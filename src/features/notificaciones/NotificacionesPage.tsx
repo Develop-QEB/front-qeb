@@ -4,7 +4,7 @@ import {
   Search, ChevronDown, ChevronRight,
   Calendar, User, FileText, X, List, LayoutGrid, CalendarDays,
   PanelRight, FolderOpen, Clock, CheckCircle, AlertCircle, Circle,
-  MessageSquare, Paperclip, Send, ArrowUpDown,
+  MessageSquare, Send,
   Users, Tag, Building2, RefreshCw, Download, Table2
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
@@ -53,7 +53,7 @@ const GROUP_BY_OPTIONS: { value: GroupByType; label: string; icon: typeof Circle
 // Función para verificar si una fecha está en el rango
 function isDateInRange(dateStr: string | null | undefined, filter: DateFilterType): boolean {
   if (filter === 'all') return true;
-  if (!dateStr) return filter === 'overdue' ? false : false;
+  if (!dateStr) return false;
 
   const date = new Date(dateStr);
   const today = new Date();
@@ -788,20 +788,6 @@ function TaskDrawer({
           </div>
         )}
 
-        {/* Archivos */}
-        {tarea.archivo && (
-          <div className="space-y-2">
-            <label className="text-xs text-zinc-500 flex items-center gap-1">
-              <Paperclip className="h-3 w-3" /> Archivos adjuntos
-            </label>
-            <div className="p-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50">
-              <a href={tarea.archivo} target="_blank" rel="noopener noreferrer" className="text-sm text-purple-400 hover:underline">
-                Ver archivo
-              </a>
-            </div>
-          </div>
-        )}
-
         {/* Comentarios */}
         <div className="space-y-3">
           <label className="text-xs text-zinc-500 flex items-center gap-1">
@@ -996,14 +982,13 @@ export function NotificacionesPage() {
             <button
               onClick={() => {
                 // Exportar a CSV
-                const headers = ['ID', 'Tipo', 'Título', 'Asignado', 'Fecha Inicio', 'Fecha Fin', 'Creador', 'Status', '# Propuesta'];
+                const headers = ['ID', 'Tipo', 'Título', 'Asignado', 'Fecha', 'Creador', 'Status', '# Propuesta'];
                 const rows = filteredTareas.map(t => [
                   t.id,
                   t.tipo || '',
                   t.titulo || '',
                   t.asignado || '',
-                  t.fecha_inicio || '',
-                  t.fecha_fin || '',
+                  t.fecha_creacion || '',
                   t.responsable || '',
                   t.estatus || '',
                   t.referencia_id || ''
@@ -1080,11 +1065,11 @@ export function NotificacionesPage() {
           <div className="flex items-center gap-3 ml-auto">
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/30">
               <Clock className="h-3 w-3 text-amber-400" />
-              <span className="text-xs text-amber-300">{stats?.activas || 0} activas</span>
+              <span className="text-xs text-amber-300">{stats?.por_estatus?.['Activo'] || 0} activas</span>
             </div>
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30">
               <CheckCircle className="h-3 w-3 text-emerald-400" />
-              <span className="text-xs text-emerald-300">{stats?.atendidas || 0} atendidas</span>
+              <span className="text-xs text-emerald-300">{stats?.por_estatus?.['Atendido'] || 0} atendidas</span>
             </div>
           </div>
         </div>
