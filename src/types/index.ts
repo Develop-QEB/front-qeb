@@ -231,3 +231,72 @@ export interface Catorcena {
   fecha_inicio: string;
   fecha_fin: string;
 }
+
+// Tarea - basado en tabla 'tareas'
+export interface Tarea {
+  id: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  tipo: string | null;
+  responsable: string | null;
+  id_responsable: number;
+  estatus: string | null;
+  descripcion: string | null;
+  titulo: string | null;
+  contenido: string | null;
+  campania_id: number | null;
+  archivo: string | null;
+  id_solicitud: string;
+  id_propuesta: string | null;
+  evidencia: string | null;
+  proveedores_id: number | null;
+  listado_inventario: string | null;
+  nombre_proveedores: string | null;
+  asignado: string | null;
+  id_asignado: string | null;
+  ids_reservas: string | null;
+  // Campos computados del frontend
+  prioridad?: 'alta' | 'media' | 'baja';
+  subtareas_count?: number;
+}
+
+export interface TareaStats {
+  total: number;
+  activas: number;
+  atendidas: number;
+  por_tipo: Record<string, number>;
+  por_estatus: Record<string, number>;
+}
+
+export interface ComentarioTarea {
+  id: number;
+  tarea_id: number;
+  usuario_id: number;
+  contenido: string;
+  fecha: string;
+  usuario_nombre?: string;
+}
+
+// Notificacion - alias para compatibilidad (usa Tarea internamente)
+export interface Notificacion {
+  id: number;
+  usuario_id: number;
+  titulo: string;
+  mensaje: string;
+  tipo: string;
+  leida: boolean;
+  referencia_tipo: 'solicitud' | 'propuesta' | 'campana' | 'sistema' | null;
+  referencia_id: number | null;
+  fecha_creacion: string;
+  fecha_fin?: string;
+  responsable?: string;
+  asignado?: string;
+  estatus?: string;
+}
+
+export interface NotificacionStats {
+  total: number;
+  no_leidas: number;
+  por_tipo: Record<string, number>;
+  por_estatus?: Record<string, number>;
+}

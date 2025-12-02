@@ -9,9 +9,6 @@ import {
   MapPin,
   LogOut,
   ChevronLeft,
-  Calendar,
-  BarChart3,
-  Settings,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
