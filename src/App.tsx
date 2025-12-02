@@ -11,6 +11,7 @@ import { SolicitudesPage } from './features/solicitudes/SolicitudesPage';
 import { PropuestasPage } from './features/propuestas/PropuestasPage';
 import { CampanasPage } from './features/campanas/CampanasPage';
 import { NotificacionesPage } from './features/notificaciones/NotificacionesPage';
+import { CorreosPage } from './features/correos/CorreosPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +45,7 @@ function App() {
             <Route path="/propuestas" element={<PropuestasPage />} />
             <Route path="/campanas" element={<CampanasPage />} />
             <Route path="/notificaciones" element={<NotificacionesPage />} />
+            <Route path="/correos" element={<CorreosPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
