@@ -3,12 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Trash2,
   Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
-  ArrowUpDown, Calendar
+  ArrowUpDown, Calendar, Clock, Plus
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { solicitudesService } from '../../services/solicitudes.service';
-import { Solicitud } from '../../types';
+import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { CreateSolicitudModal } from './CreateSolicitudModal';
 
 // Filter Chip Component with Search - same as ClientesPage
 function FilterChip({
@@ -178,6 +179,7 @@ export function SolicitudesPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const limit = 20;
 
   // Debounce search
@@ -340,16 +342,62 @@ export function SolicitudesPage() {
     }
   };
 
-  // Get catorcenas for selected years
+  // Get current catorcena
+  const currentCatorcena = useMemo((): Catorcena | null => {
+    if (!catorcenasData?.data) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return catorcenasData.data.find(c => {
+      const inicio = new Date(c.fecha_inicio);
+      const fin = new Date(c.fecha_fin);
+      inicio.setHours(0, 0, 0, 0);
+      fin.setHours(23, 59, 59, 999);
+      return today >= inicio && today <= fin;
+    }) || null;
+  }, [catorcenasData]);
+
+  // Filter year options: Year Fin must be >= Year Inicio
+  const yearInicioOptions = useMemo(() => {
+    if (!catorcenasData?.years) return [];
+    // If yearFin is set, only show years <= yearFin
+    if (yearFin) {
+      return catorcenasData.years.filter(y => y <= yearFin);
+    }
+    return catorcenasData.years;
+  }, [catorcenasData, yearFin]);
+
+  const yearFinOptions = useMemo(() => {
+    if (!catorcenasData?.years) return [];
+    // If yearInicio is set, only show years >= yearInicio
+    if (yearInicio) {
+      return catorcenasData.years.filter(y => y >= yearInicio);
+    }
+    return catorcenasData.years;
+  }, [catorcenasData, yearInicio]);
+
+  // Get catorcenas for selected years with range validation
   const catorcenasInicioOptions = useMemo(() => {
     if (!catorcenasData?.data || !yearInicio) return [];
-    return catorcenasData.data.filter(c => c.a_o === yearInicio);
-  }, [catorcenasData, yearInicio]);
+    const catorcenas = catorcenasData.data.filter(c => c.a_o === yearInicio);
+
+    // If same year, filter catorcena inicio to be <= catorcena fin
+    if (yearInicio === yearFin && catorcenaFin) {
+      return catorcenas.filter(c => c.numero_catorcena <= catorcenaFin);
+    }
+    return catorcenas;
+  }, [catorcenasData, yearInicio, yearFin, catorcenaFin]);
 
   const catorcenasFinOptions = useMemo(() => {
     if (!catorcenasData?.data || !yearFin) return [];
-    return catorcenasData.data.filter(c => c.a_o === yearFin);
-  }, [catorcenasData, yearFin]);
+    const catorcenas = catorcenasData.data.filter(c => c.a_o === yearFin);
+
+    // If same year, filter catorcena fin to be >= catorcena inicio
+    if (yearInicio === yearFin && catorcenaInicio) {
+      return catorcenas.filter(c => c.numero_catorcena >= catorcenaInicio);
+    }
+    return catorcenas;
+  }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
 
   // Group data
   const groupedData = useMemo(() => {
@@ -521,6 +569,15 @@ export function SolicitudesPage() {
                 <Download className="h-4 w-4" />
                 Exportar CSV
               </button>
+
+              {/* Nueva Solicitud */}
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-purple-600 text-white hover:bg-purple-700 transition-all"
+              >
+                <Plus className="h-4 w-4" />
+                Nueva Solicitud
+              </button>
             </div>
 
             {/* Filters Row (Expandable) */}
@@ -541,6 +598,17 @@ export function SolicitudesPage() {
 
                 <div className="h-4 w-px bg-zinc-700 mx-1" />
 
+                {/* Current Catorcena Indicator */}
+                {currentCatorcena && (
+                  <>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs">
+                      <Clock className="h-3 w-3" />
+                      <span>Actual: Cat. {currentCatorcena.numero_catorcena} / {currentCatorcena.a_o}</span>
+                    </div>
+                    <div className="h-4 w-px bg-zinc-700 mx-1" />
+                  </>
+                )}
+
                 {/* Year Range */}
                 <span className="text-xs text-zinc-500 mr-1">
                   <Calendar className="h-3 w-3 inline mr-1" />
@@ -548,11 +616,17 @@ export function SolicitudesPage() {
                 </span>
                 <FilterChip
                   label="Año Inicio"
-                  options={catorcenasData?.years?.map(String) || []}
+                  options={yearInicioOptions.map(String)}
                   value={yearInicio?.toString() || ''}
                   onChange={(val) => {
-                    setYearInicio(parseInt(val));
+                    const newYearInicio = parseInt(val);
+                    setYearInicio(newYearInicio);
                     setCatorcenaInicio(undefined);
+                    // Reset yearFin if it becomes invalid
+                    if (yearFin && newYearInicio > yearFin) {
+                      setYearFin(undefined);
+                      setCatorcenaFin(undefined);
+                    }
                     setPage(1);
                   }}
                   onClear={() => {
@@ -563,11 +637,17 @@ export function SolicitudesPage() {
                 />
                 <FilterChip
                   label="Año Fin"
-                  options={catorcenasData?.years?.map(String) || []}
+                  options={yearFinOptions.map(String)}
                   value={yearFin?.toString() || ''}
                   onChange={(val) => {
-                    setYearFin(parseInt(val));
+                    const newYearFin = parseInt(val);
+                    setYearFin(newYearFin);
                     setCatorcenaFin(undefined);
+                    // Reset yearInicio if it becomes invalid
+                    if (yearInicio && newYearFin < yearInicio) {
+                      setYearInicio(undefined);
+                      setCatorcenaInicio(undefined);
+                    }
                     setPage(1);
                   }}
                   onClear={() => {
@@ -586,6 +666,10 @@ export function SolicitudesPage() {
                     onChange={(val) => {
                       const num = parseInt(val.replace('Cat. ', ''));
                       setCatorcenaInicio(num);
+                      // If same year and catorcenaFin becomes invalid, reset it
+                      if (yearInicio === yearFin && catorcenaFin && num > catorcenaFin) {
+                        setCatorcenaFin(undefined);
+                      }
                       setPage(1);
                     }}
                     onClear={() => {
@@ -602,6 +686,10 @@ export function SolicitudesPage() {
                     onChange={(val) => {
                       const num = parseInt(val.replace('Cat. ', ''));
                       setCatorcenaFin(num);
+                      // If same year and catorcenaInicio becomes invalid, reset it
+                      if (yearInicio === yearFin && catorcenaInicio && num < catorcenaInicio) {
+                        setCatorcenaInicio(undefined);
+                      }
                       setPage(1);
                     }}
                     onClear={() => {
@@ -787,6 +875,12 @@ export function SolicitudesPage() {
           </div>
         </div>
       )}
+
+      {/* Create Solicitud Modal */}
+      <CreateSolicitudModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+      />
     </div>
   );
 }

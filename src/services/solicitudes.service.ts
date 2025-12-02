@@ -21,6 +21,73 @@ export interface CatorcenasResponse {
   years: number[];
 }
 
+export interface UserOption {
+  id: number;
+  nombre: string;
+  area: string;
+  puesto: string;
+}
+
+export interface InventarioFilters {
+  estados: string[];
+  ciudades: { ciudad: string; estado: string }[];
+  formatos: string[];
+  nse: string[];
+}
+
+export interface SolicitudCaraInput {
+  ciudad: string;
+  estado: string;
+  tipo: string;
+  flujo?: string;
+  bonificacion?: number;
+  caras: number;
+  nivel_socioeconomico: string;
+  formato: string;
+  costo: number;
+  tarifa_publica?: number;
+  inicio_periodo: string;
+  fin_periodo: string;
+  caras_flujo?: number;
+  caras_contraflujo?: number;
+  descuento?: number;
+}
+
+export interface CreateSolicitudInput {
+  // Client data
+  cliente_id: number;
+  cuic: number | string;
+  razon_social: string;
+  unidad_negocio?: string;
+  marca_id?: number;
+  marca_nombre?: string;
+  asesor?: string;
+  producto_id?: number;
+  producto_nombre?: string;
+  agencia?: string;
+  categoria_id?: number;
+  categoria_nombre?: string;
+  // Campaign data
+  nombre_campania: string;
+  descripcion: string;
+  notas?: string;
+  presupuesto?: number;
+  // Articulo
+  articulo: string;
+  // Asignados
+  asignados: { id: number; nombre: string }[];
+  // Dates
+  fecha_inicio: string;
+  fecha_fin: string;
+  // File
+  archivo?: string;
+  tipo_archivo?: string;
+  // IMU
+  IMU: boolean;
+  // Caras
+  caras: SolicitudCaraInput[];
+}
+
 export const solicitudesService = {
   async getAll(params: SolicitudesParams = {}): Promise<PaginatedResponse<Solicitud>> {
     const response = await api.get<PaginatedResponse<Solicitud>>('/solicitudes', { params });
@@ -69,6 +136,51 @@ export const solicitudesService = {
     const response = await api.get<ApiResponse<Solicitud[]>>('/solicitudes/export', { params });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al exportar solicitudes');
+    }
+    return response.data.data;
+  },
+
+  async getUsers(area?: string): Promise<UserOption[]> {
+    const response = await api.get<ApiResponse<UserOption[]>>('/solicitudes/users', {
+      params: area ? { area } : {},
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener usuarios');
+    }
+    return response.data.data;
+  },
+
+  async getInventarioFilters(): Promise<InventarioFilters> {
+    const response = await api.get<ApiResponse<InventarioFilters>>('/solicitudes/inventario-filters');
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener filtros de inventario');
+    }
+    return response.data.data;
+  },
+
+  async getFormatosByCiudades(ciudades: string[]): Promise<string[]> {
+    if (ciudades.length === 0) return [];
+    const response = await api.get<ApiResponse<string[]>>('/solicitudes/formatos-by-ciudades', {
+      params: { ciudades: ciudades.join(',') },
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener formatos');
+    }
+    return response.data.data;
+  },
+
+  async getNextId(): Promise<number> {
+    const response = await api.get<ApiResponse<{ nextId: number }>>('/solicitudes/next-id');
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener próximo ID');
+    }
+    return response.data.data.nextId;
+  },
+
+  async create(data: CreateSolicitudInput): Promise<{ solicitud: Solicitud }> {
+    const response = await api.post<ApiResponse<{ solicitud: Solicitud }>>('/solicitudes', data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear solicitud');
     }
     return response.data.data;
   },
