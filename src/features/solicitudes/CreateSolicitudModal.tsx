@@ -84,6 +84,79 @@ const getTarifaFromItemCode = (itemCode: string): { costo: number; tarifa_public
   return { costo: 0, tarifa_publica: 0 };
 };
 
+// Ciudad -> Estado mapping for auto-selection
+const CIUDAD_ESTADO_MAP: Record<string, string> = {
+  'GUADALAJARA': 'Jalisco',
+  'ZAPOPAN': 'Jalisco',
+  'TLAQUEPAQUE': 'Jalisco',
+  'TONALA': 'Jalisco',
+  'TLAJOMULCO': 'Jalisco',
+  'PUERTO VALLARTA': 'Jalisco',
+  'MONTERREY': 'Nuevo León',
+  'SAN PEDRO': 'Nuevo León',
+  'SAN NICOLAS': 'Nuevo León',
+  'APODACA': 'Nuevo León',
+  'ESCOBEDO': 'Nuevo León',
+  'SANTA CATARINA': 'Nuevo León',
+  'CIUDAD DE MEXICO': 'Ciudad de México',
+  'CDMX': 'Ciudad de México',
+  'MEXICO': 'Ciudad de México',
+  'DF': 'Ciudad de México',
+  'TIJUANA': 'Baja California',
+  'MEXICALI': 'Baja California',
+  'ENSENADA': 'Baja California',
+  'LEON': 'Guanajuato',
+  'IRAPUATO': 'Guanajuato',
+  'CELAYA': 'Guanajuato',
+  'QUERETARO': 'Querétaro',
+  'PUEBLA': 'Puebla',
+  'MERIDA': 'Yucatán',
+  'CANCUN': 'Quintana Roo',
+  'PLAYA DEL CARMEN': 'Quintana Roo',
+  'CHIHUAHUA': 'Chihuahua',
+  'JUAREZ': 'Chihuahua',
+  'CIUDAD JUAREZ': 'Chihuahua',
+  'HERMOSILLO': 'Sonora',
+  'CULIACAN': 'Sinaloa',
+  'MAZATLAN': 'Sinaloa',
+  'TORREON': 'Coahuila',
+  'SALTILLO': 'Coahuila',
+  'AGUASCALIENTES': 'Aguascalientes',
+  'MORELIA': 'Michoacán',
+  'SAN LUIS POTOSI': 'San Luis Potosí',
+  'TAMPICO': 'Tamaulipas',
+  'REYNOSA': 'Tamaulipas',
+  'VERACRUZ': 'Veracruz',
+  'XALAPA': 'Veracruz',
+  'OAXACA': 'Oaxaca',
+  'TUXTLA': 'Chiapas',
+  'VILLAHERMOSA': 'Tabasco',
+  'CAMPECHE': 'Campeche',
+  'ACAPULCO': 'Guerrero',
+  'CUERNAVACA': 'Morelos',
+  'TOLUCA': 'Estado de México',
+  'PACHUCA': 'Hidalgo',
+  'ZACATECAS': 'Zacatecas',
+  'DURANGO': 'Durango',
+  'TEPIC': 'Nayarit',
+  'COLIMA': 'Colima',
+  'LA PAZ': 'Baja California Sur',
+  'LOS CABOS': 'Baja California Sur',
+};
+
+// Extract city from article name and return estado/ciudad
+const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string } | null => {
+  if (!itemName) return null;
+  const name = itemName.toUpperCase();
+
+  for (const [ciudad, estado] of Object.entries(CIUDAD_ESTADO_MAP)) {
+    if (name.includes(ciudad)) {
+      return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
+    }
+  }
+  return null;
+};
+
 interface SAPCuicItem {
   CUIC: number;
   T0_U_RazonSocial: string;
@@ -335,7 +408,12 @@ function MultiSelectTags({
                       }`}>
                         {isSelected && <Check className="h-3 w-3 text-white" />}
                       </div>
-                      {option[displayKey]}
+                      <div className="flex-1">
+                        <span>{option[displayKey]}</span>
+                        {option.area && (
+                          <span className="ml-2 text-[10px] text-zinc-500">({option.area})</span>
+                        )}
+                      </div>
                     </button>
                   );
                 })}
@@ -354,6 +432,7 @@ function MultiSelectTags({
               className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-xs"
             >
               {item[displayKey]}
+              {item.area && <span className="text-[10px] text-purple-400/70">({item.area})</span>}
               <button type="button" onClick={() => remove(item)} className="hover:text-white">
                 <X className="h-3 w-3" />
               </button>
@@ -446,7 +525,7 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
   const { data: cuicData, isLoading: cuicLoading } = useQuery({
     queryKey: ['sap-cuic-all'],
     queryFn: async () => {
-      const response = await fetch('https://rate-focuses-phase-politicians.trycloudflare.com/cuic');
+      const response = await fetch('https://characteristics-terminals-athletic-workplace.trycloudflare.com/cuic');
       if (!response.ok) throw new Error('Error fetching CUIC data');
       const data = await response.json();
       return (data.value || data) as SAPCuicItem[];
@@ -459,7 +538,7 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
   const { data: articulosData, isLoading: articulosLoading } = useQuery({
     queryKey: ['sap-articulos-all'],
     queryFn: async () => {
-      const response = await fetch('https://rate-focuses-phase-politicians.trycloudflare.com/articulos');
+      const response = await fetch('https://characteristics-terminals-athletic-workplace.trycloudflare.com/articulos');
       if (!response.ok) throw new Error('Error fetching articulos data');
       const data = await response.json();
       return (data.value || data) as SAPArticulo[];
@@ -855,34 +934,76 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
                 />
               </div>
 
-              {/* Selected client info */}
+              {/* Selected client info - Complete */}
               {selectedCuic && (
-                <div className="grid grid-cols-2 gap-4 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
-                  <div>
-                    <span className="text-xs text-zinc-500">Razón Social</span>
-                    <div className="text-white font-medium">{selectedCuic.T0_U_RazonSocial}</div>
+                <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50 space-y-4">
+                  {/* Row 1: CUIC, Marca, Producto */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
+                      <span className="text-[10px] text-purple-400 uppercase tracking-wider">CUIC</span>
+                      <div className="text-lg font-bold text-white">{selectedCuic.CUIC}</div>
+                    </div>
+                    <div className="p-3 bg-zinc-700/30 rounded-lg">
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Marca</span>
+                      <div className="text-sm font-medium text-white">{selectedCuic.T2_U_Marca || '-'}</div>
+                    </div>
+                    <div className="p-3 bg-zinc-700/30 rounded-lg">
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Producto</span>
+                      <div className="text-sm font-medium text-white">{selectedCuic.T2_U_Producto || '-'}</div>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-xs text-zinc-500">Unidad de Negocio</span>
-                    <div className="text-white">{selectedCuic.T1_U_UnidadNegocio || '-'}</div>
+                  {/* Row 2: Razón Social, Cliente */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Razón Social</span>
+                      <div className="text-sm text-white">{selectedCuic.T0_U_RazonSocial || '-'}</div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Cliente</span>
+                      <div className="text-sm text-white">{selectedCuic.T0_U_Cliente || '-'}</div>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-xs text-zinc-500">Agencia</span>
-                    <div className="text-white">{selectedCuic.T0_U_Agencia || '-'}</div>
+                  {/* Row 3: Asesor, Agencia, Unidad Negocio */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Asesor</span>
+                      <div className="text-sm text-emerald-400">{selectedCuic.T0_U_Asesor || '-'}</div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Agencia</span>
+                      <div className="text-sm text-white">{selectedCuic.T0_U_Agencia || '-'}</div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Unidad de Negocio</span>
+                      <div className="text-sm text-white">{selectedCuic.T1_U_UnidadNegocio || '-'}</div>
+                    </div>
                   </div>
+                  {/* Row 4: Categoría */}
                   <div>
-                    <span className="text-xs text-zinc-500">Categoría</span>
-                    <div className="text-white">{selectedCuic.T2_U_Categoria || '-'}</div>
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Categoría</span>
+                    <div className="text-sm text-amber-400">{selectedCuic.T2_U_Categoria || '-'}</div>
                   </div>
                 </div>
               )}
 
               {/* Asignados with tags - search at bottom */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
-                  <Users className="h-4 w-4 text-purple-400" />
-                  Asignados
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                    <Users className="h-4 w-4 text-purple-400" />
+                    Asignados
+                  </label>
+                  {selectedAsignados.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAsignados([])}
+                      className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Limpiar todos
+                    </button>
+                  )}
+                </div>
                 <MultiSelectTags
                   label="usuario"
                   options={users || []}
@@ -899,7 +1020,7 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
           {/* Step 2: Campaña */}
           {step === 2 && (
             <div className="space-y-6">
-              {/* Campaign name and description */}
+              {/* Campaign name and notas */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-zinc-300">Nombre de Campaña</label>
@@ -912,12 +1033,12 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-300">Descripción</label>
+                  <label className="text-sm font-medium text-zinc-300">Notas</label>
                   <input
                     type="text"
-                    value={descripcion}
-                    onChange={(e) => setDescripcion(e.target.value)}
-                    placeholder="Descripción breve..."
+                    value={notas}
+                    onChange={(e) => setNotas(e.target.value)}
+                    placeholder="Notas breves..."
                     className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                   />
                 </div>
@@ -1004,14 +1125,14 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
                 </div>
               </div>
 
-              {/* Notes */}
+              {/* Descripción (large) */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Notas</label>
+                <label className="text-sm font-medium text-zinc-300">Descripción</label>
                 <textarea
-                  value={notas}
-                  onChange={(e) => setNotas(e.target.value)}
-                  placeholder="Notas adicionales..."
-                  rows={3}
+                  value={descripcion}
+                  onChange={(e) => setDescripcion(e.target.value)}
+                  placeholder="Descripción detallada de la campaña..."
+                  rows={4}
                   className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
                 />
               </div>
@@ -1052,9 +1173,22 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
                     onChange={(item) => {
                       // Auto-set tarifa publica from ItemCode mapping
                       const tarifa = getTarifaFromItemCode(item.ItemCode);
-                      setNewCara({ ...newCara, articulo: item, tarifaPublica: tarifa.tarifa_publica });
+                      // Auto-set estado and ciudad from ItemName
+                      const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
+                      if (ciudadEstado) {
+                        setNewCara({
+                          ...newCara,
+                          articulo: item,
+                          tarifaPublica: tarifa.tarifa_publica,
+                          estado: ciudadEstado.estado,
+                          ciudades: [ciudadEstado.ciudad],
+                          formato: '', // Reset formato to re-filter by new ciudad
+                        });
+                      } else {
+                        setNewCara({ ...newCara, articulo: item, tarifaPublica: tarifa.tarifa_publica });
+                      }
                     }}
-                    onClear={() => setNewCara({ ...newCara, articulo: null, tarifaPublica: 0 })}
+                    onClear={() => setNewCara({ ...newCara, articulo: null, tarifaPublica: 0, estado: '', ciudades: [], formato: '' })}
                     displayKey="ItemName"
                     valueKey="ItemCode"
                     searchKeys={['ItemCode', 'ItemName']}
