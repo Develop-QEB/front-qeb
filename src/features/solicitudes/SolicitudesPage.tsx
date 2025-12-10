@@ -3,13 +3,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Trash2,
   Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
-  ArrowUpDown, Calendar, Clock, Plus
+
+  ArrowUpDown, Calendar, Clock, Plus, Eye, Edit2, PlayCircle, MessageSquare
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
+
 import { Header } from '../../components/layout/Header';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { CreateSolicitudModal } from './CreateSolicitudModal';
+import { ViewSolicitudModal, StatusModal, AtenderModal } from './SolicitudModals';
+import { EditSolicitudModal } from './EditSolicitudModal';
 
 // Filter Chip Component with Search - same as ClientesPage
 function FilterChip({
@@ -44,11 +49,10 @@ function FilterChip({
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
-          value
-            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-            : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
-        }`}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${value
+          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+          }`}
       >
         <span>{value || label}</span>
         {value ? (
@@ -83,11 +87,10 @@ function FilterChip({
                   <button
                     key={option}
                     onClick={() => { onChange(option); handleClose(); }}
-                    className={`w-full px-3 py-2 text-left text-xs transition-colors ${
-                      value === option
-                        ? 'bg-purple-500/20 text-purple-300'
-                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                    }`}
+                    className={`w-full px-3 py-2 text-left text-xs transition-colors ${value === option
+                      ? 'bg-purple-500/20 text-purple-300'
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                      }`}
                   >
                     {option}
                   </button>
@@ -153,14 +156,14 @@ const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', 
 
 // Chart colors for dynamic status
 const CHART_COLORS = [
-  '#f59e0b', // amber
-  '#10b981', // emerald
-  '#ef4444', // red
-  '#06b6d4', // cyan
-  '#3b82f6', // blue
-  '#8b5cf6', // violet
-  '#ec4899', // pink
-  '#84cc16', // lime
+  '#8b5cf6', // violet-500
+  '#d946ef', // fuchsia-500
+  '#ec4899', // pink-500
+  '#f43f5e', // rose-500
+  '#f59e0b', // amber-500
+  '#10b981', // emerald-500
+  '#06b6d4', // cyan-500
+  '#3b82f6', // blue-500
 ];
 
 export function SolicitudesPage() {
@@ -180,6 +183,10 @@ export function SolicitudesPage() {
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [viewSolicitudId, setViewSolicitudId] = useState<number | null>(null);
+  const [editSolicitud, setEditSolicitud] = useState<Solicitud | null>(null);
+  const [statusSolicitud, setStatusSolicitud] = useState<Solicitud | null>(null);
+  const [atenderSolicitud, setAtenderSolicitud] = useState<Solicitud | null>(null);
   const limit = 20;
 
   // Debounce search
@@ -253,53 +260,22 @@ export function SolicitudesPage() {
   }, [stats]);
 
   // Mini Donut Chart Component - compact version
-  const MiniDonutChart = ({ data }: { data: typeof chartData }) => {
-    if (!data || data.length === 0) {
+  // Custom Tooltip for Chart
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
       return (
-        <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center">
-          <span className="text-xs text-zinc-500">--</span>
+        <div className="bg-zinc-900/90 border border-zinc-700/50 p-3 rounded-xl shadow-xl backdrop-blur-xl">
+          <p className="text-white font-medium mb-1">{payload[0].name}</p>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: payload[0].payload.fill }} />
+            <span className="text-zinc-300 text-sm">
+              {payload[0].value} solicitudes ({payload[0].payload.percent}%)
+            </span>
+          </div>
         </div>
       );
     }
-
-    const size = 64;
-    const strokeWidth = 8;
-    const radius = (size - strokeWidth) / 2;
-    const circumference = 2 * Math.PI * radius;
-
-    let offset = 0;
-    const total = data.reduce((acc, d) => acc + d.value, 0);
-
-    return (
-      <div className="relative">
-        <svg width={size} height={size} className="transform -rotate-90">
-          {data.map((segment, i) => {
-            const segmentLength = (segment.value / total) * circumference;
-            const dash = `${segmentLength} ${circumference - segmentLength}`;
-            const currentOffset = offset;
-            offset += segmentLength;
-
-            return (
-              <circle
-                key={i}
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                fill="none"
-                stroke={segment.color}
-                strokeWidth={strokeWidth}
-                strokeDasharray={dash}
-                strokeDashoffset={-currentOffset}
-                className="transition-all duration-500"
-              />
-            );
-          })}
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-sm font-bold text-white">{total.toLocaleString()}</span>
-        </div>
-      </div>
-    );
+    return null;
   };
 
   // Handle export CSV
@@ -445,6 +421,23 @@ export function SolicitudesPage() {
   const renderSolicitudRow = (item: Solicitud, index: number) => {
     const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
 
+    // Button enable/disable logic based on status
+    const isDesactivado = item.status === 'Desactivado';
+    const isAprobado = item.status === 'Aprobado' || item.status === 'Aprobada';
+    const isAjustar = item.status === 'Ajustar';
+    const isAtendida = item.status === 'Atendida';
+
+    // Ver: siempre activo
+    const canView = true;
+    // Editar: activo si no está Desactivado, no está Aprobado, no está Atendida
+    const canEdit = !isDesactivado && !isAprobado && !isAtendida;
+    // Atender: solo activo si está Aprobado
+    const canAtender = isAprobado;
+    // Estatus: siempre activo
+    const canChangeStatus = true;
+    // Eliminar: solo si no está Desactivado, Aprobado o Atendida
+    const canDelete = !isDesactivado && !isAprobado && !isAtendida;
+
     return (
       <tr key={`sol-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
         <td className="px-4 py-3">
@@ -474,17 +467,72 @@ export function SolicitudesPage() {
           <span className="text-zinc-300 text-xs">{item.asignado || '-'}</span>
         </td>
         <td className="px-4 py-3">
-          <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setStatusSolicitud(item); }}
+            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+          >
             {item.status}
-          </span>
+          </button>
         </td>
         <td className="px-4 py-3">
-          <button
-            onClick={(e) => { e.stopPropagation(); setDeleteId(item.id); }}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/10 text-red-400 text-xs hover:bg-red-500/20 transition-all duration-200 border border-red-500/20"
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Ver */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setViewSolicitudId(item.id); }}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/10 text-purple-400 text-xs hover:bg-purple-500/20 transition-all duration-200 border border-purple-500/20"
+              title="Ver detalles"
+            >
+              <Eye className="h-3 w-3" />
+            </button>
+
+            {/* Editar */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setEditSolicitud(item); }}
+              disabled={!canEdit}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all duration-200 border ${canEdit
+                ? 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border-blue-500/20'
+                : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                }`}
+              title={canEdit ? 'Editar solicitud' : 'No disponible'}
+            >
+              <Edit2 className="h-3 w-3" />
+            </button>
+
+            {/* Atender */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setAtenderSolicitud(item); }}
+              disabled={!canAtender}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all duration-200 border ${canAtender
+                ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border-cyan-500/20'
+                : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                }`}
+              title={canAtender ? 'Atender solicitud' : 'Solo disponible para solicitudes aprobadas'}
+            >
+              <PlayCircle className="h-3 w-3" />
+            </button>
+
+            {/* Estatus/Comentarios */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setStatusSolicitud(item); }}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 text-xs hover:bg-amber-500/20 transition-all duration-200 border border-amber-500/20"
+              title="Ver/Cambiar estatus"
+            >
+              <MessageSquare className="h-3 w-3" />
+            </button>
+
+            {/* Eliminar */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setDeleteId(item.id); }}
+              disabled={!canDelete}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all duration-200 border ${canDelete
+                ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border-red-500/20'
+                : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                }`}
+              title={canDelete ? 'Eliminar solicitud' : 'No disponible'}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
         </td>
       </tr>
     );
@@ -498,34 +546,94 @@ export function SolicitudesPage() {
       <Header title="Solicitudes" />
 
       <div className="p-6 space-y-5">
-        {/* Compact Stats Bar with Chart */}
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-4">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center gap-6">
-            {/* Left: Mini Donut Chart */}
-            <div className="flex items-center gap-4">
-              <MiniDonutChart data={chartData} />
-            </div>
+        {/* New Pro Dashboard Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
-            {/* Right: Status Pills */}
-            <div className="flex flex-wrap items-center gap-3">
-              {chartData?.map((item, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/60 border border-zinc-700/50"
-                >
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-xs text-zinc-400">{item.label}</span>
-                  <span className="text-sm font-semibold text-white">{item.value.toLocaleString()}</span>
-                </div>
-              ))}
-              {!chartData && (
-                <span className="text-xs text-zinc-500">Cargando estadisticas...</span>
-              )}
+          {/* Main KPI: Total */}
+          <div className="col-span-1 md:col-span-2 lg:col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none group-hover:bg-purple-500/20 transition-all duration-500" />
+            <div>
+              <p className="text-zinc-400 text-sm font-medium mb-1">Total Solicitudes</p>
+              <h3 className="text-4xl font-bold text-white tracking-tight">
+                {stats?.total.toLocaleString() ?? '0'}
+              </h3>
+            </div>
+            <div className="mt-4 flex items-center gap-2">
+              <span className="text-xs px-2 py-1 rounded-full bg-zinc-800/80 text-zinc-300 border border-zinc-700/50">
+                Todas las catorcenas
+              </span>
             </div>
           </div>
+
+          {/* Chart Card */}
+          <div className="col-span-1 md:col-span-2 lg:col-span-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-4 flex items-center relative overflow-hidden">
+
+            {chartData ? (
+              <div className="w-full h-[140px] flex items-center">
+                <div className="h-full min-w-[140px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={55}
+                        paddingAngle={4}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {chartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip content={<CustomTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Legend / List */}
+                <div className="flex-1 flex flex-wrap gap-2 content-center pl-4 h-full overflow-y-auto custom-scrollbar">
+                  {chartData.map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-zinc-800/30 border border-zinc-800/50 min-w-[120px]">
+                      <div className="w-2 h-8 rounded-full" style={{ backgroundColor: item.color }} />
+                      <div>
+                        <div className="text-sm font-bold text-white">{item.value}</div>
+                        <div className="text-[10px] text-zinc-400 uppercase tracking-wide truncate max-w-[80px]" title={item.label}>{item.label}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="w-full h-[140px] flex items-center justify-center text-zinc-500 text-sm">
+                Cargando datos...
+              </div>
+            )}
+          </div>
+
+          {/* KPI: Pendientes Priority */}
+          <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute bottom-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl -mr-5 -mb-5 pointer-events-none group-hover:bg-amber-500/20 transition-all duration-500" />
+            <div>
+              <p className="text-zinc-400 text-sm font-medium mb-1">Pendientes / En Proceso</p>
+              <div className="flex items-baseline gap-2">
+                <h3 className="text-3xl font-bold text-amber-400">
+                  {((stats?.byStatus['Pendiente'] || 0) + (stats?.byStatus['En Proceso'] || 0)).toLocaleString()}
+                </h3>
+                <span className="text-xs text-amber-500/80 font-medium">Atención requerida</span>
+              </div>
+            </div>
+
+            {/* Progress bar visual */}
+            <div className="mt-4 w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-amber-500 to-orange-500"
+                style={{ width: `${Math.min(100, (((stats?.byStatus['Pendiente'] || 0) + (stats?.byStatus['En Proceso'] || 0)) / (stats?.total || 1)) * 100)}%` }}
+              />
+            </div>
+          </div>
+
         </div>
 
         {/* Control Bar */}
@@ -548,11 +656,10 @@ export function SolicitudesPage() {
               {/* Filter Toggle */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  showFilters || hasActiveFilters
-                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                    : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                  : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
+                  }`}
               >
                 <SlidersHorizontal className="h-4 w-4" />
                 Filtros
@@ -880,6 +987,43 @@ export function SolicitudesPage() {
       <CreateSolicitudModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
+      />
+
+      {/* Edit Solicitud Modal */}
+      <EditSolicitudModal
+        isOpen={!!editSolicitud}
+        onClose={() => setEditSolicitud(null)}
+        solicitudId={editSolicitud?.id || null}
+      />
+
+      {/* View Solicitud Modal */}
+      <ViewSolicitudModal
+        isOpen={!!viewSolicitudId}
+        onClose={() => setViewSolicitudId(null)}
+        solicitudId={viewSolicitudId}
+      />
+
+      {/* Status Modal */}
+      <StatusModal
+        isOpen={!!statusSolicitud}
+        onClose={() => setStatusSolicitud(null)}
+        solicitud={statusSolicitud}
+        onStatusChange={() => {
+          queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
+          queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
+          setStatusSolicitud(null);
+        }}
+      />
+
+      {/* Atender Modal */}
+      <AtenderModal
+        isOpen={!!atenderSolicitud}
+        onClose={() => setAtenderSolicitud(null)}
+        solicitud={atenderSolicitud}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
+          queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
+        }}
       />
     </div>
   );

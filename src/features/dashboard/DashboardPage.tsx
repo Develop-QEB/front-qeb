@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import {
   Package,
   CheckCircle2,
@@ -24,6 +25,52 @@ import {
   DashboardFilters,
   ChartData,
 } from '../../services/dashboard.service';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
+
+// Custom Tooltip for Recharts
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const value = payload[0].value;
+    const name = data.nombre || data.name || label;
+    const percentage = data.percentage;
+
+    return (
+      <div className="bg-[#1a1025]/95 border border-purple-500/30 p-4 rounded-xl shadow-2xl backdrop-blur-xl min-w-[150px] z-[9999]">
+        <p className="text-purple-200 font-medium mb-2 text-sm border-b border-purple-500/20 pb-1">{name}</p>
+        <div className="flex items-center gap-3">
+          <div
+            className="w-3 h-3 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]"
+            style={{ backgroundColor: data.fill || payload[0].color || payload[0].fill || '#a855f7' }}
+          />
+          <div className="flex flex-col">
+            <span className="text-white text-lg font-bold tracking-tight">
+              {value?.toLocaleString()}
+            </span>
+            {percentage !== undefined && (
+              <span className="text-xs text-purple-400 font-medium">
+                {percentage.toFixed(1)}% del total
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
 // Tipos de estatus para KPIs
 type EstatusType = 'total' | 'Disponible' | 'Reservado' | 'Vendido' | 'Bloqueado';
@@ -120,11 +167,10 @@ function KPICard({
 
   return (
     <Card
-      className={`cursor-pointer transition-all duration-300 hover:scale-[1.02] ${
-        isActive
+      className={`cursor-pointer transition-all duration-300 hover:scale-[1.02] border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md ${isActive
           ? `bg-gradient-to-r ${colorClass.bg} ${colorClass.border} shadow-lg ${colorClass.glow}`
-          : 'hover:border-purple-600/50'
-      }`}
+          : 'hover:border-purple-600/50 hover:bg-[#1a1025]/90'
+        }`}
       onClick={onClick}
     >
       <CardContent className="pt-5">
@@ -142,9 +188,8 @@ function KPICard({
             )}
           </div>
           <div
-            className={`p-3 rounded-xl bg-gradient-to-r ${colorClass.bg} ${
-              isActive ? 'ring-2 ring-offset-2 ring-offset-[#1a1025]' : ''
-            }`}
+            className={`p-3 rounded-xl bg-gradient-to-r ${colorClass.bg} ${isActive ? 'ring-2 ring-offset-2 ring-offset-[#1a1025]' : ''
+              }`}
           >
             <Icon className={`h-6 w-6 ${colorClass.text}`} />
           </div>
@@ -160,7 +205,221 @@ function KPICard({
   );
 }
 
-// Componente de grafica de barras horizontal con animacion
+// 1. Mapa de México para Plazas (Ciudades)
+const CITY_COORDINATES: Record<string, [number, number]> = {
+  'Monterrey': [25.6761, -100.3153],
+  'CDMX': [19.4326, -99.1332],
+  'Guadalajara': [20.6597, -103.3496],
+  'Merida': [20.9674, -89.5926],
+  'Cancun': [21.1619, -86.8515],
+  'Puebla': [19.0414, -98.2063],
+  'Tijuana': [32.5149, -117.0382],
+  'Queretaro': [20.5888, -100.3899],
+  'Leon': [21.1221, -101.6664],
+  'Toluca': [19.2826, -99.6557],
+  'San Luis Potosi': [22.1565, -100.9855],
+  'Aguascalientes': [21.8853, -102.2916],
+  'Chihuahua': [28.6353, -106.0889],
+  'Hermosillo': [29.0730, -110.9559],
+  'Saltillo': [25.4383, -101.0000],
+  'Mexicali': [32.6245, -115.4523],
+  'Culiacan': [24.8059, -107.3944],
+  'Acapulco': [16.8531, -99.8237],
+  'Veracruz': [19.1738, -96.1342],
+  'Villahermosa': [17.9895, -92.9475],
+  'Mazatlan': [23.2494, -106.4111],
+  'Tampico': [22.2331, -97.8611],
+  'Morelia': [19.7008, -101.1844],
+  'Torreon': [25.5428, -103.4189],
+  'Ciudad Juarez': [31.6904, -106.4245],
+};
+
+function MexicoMapChart({ data, title }: { data: ChartData[]; title: string }) {
+  const center: [number, number] = [23.6345, -102.5528];
+
+  const mapData = useMemo(() => {
+    return data
+      .map(item => {
+        const cityKey = Object.keys(CITY_COORDINATES).find(key =>
+          item.nombre.toLowerCase().includes(key.toLowerCase()) ||
+          key.toLowerCase().includes(item.nombre.toLowerCase())
+        );
+        return {
+          ...item,
+          coords: cityKey ? CITY_COORDINATES[cityKey] : null
+        };
+      })
+      .filter(item => item.coords !== null)
+      .sort((a, b) => b.cantidad - a.cantidad);
+  }, [data]);
+
+  const maxVal = Math.max(...mapData.map(d => d.cantidad), 1);
+
+  return (
+    <Card className="h-full border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10 overflow-hidden">
+      <CardHeader>
+        <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2 text-purple-100">
+          <TrendingUp className="h-4 w-4 text-cyan-400" />
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="h-[400px] p-0 relative">
+        <MapContainer
+          center={center}
+          zoom={5}
+          style={{ height: '100%', width: '100%', background: '#130e24' }}
+          zoomControl={false}
+          scrollWheelZoom={false}
+          dragging={true}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          />
+          {mapData.map((city, idx) => (
+            <CircleMarker
+              key={idx}
+              center={city.coords!}
+              pathOptions={{
+                fillColor: idx === 0 ? '#facc15' : idx < 3 ? '#ec4899' : '#22d3ee',
+                color: idx === 0 ? '#facc15' : idx < 3 ? '#ec4899' : '#22d3ee',
+                weight: 1,
+                opacity: 0.8,
+                fillOpacity: 0.6
+              }}
+              radius={Math.max(5, (city.cantidad / maxVal) * 20) + 2}
+            >
+              <Popup className="custom-popup">
+                <div className="p-2 text-center text-slate-800">
+                  <p className="font-bold">{city.nombre}</p>
+                  <p className="text-purple-600 font-bold">{city.cantidad} Inventario</p>
+                </div>
+              </Popup>
+            </CircleMarker>
+          ))}
+        </MapContainer>
+        <div className="absolute bottom-4 left-4 bg-[#1a1025]/90 p-3 rounded-lg border border-purple-500/20 backdrop-blur-sm z-[1000] pointer-events-none">
+          <p className="text-xs text-purple-200 mb-2 font-medium">Top Plazas</p>
+          {mapData.slice(0, 3).map((city, i) => (
+            <div key={i} className="flex items-center gap-2 mb-1">
+              <div className={`w-2 h-2 rounded-full ${i === 0 ? 'bg-yellow-400' : 'bg-pink-500'}`} />
+              <span className="text-[10px] text-zinc-300">{city.nombre}</span>
+              <span className="text-[10px] text-white font-bold">{city.cantidad}</span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// 2. Vertical Bar Chart Simple (para NSE)
+function SimpleBarChart({
+  data,
+  title,
+  color = "blue"
+}: {
+  data: ChartData[];
+  title: string;
+  color?: string;
+}) {
+  return (
+    <Card className="h-full border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
+      <CardHeader>
+        <CardTitle className="text-sm uppercase tracking-wider text-purple-100">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <XAxis
+              dataKey="nombre"
+              tick={{ fill: '#e9d5ff', fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <RechartsTooltip
+              cursor={{ fill: 'rgba(168, 85, 247, 0.1)' }}
+              content={<CustomTooltip />}
+            />
+            <Bar
+              dataKey="cantidad"
+              radius={[4, 4, 0, 0]}
+              barSize={40}
+              animationDuration={1500}
+            >
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#8b5cf6' : '#d946ef'} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
+// 3. Donut Chart (Simple Pie) para Municipio (Replaces Treemap)
+function DonutChart({
+  data,
+  title,
+  maxItems = 6,
+}: {
+  data: ChartData[];
+  title: string;
+  maxItems?: number;
+}) {
+  const processedData = useMemo(() => {
+    const sorted = [...data].sort((a, b) => b.cantidad - a.cantidad).slice(0, maxItems);
+    const total = sorted.reduce((sum, item) => sum + item.cantidad, 0);
+    return sorted.map((item, index) => ({
+      ...item,
+      percentage: total > 0 ? (item.cantidad / total) * 100 : 0,
+      fill: ['#ec4899', '#8b5cf6', '#22d3ee', '#facc15', '#22c55e'][index % 5]
+    }));
+  }, [data, maxItems]);
+
+  return (
+    <Card className="h-full border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
+      <CardHeader>
+        <CardTitle className="text-sm uppercase tracking-wider text-purple-100">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="h-[350px]">
+        {processedData.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-purple-300/40">Sin datos</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={processedData}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={80}
+                paddingAngle={5}
+                dataKey="cantidad"
+              >
+                {processedData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Pie>
+              <RechartsTooltip content={<CustomTooltip />} />
+              <Legend
+                layout="vertical"
+                verticalAlign="middle"
+                align="right"
+                formatter={(value, entry: any) => (
+                  <span className="text-purple-200 text-xs ml-1 font-medium">{entry.payload.nombre}</span>
+                )}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Reuse HorizontalBarChart (Standard)
 function HorizontalBarChart({
   data,
   color,
@@ -172,77 +431,75 @@ function HorizontalBarChart({
   title: string;
   maxItems?: number;
 }) {
-  const [animate, setAnimate] = useState(false);
-
-  const colors = {
-    pink: 'from-pink-500 to-purple-500',
-    cyan: 'from-cyan-400 to-blue-500',
-    yellow: 'from-yellow-400 to-orange-500',
-    green: 'from-green-400 to-teal-500',
-    purple: 'from-purple-400 to-pink-500',
-  };
-
-  const glowColors = {
-    pink: 'shadow-pink-500/30',
-    cyan: 'shadow-cyan-500/30',
-    yellow: 'shadow-yellow-500/30',
-    green: 'shadow-green-500/30',
-    purple: 'shadow-purple-500/30',
-  };
-
   const sortedData = useMemo(() =>
     [...data].sort((a, b) => b.cantidad - a.cantidad).slice(0, maxItems),
     [data, maxItems]
   );
-  const maxValue = Math.max(...sortedData.map((d) => d.cantidad), 1);
 
-  // Trigger animation when data changes
-  useEffect(() => {
-    setAnimate(false);
-    const timer = setTimeout(() => setAnimate(true), 50);
-    return () => clearTimeout(timer);
-  }, [data]);
+  const colorsMap = {
+    pink: '#ec4899',
+    cyan: '#22d3ee',
+    yellow: '#facc15',
+    green: '#22c55e',
+    purple: '#a855f7',
+  };
 
   return (
-    <Card className="h-full">
+    <Card className="h-full border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
       <CardHeader>
-        <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-pink-400" />
+        <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2 text-purple-100">
+          <TrendingUp className={`h-4 w-4 text-${color}-400`} />
           {title}
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="h-[300px]">
         {sortedData.length === 0 ? (
-          <div className="text-center py-8 text-purple-400/60">Sin datos</div>
+          <div className="h-full flex items-center justify-center text-purple-300/40">Sin datos</div>
         ) : (
-          <div className="space-y-3">
-            {sortedData.map((item, index) => (
-              <div key={item.nombre} className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-purple-300/70 truncate max-w-[70%]">
-                    {item.nombre}
-                  </span>
-                  <span className="text-white font-medium">{item.cantidad.toLocaleString()}</span>
-                </div>
-                <div className="h-2.5 bg-purple-900/30 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full bg-gradient-to-r ${colors[color]} rounded-full shadow-lg ${glowColors[color]} transition-all duration-700 ease-out`}
-                    style={{
-                      width: animate ? `${(item.cantidad / maxValue) * 100}%` : '0%',
-                      transitionDelay: `${index * 80}ms`
-                    }}
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              layout="vertical"
+              data={sortedData}
+              margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+            >
+              <XAxis type="number" hide />
+              <YAxis
+                type="category"
+                dataKey="nombre"
+                width={100}
+                tick={{ fill: '#e9d5ff', fontSize: 11, fontWeight: 500 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <RechartsTooltip
+                cursor={{ fill: 'rgba(168, 85, 247, 0.1)' }}
+                content={<CustomTooltip />}
+              />
+              <Bar
+                dataKey="cantidad"
+                fill={colorsMap[color]}
+                radius={[0, 4, 4, 0]}
+                barSize={24}
+                animationDuration={1500}
+                animationEasing="ease-out"
+              >
+                {sortedData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={colorsMap[color]}
+                    fillOpacity={0.8 + (index % 2) * 0.2}
                   />
-                </div>
-              </div>
-            ))}
-          </div>
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         )}
       </CardContent>
     </Card>
   );
 }
 
-// Componente de comparacion para 2 valores (Tradicional vs Digital)
+// ComparisonChart (Trad vs Digital) - Semi-Circle Donut (Gauge)
 function ComparisonChart({
   data,
   title,
@@ -250,233 +507,64 @@ function ComparisonChart({
   data: ChartData[];
   title: string;
 }) {
-  const [animate, setAnimate] = useState(false);
-
-  const sortedData = useMemo(() =>
-    [...data].sort((a, b) => b.cantidad - a.cantidad).slice(0, 2),
-    [data]
-  );
-
-  const total = sortedData.reduce((sum, d) => sum + d.cantidad, 0);
-  const leftItem = sortedData[0];
-  const rightItem = sortedData[1];
-
-  const leftPercent = total > 0 ? (leftItem?.cantidad || 0) / total * 100 : 50;
-  const rightPercent = total > 0 ? (rightItem?.cantidad || 0) / total * 100 : 50;
-
-  useEffect(() => {
-    setAnimate(false);
-    const timer = setTimeout(() => setAnimate(true), 50);
-    return () => clearTimeout(timer);
+  const sortedData = useMemo(() => {
+    const total = data.reduce((acc, curr) => acc + curr.cantidad, 0);
+    return [...data]
+      .sort((a, b) => b.cantidad - a.cantidad)
+      .map((item, index) => ({
+        ...item,
+        percentage: total > 0 ? (item.cantidad / total) * 100 : 0,
+        fill: index === 0 ? '#22d3ee' : '#ec4899',
+      }));
   }, [data]);
 
-  return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle className="text-sm uppercase tracking-wider">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col items-center justify-center h-[calc(100%-4rem)]">
-        {sortedData.length === 0 ? (
-          <div className="text-center py-8 text-purple-400/60">Sin datos</div>
-        ) : (
-          <div className="w-full space-y-6">
-            {/* Barra de comparacion */}
-            <div className="relative h-12 rounded-full overflow-hidden bg-purple-900/30">
-              <div
-                className="absolute left-0 top-0 h-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-700 ease-out flex items-center justify-end pr-3"
-                style={{ width: animate ? `${leftPercent}%` : '0%' }}
-              >
-                {leftPercent > 15 && (
-                  <span className="text-white font-bold text-lg drop-shadow-lg">
-                    {leftPercent.toFixed(0)}%
-                  </span>
-                )}
-              </div>
-              <div
-                className="absolute right-0 top-0 h-full bg-gradient-to-l from-pink-500 to-pink-400 transition-all duration-700 ease-out flex items-center justify-start pl-3"
-                style={{ width: animate ? `${rightPercent}%` : '0%' }}
-              >
-                {rightPercent > 15 && (
-                  <span className="text-white font-bold text-lg drop-shadow-lg">
-                    {rightPercent.toFixed(0)}%
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Labels y valores */}
-            <div className="flex justify-between items-start">
-              <div className="text-center">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-4 h-4 rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400" />
-                  <span className="text-lg font-medium text-cyan-400">
-                    {leftItem?.nombre || 'N/A'}
-                  </span>
-                </div>
-                <p className="text-2xl font-light text-white">
-                  {(leftItem?.cantidad || 0).toLocaleString()}
-                </p>
-              </div>
-
-              <div className="text-center px-4">
-                <span className="text-purple-400/60 text-sm">vs</span>
-              </div>
-
-              <div className="text-center">
-                <div className="flex items-center gap-2 mb-1 justify-end">
-                  <span className="text-lg font-medium text-pink-400">
-                    {rightItem?.nombre || 'N/A'}
-                  </span>
-                  <div className="w-4 h-4 rounded-full bg-gradient-to-r from-pink-500 to-pink-400" />
-                </div>
-                <p className="text-2xl font-light text-white">
-                  {(rightItem?.cantidad || 0).toLocaleString()}
-                </p>
-              </div>
-            </div>
-
-            {/* Total */}
-            <div className="text-center pt-2 border-t border-purple-800/30">
-              <span className="text-purple-400/60 text-sm">Total: </span>
-              <span className="text-white font-medium">{total.toLocaleString()}</span>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// Componente de grafica circular/donut con animación de segmentos que crecen
-function DonutChart({
-  data,
-  title,
-  maxItems = 6,
-}: {
-  data: ChartData[];
-  title: string;
-  maxItems?: number;
-}) {
-  const [animate, setAnimate] = useState(false);
-  const [animationKey, setAnimationKey] = useState(0);
-
-  const colors = [
-    '#ec4899', // pink
-    '#22d3ee', // cyan
-    '#facc15', // yellow
-    '#22c55e', // green
-    '#a855f7', // purple
-    '#f97316', // orange
-  ];
-
-  const sortedData = useMemo(() =>
-    [...data].sort((a, b) => b.cantidad - a.cantidad).slice(0, maxItems),
-    [data, maxItems]
-  );
-  const total = sortedData.reduce((sum, d) => sum + d.cantidad, 0);
-
-  // Trigger animation cuando cambian los datos
-  useEffect(() => {
-    setAnimate(false);
-    setAnimationKey(prev => prev + 1);
-    const timer = setTimeout(() => setAnimate(true), 50);
-    return () => clearTimeout(timer);
-  }, [data]);
-
-  // Calcular segmentos del donut
-  let currentAngle = 0;
-  const segments = sortedData.map((item, index) => {
-    const percentage = total > 0 ? (item.cantidad / total) * 100 : 0;
-    const angle = (percentage / 100) * 360;
-    const segment = {
-      ...item,
-      percentage,
-      startAngle: currentAngle,
-      endAngle: currentAngle + angle,
-      color: colors[index % colors.length],
-    };
-    currentAngle += angle;
-    return segment;
-  });
-
-  // Calcular el stroke-dasharray para animación de "dibujo"
-  const radius = 35;
-  const circumference = 2 * Math.PI * radius;
+  const total = sortedData.reduce((acc, curr) => acc + curr.cantidad, 0);
 
   return (
-    <Card className="h-full">
+    <Card className="h-full border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
       <CardHeader>
-        <CardTitle className="text-sm uppercase tracking-wider">{title}</CardTitle>
+        <CardTitle className="text-sm uppercase tracking-wider text-purple-100">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col items-center justify-center h-[calc(100%-4rem)]">
+      <CardContent className="h-[300px] flex items-center justify-center relative">
         {sortedData.length === 0 ? (
-          <div className="text-center py-8 text-purple-400/60">Sin datos</div>
+          <div className="text-purple-300/40">Sin datos</div>
         ) : (
-          <div className="flex flex-col items-center gap-4 w-full h-full justify-center">
-            {/* Donut Chart con animación de stroke */}
-            <div className="relative w-56 h-56">
-              <svg
-                key={animationKey}
-                viewBox="0 0 100 100"
-                className="w-full h-full -rotate-90"
-              >
-                {/* Fondo del donut */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r={radius}
-                  fill="none"
-                  stroke="rgba(139, 92, 246, 0.1)"
-                  strokeWidth="20"
-                />
-                {/* Segmentos animados */}
-                {segments.map((segment, index) => {
-                  const segmentLength = (segment.percentage / 100) * circumference;
-                  const previousSegments = segments.slice(0, index);
-                  const offset = previousSegments.reduce((acc, s) => acc + (s.percentage / 100) * circumference, 0);
-
-                  return (
-                    <circle
-                      key={index}
-                      cx="50"
-                      cy="50"
-                      r={radius}
-                      fill="none"
-                      stroke={segment.color}
-                      strokeWidth="20"
-                      strokeDasharray={`${segmentLength} ${circumference}`}
-                      strokeDashoffset={-offset}
-                      className="transition-all duration-700 ease-out"
-                      style={{
-                        filter: `drop-shadow(0 0 6px ${segment.color}80)`,
-                        strokeDasharray: animate
-                          ? `${segmentLength} ${circumference}`
-                          : `0 ${circumference}`,
-                        transitionDelay: `${index * 100}ms`,
-                      }}
-                    />
-                  );
-                })}
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-light text-white">{total.toLocaleString()}</span>
-                <span className="text-xs text-purple-400/60">Total</span>
-              </div>
+          <>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={sortedData}
+                  cx="50%"
+                  cy="70%"
+                  startAngle={180}
+                  endAngle={0}
+                  innerRadius={80}
+                  outerRadius={120}
+                  paddingAngle={2}
+                  dataKey="cantidad"
+                >
+                  {sortedData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <RechartsTooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+            {/* Center Stats (Positioned slightly lower for semi-circle) */}
+            <div className="absolute inset-x-0 bottom-10 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-3xl font-bold text-white tracking-tight">{total.toLocaleString()}</span>
+              <span className="text-xs text-purple-400 font-medium uppercase tracking-wider">Total</span>
             </div>
-            {/* Legend - Horizontal */}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 w-full">
-              {segments.map((segment, index) => (
-                <div key={index} className="flex items-center gap-2 text-sm">
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: segment.color }}
-                  />
-                  <span className="text-purple-300/70 truncate flex-1">{segment.nombre}</span>
-                  <span className="text-white font-medium">{segment.percentage.toFixed(0)}%</span>
+            {/* Legend */}
+            <div className="absolute top-4 right-4 flex flex-col gap-2">
+              {sortedData.map((item, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" style={{ backgroundColor: item.fill }} />
+                  <span className="text-[10px] text-zinc-300 font-medium">{item.nombre}: {item.percentage.toFixed(0)}%</span>
                 </div>
               ))}
             </div>
-          </div>
+          </>
         )}
       </CardContent>
     </Card>
@@ -606,7 +694,7 @@ export function DashboardPage() {
 
           {/* Panel de filtros expandible - diseño horizontal */}
           {showFilters && (
-            <Card className="overflow-hidden">
+            <Card className="overflow-hidden border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md">
               <CardContent className="py-4">
                 <div className="grid gap-4 md:grid-cols-6">
                   <FilterSelect
@@ -739,6 +827,7 @@ export function DashboardPage() {
             color="pink"
             title="Por Mueble"
           />
+          {/* Comparison - Tradicional vs Digital (NOW SEMI-CIRCLE GAUGE) */}
           <ComparisonChart
             data={graficas?.porTipo || []}
             title="Por Tipo (Tradicional vs Digital)"
@@ -747,26 +836,26 @@ export function DashboardPage() {
 
         {/* Segunda fila de graficas */}
         <div className="grid gap-4 lg:grid-cols-2">
+          {/* Donut Chart para Municipio (NOW PIE with hole) */}
           <DonutChart data={graficas?.porMunicipio || []} title="Por Municipio" />
-          <DonutChart data={graficas?.porNSE || []} title="Por Nivel Socioeconomico" />
+          {/* Simple Bar Chart para NSE */}
+          <SimpleBarChart data={graficas?.porNSE || []} title="Por Nivel Socioeconomico" />
         </div>
 
-        {/* Tercera fila - Por Plaza */}
+        {/* Tercera fila - Por Plaza (MAPA - KEPT) */}
         <div className="grid gap-4 lg:grid-cols-1">
-          <HorizontalBarChart
+          <MexicoMapChart
             data={graficas?.porPlaza || []}
-            color="cyan"
-            title="Por Plaza"
-            maxItems={10}
+            title="Ubicacion de Plazas (Ciudades)"
           />
         </div>
 
-        {/* Widgets adicionales */}
+        {/* Widgets adicionales (Actividad y Catorcenas) */}
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Actividad reciente */}
-          <Card>
+          <Card className="border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
             <CardHeader>
-              <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2">
+              <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2 text-purple-100">
                 <Activity className="h-4 w-4 text-pink-400" />
                 Actividad Reciente
               </CardTitle>
@@ -796,9 +885,9 @@ export function DashboardPage() {
           </Card>
 
           {/* Proximas catorcenas */}
-          <Card>
+          <Card className="border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
             <CardHeader>
-              <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2">
+              <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2 text-purple-100">
                 <Calendar className="h-4 w-4 text-cyan-400" />
                 Proximas Catorcenas
               </CardTitle>
@@ -842,9 +931,9 @@ export function DashboardPage() {
           </Card>
 
           {/* Top clientes */}
-          <Card>
+          <Card className="border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
             <CardHeader>
-              <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2">
+              <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2 text-purple-100">
                 <Users className="h-4 w-4 text-yellow-400" />
                 Top Clientes
               </CardTitle>
@@ -857,15 +946,14 @@ export function DashboardPage() {
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-purple-900/20 transition-colors"
                   >
                     <div
-                      className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                        index === 0
+                      className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium ${index === 0
                           ? 'bg-yellow-500 text-black'
                           : index === 1
-                          ? 'bg-gray-300 text-black'
-                          : index === 2
-                          ? 'bg-orange-600 text-white'
-                          : 'bg-purple-800 text-white'
-                      }`}
+                            ? 'bg-gray-300 text-black'
+                            : index === 2
+                              ? 'bg-orange-600 text-white'
+                              : 'bg-purple-800 text-white'
+                        }`}
                     >
                       {index + 1}
                     </div>
