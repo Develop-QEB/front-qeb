@@ -2,86 +2,260 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, Upload, ChevronDown, ChevronRight, Check, Users, Building2,
-  Package, Calendar, FileText, MapPin, Layers, Hash
+  Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw
 } from 'lucide-react';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { formatCurrency } from '../../lib/utils';
+import { getSapCache, setSapCache, SAP_CACHE_KEYS, getCacheTimestamp, clearSapCache } from '../../lib/sapCache';
 
-// Tarifa publica lookup map based on ItemCode
-const TARIFA_PUBLICA_MAP: Record<string, { costo: number; tarifa_publica: number }> = {
-  'RT-CAR': { costo: 8000, tarifa_publica: 10000 },
-  'RT-ESQ': { costo: 5600, tarifa_publica: 7000 },
-  'RT-MUR': { costo: 16000, tarifa_publica: 20000 },
-  'RT-PAN': { costo: 7200, tarifa_publica: 9000 },
-  'RT-TOT': { costo: 4800, tarifa_publica: 6000 },
-  'RT-PAR': { costo: 96000, tarifa_publica: 120000 },
-  'RT-UNI': { costo: 6720, tarifa_publica: 8400 },
-  'RT-COB': { costo: 4000, tarifa_publica: 5000 },
-  'RT-DTA': { costo: 2800, tarifa_publica: 3500 },
-  'RT-PSU': { costo: 4800, tarifa_publica: 6000 },
-  'DI-BAN': { costo: 6400, tarifa_publica: 8000 },
-  'DI-VER': { costo: 6400, tarifa_publica: 8000 },
-  'DI-TOT': { costo: 6400, tarifa_publica: 8000 },
-  'DI-DTA': { costo: 5600, tarifa_publica: 7000 },
-  'DI-PST': { costo: 6400, tarifa_publica: 8000 },
-  'DI-PAN': { costo: 11200, tarifa_publica: 14000 },
-  'DI-ESP': { costo: 64000, tarifa_publica: 80000 },
-  'DI-MUR': { costo: 24000, tarifa_publica: 30000 },
-  'DI-UNI': { costo: 10400, tarifa_publica: 13000 },
-  'DI-MED': { costo: 28000, tarifa_publica: 35000 },
-  'DI-LED': { costo: 32000, tarifa_publica: 40000 },
-  'DI-MES': { costo: 12800, tarifa_publica: 16000 },
-  'DI-MIX': { costo: 32000, tarifa_publica: 40000 },
-  'RT-BRD': { costo: 4000, tarifa_publica: 5000 },
-  'RT-BAN': { costo: 4000, tarifa_publica: 5000 },
-  'RT-VER': { costo: 4000, tarifa_publica: 5000 },
-  'RT-MES': { costo: 8000, tarifa_publica: 10000 },
-  'RT-PST': { costo: 4000, tarifa_publica: 5000 },
-  'RT-ESP': { costo: 40000, tarifa_publica: 50000 },
-  'RT-MED': { costo: 16000, tarifa_publica: 20000 },
-  'RT-LED': { costo: 16000, tarifa_publica: 20000 },
-  'RT-GRA': { costo: 6400, tarifa_publica: 8000 },
-  'RT-ACT': { costo: 8000, tarifa_publica: 10000 },
-  'RT-TAX': { costo: 3200, tarifa_publica: 4000 },
-  'RT-BUS': { costo: 4000, tarifa_publica: 5000 },
-  'RT-CEN': { costo: 12000, tarifa_publica: 15000 },
-  'RT-PRO': { costo: 8000, tarifa_publica: 10000 },
-  'DI-GRA': { costo: 9600, tarifa_publica: 12000 },
-  'DI-ACT': { costo: 12000, tarifa_publica: 15000 },
-  'DI-TAX': { costo: 4800, tarifa_publica: 6000 },
-  'DI-BUS': { costo: 6400, tarifa_publica: 8000 },
-  'DI-CEN': { costo: 20000, tarifa_publica: 25000 },
-  'DI-PRO': { costo: 12000, tarifa_publica: 15000 },
-  'DI-CAR': { costo: 12000, tarifa_publica: 15000 },
-  'DI-ESQ': { costo: 8400, tarifa_publica: 10500 },
-  'DI-PAR': { costo: 160000, tarifa_publica: 200000 },
-  'DI-COB': { costo: 6400, tarifa_publica: 8000 },
+// Tarifa publica lookup map based on ItemCode (full SAP codes with tarifa_publica values)
+const TARIFA_PUBLICA_MAP: Record<string, number> = {
+  'RT-BL-COB-MX': 2500,
+  'RT-BP1-SEC1-01-NAUC': 110000,
+  'RT-BP1-SEC1-02-NAUC': 110000,
+  'RT-BP2-SEC1-01-NAUC': 50000,
+  'RT-BP2-SEC1-02-NAUC': 50000,
+  'RT-BP3-SEC1-01-NAUC': 60000,
+  'RT-BP3-SEC1-02-NAUC': 60000,
+  'RT-BP4-SEC1-01-NAUC': 55000,
+  'RT-BP5-SEC1-01-NAUC': 36667,
+  'RT-BP5-SEC1-02-NAUC': 36667,
+  'RT-BP5-SEC1-03-NAUC': 36667,
+  'RT-BP5-SEC1-04-NAUC': 36667,
+  'RT-BP5-SEC2-01-NAUC': 36667,
+  'RT-BP5-SEC2-02-NAUC': 36667,
+  'RT-BP5-SEC2-03-NAUC': 36667,
+  'RT-BP5-SEC2-04-NAUC': 36667,
+  'RT-BP5-SEC3-01-NAUC': 36667,
+  'RT-BP5-SEC3-02-NAUC': 36667,
+  'RT-BP5-SEC3-03-NAUC': 36667,
+  'RT-BP5-SEC3-04-NAUC': 36667,
+  'RT-BP5-SEC4-01-NAUC': 36667,
+  'RT-BP5-SEC4-02-NAUC': 36667,
+  'RT-BP5-SEC4-03-NAUC': 36667,
+  'RT-BP5-SEC4-04-NAUC': 36667,
+  'RT-CDMX-DI-IT': 0,
+  'RT-CDMX-PA-IT': 0,
+  'RT-CDMX-WIFI': 0,
+  'RT-CL-COB-BR': 3768,
+  'RT-CL-COB-MX': 6127,
+  'RT-CL-COB-PH': 3768,
+  'RT-CL-COB-TJ': 3768,
+  'RT-CL-PRA-MX': 9190,
+  'RT-DIG-01-MR': 9842,
+  'RT-DIG-01-MX': 9482,
+  'RT-DIG-01-PB': 8500,
+  'RT-DIG-02-MX': 9482,
+  'RT-DIG-03-MX': 9482,
+  'RT-DIG-04-MX': 9482,
+  'RT-DIG-PRG-PB': 0,
+  'RT-ES-DIG-EM': 40000,
+  'RT-GDL-WIFI': 0,
+  'RT-GDL-WIFI-DIG': 0,
+  'RT-KCD-GDL-FL': 35000,
+  'RT-KCD-GDL-PER': 26900,
+  'RT-KCS-AGS': 27500,
+  'RT-KCS-AGS-PER': 30000,
+  'RT-KCS-GDL': 30000,
+  'RT-KCS-GDL-PER': 30000,
+  'RT-KCS-LEN': 27500,
+  'RT-KCS-LEN-PER': 30000,
+  'RT-KCS-MEX-PER': 60000,
+  'RT-KCS-MTY-PER': 2500,
+  'RT-KCS-PH-PER': 30000,
+  'RT-KCS-SLP': 27500,
+  'RT-KCS-SLP-PER': 30000,
+  'RT-KCS-VER-PER': 60000,
+  'RT-KCS-ZAP': 30000,
+  'RT-KCS-ZAP-FL': 30000,
+  'RT-KCS-ZAP-PER': 30000,
+  'RT-MMC-GDL-MA': 0,
+  'RT-MMC-GDL-MB': 0,
+  'RT-MMC-GDL-MC': 0,
+  'RT-MMC-GDL-MP': 0,
+  'RT-MMC-GDL-VE': 0,
+  'RT-MMC-GDL-VI': 0,
+  'RT-MTY-DI-IT': 0,
+  'RT-MTY-PA-IT': 0,
+  'RT-MTY-WIFI': 0,
+  'RT-P1-COB-CH': 3768,
+  'RT-P1-COB-CL': 3768,
+  'RT-P1-COB-EM': 6127,
+  'RT-P1-COB-GD': 6127,
+  'RT-P1-COB-MR': 3768,
+  'RT-P1-COB-MX': 6127,
+  'RT-P1-COB-MY': 6127,
+  'RT-P1-COB-PB': 3768,
+  'RT-P1-COB-QR': 3768,
+  'RT-P1-COB-SA': 3768,
+  'RT-P1-COB-TL': 6127,
+  'RT-P1-COB-ZP': 6127,
+  'RT-P1-DIG-GD': 6127,
+  'RT-P1-DIG-MX': 9482,
+  'RT-P1-DIG-MY': 6127,
+  'RT-P1-PRA-MX': 9190,
+  'RT-P1-PRC-EM': 9190,
+  'RT-P1-PRC-MX': 9190,
+  'RT-P2-COB-AC': 3768,
+  'RT-P2-COB-BR': 3768,
+  'RT-P2-COB-MZ': 3768,
+  'RT-P2-COB-OX': 3768,
+  'RT-P2-COB-PH': 3768,
+  'RT-P2-COB-PV': 3768,
+  'RT-P2-COB-TJ': 3768,
+  'RT-P3-COB-BR': 3768,
+  'RT-P4-COB-CU': 3768,
+  'RT-P4-COB-MZ': 0,
+  'RT-P4-COB-ZP': 6127,
+  'RT-PTE-GDL': 45000,
+  'RT-TUC-GDL': 84000,
+  'RT-TUV-GDL': 112000,
 };
 
-// Get tarifa and costo from ItemCode - flexible matching
-const getTarifaFromItemCode = (itemCode: string): { costo: number; tarifa_publica: number } => {
+// Costo lookup map (for reference)
+const COSTO_MAP: Record<string, number> = {
+  'RT-BL-COB-MX': 1875,
+  'RT-BP1-SEC1-01-NAUC': 50000,
+  'RT-BP1-SEC1-02-NAUC': 50000,
+  'RT-BP2-SEC1-01-NAUC': 35000,
+  'RT-BP2-SEC1-02-NAUC': 35000,
+  'RT-BP3-SEC1-01-NAUC': 40000,
+  'RT-BP3-SEC1-02-NAUC': 40000,
+  'RT-BP4-SEC1-01-NAUC': 30000,
+  'RT-BP5-SEC1-01-NAUC': 22000,
+  'RT-BP5-SEC1-02-NAUC': 22000,
+  'RT-BP5-SEC1-03-NAUC': 22000,
+  'RT-BP5-SEC1-04-NAUC': 22000,
+  'RT-BP5-SEC2-01-NAUC': 22000,
+  'RT-BP5-SEC2-02-NAUC': 22000,
+  'RT-BP5-SEC2-03-NAUC': 22000,
+  'RT-BP5-SEC2-04-NAUC': 22000,
+  'RT-BP5-SEC3-01-NAUC': 22000,
+  'RT-BP5-SEC3-02-NAUC': 22000,
+  'RT-BP5-SEC3-03-NAUC': 22000,
+  'RT-BP5-SEC3-04-NAUC': 22000,
+  'RT-BP5-SEC4-01-NAUC': 22000,
+  'RT-BP5-SEC4-02-NAUC': 22000,
+  'RT-BP5-SEC4-03-NAUC': 22000,
+  'RT-BP5-SEC4-04-NAUC': 22000,
+  'RT-CDMX-DI-IT': 3,
+  'RT-CDMX-PA-IT': 3,
+  'RT-CDMX-WIFI': 3,
+  'RT-CL-COB-BR': 2400,
+  'RT-CL-COB-MX': 3400,
+  'RT-CL-COB-PH': 2400,
+  'RT-CL-COB-TJ': 2400,
+  'RT-CL-PRA-MX': 4100,
+  'RT-DIG-01-MR': 4100,
+  'RT-DIG-01-MX': 5000,
+  'RT-DIG-01-PB': 4100,
+  'RT-DIG-02-MX': 5000,
+  'RT-DIG-03-MX': 5000,
+  'RT-DIG-04-MX': 5000,
+  'RT-DIG-PRG-PB': 5000,
+  'RT-ES-DIG-EM': 25000,
+  'RT-GDL-WIFI': 3,
+  'RT-GDL-WIFI-DIG': 3,
+  'RT-KCD-GDL-FL': 23000,
+  'RT-KCD-GDL-PER': 20000,
+  'RT-KCS-AGS': 18000,
+  'RT-KCS-AGS-PER': 14000,
+  'RT-KCS-GDL': 20000,
+  'RT-KCS-GDL-PER': 14000,
+  'RT-KCS-LEN': 18000,
+  'RT-KCS-LEN-PER': 14000,
+  'RT-KCS-MEX-PER': 25000,
+  'RT-KCS-MTY-PER': 20000,
+  'RT-KCS-PH-PER': 14000,
+  'RT-KCS-SLP': 18000,
+  'RT-KCS-SLP-PER': 14000,
+  'RT-KCS-VER-PER': 14000,
+  'RT-KCS-ZAP': 20000,
+  'RT-KCS-ZAP-FL': 14000,
+  'RT-KCS-ZAP-PER': 14000,
+  'RT-MMC-GDL-MA': 20000,
+  'RT-MMC-GDL-MB': 15000,
+  'RT-MMC-GDL-MC': 10000,
+  'RT-MMC-GDL-MP': 2000,
+  'RT-MMC-GDL-VE': 15000,
+  'RT-MMC-GDL-VI': 20000,
+  'RT-MTY-DI-IT': 3,
+  'RT-MTY-PA-IT': 3,
+  'RT-MTY-WIFI': 3,
+  'RT-P1-COB-CH': 2400,
+  'RT-P1-COB-CL': 2400,
+  'RT-P1-COB-EM': 3400,
+  'RT-P1-COB-GD': 3100,
+  'RT-P1-COB-MR': 2400,
+  'RT-P1-COB-MX': 3400,
+  'RT-P1-COB-MY': 3100,
+  'RT-P1-COB-PB': 2400,
+  'RT-P1-COB-QR': 2400,
+  'RT-P1-COB-SA': 2400,
+  'RT-P1-COB-TL': 2400,
+  'RT-P1-COB-ZP': 3100,
+  'RT-P1-DIG-GD': 4000,
+  'RT-P1-DIG-MX': 5000,
+  'RT-P1-DIG-MY': 4000,
+  'RT-P1-PRA-MX': 4100,
+  'RT-P1-PRC-EM': 4100,
+  'RT-P1-PRC-MX': 4100,
+  'RT-P2-COB-AC': 2400,
+  'RT-P2-COB-BR': 2400,
+  'RT-P2-COB-MZ': 2400,
+  'RT-P2-COB-OX': 2400,
+  'RT-P2-COB-PH': 2400,
+  'RT-P2-COB-PV': 2400,
+  'RT-P2-COB-TJ': 2400,
+  'RT-P3-COB-BR': 2400,
+  'RT-P4-COB-CU': 2400,
+  'RT-P4-COB-MZ': 2400,
+  'RT-P4-COB-ZP': 3100,
+  'RT-PTE-GDL': 20000,
+  'RT-TUC-GDL': 50000,
+  'RT-TUV-GDL': 50000,
+};
+
+// Formato auto-detection from article name
+const getFormatoFromArticulo = (itemName: string): string => {
+  if (!itemName) return '';
+  const name = itemName.toUpperCase();
+  if (name.includes('PARABUS')) return 'PARABUS';
+  if (name.includes('CASETA DE TAXIS')) return 'CASETA DE TAXIS';
+  if (name.includes('METROPOLITANO PARALELO')) return 'METROPOLITANO PARALELO';
+  if (name.includes('METROPOLITANO PERPENDICULAR')) return 'METROPOLITANO PERPENDICULAR';
+  if (name.includes('COLUMNA RECARGA')) return 'COLUMNA RECARGA';
+  if (name.includes('MUPI DE PIEDRA')) return 'MUPI DE PIEDRA';
+  if (name.includes('MUPI')) return 'MUPI';
+  if (name.includes('COLUMNA')) return 'COLUMNA';
+  if (name.includes('BOLERO')) return 'BOLERO';
+  return '';
+};
+
+// Tipo auto-detection from article name (Tradicional or Digital)
+const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' | '' => {
+  if (!itemName) return '';
+  const name = itemName.toUpperCase();
+  if (name.includes('DIGITAL') || name.includes('DIG')) return 'Digital';
+  if (name.includes('TRADICIONAL') || name.includes('RENTA')) return 'Tradicional';
+  return '';
+};
+
+// Get tarifa and costo from ItemCode - exact match first, then default calculation
+const getTarifaFromItemCode = (itemCode: string, caras: number = 1): { costo: number; tarifa_publica: number } => {
   if (!itemCode) return { costo: 0, tarifa_publica: 0 };
 
-  // Try exact match first
   const code = itemCode.toUpperCase().trim();
-  if (TARIFA_PUBLICA_MAP[code]) {
-    return TARIFA_PUBLICA_MAP[code];
+
+  // Check exact match in tarifa map
+  if (TARIFA_PUBLICA_MAP[code] !== undefined) {
+    const tarifa = TARIFA_PUBLICA_MAP[code];
+    const costo = COSTO_MAP[code] || (caras * 650);
+    return { costo, tarifa_publica: tarifa };
   }
 
-  // Try matching the pattern XX-XXX (first 6 chars or until space/special char)
-  const match = code.match(/^([A-Z]{2}-[A-Z]{3})/);
-  if (match && TARIFA_PUBLICA_MAP[match[1]]) {
-    return TARIFA_PUBLICA_MAP[match[1]];
-  }
-
-  // Try finding partial match
-  for (const key of Object.keys(TARIFA_PUBLICA_MAP)) {
-    if (code.startsWith(key) || code.includes(key)) {
-      return TARIFA_PUBLICA_MAP[key];
-    }
-  }
-
-  return { costo: 0, tarifa_publica: 0 };
+  // Default calculation: caras * 650 for costo, caras * 850 for tarifa
+  return { costo: caras * 650, tarifa_publica: caras * 850 };
 };
 
 // Ciudad -> Estado mapping for auto-selection
@@ -199,6 +373,7 @@ interface CaraEntry {
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  editSolicitudId?: number;
 }
 
 // Searchable Select Component - Shows ALL options
@@ -444,8 +619,9 @@ function MultiSelectTags({
   );
 }
 
-export function CreateSolicitudModal({ isOpen, onClose }: Props) {
+export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props) {
   const queryClient = useQueryClient();
+  const isEditMode = !!editSolicitudId;
 
   // Form state
   const [step, setStep] = useState(1);
@@ -476,6 +652,7 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
     estado: '',
     ciudades: [] as string[],
     formato: '',
+    tipo: '' as 'Tradicional' | 'Digital' | '',
     nse: [] as string[],
     periodo: '',
     renta: 1,
@@ -521,31 +698,99 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
     enabled: isOpen,
   });
 
-  // Fetch ALL CUIC data from SAP
-  const { data: cuicData, isLoading: cuicLoading } = useQuery({
-    queryKey: ['sap-cuic-all'],
-    queryFn: async () => {
-      const response = await fetch('https://characteristics-terminals-athletic-workplace.trycloudflare.com/cuic');
-      if (!response.ok) throw new Error('Error fetching CUIC data');
-      const data = await response.json();
-      return (data.value || data) as SAPCuicItem[];
-    },
-    enabled: isOpen,
-    staleTime: 60000,
+  // Fetch existing solicitud data for edit mode
+  const { data: editSolicitudData, isLoading: editDataLoading } = useQuery({
+    queryKey: ['solicitud-edit', editSolicitudId],
+    queryFn: () => solicitudesService.getFullDetails(editSolicitudId!),
+    enabled: isOpen && isEditMode,
   });
 
-  // Fetch ALL articulos from SAP
-  const { data: articulosData, isLoading: articulosLoading } = useQuery({
-    queryKey: ['sap-articulos-all'],
+  // State for forcing SAP refresh
+  const [forceRefreshSap, setForceRefreshSap] = useState(0);
+
+  // Fetch ALL CUIC data from SAP with cache
+  const { data: cuicData, isLoading: cuicLoading, refetch: refetchCuic, isFetching: cuicFetching } = useQuery({
+    queryKey: ['sap-cuic-all', forceRefreshSap],
     queryFn: async () => {
-      const response = await fetch('https://characteristics-terminals-athletic-workplace.trycloudflare.com/articulos');
-      if (!response.ok) throw new Error('Error fetching articulos data');
-      const data = await response.json();
-      return (data.value || data) as SAPArticulo[];
+      // Try cache first (unless forcing refresh)
+      if (forceRefreshSap === 0) {
+        const cached = getSapCache<SAPCuicItem[]>(SAP_CACHE_KEYS.CUIC);
+        if (cached && cached.length > 0) {
+          return cached;
+        }
+      }
+      // Fetch from SAP
+      try {
+        const response = await fetch('https://characteristics-terminals-athletic-workplace.trycloudflare.com/cuic');
+        if (!response.ok) throw new Error('Error fetching CUIC data');
+        const data = await response.json();
+        const items = (data.value || data) as SAPCuicItem[];
+        // Save to cache
+        if (items && items.length > 0) {
+          setSapCache(SAP_CACHE_KEYS.CUIC, items);
+        }
+        return items;
+      } catch (error) {
+        // If fetch fails, try to return cached data
+        const cached = getSapCache<SAPCuicItem[]>(SAP_CACHE_KEYS.CUIC);
+        if (cached && cached.length > 0) {
+          console.warn('SAP fetch failed, using cached data');
+          return cached;
+        }
+        throw error;
+      }
     },
     enabled: isOpen,
-    staleTime: 60000,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 1,
   });
+
+  // Fetch ALL articulos from SAP with cache
+  const { data: articulosData, isLoading: articulosLoading, refetch: refetchArticulos, isFetching: articulosFetching } = useQuery({
+    queryKey: ['sap-articulos-all', forceRefreshSap],
+    queryFn: async () => {
+      // Try cache first (unless forcing refresh)
+      if (forceRefreshSap === 0) {
+        const cached = getSapCache<SAPArticulo[]>(SAP_CACHE_KEYS.ARTICULOS);
+        if (cached && cached.length > 0) {
+          return cached;
+        }
+      }
+      // Fetch from SAP
+      try {
+        const response = await fetch('https://characteristics-terminals-athletic-workplace.trycloudflare.com/articulos');
+        if (!response.ok) throw new Error('Error fetching articulos data');
+        const data = await response.json();
+        const items = (data.value || data) as SAPArticulo[];
+        // Save to cache
+        if (items && items.length > 0) {
+          setSapCache(SAP_CACHE_KEYS.ARTICULOS, items);
+        }
+        return items;
+      } catch (error) {
+        // If fetch fails, try to return cached data
+        const cached = getSapCache<SAPArticulo[]>(SAP_CACHE_KEYS.ARTICULOS);
+        if (cached && cached.length > 0) {
+          console.warn('SAP articulos fetch failed, using cached data');
+          return cached;
+        }
+        throw error;
+      }
+    },
+    enabled: isOpen,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 1,
+  });
+
+  // Function to force refresh SAP data
+  const handleRefreshSap = () => {
+    clearSapCache();
+    setForceRefreshSap(prev => prev + 1);
+  };
+
+  // Get cache timestamps for display
+  const cuicCacheTime = getCacheTimestamp(SAP_CACHE_KEYS.CUIC);
+  const articulosCacheTime = getCacheTimestamp(SAP_CACHE_KEYS.ARTICULOS);
 
   // Fetch formatos based on selected ciudades
   const { data: formatosByCiudades } = useQuery({
@@ -567,15 +812,6 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
       setSelectedAsignados(traficoUsers);
     }
   }, [traficoUsers]);
-
-  // Derive tipo from articulo
-  const getTipoFromArticulo = (articulo: SAPArticulo | null): string => {
-    if (!articulo) return '';
-    const name = articulo.ItemName.toUpperCase();
-    if (name.includes('DIGITAL')) return 'Digital';
-    if (name.includes('RENTA')) return 'Tradicional';
-    return '';
-  };
 
   // Filter cities by estado
   const filteredCiudades = useMemo(() => {
@@ -653,7 +889,7 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
 
   // Add cara entry
   const handleAddCara = () => {
-    if (!newCara.articulo || !newCara.estado || !newCara.formato || newCara.nse.length === 0 || !newCara.periodo) return;
+    if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo) return;
 
     const [yearStr, catStr] = newCara.periodo.split('-');
     const catorcenaYear = parseInt(yearStr);
@@ -662,11 +898,10 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
     const period = availablePeriods.find(p => p.a_o === catorcenaYear && p.numero_catorcena === catorcenaNum);
     if (!period) return;
 
-    // Calculate descuento: if renta=100, bonif=10, then real renta is 90, descuento is 10/100 = 10%
-    const totalCaras = newCara.renta;
-    const descuento = totalCaras > 0 ? (newCara.bonificacion / totalCaras) * 100 : 0;
-    const realRenta = newCara.renta - newCara.bonificacion;
-    const precioTotal = (newCara.tarifaPublica * realRenta) * (1 - descuento / 100);
+    // Calculate descuento: if renta=100, bonif=10, then descuento is 10/(100+10) = 9.09%
+    const totalCaras = newCara.renta + newCara.bonificacion;
+    const descuento = totalCaras > 0 ? (newCara.bonificacion / totalCaras) : 0;
+    const precioTotal = newCara.tarifaPublica * newCara.renta;
 
     const cara: CaraEntry = {
       id: `${Date.now()}-${Math.random()}`,
@@ -674,7 +909,7 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
       estado: newCara.estado,
       ciudades: newCara.ciudades.length > 0 ? newCara.ciudades : ['Todas'],
       formato: newCara.formato,
-      tipo: getTipoFromArticulo(newCara.articulo),
+      tipo: newCara.tipo,
       nse: newCara.nse,
       catorcenaNum,
       catorcenaYear,
@@ -683,8 +918,8 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
       renta: newCara.renta,
       bonificacion: newCara.bonificacion,
       tarifaPublica: newCara.tarifaPublica,
-      descuento,
-      precioTotal: newCara.tarifaPublica * (newCara.renta - newCara.bonificacion),
+      descuento: descuento * 100, // Store as percentage
+      precioTotal,
     };
 
     setCaras([...caras, cara]);
@@ -692,12 +927,13 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
     // Auto expand the catorcena
     setExpandedCatorcenas(prev => new Set(prev).add(`${catorcenaYear}-${catorcenaNum}`));
 
-    // Reset form but keep articulo as default
+    // Reset ALL form fields to allow creating a new cara with same solicitud
     setNewCara({
-      ...newCara,
+      articulo: null,
       estado: '',
       ciudades: [],
       formato: '',
+      tipo: '',
       nse: [],
       periodo: '',
       renta: 1,
@@ -774,6 +1010,18 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
     },
   });
 
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => solicitudesService.update(editSolicitudId!, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-edit', editSolicitudId] });
+      onClose();
+      resetForm();
+    },
+  });
+
   // Reset form
   const resetForm = () => {
     setStep(1);
@@ -841,8 +1089,76 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
       })),
     };
 
-    createMutation.mutate(data);
+    if (isEditMode) {
+      updateMutation.mutate(data);
+    } else {
+      createMutation.mutate(data);
+    }
   };
+
+  // Populate form when editing
+  useEffect(() => {
+    if (isEditMode && editSolicitudData && cuicData && articulosData) {
+      const sol = editSolicitudData.solicitud;
+
+      // Find the CUIC item from SAP data - cuic is stored as string, CUIC from SAP is number
+      const solCuic = sol.cuic ? parseInt(sol.cuic, 10) : null;
+      const cuicItem = cuicData.find(c => c.CUIC === solCuic);
+      if (cuicItem) {
+        setSelectedCuic(cuicItem);
+      }
+
+      // Set campaign data - nombre_campania might come from cotizacion
+      const nombreCampania = editSolicitudData.cotizacion?.nombre_campania || editSolicitudData.campania?.nombre || '';
+      setNombreCampania(nombreCampania);
+      setDescripcion(sol.descripcion || '');
+      setNotas(sol.notas || '');
+      setImu(Boolean(sol.IMU));
+
+      // Set asignados - parse from id_asignado and asignado strings
+      if (sol.id_asignado && sol.asignado) {
+        const ids = sol.id_asignado.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+        const nombres = sol.asignado.split(',').map(n => n.trim());
+        const asignadosData = ids.map((id, idx) => ({
+          id,
+          nombre: nombres[idx] || '',
+          area: '',
+          puesto: ''
+        }));
+        setSelectedAsignados(asignadosData);
+      }
+
+      // Set caras from the fetched data
+      if (editSolicitudData.caras && editSolicitudData.caras.length > 0) {
+        const loadedCaras: CaraEntry[] = editSolicitudData.caras.map((cara, idx) => {
+          const articulo = articulosData.find(a => a.ItemCode === cara.articulo) || {
+            ItemCode: cara.articulo || '',
+            ItemName: cara.articulo || ''
+          };
+
+          return {
+            id: `edit-${idx}-${Date.now()}`,
+            articulo,
+            estado: cara.estados || '',
+            ciudades: cara.ciudad ? cara.ciudad.split(', ').map(c => c.trim()) : [],
+            formato: cara.formato || '',
+            tipo: cara.tipo || '',
+            nse: cara.nivel_socioeconomico ? cara.nivel_socioeconomico.split(',') : [],
+            catorcenaNum: 1,
+            catorcenaYear: new Date().getFullYear(),
+            periodoInicio: cara.inicio_periodo || '',
+            periodoFin: cara.fin_periodo || '',
+            renta: cara.caras || 1,
+            bonificacion: cara.bonificacion || 0,
+            tarifaPublica: cara.tarifa_publica || 0,
+            descuento: cara.descuento || 0,
+            precioTotal: cara.costo || 0,
+          };
+        });
+        setCaras(loadedCaras);
+      }
+    }
+  }, [isEditMode, editSolicitudData, cuicData, articulosData]);
 
   // Toggle NSE
   const toggleNse = (nse: string) => {
@@ -855,13 +1171,51 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
 
   if (!isOpen) return null;
 
+  // Show loading state when fetching edit data
+  if (isEditMode && editDataLoading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative bg-zinc-900 rounded-2xl border border-zinc-700 p-8 flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500" />
+          <p className="text-zinc-400">Cargando solicitud...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-5xl max-h-[95vh] h-[95vh] bg-zinc-900 rounded-2xl border border-zinc-700 shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-          <h2 className="text-xl font-bold text-white">Nueva Solicitud</h2>
+          <div className="flex items-center gap-4">
+            <h2 className="text-xl font-bold text-white">{isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud'}</h2>
+            {/* SAP Status & Refresh */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-800 rounded-lg text-[10px]">
+                <span className="text-zinc-500">CUIC:</span>
+                <span className={cuicData && cuicData.length > 0 ? 'text-emerald-400' : 'text-red-400'}>
+                  {cuicData?.length || 0}
+                </span>
+                <span className="text-zinc-600">|</span>
+                <span className="text-zinc-500">Art:</span>
+                <span className={articulosData && articulosData.length > 0 ? 'text-emerald-400' : 'text-red-400'}>
+                  {articulosData?.length || 0}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleRefreshSap}
+                disabled={cuicFetching || articulosFetching}
+                className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
+                title={`Refrescar datos SAP${cuicCacheTime ? `\nÚltima actualización: ${cuicCacheTime.toLocaleString()}` : ''}`}
+              >
+                <RefreshCw className={`h-4 w-4 text-zinc-400 ${(cuicFetching || articulosFetching) ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          </div>
           <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
             <X className="h-5 w-5 text-zinc-400" />
           </button>
@@ -873,7 +1227,7 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
             {[
               { num: 1, label: 'Cliente', icon: Building2 },
               { num: 2, label: 'Campaña', icon: FileText },
-              { num: 3, label: 'Ubicaciones', icon: MapPin },
+              { num: 3, label: 'Asignar Caras', icon: MapPin },
               { num: 4, label: 'Resumen', icon: Layers },
             ].map((s, i) => (
               <React.Fragment key={s.num}>
@@ -936,52 +1290,49 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
 
               {/* Selected client info - Complete */}
               {selectedCuic && (
-                <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50 space-y-4">
-                  {/* Row 1: CUIC, Marca, Producto */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
+                <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                  {/* Header con CUIC destacado */}
+                  <div className="flex items-start justify-between mb-3 pb-3 border-b border-zinc-700/50">
+                    <div>
                       <span className="text-[10px] text-purple-400 uppercase tracking-wider">CUIC</span>
-                      <div className="text-lg font-bold text-white">{selectedCuic.CUIC}</div>
+                      <div className="text-xl font-bold text-purple-400">{selectedCuic.CUIC}</div>
                     </div>
-                    <div className="p-3 bg-zinc-700/30 rounded-lg">
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Marca</span>
-                      <div className="text-sm font-medium text-white">{selectedCuic.T2_U_Marca || '-'}</div>
-                    </div>
-                    <div className="p-3 bg-zinc-700/30 rounded-lg">
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Producto</span>
-                      <div className="text-sm font-medium text-white">{selectedCuic.T2_U_Producto || '-'}</div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Categoría</span>
+                      <div className="text-sm font-medium text-amber-400">{selectedCuic.T2_U_Categoria || '-'}</div>
                     </div>
                   </div>
-                  {/* Row 2: Razón Social, Cliente */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Razón Social</span>
-                      <div className="text-sm text-white">{selectedCuic.T0_U_RazonSocial || '-'}</div>
+
+                  {/* Grid de información 2 columnas */}
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Marca:</span>
+                      <span className="text-white font-medium">{selectedCuic.T2_U_Marca || '-'}</span>
                     </div>
-                    <div>
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Cliente</span>
-                      <div className="text-sm text-white">{selectedCuic.T0_U_Cliente || '-'}</div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Producto:</span>
+                      <span className="text-white">{selectedCuic.T2_U_Producto || '-'}</span>
                     </div>
-                  </div>
-                  {/* Row 3: Asesor, Agencia, Unidad Negocio */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Asesor</span>
-                      <div className="text-sm text-emerald-400">{selectedCuic.T0_U_Asesor || '-'}</div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Cliente:</span>
+                      <span className="text-white">{selectedCuic.T0_U_Cliente || '-'}</span>
                     </div>
-                    <div>
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Agencia</span>
-                      <div className="text-sm text-white">{selectedCuic.T0_U_Agencia || '-'}</div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Razón Social:</span>
+                      <span className="text-white truncate max-w-[180px]" title={selectedCuic.T0_U_RazonSocial || '-'}>{selectedCuic.T0_U_RazonSocial || '-'}</span>
                     </div>
-                    <div>
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Unidad de Negocio</span>
-                      <div className="text-sm text-white">{selectedCuic.T1_U_UnidadNegocio || '-'}</div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Asesor:</span>
+                      <span className="text-emerald-400 font-medium">{selectedCuic.T0_U_Asesor || '-'}</span>
                     </div>
-                  </div>
-                  {/* Row 4: Categoría */}
-                  <div>
-                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Categoría</span>
-                    <div className="text-sm text-amber-400">{selectedCuic.T2_U_Categoria || '-'}</div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Agencia:</span>
+                      <span className="text-white">{selectedCuic.T0_U_Agencia || '-'}</span>
+                    </div>
+                    <div className="flex justify-between col-span-2">
+                      <span className="text-zinc-500">Unidad de Negocio:</span>
+                      <span className="text-white">{selectedCuic.T1_U_UnidadNegocio || '-'}</span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1157,10 +1508,10 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
               <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
                 <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
                   <Plus className="h-4 w-4 text-purple-400" />
-                  Agregar Ubicación
+                  Agregar Cara
                 </h3>
 
-                {/* Articulo SAP - per entry */}
+                {/* Row 1: Articulo SAP */}
                 <div className="mb-4">
                   <label className="text-xs text-zinc-500 flex items-center gap-1">
                     <Package className="h-3 w-3" />
@@ -1175,20 +1526,22 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
                       const tarifa = getTarifaFromItemCode(item.ItemCode);
                       // Auto-set estado and ciudad from ItemName
                       const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
-                      if (ciudadEstado) {
-                        setNewCara({
-                          ...newCara,
-                          articulo: item,
-                          tarifaPublica: tarifa.tarifa_publica,
-                          estado: ciudadEstado.estado,
-                          ciudades: [ciudadEstado.ciudad],
-                          formato: '', // Reset formato to re-filter by new ciudad
-                        });
-                      } else {
-                        setNewCara({ ...newCara, articulo: item, tarifaPublica: tarifa.tarifa_publica });
-                      }
+                      // Auto-set formato from ItemName
+                      const formato = getFormatoFromArticulo(item.ItemName);
+                      // Auto-set tipo from ItemName
+                      const tipo = getTipoFromName(item.ItemName);
+
+                      setNewCara({
+                        ...newCara,
+                        articulo: item,
+                        tarifaPublica: tarifa.tarifa_publica,
+                        estado: ciudadEstado?.estado || newCara.estado,
+                        ciudades: ciudadEstado ? [ciudadEstado.ciudad] : newCara.ciudades,
+                        formato: formato || newCara.formato,
+                        tipo: tipo || newCara.tipo,
+                      });
                     }}
-                    onClear={() => setNewCara({ ...newCara, articulo: null, tarifaPublica: 0, estado: '', ciudades: [], formato: '' })}
+                    onClear={() => setNewCara({ ...newCara, articulo: null, tarifaPublica: 0, estado: '', ciudades: [], formato: '', tipo: '' })}
                     displayKey="ItemName"
                     valueKey="ItemCode"
                     searchKeys={['ItemCode', 'ItemName']}
@@ -1206,25 +1559,16 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
                       </div>
                     )}
                   />
-                  {newCara.articulo && (
-                    <div className="flex items-center gap-2 text-xs mt-1">
-                      <span className="text-zinc-400">Tipo:</span>
-                      <span className={`px-2 py-0.5 rounded-full ${
-                        getTipoFromArticulo(newCara.articulo) === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
-                      }`}>
-                        {getTipoFromArticulo(newCara.articulo) || 'No determinado'}
-                      </span>
-                    </div>
-                  )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                {/* Row 2: Estado, Ciudad (opcional), Formato, Tipo */}
+                <div className="grid grid-cols-4 gap-3 mb-4">
                   {/* Estado */}
                   <div>
                     <label className="text-xs text-zinc-500">Estado</label>
                     <select
                       value={newCara.estado}
-                      onChange={(e) => setNewCara({ ...newCara, estado: e.target.value, ciudades: [], formato: '' })}
+                      onChange={(e) => setNewCara({ ...newCara, estado: e.target.value, ciudades: [] })}
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     >
                       <option value="">Seleccionar</option>
@@ -1234,36 +1578,55 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
                     </select>
                   </div>
 
-                  {/* Ciudad - Multiselect */}
+                  {/* Ciudad (opcional) */}
                   <div>
-                    <label className="text-xs text-zinc-500">Ciudad (multiselect)</label>
+                    <label className="text-xs text-zinc-500">Ciudad (opcional)</label>
                     <MultiSelectTags
                       label="ciudad"
                       options={filteredCiudades.map(c => ({ ciudad: c }))}
                       selected={newCara.ciudades.map(c => ({ ciudad: c }))}
-                      onChange={(items) => setNewCara({ ...newCara, ciudades: items.map(i => i.ciudad), formato: '' })}
+                      onChange={(items) => setNewCara({ ...newCara, ciudades: items.map(i => i.ciudad) })}
                       displayKey="ciudad"
                       valueKey="ciudad"
                       searchKey="ciudad"
                     />
                   </div>
 
-                  {/* Formato - filtered by ciudades */}
+                  {/* Formato */}
                   <div>
                     <label className="text-xs text-zinc-500">Formato</label>
                     <select
                       value={newCara.formato}
                       onChange={(e) => setNewCara({ ...newCara, formato: e.target.value })}
-                      disabled={newCara.ciudades.length === 0}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     >
-                      <option value="">{newCara.ciudades.length === 0 ? 'Selecciona ciudad(es)' : 'Seleccionar'}</option>
+                      <option value="">Seleccionar</option>
                       {filteredFormatos.map(f => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                      {inventarioFilters?.formatos.filter(f => !filteredFormatos.includes(f)).map(f => (
                         <option key={f} value={f}>{f}</option>
                       ))}
                     </select>
                   </div>
 
+                  {/* Tipo (selector con autocompletado) */}
+                  <div>
+                    <label className="text-xs text-zinc-500">Tipo</label>
+                    <select
+                      value={newCara.tipo}
+                      onChange={(e) => setNewCara({ ...newCara, tipo: e.target.value as 'Tradicional' | 'Digital' | '' })}
+                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                    >
+                      <option value="">Seleccionar</option>
+                      <option value="Tradicional">Tradicional</option>
+                      <option value="Digital">Digital</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Row 3: Periodo, Renta, Bonificación, Tarifa Pública */}
+                <div className="grid grid-cols-4 gap-3 mb-4">
                   {/* Periodo */}
                   <div>
                     <label className="text-xs text-zinc-500">Periodo</label>
@@ -1284,7 +1647,7 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
 
                   {/* Renta */}
                   <div>
-                    <label className="text-xs text-zinc-500">Renta (caras)</label>
+                    <label className="text-xs text-zinc-500">Caras</label>
                     <input
                       type="number"
                       min={1}
@@ -1309,36 +1672,31 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
 
                   {/* Tarifa Publica - Auto-calculated from ItemCode */}
                   <div>
-                    <label className="text-xs text-zinc-500">Tarifa Pública (auto)</label>
+                    <label className="text-xs text-zinc-500">Tarifa Pública</label>
                     <div className="w-full px-3 py-2 bg-zinc-800/50 border border-zinc-700 rounded-lg text-emerald-400 text-sm font-medium">
                       {newCara.tarifaPublica > 0 ? formatCurrency(newCara.tarifaPublica) : 'Selecciona artículo'}
                     </div>
-                    {newCara.articulo && (
-                      <div className="text-[10px] text-zinc-500 mt-1">
-                        Costo: {formatCurrency(getTarifaFromItemCode(newCara.articulo.ItemCode).costo)}
-                      </div>
-                    )}
                   </div>
+                </div>
 
-                  {/* NSE */}
-                  <div className="col-span-2">
-                    <label className="text-xs text-zinc-500">Nivel Socioeconómico</label>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {inventarioFilters?.nse.map(n => (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => toggleNse(n)}
-                          className={`px-3 py-1 rounded-full text-xs transition-all ${
-                            newCara.nse.includes(n)
-                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                              : 'bg-zinc-700/50 text-zinc-400 border border-zinc-600/50 hover:border-zinc-500'
-                          }`}
-                        >
-                          {n}
-                        </button>
-                      ))}
-                    </div>
+                {/* Row 4: NSE */}
+                <div className="mb-4">
+                  <label className="text-xs text-zinc-500">Nivel Socioeconómico</label>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {inventarioFilters?.nse.map(n => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => toggleNse(n)}
+                        className={`px-3 py-1 rounded-full text-xs transition-all ${
+                          newCara.nse.includes(n)
+                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                            : 'bg-zinc-700/50 text-zinc-400 border border-zinc-600/50 hover:border-zinc-500'
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -1362,11 +1720,11 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
                 <button
                   type="button"
                   onClick={handleAddCara}
-                  disabled={!newCara.articulo || !newCara.estado || !newCara.formato || newCara.nse.length === 0 || !newCara.periodo}
+                  disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo}
                   className="mt-4 flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors"
                 >
                   <Plus className="h-4 w-4" />
-                  Agregar
+                  Agregar Cara
                 </button>
               </div>
 
@@ -1374,7 +1732,7 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
               <div className="rounded-xl border border-zinc-700/50 overflow-hidden">
                 {groupedCaras.length === 0 ? (
                   <div className="px-4 py-8 text-center text-zinc-500 text-sm">
-                    No hay ubicaciones agregadas
+                    No hay caras agregadas
                   </div>
                 ) : (
                   <div>
@@ -1396,7 +1754,7 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
                             <div className="flex items-center gap-3">
                               {isExpanded ? <ChevronDown className="h-4 w-4 text-zinc-400" /> : <ChevronRight className="h-4 w-4 text-zinc-400" />}
                               <span className="font-medium text-white">Catorcena {cat} / {year}</span>
-                              <span className="text-xs text-zinc-500">({items.length} ubicaciones)</span>
+                              <span className="text-xs text-zinc-500">({items.length} caras)</span>
                             </div>
                             <div className="flex items-center gap-4 text-sm">
                               <span className="text-zinc-400">{groupRenta} renta</span>
@@ -1407,60 +1765,68 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
 
                           {/* Expanded items */}
                           {isExpanded && (
-                            <div className="bg-zinc-900/50">
-                              <table className="w-full">
+                            <div className="bg-zinc-900/50 overflow-x-auto">
+                              <table className="w-full min-w-[900px]">
                                 <thead>
                                   <tr className="bg-zinc-800/30">
-                                    <th className="px-3 py-2 text-left text-[10px] font-semibold text-zinc-500">Artículo</th>
-                                    <th className="px-3 py-2 text-left text-[10px] font-semibold text-zinc-500">Estado</th>
-                                    <th className="px-3 py-2 text-left text-[10px] font-semibold text-zinc-500">Ciudad</th>
-                                    <th className="px-3 py-2 text-left text-[10px] font-semibold text-zinc-500">Formato</th>
-                                    <th className="px-3 py-2 text-left text-[10px] font-semibold text-zinc-500">Tipo</th>
-                                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500">Renta</th>
-                                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500">Bonif.</th>
-                                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500">Total</th>
-                                    <th className="px-3 py-2 text-right text-[10px] font-semibold text-zinc-500">Tarifa</th>
-                                    <th className="px-3 py-2 text-right text-[10px] font-semibold text-zinc-500">Desc.</th>
-                                    <th className="px-3 py-2 text-right text-[10px] font-semibold text-zinc-500">Precio</th>
-                                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500"></th>
+                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Artículo</th>
+                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Ciudad</th>
+                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Tipo</th>
+                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Formato</th>
+                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Caras</th>
+                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Bonif.</th>
+                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Total</th>
+                                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Tarifa Púb.</th>
+                                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Precio Total</th>
+                                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Tarifa Efect.</th>
+                                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Desc.</th>
+                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500"></th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {items.map((cara) => (
-                                    <tr key={cara.id} className="border-t border-zinc-800/50 hover:bg-zinc-800/20">
-                                      <td className="px-3 py-2 text-xs text-white max-w-[120px] truncate" title={cara.articulo.ItemName}>
-                                        {cara.articulo.ItemName}
-                                      </td>
-                                      <td className="px-3 py-2 text-xs text-zinc-300">{cara.estado}</td>
-                                      <td className="px-3 py-2 text-xs text-zinc-300 max-w-[100px] truncate" title={cara.ciudades.join(', ')}>
-                                        {cara.ciudades.join(', ')}
-                                      </td>
-                                      <td className="px-3 py-2 text-xs text-zinc-300">{cara.formato}</td>
-                                      <td className="px-3 py-2">
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                                          cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
-                                        }`}>
-                                          {cara.tipo}
-                                        </span>
-                                      </td>
-                                      <td className="px-3 py-2 text-xs text-center text-white">{cara.renta}</td>
-                                      <td className="px-3 py-2 text-xs text-center text-emerald-400">{cara.bonificacion}</td>
-                                      <td className="px-3 py-2 text-xs text-center text-white font-medium">{cara.renta - cara.bonificacion}</td>
-                                      <td className="px-3 py-2 text-xs text-right text-zinc-300">{formatCurrency(cara.tarifaPublica)}</td>
-                                      <td className="px-3 py-2 text-xs text-right text-amber-400">{cara.descuento.toFixed(1)}%</td>
-                                      <td className="px-3 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(cara.precioTotal)}</td>
-                                      <td className="px-3 py-2 text-center">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleRemoveCara(cara.id)}
-                                          className="p-1 hover:bg-red-500/20 rounded text-red-400 text-[10px]"
-                                          title="Descartar"
-                                        >
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  ))}
+                                  {items.map((cara) => {
+                                    const totalCaras = cara.renta + cara.bonificacion;
+                                    const precioTotal = cara.tarifaPublica * cara.renta;
+                                    const tarifaEfectiva = totalCaras > 0 ? precioTotal / totalCaras : 0;
+                                    const descuento = totalCaras > 0 ? ((cara.bonificacion / totalCaras) * 100) : 0;
+
+                                    return (
+                                      <tr key={cara.id} className="border-t border-zinc-800/50 hover:bg-zinc-800/20">
+                                        <td className="px-2 py-2 text-xs text-white max-w-[140px]" title={`${cara.articulo.ItemCode} - ${cara.articulo.ItemName}`}>
+                                          <div className="truncate font-medium">{cara.articulo.ItemCode}</div>
+                                          <div className="truncate text-[10px] text-zinc-500">{cara.articulo.ItemName}</div>
+                                        </td>
+                                        <td className="px-2 py-2 text-xs text-zinc-300 max-w-[80px] truncate" title={`${cara.estado} - ${cara.ciudades.join(', ')}`}>
+                                          {cara.ciudades.join(', ')}
+                                        </td>
+                                        <td className="px-2 py-2">
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                            cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
+                                          }`}>
+                                            {cara.tipo}
+                                          </span>
+                                        </td>
+                                        <td className="px-2 py-2 text-xs text-zinc-300">{cara.formato}</td>
+                                        <td className="px-2 py-2 text-xs text-center text-white">{cara.renta}</td>
+                                        <td className="px-2 py-2 text-xs text-center text-emerald-400">{cara.bonificacion}</td>
+                                        <td className="px-2 py-2 text-xs text-center text-white font-medium">{totalCaras}</td>
+                                        <td className="px-2 py-2 text-xs text-right text-zinc-300">{formatCurrency(cara.tarifaPublica)}</td>
+                                        <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
+                                        <td className="px-2 py-2 text-xs text-right text-purple-400">{formatCurrency(tarifaEfectiva)}</td>
+                                        <td className="px-2 py-2 text-xs text-right text-amber-400">{descuento.toFixed(2)}%</td>
+                                        <td className="px-2 py-2 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemoveCara(cara.id)}
+                                            className="p-1 hover:bg-red-500/20 rounded text-red-400 text-[10px]"
+                                            title="Eliminar"
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </div>
@@ -1517,7 +1883,7 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
                       <span className="text-white text-sm">{nombreCampania || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Ubicaciones:</span>
+                      <span className="text-zinc-500 text-sm">Caras:</span>
                       <span className="text-white text-sm">{caras.length}</span>
                     </div>
                     <div className="flex justify-between">
@@ -1574,13 +1940,34 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
                   <Upload className="h-4 w-4 text-purple-400" />
                   Archivo (opcional)
                 </label>
-                <input
-                  type="file"
-                  onChange={handleFileChange}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-500 file:text-white hover:file:bg-purple-600"
-                />
-                {archivo && (
-                  <div className="text-xs text-emerald-400">Archivo cargado: {tipoArchivo}</div>
+                {archivo ? (
+                  <div className="flex items-center gap-3 p-3 bg-zinc-800 border border-emerald-500/30 rounded-xl">
+                    {tipoArchivo?.startsWith('image/') ? (
+                      <img src={archivo} alt="Preview" className="w-16 h-16 object-cover rounded-lg" />
+                    ) : (
+                      <div className="w-16 h-16 flex items-center justify-center bg-zinc-700 rounded-lg">
+                        <FileText className="h-6 w-6 text-zinc-400" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <div className="text-sm text-emerald-400 font-medium">Archivo cargado</div>
+                      <div className="text-xs text-zinc-500">{tipoArchivo}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setArchivo(null); setTipoArchivo(null); }}
+                      className="p-2 hover:bg-red-500/20 rounded-lg text-red-400"
+                      title="Eliminar archivo"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="file"
+                    onChange={handleFileChange}
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-500 file:text-white hover:file:bg-purple-600"
+                  />
                 )}
               </div>
 
@@ -1620,18 +2007,18 @@ export function CreateSolicitudModal({ isOpen, onClose }: Props) {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={createMutation.isPending || !selectedCuic || caras.length === 0}
+              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0}
               className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:bg-zinc-700 disabled:text-zinc-500 transition-colors flex items-center gap-2"
             >
-              {createMutation.isPending ? (
+              {(isEditMode ? updateMutation.isPending : createMutation.isPending) ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                  Creando...
+                  {isEditMode ? 'Guardando...' : 'Creando...'}
                 </>
               ) : (
                 <>
                   <Check className="h-4 w-4" />
-                  Crear Solicitud
+                  {isEditMode ? 'Guardar Cambios' : 'Crear Solicitud'}
                 </>
               )}
             </button>

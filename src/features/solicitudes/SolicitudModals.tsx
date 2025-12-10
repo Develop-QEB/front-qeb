@@ -1,0 +1,1096 @@
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  X, Eye, Edit2, PlayCircle, MessageSquare, Download, FileText,
+  Calendar, User, Building2, Package, DollarSign, MapPin, Hash,
+  Clock, Send, AlertTriangle, CheckCircle2, XCircle, Loader2,
+  ChevronDown, ChevronRight, Layers, Tag, TrendingUp, BarChart3
+} from 'lucide-react';
+import { solicitudesService, SolicitudFullDetails, Comentario, SolicitudCara } from '../../services/solicitudes.service';
+import { Solicitud, Catorcena } from '../../types';
+import { formatCurrency, formatDate } from '../../lib/utils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+// Status badge colors
+const STATUS_COLORS: Record<string, { bg: string; text: string; border: string; gradient: string }> = {
+  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30', gradient: 'from-amber-600 to-orange-600' },
+  'Aprobado': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30', gradient: 'from-emerald-600 to-green-600' },
+  'Aprobada': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30', gradient: 'from-emerald-600 to-green-600' },
+  'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30', gradient: 'from-red-600 to-rose-600' },
+  'Atendida': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30', gradient: 'from-cyan-600 to-blue-600' },
+  'Desactivado': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30', gradient: 'from-zinc-600 to-gray-600' },
+  'Ajustar': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30', gradient: 'from-orange-600 to-amber-600' },
+};
+
+const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30', gradient: 'from-violet-600 to-purple-600' };
+
+// Helper to convert date to catorcena format
+function dateToCatorcena(dateStr: string, catorcenas: Catorcena[]): { catorcena: string; year: number } | null {
+  if (!dateStr || !catorcenas.length) return null;
+  const date = new Date(dateStr);
+  const catorcena = catorcenas.find(c => {
+    const inicio = new Date(c.fecha_inicio);
+    const fin = new Date(c.fecha_fin);
+    return date >= inicio && date <= fin;
+  });
+  if (catorcena) {
+    return { catorcena: `Catorcena ${catorcena.numero_catorcena}`, year: catorcena.a_o };
+  }
+  return null;
+}
+
+// Helper to get catorcena display string
+function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[]): string {
+  const result = dateToCatorcena(dateStr, catorcenas);
+  if (result) {
+    return `${result.catorcena} - ${result.year}`;
+  }
+  return formatDate(dateStr);
+}
+
+// Helper to get catorcena range for display
+function getCatorcenaRange(fechaInicio: string, fechaFin: string, catorcenas: Catorcena[]): string {
+  const inicio = dateToCatorcena(fechaInicio, catorcenas);
+  const fin = dateToCatorcena(fechaFin, catorcenas);
+
+  if (inicio && fin) {
+    if (inicio.catorcena === fin.catorcena && inicio.year === fin.year) {
+      return `${inicio.catorcena} - ${inicio.year}`;
+    }
+    return `${inicio.catorcena} (${inicio.year}) a ${fin.catorcena} (${fin.year})`;
+  }
+  return `${formatDate(fechaInicio)} al ${formatDate(fechaFin)}`;
+}
+
+// Group caras by catorcena and articulo
+interface GroupedCaras {
+  key: string;
+  catorcena: string;
+  articulo: string;
+  caras: SolicitudCara[];
+  totalCaras: number;
+  totalBonificacion: number;
+  totalCosto: number;
+}
+
+function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Catorcena[]): GroupedCaras[] {
+  const groups: Map<string, GroupedCaras> = new Map();
+
+  caras.forEach(cara => {
+    const catorcenaResult = dateToCatorcena(cara.inicio_periodo, catorcenas);
+    const catorcenaStr = catorcenaResult ? `${catorcenaResult.catorcena} - ${catorcenaResult.year}` : formatDate(cara.inicio_periodo);
+    const articulo = cara.articulo || 'Sin artículo';
+    const key = `${catorcenaStr}|${articulo}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        catorcena: catorcenaStr,
+        articulo,
+        caras: [],
+        totalCaras: 0,
+        totalBonificacion: 0,
+        totalCosto: 0,
+      });
+    }
+
+    const group = groups.get(key)!;
+    group.caras.push(cara);
+    group.totalCaras += Number(cara.caras) || 0;
+    group.totalBonificacion += Number(cara.bonificacion) || 0;
+    group.totalCosto += Number(cara.costo) || 0;
+  });
+
+  return Array.from(groups.values()).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+// ============ VIEW SOLICITUD MODAL ============
+interface ViewSolicitudModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  solicitudId: number | null;
+}
+
+export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicitudModalProps) {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Bloquear scroll del body cuando el modal está abierto
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['solicitud-details', solicitudId],
+    queryFn: () => solicitudesService.getFullDetails(solicitudId!),
+    enabled: isOpen && !!solicitudId,
+  });
+
+  const { data: catorcenasData } = useQuery({
+    queryKey: ['catorcenas-all'],
+    queryFn: () => solicitudesService.getCatorcenas(),
+    enabled: isOpen,
+  });
+
+  const catorcenas = catorcenasData?.data || [];
+
+  const groupedCaras = useMemo(() => {
+    if (!data?.caras) return [];
+    return groupCarasByCatorcenaAndArticulo(data.caras, catorcenas);
+  }, [data?.caras, catorcenas]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const generatePDF = () => {
+    if (!data) return;
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 15;
+    const contentWidth = pageWidth - marginX * 2;
+    const centerX = pageWidth / 2;
+
+    // Colores corporativos IMU
+    const imuBlue: [number, number, number] = [0, 113, 206];
+    const imuGreen: [number, number, number] = [118, 183, 42];
+    const imuDarkBlue: [number, number, number] = [27, 42, 74];
+    const white: [number, number, number] = [255, 255, 255];
+    const lightBg: [number, number, number] = [250, 251, 252];
+    const textDark: [number, number, number] = [30, 41, 59];
+    const textMuted: [number, number, number] = [120, 130, 145];
+
+    // === FONDO ===
+    doc.setFillColor(...white);
+    doc.rect(0, 0, pageWidth, pageHeight, 'F');
+
+    // === HEADER ===
+    doc.setFillColor(...imuDarkBlue);
+    doc.rect(0, 0, pageWidth, 32, 'F');
+    doc.setFillColor(...imuGreen);
+    doc.rect(0, 32, pageWidth, 2, 'F');
+
+    // Logo Grupo IMU
+    doc.setTextColor(...imuGreen);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Grupo', marginX, 11);
+    doc.setTextColor(...white);
+    doc.setFontSize(18);
+    doc.text('IMU', marginX, 21);
+    doc.setFontSize(5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(160, 165, 175);
+    doc.text('Imagenes y muebles urbanos', marginX, 27);
+
+    // Título "SOLICITUD" centrado
+    doc.setTextColor(...white);
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('SOLICITUD', centerX, 18, { align: 'center' });
+
+    // Número de solicitud debajo del título
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(180, 185, 195);
+    doc.text(`No. ${data.solicitud.id}`, centerX, 26, { align: 'center' });
+
+    let yPos = 42;
+
+    // === DATOS DE LA CAMPAÑA ===
+    doc.setFillColor(...lightBg);
+    doc.roundedRect(marginX, yPos, contentWidth, 32, 3, 3, 'F');
+
+    doc.setTextColor(...imuDarkBlue);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('DATOS DE LA CAMPAÑA', marginX + 5, yPos + 8);
+
+    // Línea decorativa
+    doc.setFillColor(...imuBlue);
+    doc.rect(marginX + 5, yPos + 10, 35, 0.5, 'F');
+
+    const col1 = marginX + 5;
+    const col2 = marginX + contentWidth / 2;
+
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+
+    // Fila 1
+    doc.setTextColor(...textMuted);
+    doc.text('Nombre Campaña:', col1, yPos + 17);
+    doc.setTextColor(...textDark);
+    doc.setFont('helvetica', 'bold');
+    doc.text(String(data.cotizacion?.nombre_campania || '-').substring(0, 40), col1 + 28, yPos + 17);
+
+    // Fila 2: Período
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...textMuted);
+    doc.text('Período:', col1, yPos + 24);
+
+    const fechaInicio = data.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : '-';
+    const fechaFin = data.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : '-';
+    const catInicio = data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas) : '';
+    const catFin = data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas) : '';
+
+    doc.setTextColor(...imuBlue);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${fechaInicio}`, col1 + 15, yPos + 24);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...textMuted);
+    doc.text(`(${catInicio})`, col1 + 35, yPos + 24);
+
+    doc.setTextColor(...textDark);
+    doc.text('al', col1 + 60, yPos + 24);
+
+    doc.setTextColor(...imuBlue);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${fechaFin}`, col1 + 67, yPos + 24);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...textMuted);
+    doc.text(`(${catFin})`, col1 + 87, yPos + 24);
+
+    yPos += 38;
+
+    // === INFORMACIÓN DEL CLIENTE ===
+    doc.setFillColor(...lightBg);
+    doc.roundedRect(marginX, yPos, contentWidth, 40, 3, 3, 'F');
+
+    doc.setTextColor(...imuDarkBlue);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('INFORMACIÓN DEL CLIENTE', marginX + 5, yPos + 8);
+
+    doc.setFillColor(...imuGreen);
+    doc.rect(marginX + 5, yPos + 10, 40, 0.5, 'F');
+
+    const clienteInfo = [
+      ['Cliente', data.solicitud.razon_social || '-', 'Asesor', data.solicitud.asesor || '-'],
+      ['Producto', data.solicitud.producto_nombre || '-', 'Categoría', data.solicitud.categoria_nombre || '-'],
+      ['Agencia', data.solicitud.agencia || '-', 'Marca', data.solicitud.marca_nombre || '-'],
+    ];
+
+    doc.setFontSize(7);
+    let infoY = yPos + 17;
+    clienteInfo.forEach(row => {
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...textMuted);
+      doc.text(row[0] + ':', col1, infoY);
+      doc.setTextColor(...textDark);
+      doc.text(String(row[1]).substring(0, 30), col1 + 18, infoY);
+
+      doc.setTextColor(...textMuted);
+      doc.text(row[2] + ':', col2, infoY);
+      doc.setTextColor(...textDark);
+      doc.text(String(row[3]).substring(0, 30), col2 + 18, infoY);
+
+      infoY += 7;
+    });
+
+    yPos += 46;
+
+    // === RESUMEN (centrado y estético) ===
+    if (data.cotizacion) {
+      doc.setFillColor(...imuDarkBlue);
+      doc.roundedRect(marginX, yPos, contentWidth, 20, 3, 3, 'F');
+
+      const summaryItems = [
+        { label: 'Total de Caras', value: data.cotizacion.numero_caras?.toString() || '0' },
+        { label: 'Bonificadas', value: data.cotizacion.bonificacion?.toString() || '0' },
+        { label: 'Caras Facturadas', value: ((data.cotizacion.numero_caras || 0) + (data.cotizacion.bonificacion || 0)).toString() },
+        { label: 'Inversión', value: formatCurrency(data.cotizacion.precio || 0) },
+      ];
+
+      const totalItemsWidth = summaryItems.length * 40;
+      const startX = (pageWidth - totalItemsWidth) / 2;
+
+      summaryItems.forEach((item, idx) => {
+        const itemX = startX + idx * 45;
+        // Valor grande centrado
+        doc.setTextColor(...white);
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(item.value, itemX + 20, yPos + 10, { align: 'center' });
+        // Label pequeño debajo
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(180, 185, 200);
+        doc.text(item.label, itemX + 20, yPos + 16, { align: 'center' });
+      });
+
+      yPos += 26;
+    }
+
+    // === DETALLE DE CARAS ===
+    if (groupedCaras.length > 0) {
+      doc.setTextColor(...imuDarkBlue);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('DETALLE DE CARAS', marginX, yPos);
+
+      doc.setFillColor(...imuBlue);
+      doc.rect(marginX, yPos + 2, 28, 0.5, 'F');
+
+      yPos += 8;
+
+      groupedCaras.forEach((group) => {
+        if (yPos > pageHeight - 40) {
+          doc.addPage();
+          doc.setFillColor(...white);
+          doc.rect(0, 0, pageWidth, pageHeight, 'F');
+          // Mini header
+          doc.setFillColor(...imuDarkBlue);
+          doc.rect(0, 0, pageWidth, 10, 'F');
+          doc.setFillColor(...imuGreen);
+          doc.rect(0, 10, pageWidth, 1, 'F');
+          doc.setTextColor(...white);
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`Solicitud ${data.solicitud.id}`, marginX, 7);
+          yPos = 18;
+        }
+
+        // Header del grupo - solo catorcena, sin precio ni cantidad
+        doc.setFillColor(...imuBlue);
+        doc.roundedRect(marginX, yPos, contentWidth, 6, 1, 1, 'F');
+        doc.setTextColor(...white);
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.text(group.catorcena, marginX + 4, yPos + 4.2);
+        yPos += 8;
+
+        // Tabla
+        const tableData = group.caras.map(c => [
+          c.idquote || c.id?.toString() || '-',
+          c.ciudad || '-',
+          c.tipo || '-',
+          c.formato || '-',
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [['ID', 'Ubicación', 'Tipo de Cara', 'Mueble']],
+          body: tableData,
+          theme: 'plain',
+          margin: { left: marginX, right: marginX },
+          styles: {
+            fontSize: 7,
+            cellPadding: 2,
+            textColor: textDark,
+            lineColor: [230, 235, 240],
+            lineWidth: 0.1,
+          },
+          headStyles: {
+            fillColor: [245, 248, 250],
+            textColor: imuDarkBlue,
+            fontStyle: 'bold',
+            fontSize: 7,
+          },
+          alternateRowStyles: { fillColor: [252, 253, 255] },
+          columnStyles: {
+            0: { cellWidth: 25 },
+            1: { cellWidth: 60 },
+            2: { cellWidth: 45 },
+            3: { cellWidth: 45 },
+          },
+        });
+
+        yPos = (doc as any).lastAutoTable.finalY + 6;
+      });
+    }
+
+    // === FOOTER ===
+    const totalPages = doc.internal.pages.length - 1;
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFillColor(...imuGreen);
+      doc.rect(0, pageHeight - 8, pageWidth, 0.8, 'F');
+      doc.setFillColor(...imuDarkBlue);
+      doc.rect(0, pageHeight - 7, pageWidth, 7, 'F');
+      doc.setTextColor(...white);
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Grupo IMU', marginX, pageHeight - 2.5);
+      doc.text(`${i} / ${totalPages}`, pageWidth - marginX, pageHeight - 2.5, { align: 'right' });
+    }
+
+    // Save
+    const fileName = `Solicitud_${data.solicitud.id}_${(data.cotizacion?.nombre_campania || '').replace(/[^a-zA-Z0-9]/g, '_') || 'documento'}.pdf`;
+    doc.save(fileName);
+  };
+
+  if (!isOpen) return null;
+
+  // Calcular KPIs desde las caras reales
+  const totalRenta = data?.caras?.reduce((sum, c) => sum + (Number(c.caras) || 0), 0) || 0;
+  const totalBonificacion = data?.caras?.reduce((sum, c) => sum + (Number(c.bonificacion) || 0), 0) || 0;
+  const totalCaras = totalRenta + totalBonificacion;
+  const totalTarifaPublica = data?.caras?.reduce((sum, c) => sum + (Number(c.tarifa_publica) || 0), 0) || 0;
+  // Inversión = tarifa pública * caras en renta
+  const inversion = data?.caras?.reduce((sum, c) => sum + ((Number(c.tarifa_publica) || 0) * (Number(c.caras) || 0)), 0) || 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 isolate">
+      <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative z-50">
+        {/* Header - Estilo violeta consistente */}
+        <div className="relative px-6 py-5 border-b border-violet-500/20 bg-gradient-to-r from-violet-600/20 via-purple-600/15 to-fuchsia-600/10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
+                <FileText className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-white">Solicitud</h2>
+                  {data && (
+                    <span className="text-violet-300 font-semibold">#{data.solicitud.id}</span>
+                  )}
+                </div>
+                {data?.cotizacion?.nombre_campania && (
+                  <p className="text-zinc-400 text-sm">{data.cotizacion.nombre_campania}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={generatePDF}
+                disabled={isLoading || !data}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500/20 text-violet-300 text-sm font-medium hover:bg-violet-500/30 disabled:opacity-50 transition-all border border-violet-500/30"
+              >
+                <Download className="h-4 w-4" />
+                PDF
+              </button>
+              <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-xl transition-colors">
+                <X className="h-5 w-5 text-zinc-400" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-5">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
+                <span className="text-zinc-500 text-sm">Cargando...</span>
+              </div>
+            </div>
+          ) : data ? (
+            <div className="space-y-5">
+              {/* Stats Row - Centrado y limpio */}
+              <div className="bg-gradient-to-r from-violet-600/10 via-purple-600/10 to-fuchsia-600/10 rounded-2xl p-5 border border-violet-500/20">
+                <div className="grid grid-cols-4 gap-6">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-white">{totalCaras}</p>
+                    <p className="text-xs text-zinc-400 mt-1">Total Caras</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-violet-400">{totalRenta}</p>
+                    <p className="text-xs text-zinc-400 mt-1">En Renta</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-white">{totalBonificacion}</p>
+                    <p className="text-xs text-zinc-400 mt-1">Bonificación</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-amber-400">{formatCurrency(inversion)}</p>
+                    <p className="text-xs text-zinc-400 mt-1">Inversión</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Two Column Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {/* Campaña Info */}
+                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                  <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Campaña
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500 text-sm">Nombre</span>
+                      <span className="text-white text-sm font-medium">{data.cotizacion?.nombre_campania || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500 text-sm">Período</span>
+                      <span className="text-violet-300 text-sm font-medium">
+                        {data.cotizacion ? getCatorcenaRange(data.cotizacion.fecha_inicio, data.cotizacion.fecha_fin, catorcenas) : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500 text-sm">Inicio</span>
+                      <span className="text-white text-sm">{data.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500 text-sm">Fin</span>
+                      <span className="text-white text-sm">{data.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : '-'}</span>
+                    </div>
+                    {data.solicitud.descripcion && (
+                      <div className="pt-2 border-t border-zinc-700/50">
+                        <span className="text-zinc-500 text-sm block mb-1">Descripción</span>
+                        <span className="text-zinc-300 text-sm">{data.solicitud.descripcion}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Cliente Info */}
+                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                  <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Cliente
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500 text-sm">CUIC</span>
+                      <span className="text-white text-sm font-mono">{data.solicitud.cuic || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500 text-sm">Razón Social</span>
+                      <span className="text-white text-sm font-medium truncate ml-4">{data.solicitud.razon_social || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500 text-sm">Marca</span>
+                      <span className="text-white text-sm">{data.solicitud.marca_nombre || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500 text-sm">Categoría</span>
+                      <span className="text-white text-sm">{data.solicitud.categoria_nombre || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500 text-sm">Agencia</span>
+                      <span className="text-white text-sm">{data.solicitud.agencia || '-'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* More Info Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                  <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Asesor
+                  </h3>
+                  <p className="text-white font-medium">{data.solicitud.asesor || '-'}</p>
+                  <p className="text-zinc-500 text-xs mt-1">Asesor comercial</p>
+                </div>
+                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                  <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    Producto
+                  </h3>
+                  <p className="text-white font-medium">{data.solicitud.producto_nombre || '-'}</p>
+                  <p className="text-zinc-500 text-xs mt-1">Producto/Servicio</p>
+                </div>
+                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                  <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Asignados
+                  </h3>
+                  {data.solicitud.asignado ? (
+                    <ul className="space-y-1.5">
+                      {data.solicitud.asignado.split(',').map((nombre, idx) => (
+                        <li key={idx} className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                          <span className="text-white text-sm">{nombre.trim()}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-zinc-500 text-sm">Sin asignar</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Caras grouped - Diseño con colores */}
+              {groupedCaras.length > 0 && (
+                <div className="bg-gradient-to-br from-violet-900/20 via-purple-900/15 to-fuchsia-900/10 rounded-2xl border border-violet-500/20 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-violet-500/20 bg-violet-600/10">
+                    <h3 className="text-sm font-semibold text-violet-300 flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      Detalle de Caras
+                    </h3>
+                  </div>
+                  <div className="divide-y divide-violet-500/10">
+                    {groupedCaras.map((group) => {
+                      const tarifaPublicaTotal = group.caras.reduce((sum, c) => sum + (c.tarifa_publica || 0), 0);
+                      return (
+                        <div key={group.key}>
+                          <button
+                            onClick={() => toggleGroup(group.key)}
+                            className="w-full px-5 py-3 flex items-center justify-between hover:bg-violet-600/10 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              {expandedGroups.has(group.key) ? (
+                                <ChevronDown className="h-4 w-4 text-violet-400" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-violet-500/50" />
+                              )}
+                              <span className="px-3 py-1 rounded-lg bg-violet-500/30 text-violet-200 text-xs font-medium border border-violet-400/30">
+                                {group.catorcena}
+                              </span>
+                              <span className="px-3 py-1 rounded-lg bg-purple-500/20 text-purple-200 text-xs font-medium border border-purple-400/20">
+                                {group.articulo}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-zinc-400 text-xs">Renta:</span>
+                                <span className="text-white text-sm font-semibold">{group.totalCaras}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-zinc-400 text-xs">Bonif:</span>
+                                <span className="text-white text-sm font-semibold">{group.totalBonificacion}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-zinc-400 text-xs">Total:</span>
+                                <span className="text-white text-sm font-bold">{group.totalCaras + group.totalBonificacion}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 pl-2 border-l border-violet-500/30">
+                                <span className="text-amber-400 text-xs">Tarifa:</span>
+                                <span className="text-amber-300 text-sm font-semibold">{formatCurrency(tarifaPublicaTotal)}</span>
+                              </div>
+                            </div>
+                          </button>
+                          {expandedGroups.has(group.key) && (
+                            <div className="px-5 pb-4">
+                              <div className="overflow-x-auto rounded-xl border border-violet-500/20 bg-zinc-900/50">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="bg-violet-600/20">
+                                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Ciudad</th>
+                                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Estado</th>
+                                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Formato</th>
+                                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Tipo</th>
+                                      <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200">Renta</th>
+                                      <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200">Bonif</th>
+                                      <th className="px-3 py-2.5 text-center text-xs font-semibold text-white">Total</th>
+                                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-amber-300">Tarifa</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-violet-500/10">
+                                    {group.caras.map((cara, idx) => (
+                                      <tr key={idx} className="hover:bg-violet-600/10 transition-colors">
+                                        <td className="px-3 py-2.5 text-zinc-200">{cara.ciudad || '-'}</td>
+                                        <td className="px-3 py-2.5 text-zinc-300">{cara.estados || '-'}</td>
+                                        <td className="px-3 py-2.5 text-zinc-300">{cara.formato || '-'}</td>
+                                        <td className="px-3 py-2.5 text-zinc-300">{cara.tipo || '-'}</td>
+                                        <td className="px-3 py-2.5 text-center text-white font-medium">{Number(cara.caras) || 0}</td>
+                                        <td className="px-3 py-2.5 text-center text-white font-medium">{Number(cara.bonificacion) || 0}</td>
+                                        <td className="px-3 py-2.5 text-center text-white font-bold">{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
+                                        <td className="px-3 py-2.5 text-right text-amber-300 font-medium">{formatCurrency(cara.tarifa_publica || 0)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Archivo Adjunto - Con preview */}
+              {data.solicitud.archivo && (
+                <div className="bg-zinc-800/30 rounded-2xl border border-zinc-800/50 overflow-hidden">
+                  <div className="px-5 py-3 border-b border-zinc-800/50 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-violet-400 flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Archivo Adjunto
+                    </h3>
+                    <a
+                      href={data.solicitud.archivo}
+                      download
+                      className="px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-300 text-xs font-medium hover:bg-violet-500/30 transition-colors flex items-center gap-1.5 border border-violet-500/30"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Descargar
+                    </a>
+                  </div>
+                  <div className="p-4">
+                    {data.solicitud.tipo_archivo?.startsWith('image/') ? (
+                      <div className="relative rounded-xl overflow-hidden bg-zinc-900/50 border border-zinc-700/50">
+                        <img
+                          src={data.solicitud.archivo}
+                          alt="Archivo adjunto"
+                          className="w-full max-h-64 object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 p-4 bg-zinc-900/50 rounded-xl border border-zinc-700/50">
+                        <div className="w-12 h-12 rounded-xl bg-violet-500/20 flex items-center justify-center">
+                          <FileText className="h-6 w-6 text-violet-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-white font-medium">Documento</p>
+                          <p className="text-xs text-zinc-500">{data.solicitud.tipo_archivo || 'Archivo adjunto'}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Historial - Compacto */}
+              {data.historial && data.historial.length > 0 && (
+                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                  <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Historial
+                  </h3>
+                  <div className="space-y-3">
+                    {data.historial.slice(0, 5).map((h, idx) => (
+                      <div key={idx} className="flex items-center gap-3 text-sm">
+                        <div className="w-2 h-2 rounded-full bg-violet-500" />
+                        <span className="text-zinc-400">{formatDate(h.fecha_hora)}</span>
+                        <span className="px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 text-xs">{h.accion}</span>
+                        <span className="text-zinc-500 truncate flex-1">{h.detalles}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
+              <XCircle className="h-12 w-12 mb-3 text-zinc-600" />
+              <p>No se pudo cargar la información</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Helper components
+function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: string; color: string }) {
+  const colors: Record<string, { bg: string; text: string; icon: string }> = {
+    violet: { bg: 'bg-violet-500/10', text: 'text-violet-400', icon: 'text-violet-400' },
+    cyan: { bg: 'bg-cyan-500/10', text: 'text-cyan-400', icon: 'text-cyan-400' },
+    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', icon: 'text-emerald-400' },
+    amber: { bg: 'bg-amber-500/10', text: 'text-amber-400', icon: 'text-amber-400' },
+  };
+  const c = colors[color] || colors.violet;
+
+  return (
+    <div className={`${c.bg} rounded-2xl p-4 border border-zinc-800`}>
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className={`h-4 w-4 ${c.icon}`} />
+        <span className="text-zinc-400 text-xs">{label}</span>
+      </div>
+      <p className={`text-lg font-bold ${c.text}`}>{value}</p>
+    </div>
+  );
+}
+
+function InfoRow({ label, value, mono = false, highlight = false }: { label: string; value?: string | null; mono?: boolean; highlight?: boolean }) {
+  return (
+    <div>
+      <span className="text-zinc-500 text-xs block mb-0.5">{label}</span>
+      <span className={`text-sm ${mono ? 'font-mono' : ''} ${highlight ? 'text-violet-400 font-medium' : 'text-white'}`}>
+        {value || '-'}
+      </span>
+    </div>
+  );
+}
+
+// ============ STATUS MODAL WITH COMMENTS ============
+interface StatusModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  solicitud: Solicitud | null;
+  onStatusChange: () => void;
+}
+
+export function StatusModal({ isOpen, onClose, solicitud, onStatusChange }: StatusModalProps) {
+  const queryClient = useQueryClient();
+  const [newComment, setNewComment] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const commentsEndRef = useRef<HTMLDivElement>(null);
+
+  const { data: comments, refetch: refetchComments } = useQuery({
+    queryKey: ['solicitud-comments', solicitud?.id],
+    queryFn: () => solicitudesService.getComments(solicitud!.id),
+    enabled: isOpen && !!solicitud,
+  });
+
+  const addCommentMutation = useMutation({
+    mutationFn: ({ id, comentario }: { id: number; comentario: string }) =>
+      solicitudesService.addComment(id, comentario),
+    onSuccess: () => {
+      setNewComment('');
+      refetchComments();
+    },
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      solicitudesService.updateStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
+      onStatusChange();
+    },
+  });
+
+  useEffect(() => {
+    if (solicitud) {
+      setSelectedStatus(solicitud.status);
+    }
+  }, [solicitud]);
+
+  useEffect(() => {
+    commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [comments]);
+
+  const handleAddComment = () => {
+    if (!newComment.trim() || !solicitud) return;
+    addCommentMutation.mutate({ id: solicitud.id, comentario: newComment });
+  };
+
+  const handleChangeStatus = () => {
+    if (!solicitud || selectedStatus === solicitud.status) return;
+    updateStatusMutation.mutate({ id: solicitud.id, status: selectedStatus });
+  };
+
+  if (!isOpen || !solicitud) return null;
+
+  const statusColor = STATUS_COLORS[solicitud.status] || DEFAULT_STATUS_COLOR;
+  const statusOptions = ['Pendiente', 'Aprobado', 'Rechazada', 'Desactivado', 'Ajustar'];
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+          <div className="flex items-center gap-3">
+            <MessageSquare className="h-5 w-5 text-purple-400" />
+            <h2 className="text-lg font-semibold text-white">Estado y Comentarios</h2>
+            <span className={`px-2 py-1 rounded-full text-xs ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+              {solicitud.status}
+            </span>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+            <X className="h-5 w-5 text-zinc-400" />
+          </button>
+        </div>
+
+        {/* Status Selector */}
+        <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-800/30">
+          <label className="block text-sm text-zinc-400 mb-2">Cambiar estado a:</label>
+          <div className="flex items-center gap-3">
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            >
+              {statusOptions.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleChangeStatus}
+              disabled={selectedStatus === solicitud.status || updateStatusMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
+            >
+              {updateStatusMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Actualizando...
+                </>
+              ) : (
+                'Actualizar'
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Comments List */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {comments && comments.length > 0 ? (
+            comments.slice().reverse().map((comment) => (
+              <CommentBubble key={comment.id} comment={comment} />
+            ))
+          ) : (
+            <div className="text-center text-zinc-500 py-8">
+              No hay comentarios aún
+            </div>
+          )}
+          <div ref={commentsEndRef} />
+        </div>
+
+        {/* New Comment Input */}
+        <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-800/30">
+          <div className="flex items-end gap-3">
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Escribe un comentario..."
+              rows={2}
+              className="flex-1 px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+            />
+            <button
+              onClick={handleAddComment}
+              disabled={!newComment.trim() || addCommentMutation.isPending}
+              className="p-3 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {addCommentMutation.isPending ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CommentBubble({ comment }: { comment: Comentario }) {
+  return (
+    <div className="flex gap-3">
+      <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+        <User className="h-4 w-4 text-purple-400" />
+      </div>
+      <div className="flex-1">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="font-medium text-white text-sm">{comment.autor_nombre}</span>
+          <span className="text-xs text-zinc-500">
+            {new Date(comment.creado_en).toLocaleDateString('es-ES', {
+              day: 'numeric',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </span>
+        </div>
+        <div className="bg-zinc-800/50 rounded-xl px-4 py-3 text-sm text-zinc-300">
+          {comment.comentario}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ ATENDER MODAL ============
+interface AtenderModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  solicitud: Solicitud | null;
+  onSuccess: () => void;
+}
+
+export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderModalProps) {
+  const queryClient = useQueryClient();
+
+  const atenderMutation = useMutation({
+    mutationFn: (id: number) => solicitudesService.atender(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+      onSuccess();
+      onClose();
+    },
+  });
+
+  if (!isOpen || !solicitud) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-full bg-cyan-500/20 flex items-center justify-center">
+            <PlayCircle className="h-6 w-6 text-cyan-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-white">Atender Solicitud</h3>
+            <p className="text-sm text-zinc-400">#{solicitud.id}</p>
+          </div>
+        </div>
+
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-amber-300 text-sm font-medium mb-1">¿Estás seguro?</p>
+              <p className="text-amber-200/80 text-xs">
+                Al atender esta solicitud, se creará una propuesta activa y se notificará al equipo asignado.
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-zinc-800/50 rounded-xl p-4 mb-6">
+          <h4 className="text-sm text-zinc-400 mb-2">Lo que sucederá:</h4>
+          <ul className="space-y-2 text-sm">
+            <li className="flex items-center gap-2 text-zinc-300">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              El status cambiará a "Atendida"
+            </li>
+            <li className="flex items-center gap-2 text-zinc-300">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              La propuesta se activará con status "Abierto"
+            </li>
+            <li className="flex items-center gap-2 text-zinc-300">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              Se crearán tareas de seguimiento
+            </li>
+          </ul>
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 border border-zinc-700"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => atenderMutation.mutate(solicitud.id)}
+            disabled={atenderMutation.isPending}
+            className="px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm hover:bg-cyan-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {atenderMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Procesando...
+              </>
+            ) : (
+              <>
+                <PlayCircle className="h-4 w-4" />
+                Atender Solicitud
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

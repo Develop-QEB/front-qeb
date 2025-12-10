@@ -184,4 +184,126 @@ export const solicitudesService = {
     }
     return response.data.data;
   },
+
+  async update(id: number, data: CreateSolicitudInput): Promise<void> {
+    const response = await api.put<ApiResponse<void>>(`/solicitudes/${id}`, data);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al actualizar solicitud');
+    }
+  },
+
+  async getFullDetails(id: number): Promise<SolicitudFullDetails> {
+    const response = await api.get<ApiResponse<SolicitudFullDetails>>(`/solicitudes/${id}`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener detalles de solicitud');
+    }
+    return response.data.data;
+  },
+
+  async atender(id: number): Promise<void> {
+    const response = await api.post<ApiResponse<void>>(`/solicitudes/${id}/atender`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al atender solicitud');
+    }
+  },
+
+  async getComments(id: number): Promise<Comentario[]> {
+    const response = await api.get<ApiResponse<Comentario[]>>(`/solicitudes/${id}/comments`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener comentarios');
+    }
+    return response.data.data;
+  },
+
+  async addComment(id: number, comentario: string): Promise<Comentario> {
+    const response = await api.post<ApiResponse<Comentario>>(`/solicitudes/${id}/comments`, { comentario });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al agregar comentario');
+    }
+    return response.data.data;
+  },
 };
+
+// Types for full details
+export interface SolicitudCara {
+  id: number;
+  idquote: string;
+  ciudad: string;
+  estados: string;
+  tipo: string;
+  flujo: string;
+  bonificacion: number;
+  caras: number;
+  nivel_socioeconomico: string;
+  formato: string;
+  costo: number;
+  tarifa_publica: number;
+  inicio_periodo: string;
+  fin_periodo: string;
+  caras_flujo: number;
+  caras_contraflujo: number;
+  articulo: string;
+  descuento: number;
+}
+
+export interface Comentario {
+  id: number;
+  autor_id: number;
+  autor_nombre: string;
+  comentario: string;
+  creado_en: string;
+  campania_id: number;
+  solicitud_id: number;
+}
+
+export interface Historial {
+  id: number;
+  tipo: string;
+  ref_id: number;
+  accion: string;
+  fecha_hora: string;
+  detalles: string;
+}
+
+export interface SolicitudFullDetails {
+  solicitud: Solicitud;
+  propuesta: {
+    id: number;
+    cliente_id: number;
+    fecha: string;
+    status: string;
+    descripcion: string;
+    notas: string;
+    solicitud_id: number;
+    asignado: string;
+    id_asignado: string;
+    inversion: number;
+    articulo: string;
+  } | null;
+  cotizacion: {
+    id: number;
+    nombre_campania: string;
+    numero_caras: number;
+    fecha_inicio: string;
+    fecha_fin: string;
+    frontal: number;
+    cruzada: number;
+    nivel_socioeconomico: string;
+    bonificacion: number;
+    precio: number;
+    articulo: string;
+  } | null;
+  campania: {
+    id: number;
+    nombre: string;
+    fecha_inicio: string;
+    fecha_fin: string;
+    total_caras: string;
+    bonificacion: number;
+    status: string;
+    articulo: string;
+  } | null;
+  caras: SolicitudCara[];
+  comentarios: Comentario[];
+  historial: Historial[];
+}
