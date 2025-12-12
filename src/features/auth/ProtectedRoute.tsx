@@ -11,11 +11,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const hasHydrated = useAuthStore((state) => state._hasHydrated);
   const location = useLocation();
 
-  console.log('[ProtectedRoute] hasHydrated:', hasHydrated, 'isAuthenticated:', isAuthenticated, 'path:', location.pathname);
-
   // Wait for Zustand to hydrate from localStorage before checking auth
   if (!hasHydrated) {
-    console.log('[ProtectedRoute] Waiting for hydration...');
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
         <Spinner size="lg" />
@@ -24,10 +21,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!isAuthenticated) {
-    console.log('[ProtectedRoute] Not authenticated, redirecting to login');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  console.log('[ProtectedRoute] Authenticated, rendering children');
   return <>{children}</>;
 }
