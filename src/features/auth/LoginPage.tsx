@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,13 +19,9 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const location = useLocation();
   const setAuth = useAuthStore((state) => state.setAuth);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  // Obtener la ruta original a la que el usuario intentaba acceder
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
 
   const {
     register,
@@ -42,7 +38,7 @@ export function LoginPage() {
     try {
       const response = await authService.login(data.email, data.password);
       setAuth(response.user, response.accessToken, response.refreshToken);
-      navigate(from, { replace: true });
+      navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesion');
     } finally {
