@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Users, Building2, Tag, Database, Cloud, Plus, Trash2,
-  Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal, Package
+  Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal, Package, RefreshCw
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { clientesService } from '../../services/clientes.service';
@@ -296,10 +296,15 @@ export function ClientesPage() {
   });
 
   // Fetch SAP clients
-  const { data: sapData, isLoading: sapLoading } = useQuery({
+  const { data: sapData, isLoading: sapLoading, refetch: refetchSap, isFetching: sapFetching } = useQuery({
     queryKey: ['clientes-sap', debouncedSearch],
     queryFn: () => clientesService.getSAPClientes(debouncedSearch || undefined),
   });
+
+  // Refresh SAP data (clear cache on backend)
+  const handleRefreshSap = async () => {
+    await refetchSap();
+  };
 
   // Create client mutation
   const createMutation = useMutation({
@@ -533,6 +538,16 @@ export function ClientesPage() {
                   count={sapTotal}
                   loading={sapLoading}
                 />
+                {activeTab === 'sap' && (
+                  <button
+                    onClick={handleRefreshSap}
+                    disabled={sapFetching}
+                    className="p-2 rounded-lg bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200 transition-all disabled:opacity-50"
+                    title="Refrescar SAP"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${sapFetching ? 'animate-spin' : ''}`} />
+                  </button>
+                )}
               </div>
 
               {/* Search */}

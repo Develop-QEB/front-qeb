@@ -423,20 +423,20 @@ export function SolicitudesPage() {
 
     // Button enable/disable logic based on status
     const isDesactivado = item.status === 'Desactivado';
-    const isAprobado = item.status === 'Aprobado' || item.status === 'Aprobada';
+    const isAprobada = item.status === 'Aprobada' || item.status === 'Aprobada';
     const isAjustar = item.status === 'Ajustar';
     const isAtendida = item.status === 'Atendida';
 
     // Ver: siempre activo
     const canView = true;
-    // Editar: activo si no está Desactivado, no está Aprobado, no está Atendida
-    const canEdit = !isDesactivado && !isAprobado && !isAtendida;
-    // Atender: solo activo si está Aprobado
-    const canAtender = isAprobado;
+    // Editar: activo si no está Desactivado, no está Aprobada, no está Atendida
+    const canEdit = !isDesactivado && !isAprobada && !isAtendida;
+    // Atender: solo activo si está Aprobada
+    const canAtender = isAprobada;
     // Estatus: siempre activo
     const canChangeStatus = true;
-    // Eliminar: solo si no está Desactivado, Aprobado o Atendida
-    const canDelete = !isDesactivado && !isAprobado && !isAtendida;
+    // Eliminar: solo si no está Desactivado, Aprobada o Atendida
+    const canDelete = !isDesactivado && !isAprobada && !isAtendida;
 
     return (
       <tr key={`sol-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">

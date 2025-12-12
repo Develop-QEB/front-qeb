@@ -426,11 +426,10 @@ function SearchableSelect({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${
-          value
-            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-            : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600'
-        }`}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${value
+          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+          : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600'
+          }`}
       >
         <span className="truncate text-left flex-1">
           {value && renderSelected ? renderSelected(value) : (displayValue || label)}
@@ -473,11 +472,10 @@ function SearchableSelect({
                     key={`${option[valueKey]}-${idx}`}
                     type="button"
                     onClick={() => { onChange(option); handleClose(); }}
-                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b border-zinc-800/50 last:border-0 ${
-                      value && value[valueKey] === option[valueKey]
-                        ? 'bg-purple-500/20 text-purple-300'
-                        : 'text-zinc-300 hover:bg-zinc-800'
-                    }`}
+                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b border-zinc-800/50 last:border-0 ${value && value[valueKey] === option[valueKey]
+                      ? 'bg-purple-500/20 text-purple-300'
+                      : 'text-zinc-300 hover:bg-zinc-800'
+                      }`}
                   >
                     {renderOption ? renderOption(option) : (
                       <span>{option[displayKey]}</span>
@@ -574,13 +572,11 @@ function MultiSelectTags({
                       key={option[valueKey]}
                       type="button"
                       onClick={() => toggle(option)}
-                      className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${
-                        isSelected ? 'bg-purple-500/20 text-purple-300' : 'text-zinc-400 hover:bg-zinc-800'
-                      }`}
+                      className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${isSelected ? 'bg-purple-500/20 text-purple-300' : 'text-zinc-400 hover:bg-zinc-800'
+                        }`}
                     >
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                        isSelected ? 'bg-purple-500 border-purple-500' : 'border-zinc-600'
-                      }`}>
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-purple-500 border-purple-500' : 'border-zinc-600'
+                        }`}>
                         {isSelected && <Check className="h-3 w-3 text-white" />}
                       </div>
                       <div className="flex-1">
@@ -721,7 +717,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
       // Fetch from SAP
       try {
-        const response = await fetch('https://characteristics-terminals-athletic-workplace.trycloudflare.com/cuic');
+        const response = await fetch('https://binding-convinced-ride-foto.trycloudflare.com/cuic');
         if (!response.ok) throw new Error('Error fetching CUIC data');
         const data = await response.json();
         const items = (data.value || data) as SAPCuicItem[];
@@ -758,7 +754,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
       // Fetch from SAP
       try {
-        const response = await fetch('https://characteristics-terminals-athletic-workplace.trycloudflare.com/articulos');
+        const response = await fetch('https://binding-convinced-ride-foto.trycloudflare.com/articulos');
         if (!response.ok) throw new Error('Error fetching articulos data');
         const data = await response.json();
         const items = (data.value || data) as SAPArticulo[];
@@ -1233,13 +1229,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               <React.Fragment key={s.num}>
                 <button
                   onClick={() => setStep(s.num)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    step === s.num
-                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                      : step > s.num
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${step === s.num
+                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                    : step > s.num
                       ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                       : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50'
-                  }`}
+                    }`}
                 >
                   <s.icon className="h-4 w-4" />
                   {s.label}
@@ -1493,15 +1488,30 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           {/* Step 3: Ubicaciones */}
           {step === 3 && (
             <div className="space-y-6">
-              {/* Next ID indicator */}
-              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-xl border border-purple-500/20">
-                <div className="flex items-center gap-2">
-                  <Hash className="h-4 w-4 text-purple-400" />
-                  <span className="text-sm text-zinc-300">Próximo ID de Solicitud:</span>
+              {/* KPIs Totales */}
+              <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/30">
+                <div className="grid grid-cols-5 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-white">{totals.totalRenta}</div>
+                    <div className="text-xs text-zinc-400">Renta</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-emerald-400">{totals.totalBonificacion}</div>
+                    <div className="text-xs text-zinc-400">Bonificación</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-400">{totals.totalRenta + totals.totalBonificacion}</div>
+                    <div className="text-xs text-zinc-400">Total Caras</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-400">{totals.avgDescuento.toFixed(1)}%</div>
+                    <div className="text-xs text-zinc-400">Descuento Prom.</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-amber-400">{formatCurrency(totals.totalPrecio)}</div>
+                    <div className="text-xs text-zinc-400">Inversión</div>
+                  </div>
                 </div>
-                <span className="text-lg font-bold text-purple-400 bg-purple-500/20 px-3 py-1 rounded-lg">
-                  #{nextId || '...'}
-                </span>
               </div>
 
               {/* Add cara form */}
@@ -1647,7 +1657,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                   {/* Renta */}
                   <div>
-                    <label className="text-xs text-zinc-500">Caras</label>
+                    <label className="text-xs text-zinc-500">Renta</label>
                     <input
                       type="number"
                       min={1}
@@ -1688,11 +1698,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         key={n}
                         type="button"
                         onClick={() => toggleNse(n)}
-                        className={`px-3 py-1 rounded-full text-xs transition-all ${
-                          newCara.nse.includes(n)
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                            : 'bg-zinc-700/50 text-zinc-400 border border-zinc-600/50 hover:border-zinc-500'
-                        }`}
+                        className={`px-3 py-1 rounded-full text-xs transition-all ${newCara.nse.includes(n)
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                          : 'bg-zinc-700/50 text-zinc-400 border border-zinc-600/50 hover:border-zinc-500'
+                          }`}
                       >
                         {n}
                       </button>
@@ -1800,9 +1809,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           {cara.ciudades.join(', ')}
                                         </td>
                                         <td className="px-2 py-2">
-                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                                            cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
-                                          }`}>
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
+                                            }`}>
                                             {cara.tipo}
                                           </span>
                                         </td>
@@ -1979,7 +1987,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   onChange={(e) => setImu(e.target.checked)}
                   className="w-5 h-5 rounded bg-zinc-800 border-zinc-700 text-purple-500 focus:ring-purple-500/50"
                 />
-                <span className="text-sm text-zinc-300">IMU (Impuesto Municipal)</span>
+                <span className="text-sm text-zinc-300">IMU (Impresión  IMU)</span>
               </label>
             </div>
           )}
