@@ -270,11 +270,11 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-zinc-400 mb-1">Presupuesto</label>
+                    <label className="block text-xs text-zinc-400 mb-1">Notas</label>
                     <input
-                      type="number"
-                      value={presupuesto}
-                      onChange={(e) => setPresupuesto(Number(e.target.value))}
+                      type="text"
+                      value={notas}
+                      onChange={(e) => setNotas(e.target.value)}
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     />
                   </div>
@@ -283,15 +283,6 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                     <textarea
                       value={descripcion}
                       onChange={(e) => setDescripcion(e.target.value)}
-                      rows={2}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-xs text-zinc-400 mb-1">Notas</label>
-                    <textarea
-                      value={notas}
-                      onChange={(e) => setNotas(e.target.value)}
                       rows={2}
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
                     />

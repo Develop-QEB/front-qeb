@@ -15,7 +15,6 @@ import autoTable from 'jspdf-autotable';
 // Status badge colors
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string; gradient: string }> = {
   'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30', gradient: 'from-amber-600 to-orange-600' },
-  'Aprobado': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30', gradient: 'from-emerald-600 to-green-600' },
   'Aprobada': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30', gradient: 'from-emerald-600 to-green-600' },
   'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30', gradient: 'from-red-600 to-rose-600' },
   'Atendida': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30', gradient: 'from-cyan-600 to-blue-600' },
@@ -880,7 +879,7 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange }: Stat
   if (!isOpen || !solicitud) return null;
 
   const statusColor = STATUS_COLORS[solicitud.status] || DEFAULT_STATUS_COLOR;
-  const statusOptions = ['Pendiente', 'Aprobado', 'Rechazada', 'Desactivado', 'Ajustar'];
+  const statusOptions = ['Pendiente', 'Aprobada', 'Rechazada', 'Desactivado', 'Ajustar'];
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
