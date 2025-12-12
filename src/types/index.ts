@@ -215,12 +215,64 @@ export interface Campana {
   status: string;
   cotizacion_id: number | null;
   articulo: string;
+  // Campos adicionales del cliente/SAP
+  T0_U_Asesor: string | null;
+  T0_U_IDAsesor: number | null;
+  T0_U_IDAgencia: number | null;
+  T0_U_Agencia: string | null;
+  T0_U_Cliente: string | null;
+  T0_U_RazonSocial: string | null;
+  T0_U_IDACA: number | null;
+  cuic: number | null;
+  T1_U_Cliente: string | null;
+  T1_U_IDACA: number | null;
+  T1_U_IDCM: number | null;
+  T1_U_IDMarca: number | null;
+  T1_U_UnidadNegocio: string | null;
+  T1_U_ValidFrom: string | null;
+  T1_U_ValidTo: string | null;
+  T2_U_IDCategoria: number | null;
+  T2_U_Categoria: string | null;
+  T2_U_IDCM: number | null;
+  T2_U_IDProducto: number | null;
+  T2_U_Marca: string | null;
+  T2_U_Producto: string | null;
+  T2_U_ValidFrom: string | null;
+  T2_U_ValidTo: string | null;
+  // Campos de propuesta/cotizacion
+  user_id: number | null;
+  clientes_id: number | null;
+  nombre_campania: string | null;
+  numero_caras: number | null;
+  frontal: number | null;
+  cruzada: number | null;
+  nivel_socioeconomico: string | null;
+  observaciones: string | null;
+  descuento: number | null;
+  precio: number | null;
+  contacto: string | null;
+  fecha_expiracion: string | null;
+  fecha: string | null;
+  descripcion: string | null;
+  notas: string | null;
+  deleted_at: string | null;
+  solicitud_id: number | null;
+  precio_simulado: number | null;
+  asignado: string | null;
+  id_asignado: string | null;
+  inversion: number | null;
+  comentario_cambio_status: string | null;
+  updated_at: string | null;
 }
 
 export interface CampanaStats {
   total: number;
   activas: number;
   inactivas: number;
+}
+
+export interface CampanaWithComments extends Campana {
+  comentarios?: ComentarioTarea[];
 }
 
 // Catorcena - basado en tabla 'catorcenas'
@@ -270,8 +322,10 @@ export interface TareaStats {
 
 export interface ComentarioTarea {
   id: number;
-  tarea_id: number;
-  usuario_id: number;
+  tarea_id?: number;
+  usuario_id?: number;
+  autor_id?: number;
+  autor_nombre?: string;
   contenido: string;
   fecha: string;
   usuario_nombre?: string;
