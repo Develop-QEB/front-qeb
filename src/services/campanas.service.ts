@@ -1,5 +1,45 @@
 import api from '../lib/api';
-import { Campana, CampanaStats, PaginatedResponse, ApiResponse } from '../types';
+import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea } from '../types';
+
+export interface CampanaWithComments extends Campana {
+  comentarios?: ComentarioTarea[];
+}
+
+export interface InventarioReservado {
+  rsv_ids: string;
+  id: number;
+  codigo_original: string;
+  codigo_unico: string;
+  ubicacion: string | null;
+  tipo_de_cara: string | null;
+  cara: string | null;
+  mueble: string | null;
+  latitud: number;
+  longitud: number;
+  plaza: string | null;
+  estado: string | null;
+  municipio: string | null;
+  tipo_de_mueble: string | null;
+  ancho: number;
+  alto: number;
+  nivel_socioeconomico: string | null;
+  tarifa_publica: number | null;
+  archivo: string | null;
+  espacios_ids: string | null;
+  estatus_reserva: string | null;
+  calendario_id: number | null;
+  espacios: string | null;
+  solicitud_caras_id: number | null;
+  articulo: string | null;
+  inicio_periodo: string | null;
+  fin_periodo: string | null;
+  caras_totales: number;
+  grupo_completo_id: number | null;
+}
+
+export interface InventarioConAPS extends InventarioReservado {
+  aps: number;
+}
 
 export interface CampanasParams {
   page?: number;
@@ -13,8 +53,8 @@ export const campanasService = {
     return response.data;
   },
 
-  async getById(id: number): Promise<Campana> {
-    const response = await api.get<ApiResponse<Campana>>(`/campanas/${id}`);
+  async getById(id: number): Promise<CampanaWithComments> {
+    const response = await api.get<ApiResponse<CampanaWithComments>>(`/campanas/${id}`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener campana');
     }
@@ -33,6 +73,38 @@ export const campanasService = {
     const response = await api.get<ApiResponse<CampanaStats>>('/campanas/stats');
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener estadisticas');
+    }
+    return response.data.data;
+  },
+
+  async addComment(id: number, contenido: string): Promise<ComentarioTarea> {
+    const response = await api.post<ApiResponse<ComentarioTarea>>(`/campanas/${id}/comentarios`, { contenido });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al agregar comentario');
+    }
+    return response.data.data;
+  },
+
+  async getInventarioReservado(id: number): Promise<InventarioReservado[]> {
+    const response = await api.get<ApiResponse<InventarioReservado[]>>(`/campanas/${id}/inventario`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener inventario reservado');
+    }
+    return response.data.data;
+  },
+
+  async getInventarioConAPS(id: number): Promise<InventarioConAPS[]> {
+    const response = await api.get<ApiResponse<InventarioConAPS[]>>(`/campanas/${id}/inventario-aps`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener inventario con APS');
+    }
+    return response.data.data;
+  },
+
+  async assignAPS(id: number, inventarioIds: number[]): Promise<{ aps: number; message: string }> {
+    const response = await api.post<ApiResponse<{ aps: number; message: string }>>(`/campanas/${id}/assign-aps`, { inventarioIds });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al asignar APS');
     }
     return response.data.data;
   },
