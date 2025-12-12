@@ -1,9 +1,7 @@
 import api from '../lib/api';
-import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea } from '../types';
+import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea, CampanaWithComments } from '../types';
 
-export interface CampanaWithComments extends Campana {
-  comentarios?: ComentarioTarea[];
-}
+export type { CampanaWithComments };
 
 export interface InventarioReservado {
   rsv_ids: string;
