@@ -14,7 +14,7 @@ import { NotificacionesPage } from './features/notificaciones/NotificacionesPage
 import { CorreosPage } from './features/correos/CorreosPage';
 
 const queryClient = new QueryClient({
-  defaultOptions: {
+  defaultOptions: { 
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
