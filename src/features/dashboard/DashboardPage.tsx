@@ -256,7 +256,7 @@ function MexicoMapChart({ data, title }: { data: ChartData[]; title: string }) {
   const maxVal = Math.max(...mapData.map(d => d.cantidad), 1);
 
   return (
-    <Card className="h-full border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10 overflow-hidden">
+    <Card className="h-full border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl shadow-xl shadow-purple-500/5 overflow-hidden">
       <CardHeader>
         <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2 text-purple-100">
           <TrendingUp className="h-4 w-4 text-cyan-400" />
@@ -324,7 +324,7 @@ function SimpleBarChart({
   color?: string;
 }) {
   return (
-    <Card className="h-full border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
+    <Card className="h-full border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl shadow-xl shadow-purple-500/5">
       <CardHeader>
         <CardTitle className="text-sm uppercase tracking-wider text-purple-100">{title}</CardTitle>
       </CardHeader>
@@ -379,7 +379,7 @@ function DonutChart({
   }, [data, maxItems]);
 
   return (
-    <Card className="h-full border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
+    <Card className="h-full border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl shadow-xl shadow-purple-500/5">
       <CardHeader>
         <CardTitle className="text-sm uppercase tracking-wider text-purple-100">{title}</CardTitle>
       </CardHeader>
@@ -445,7 +445,7 @@ function HorizontalBarChart({
   };
 
   return (
-    <Card className="h-full border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
+    <Card className="h-full border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl shadow-xl shadow-purple-500/5">
       <CardHeader>
         <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2 text-purple-100">
           <TrendingUp className={`h-4 w-4 text-${color}-400`} />
@@ -521,7 +521,7 @@ function ComparisonChart({
   const total = sortedData.reduce((acc, curr) => acc + curr.cantidad, 0);
 
   return (
-    <Card className="h-full border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
+    <Card className="h-full border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl shadow-xl shadow-purple-500/5">
       <CardHeader>
         <CardTitle className="text-sm uppercase tracking-wider text-purple-100">{title}</CardTitle>
       </CardHeader>
@@ -694,7 +694,7 @@ export function DashboardPage() {
 
           {/* Panel de filtros expandible - diseño horizontal */}
           {showFilters && (
-            <Card className="overflow-hidden border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md">
+            <Card className="overflow-hidden border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl shadow-xl shadow-purple-500/5">
               <CardContent className="py-4">
                 <div className="grid gap-4 md:grid-cols-6">
                   <FilterSelect
@@ -853,7 +853,7 @@ export function DashboardPage() {
         {/* Widgets adicionales (Actividad y Catorcenas) */}
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Actividad reciente */}
-          <Card className="border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
+          <Card className="border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl shadow-xl shadow-purple-500/5">
             <CardHeader>
               <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2 text-purple-100">
                 <Activity className="h-4 w-4 text-pink-400" />
@@ -885,7 +885,7 @@ export function DashboardPage() {
           </Card>
 
           {/* Proximas catorcenas */}
-          <Card className="border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
+          <Card className="border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl shadow-xl shadow-purple-500/5">
             <CardHeader>
               <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2 text-purple-100">
                 <Calendar className="h-4 w-4 text-cyan-400" />
@@ -931,7 +931,7 @@ export function DashboardPage() {
           </Card>
 
           {/* Top clientes */}
-          <Card className="border border-purple-500/20 bg-[#130e24]/80 backdrop-blur-md shadow-lg shadow-purple-900/10">
+          <Card className="border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl shadow-xl shadow-purple-500/5">
             <CardHeader>
               <CardTitle className="text-sm uppercase tracking-wider flex items-center gap-2 text-purple-100">
                 <Users className="h-4 w-4 text-yellow-400" />

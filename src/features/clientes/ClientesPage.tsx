@@ -453,23 +453,25 @@ export function ClientesPage() {
         </td>
       )}
       <td className="px-4 py-3">
-        {isDb ? (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
-            disabled={deleteMutation.isPending}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/10 text-red-400 text-xs hover:bg-red-500/20 transition-all duration-200 disabled:opacity-50 border border-red-500/20"
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
-        ) : (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleAddToDatabase(item); }}
-            disabled={createMutation.isPending}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 text-white text-xs font-medium hover:from-emerald-500 hover:to-green-500 transition-all duration-200 disabled:opacity-50"
-          >
-            <Plus className="h-3 w-3" />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {isDb ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
+              disabled={deleteMutation.isPending}
+              className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 transition-all disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); handleAddToDatabase(item); }}
+              disabled={createMutation.isPending}
+              className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 transition-all disabled:opacity-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -516,7 +518,7 @@ export function ClientesPage() {
         </div>
 
         {/* Control Bar */}
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-4 relative z-30">
+        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4 relative z-30">
           <div className="flex flex-col gap-4">
             {/* Top Row: Tabs + Search */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
@@ -552,11 +554,11 @@ export function ClientesPage() {
 
               {/* Search */}
               <div className="relative flex-1 w-full lg:max-w-xl">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
                 <input
                   type="search"
                   placeholder="Buscar..."
-                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/30 transition-all"
+                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -648,7 +650,7 @@ export function ClientesPage() {
         )}
 
         {/* Data Table */}
-        <div className="relative z-10 rounded-2xl border border-zinc-800/80 bg-zinc-900/30 backdrop-blur-sm overflow-hidden">
+        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5 relative z-10">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -658,7 +660,7 @@ export function ClientesPage() {
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-gradient-to-r from-purple-900/20 to-fuchsia-900/20 border-b border-purple-500/20">
+                    <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">CUIC</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Razon Social</th>
@@ -700,22 +702,23 @@ export function ClientesPage() {
 
               {/* Pagination for DB only (when not filtering/grouping) */}
               {activeTab === 'db' && !needsFullData && dbData?.pagination && dbTotalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800/50">
-                  <span className="text-xs text-zinc-500">
-                    Página {page} de {dbTotalPages} ({dbData.pagination.total} total)
+                <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
+                  <span className="text-sm text-purple-300/70">
+                    Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{dbTotalPages}</span>
+                    <span className="text-purple-300/50 ml-2">({dbData.pagination.total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
-                      className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                     >
                       Anterior
                     </button>
                     <button
                       onClick={() => setPage(p => Math.min(dbTotalPages, p + 1))}
                       disabled={page === dbTotalPages}
-                      className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                     >
                       Siguiente
                     </button>
@@ -725,7 +728,7 @@ export function ClientesPage() {
 
               {/* Full data info when filtering/grouping */}
               {activeTab === 'db' && needsFullData && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800/50">
+                <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
                   <span className="text-xs text-zinc-500">
                     Mostrando {filteredData.length} clientes filtrados
                   </span>
@@ -734,7 +737,7 @@ export function ClientesPage() {
 
               {/* SAP info */}
               {activeTab === 'sap' && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800/50">
+                <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
                   <span className="text-xs text-zinc-500">
                     {sapTotal} clientes de SAP disponibles
                     {sapData?.cached && <span className="ml-2 text-emerald-400">(desde cache)</span>}

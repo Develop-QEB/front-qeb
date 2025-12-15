@@ -1,133 +1,1317 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Filter } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
+  ArrowUpDown, Calendar, Eye, DollarSign, FileText, Building2, MessageSquare,
+  CheckCircle, Users, Send, Loader2, User, Share2, UserPlus, Wrench
+} from 'lucide-react';
 import { Header } from '../../components/layout/Header';
-import { DataTable } from '../../components/tables/DataTable';
-import { Badge } from '../../components/ui/badge';
-import { Select } from '../../components/ui/select';
-import { propuestasService } from '../../services/propuestas.service';
-import { Propuesta } from '../../types';
+import { propuestasService, PropuestaComentario } from '../../services/propuestas.service';
+import { solicitudesService, UserOption } from '../../services/solicitudes.service';
+import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 
-const statusVariants: Record<string, 'secondary' | 'info' | 'success' | 'destructive' | 'warning'> = {
-  Pendiente: 'warning',
-  Aprobada: 'success',
-  Rechazada: 'destructive',
+// Status badge colors
+const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  'Por aprobar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+  'Compartir': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+  'Abierto': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
+  'Ajuste Cto-Cliente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
+  'Pase a ventas': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'Activa': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
+  'Aprobada': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
+  'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
 };
 
+const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
+
+const STATUS_OPTIONS = ['Por aprobar', 'Compartir', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas', 'Pendiente'];
+
+// Simple KPI Card
+function KpiCard({ label, value, color }: { label: string; value: number | string; color: string }) {
+  const colorClasses: Record<string, string> = {
+    purple: 'bg-purple-500/10 border-purple-500/20 text-purple-300',
+    emerald: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300',
+    amber: 'bg-amber-500/10 border-amber-500/20 text-amber-300',
+    cyan: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-300',
+    fuchsia: 'bg-fuchsia-500/10 border-fuchsia-500/20 text-fuchsia-300',
+  };
+
+  return (
+    <div className={`px-4 py-3 rounded-xl border ${colorClasses[color]} transition-all hover:scale-[1.02]`}>
+      <p className="text-2xl font-bold text-white">{value}</p>
+      <p className="text-xs text-zinc-400">{label}</p>
+    </div>
+  );
+}
+
+// Filter Chip Component with Search
+function FilterChip({
+  label,
+  options,
+  value,
+  onChange,
+  onClear
+}: {
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (value: string) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm) return options;
+    return options.filter(opt =>
+      opt.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [options, searchTerm]);
+
+  const handleClose = () => {
+    setOpen(false);
+    setSearchTerm('');
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${value
+          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+          }`}
+      >
+        <span>{value || label}</span>
+        {value ? (
+          <X className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); onClear(); }} />
+        ) : (
+          <ChevronDown className="h-3 w-3" />
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={handleClose} />
+          <div className="absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
+            <div className="p-2 border-b border-zinc-800">
+              <input
+                type="text"
+                placeholder={`Buscar ${label.toLowerCase()}...`}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50"
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div className="max-h-52 overflow-auto">
+              {filteredOptions.length === 0 ? (
+                <div className="px-3 py-3 text-xs text-zinc-500 text-center">
+                  {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
+                </div>
+              ) : (
+                filteredOptions.map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => { onChange(option); handleClose(); }}
+                    className={`w-full px-3 py-2 text-left text-xs transition-colors ${value === option
+                      ? 'bg-purple-500/20 text-purple-300'
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                      }`}
+                  >
+                    {option}
+                  </button>
+                ))
+              )}
+            </div>
+            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
+              {filteredOptions.length} de {options.length} opciones
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Period Filter Popover Component
+function PeriodFilterPopover({
+  catorcenasData,
+  yearInicio,
+  yearFin,
+  catorcenaInicio,
+  catorcenaFin,
+  onApply,
+  onClear
+}: {
+  catorcenasData: { years: number[]; data: Catorcena[] } | undefined;
+  yearInicio: number | undefined;
+  yearFin: number | undefined;
+  catorcenaInicio: number | undefined;
+  catorcenaFin: number | undefined;
+  onApply: (yearInicio: number, yearFin: number, catorcenaInicio?: number, catorcenaFin?: number) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [tempYearInicio, setTempYearInicio] = useState<number | undefined>(yearInicio);
+  const [tempYearFin, setTempYearFin] = useState<number | undefined>(yearFin);
+  const [tempCatorcenaInicio, setTempCatorcenaInicio] = useState<number | undefined>(catorcenaInicio);
+  const [tempCatorcenaFin, setTempCatorcenaFin] = useState<number | undefined>(catorcenaFin);
+
+  useEffect(() => {
+    setTempYearInicio(yearInicio);
+    setTempYearFin(yearFin);
+    setTempCatorcenaInicio(catorcenaInicio);
+    setTempCatorcenaFin(catorcenaFin);
+  }, [yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+
+  const years = catorcenasData?.years || [];
+
+  const yearInicioOptions = useMemo(() => {
+    if (tempYearFin) return years.filter(y => y <= tempYearFin);
+    return years;
+  }, [years, tempYearFin]);
+
+  const yearFinOptions = useMemo(() => {
+    if (tempYearInicio) return years.filter(y => y >= tempYearInicio);
+    return years;
+  }, [years, tempYearInicio]);
+
+  const catorcenasInicioOptions = useMemo(() => {
+    if (!catorcenasData?.data || !tempYearInicio) return [];
+    const catorcenas = catorcenasData.data.filter(c => c.a_o === tempYearInicio);
+    if (tempYearInicio === tempYearFin && tempCatorcenaFin) {
+      return catorcenas.filter(c => c.numero_catorcena <= tempCatorcenaFin);
+    }
+    return catorcenas;
+  }, [catorcenasData, tempYearInicio, tempYearFin, tempCatorcenaFin]);
+
+  const catorcenasFinOptions = useMemo(() => {
+    if (!catorcenasData?.data || !tempYearFin) return [];
+    const catorcenas = catorcenasData.data.filter(c => c.a_o === tempYearFin);
+    if (tempYearInicio === tempYearFin && tempCatorcenaInicio) {
+      return catorcenas.filter(c => c.numero_catorcena >= tempCatorcenaInicio);
+    }
+    return catorcenas;
+  }, [catorcenasData, tempYearFin, tempYearInicio, tempCatorcenaInicio]);
+
+  const isActive = yearInicio !== undefined && yearFin !== undefined;
+  const canApply = tempYearInicio !== undefined && tempYearFin !== undefined;
+
+  const handleApply = () => {
+    if (canApply) {
+      onApply(tempYearInicio!, tempYearFin!, tempCatorcenaInicio, tempCatorcenaFin);
+      setOpen(false);
+    }
+  };
+
+  const handleClear = () => {
+    setTempYearInicio(undefined);
+    setTempYearFin(undefined);
+    setTempCatorcenaInicio(undefined);
+    setTempCatorcenaFin(undefined);
+    onClear();
+    setOpen(false);
+  };
+
+  const getDisplayText = () => {
+    if (!isActive) return 'Periodo';
+    let text = `${yearInicio}`;
+    if (catorcenaInicio) text += `/C${catorcenaInicio}`;
+    text += ` - ${yearFin}`;
+    if (catorcenaFin) text += `/C${catorcenaFin}`;
+    return text;
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${isActive
+          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+          }`}
+      >
+        <Calendar className="h-3 w-3" />
+        <span>{getDisplayText()}</span>
+        {isActive ? (
+          <X className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); handleClear(); }} />
+        ) : (
+          <ChevronDown className="h-3 w-3" />
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
+            <div className="p-3 border-b border-zinc-800">
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-purple-400" />
+                Filtro de Periodo
+              </h3>
+              <p className="text-[10px] text-zinc-500 mt-1">Selecciona año inicio y fin (obligatorios)</p>
+            </div>
+
+            <div className="p-3 space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Año Inicio *</label>
+                  <select
+                    value={tempYearInicio || ''}
+                    onChange={(e) => {
+                      const val = e.target.value ? parseInt(e.target.value) : undefined;
+                      setTempYearInicio(val);
+                      setTempCatorcenaInicio(undefined);
+                      if (val && tempYearFin && val > tempYearFin) {
+                        setTempYearFin(undefined);
+                        setTempCatorcenaFin(undefined);
+                      }
+                    }}
+                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  >
+                    <option value="">Seleccionar</option>
+                    {yearInicioOptions.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Inicio</label>
+                  <select
+                    value={tempCatorcenaInicio || ''}
+                    onChange={(e) => {
+                      const val = e.target.value ? parseInt(e.target.value) : undefined;
+                      setTempCatorcenaInicio(val);
+                      if (val && tempYearInicio === tempYearFin && tempCatorcenaFin && val > tempCatorcenaFin) {
+                        setTempCatorcenaFin(undefined);
+                      }
+                    }}
+                    disabled={!tempYearInicio}
+                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
+                  >
+                    <option value="">Todas</option>
+                    {catorcenasInicioOptions.map(c => (
+                      <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Año Fin *</label>
+                  <select
+                    value={tempYearFin || ''}
+                    onChange={(e) => {
+                      const val = e.target.value ? parseInt(e.target.value) : undefined;
+                      setTempYearFin(val);
+                      setTempCatorcenaFin(undefined);
+                      if (val && tempYearInicio && val < tempYearInicio) {
+                        setTempYearInicio(undefined);
+                        setTempCatorcenaInicio(undefined);
+                      }
+                    }}
+                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  >
+                    <option value="">Seleccionar</option>
+                    {yearFinOptions.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Fin</label>
+                  <select
+                    value={tempCatorcenaFin || ''}
+                    onChange={(e) => {
+                      const val = e.target.value ? parseInt(e.target.value) : undefined;
+                      setTempCatorcenaFin(val);
+                      if (val && tempYearInicio === tempYearFin && tempCatorcenaInicio && val < tempCatorcenaInicio) {
+                        setTempCatorcenaInicio(undefined);
+                      }
+                    }}
+                    disabled={!tempYearFin}
+                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
+                  >
+                    <option value="">Todas</option>
+                    {catorcenasFinOptions.map(c => (
+                      <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-zinc-800 flex items-center justify-between gap-2">
+              <button
+                onClick={handleClear}
+                className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+              >
+                Limpiar
+              </button>
+              <button
+                onClick={handleApply}
+                disabled={!canApply}
+                className="px-4 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-colors"
+              >
+                Aplicar Filtro
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Group Header for table
+function GroupHeader({
+  groupName,
+  count,
+  expanded,
+  onToggle
+}: {
+  groupName: string;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <tr
+      onClick={onToggle}
+      className="bg-purple-500/10 border-b border-purple-500/20 cursor-pointer hover:bg-purple-500/20 transition-colors"
+    >
+      <td colSpan={11} className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          {expanded ? (
+            <ChevronDown className="h-4 w-4 text-purple-400" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-purple-400" />
+          )}
+          <span className="font-semibold text-white">{groupName || 'Sin asignar'}</span>
+          <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">
+            {count} propuestas
+          </span>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ============ STATUS MODAL WITH COMMENTS ============
+interface StatusModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  propuesta: Propuesta | null;
+  onStatusChange: () => void;
+}
+
+function StatusModal({ isOpen, onClose, propuesta, onStatusChange }: StatusModalProps) {
+  const queryClient = useQueryClient();
+  const [newComment, setNewComment] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const commentsEndRef = useRef<HTMLDivElement>(null);
+
+  const { data: comments, refetch: refetchComments } = useQuery({
+    queryKey: ['propuesta-comments', propuesta?.id],
+    queryFn: () => propuestasService.getComments(propuesta!.id),
+    enabled: isOpen && !!propuesta,
+  });
+
+  const addCommentMutation = useMutation({
+    mutationFn: ({ id, comentario }: { id: number; comentario: string }) =>
+      propuestasService.addComment(id, comentario),
+    onSuccess: () => {
+      setNewComment('');
+      refetchComments();
+    },
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      propuestasService.updateStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas-stats'] });
+      onStatusChange();
+    },
+  });
+
+  useEffect(() => {
+    if (propuesta) {
+      setSelectedStatus(propuesta.status);
+    }
+  }, [propuesta]);
+
+  useEffect(() => {
+    commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [comments]);
+
+  const handleAddComment = () => {
+    if (!newComment.trim() || !propuesta) return;
+    addCommentMutation.mutate({ id: propuesta.id, comentario: newComment });
+  };
+
+  const handleChangeStatus = () => {
+    if (!propuesta || selectedStatus === propuesta.status) return;
+    updateStatusMutation.mutate({ id: propuesta.id, status: selectedStatus });
+  };
+
+  if (!isOpen || !propuesta) return null;
+
+  const statusColor = STATUS_COLORS[propuesta.status] || DEFAULT_STATUS_COLOR;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+          <div className="flex items-center gap-3">
+            <MessageSquare className="h-5 w-5 text-purple-400" />
+            <h2 className="text-lg font-semibold text-white">Estado y Comentarios</h2>
+            <span className={`px-2 py-1 rounded-full text-xs ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+              {propuesta.status}
+            </span>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+            <X className="h-5 w-5 text-zinc-400" />
+          </button>
+        </div>
+
+        {/* Status Selector */}
+        <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-800/30">
+          <label className="block text-sm text-zinc-400 mb-2">Cambiar estado a:</label>
+          <div className="flex items-center gap-3">
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            >
+              {STATUS_OPTIONS.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleChangeStatus}
+              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
+            >
+              {updateStatusMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Actualizando...
+                </>
+              ) : (
+                'Actualizar'
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Comments List */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {comments && comments.length > 0 ? (
+            comments.slice().reverse().map((comment: PropuestaComentario) => (
+              <div key={comment.id} className="flex gap-3">
+                <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                  <User className="h-4 w-4 text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-white text-sm">{comment.autor_nombre}</span>
+                    <span className="text-xs text-zinc-500">
+                      {new Date(comment.creado_en).toLocaleDateString('es-ES', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-xl px-4 py-3 text-sm text-zinc-300">
+                    {comment.comentario}
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center text-zinc-500 py-8">
+              No hay comentarios aún
+            </div>
+          )}
+          <div ref={commentsEndRef} />
+        </div>
+
+        {/* New Comment Input */}
+        <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-800/30">
+          <div className="flex items-end gap-3">
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Escribe un comentario..."
+              rows={2}
+              className="flex-1 px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+            />
+            <button
+              onClick={handleAddComment}
+              disabled={!newComment.trim() || addCommentMutation.isPending}
+              className="p-3 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {addCommentMutation.isPending ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ APPROVE MODAL ============
+interface ApproveModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  propuesta: Propuesta | null;
+  onSuccess: () => void;
+}
+
+function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalProps) {
+  const queryClient = useQueryClient();
+  const [precio, setPrecio] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState<{ id: number; nombre: string }[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+
+  const { data: users } = useQuery({
+    queryKey: ['users-for-assign'],
+    queryFn: () => solicitudesService.getUsers(),
+    enabled: isOpen,
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: () => propuestasService.approve(propuesta!.id, {
+      precio_simulado: precio ? parseFloat(precio) : undefined,
+      asignados: selectedUsers.map(u => u.nombre).join(', '),
+      id_asignados: selectedUsers.map(u => u.id).join(','),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['campanas'] });
+      onSuccess();
+      onClose();
+    },
+  });
+
+  // Initialize with current assigned users
+  useEffect(() => {
+    if (propuesta && isOpen) {
+      setPrecio(propuesta.precio_simulado?.toString() || propuesta.precio?.toString() || '');
+      // Parse current assigned users
+      if (propuesta.asignado && propuesta.id_asignado) {
+        const nombres = propuesta.asignado.split(',').map(n => n.trim());
+        const ids = propuesta.id_asignado.split(',').map(id => parseInt(id.trim()));
+        const current = nombres.map((nombre, idx) => ({ id: ids[idx] || 0, nombre }));
+        setSelectedUsers(current);
+      } else {
+        setSelectedUsers([]);
+      }
+    }
+  }, [propuesta, isOpen]);
+
+  const filteredUsers = useMemo(() => {
+    if (!users) return [];
+    return users.filter((u: UserOption) =>
+      u.nombre.toLowerCase().includes(userSearch.toLowerCase()) ||
+      u.area.toLowerCase().includes(userSearch.toLowerCase())
+    );
+  }, [users, userSearch]);
+
+  const toggleUser = (user: UserOption) => {
+    setSelectedUsers(prev => {
+      const exists = prev.find(u => u.id === user.id);
+      if (exists) {
+        return prev.filter(u => u.id !== user.id);
+      } else {
+        return [...prev, { id: user.id, nombre: user.nombre }];
+      }
+    });
+  };
+
+  if (!isOpen || !propuesta) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-gradient-to-r from-emerald-600/20 to-green-600/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+              <CheckCircle className="h-5 w-5 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Aprobar Propuesta</h2>
+              <p className="text-xs text-zinc-400">#{propuesta.id}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+            <X className="h-5 w-5 text-zinc-400" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Precio */}
+          <div>
+            <label className="block text-sm text-zinc-400 mb-2">Precio Simulado</label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-400" />
+              <input
+                type="number"
+                value={precio}
+                onChange={(e) => setPrecio(e.target.value)}
+                placeholder="0.00"
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-lg font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+              />
+            </div>
+          </div>
+
+          {/* Asignados */}
+          <div>
+            <label className="block text-sm text-zinc-400 mb-2">
+              <Users className="h-4 w-4 inline mr-1" />
+              Asignados ({selectedUsers.length})
+            </label>
+
+            {/* Selected users */}
+            {selectedUsers.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {selectedUsers.map(u => (
+                  <span
+                    key={u.id}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs border border-emerald-500/30"
+                  >
+                    {u.nombre}
+                    <X
+                      className="h-3 w-3 cursor-pointer hover:text-white"
+                      onClick={() => setSelectedUsers(prev => prev.filter(x => x.id !== u.id))}
+                    />
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Search users */}
+            <input
+              type="text"
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              placeholder="Buscar usuarios..."
+              className="w-full px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            />
+
+            {/* Users list */}
+            <div className="max-h-48 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-800/50">
+              {filteredUsers.map((user: UserOption) => {
+                const isSelected = selectedUsers.some(u => u.id === user.id);
+                return (
+                  <button
+                    key={user.id}
+                    onClick={() => toggleUser(user)}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-left hover:bg-zinc-700/50 transition-colors ${isSelected ? 'bg-emerald-500/10' : ''}`}
+                  >
+                    <div>
+                      <p className="text-sm text-white">{user.nombre}</p>
+                      <p className="text-xs text-zinc-500">{user.area} - {user.puesto}</p>
+                    </div>
+                    {isSelected && <CheckCircle className="h-4 w-4 text-emerald-400" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Info */}
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+            <p className="text-amber-300 text-sm font-medium mb-1">Al aprobar esta propuesta:</p>
+            <ul className="text-amber-200/80 text-xs space-y-1">
+              <li>• Se actualizarán las reservas de inventario</li>
+              <li>• La cotización y campaña se activarán</li>
+              <li>• Se crearán tareas de seguimiento</li>
+              <li>• Se notificará al creador de la solicitud</li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-zinc-800 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 border border-zinc-700"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => approveMutation.mutate()}
+            disabled={approveMutation.isPending}
+            className="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 text-white text-sm font-medium hover:from-emerald-500 hover:to-green-500 disabled:opacity-50 flex items-center gap-2"
+          >
+            {approveMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Aprobando...
+              </>
+            ) : (
+              <>
+                <CheckCircle className="h-4 w-4" />
+                Aprobar Propuesta
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ ASSIGN MODAL (Placeholder) ============
+function AssignModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md p-6 text-center">
+        <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mx-auto mb-4">
+          <Wrench className="h-8 w-8 text-purple-400" />
+        </div>
+        <h2 className="text-xl font-semibold text-white mb-2">Trabajando...</h2>
+        <p className="text-zinc-400 text-sm mb-6">Esta funcionalidad está en desarrollo.</p>
+        <button
+          onClick={onClose}
+          className="px-6 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
+        >
+          Cerrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PropuestasPage() {
-  const [page, setPage] = useState(1);
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [yearInicio, setYearInicio] = useState<number | undefined>(undefined);
+  const [yearFin, setYearFin] = useState<number | undefined>(undefined);
+  const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
+  const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
+  const [sortBy, setSortBy] = useState('fecha');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [groupBy, setGroupBy] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const limit = 20;
+
+  // Modals
+  const [statusPropuesta, setStatusPropuesta] = useState<Propuesta | null>(null);
+  const [approvePropuesta, setApprovePropuesta] = useState<Propuesta | null>(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const { data: catorcenasData } = useQuery({
+    queryKey: ['catorcenas'],
+    queryFn: () => solicitudesService.getCatorcenas(),
+  });
+
+  const { data: stats } = useQuery({
+    queryKey: ['propuestas-stats'],
+    queryFn: () => propuestasService.getStats(),
+  });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['propuestas', page, status],
+    queryKey: ['propuestas', page, status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy],
     queryFn: () =>
       propuestasService.getAll({
         page,
-        limit: 20,
+        limit,
         status: status || undefined,
+        search: debouncedSearch || undefined,
+        yearInicio,
+        yearFin,
+        catorcenaInicio,
+        catorcenaFin,
       }),
   });
 
-  const columns = [
-    {
-      key: 'id',
-      header: 'ID',
-      render: (item: Propuesta) => (
-        <span className="font-mono text-xs">#{item.id}</span>
-      ),
-    },
-    {
-      key: 'solicitud_id',
-      header: 'Solicitud',
-      render: (item: Propuesta) => (
-        <span className="font-mono text-xs">#{item.solicitud_id}</span>
-      ),
-    },
-    {
-      key: 'articulo',
-      header: 'Articulo',
-      render: (item: Propuesta) => item.articulo || '-',
-    },
-    {
-      key: 'precio',
-      header: 'Precio',
-      render: (item: Propuesta) => formatCurrency(item.precio),
-    },
-    {
-      key: 'inversion',
-      header: 'Inversion',
-      render: (item: Propuesta) => formatCurrency(item.inversion),
-    },
-    {
-      key: 'asignado',
-      header: 'Asignado a',
-      render: (item: Propuesta) => item.asignado || '-',
-    },
-    {
-      key: 'descripcion',
-      header: 'Descripcion',
-      render: (item: Propuesta) => (
-        <span className="max-w-xs truncate block">{item.descripcion || '-'}</span>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (item: Propuesta) => (
-        <Badge variant={statusVariants[item.status] || 'secondary'}>
-          {item.status}
-        </Badge>
-      ),
-    },
-    {
-      key: 'fecha',
-      header: 'Fecha',
-      render: (item: Propuesta) => formatDate(item.fecha),
-    },
-  ];
+  const allStatuses = STATUS_OPTIONS;
+
+  const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
+  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || sortBy !== 'fecha');
+
+  const clearAllFilters = () => {
+    setStatus('');
+    setYearInicio(undefined);
+    setYearFin(undefined);
+    setCatorcenaInicio(undefined);
+    setCatorcenaFin(undefined);
+    setSortBy('fecha');
+    setSortOrder('desc');
+    setGroupBy('');
+    setExpandedGroups(new Set());
+    setPage(1);
+  };
+
+  // Group data
+  const groupedData = useMemo(() => {
+    if (!groupBy || !data?.data) return null;
+
+    const groupKey = groupBy as keyof Propuesta;
+    const groups: Record<string, Propuesta[]> = {};
+
+    data.data.forEach(item => {
+      const key = String(item[groupKey] || 'Sin asignar');
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  }, [data, groupBy]);
+
+  const toggleGroup = (groupName: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupName)) {
+        next.delete(groupName);
+      } else {
+        next.add(groupName);
+      }
+      return next;
+    });
+  };
+
+  // Handle export CSV
+  const handleExportCSV = async () => {
+    if (!data?.data) return;
+
+    const headers = ['ID', 'Solicitud', 'Artículo', 'Precio', 'Inversión', 'Asignado', 'Descripción', 'Status', 'Fecha'];
+    const rows = data.data.map(p => [
+      p.id,
+      p.solicitud_id,
+      p.articulo || '',
+      p.precio || 0,
+      p.inversion || 0,
+      p.asignado || '',
+      p.descripcion || '',
+      p.status,
+      formatDate(p.fecha)
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `propuestas_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  const renderPropuestaRow = (item: Propuesta, index: number) => {
+    const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
+
+    return (
+      <tr key={`prop-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+        <td className="px-4 py-3">
+          <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">#{item.id}</span>
+        </td>
+        <td className="px-4 py-3">
+          <span className="font-mono text-xs px-2 py-1 rounded-md bg-blue-500/10 text-blue-300">#{item.solicitud_id}</span>
+        </td>
+        <td className="px-4 py-3">
+          <span className="text-white text-sm font-medium">{item.articulo || '-'}</span>
+        </td>
+        <td className="px-4 py-3">
+          <span className="font-medium text-emerald-400">{formatCurrency(item.precio)}</span>
+        </td>
+        <td className="px-4 py-3">
+          <span className="font-medium text-amber-400">{formatCurrency(item.inversion)}</span>
+        </td>
+        <td className="px-4 py-3">
+          <span className="text-zinc-300 text-xs">{item.asignado || '-'}</span>
+        </td>
+        <td className="px-4 py-3">
+          <button
+            onClick={() => setStatusPropuesta(item)}
+            className={`px-2 py-1 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+          >
+            {item.status}
+          </button>
+        </td>
+        <td className="px-4 py-3">
+          <span className="text-zinc-400 text-sm">{formatDate(item.fecha)}</span>
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-1">
+            {/* Ver */}
+            <button
+              className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border border-purple-500/20 hover:border-purple-500/40 transition-all"
+              title="Ver detalles"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Estatus/Comentarios */}
+            <button
+              onClick={() => setStatusPropuesta(item)}
+              className="p-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/20 hover:border-amber-500/40 transition-all"
+              title="Ver/Cambiar estatus"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Aprobar */}
+            <button
+              onClick={() => setApprovePropuesta(item)}
+              className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 transition-all"
+              title="Aprobar propuesta"
+            >
+              <CheckCircle className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Asignar */}
+            <button
+              onClick={() => setShowAssignModal(true)}
+              className="p-2 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border border-fuchsia-500/20 hover:border-fuchsia-500/40 transition-all"
+              title="Asignar"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Compartir - disabled */}
+            <button
+              disabled
+              className="p-2 rounded-lg bg-zinc-500/10 text-zinc-500 border border-zinc-500/20 cursor-not-allowed opacity-50"
+              title="Compartir (próximamente)"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
+  const totalPages = data?.pagination?.totalPages || 1;
+  const total = data?.pagination?.total ?? 0;
 
   return (
     <div className="min-h-screen">
       <Header title="Propuestas" />
 
-      <div className="p-6 space-y-4">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <Select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-              options={[
-                { value: '', label: 'Todos los status' },
-                { value: 'Pendiente', label: 'Pendiente' },
-                { value: 'Aprobada', label: 'Aprobada' },
-                { value: 'Rechazada', label: 'Rechazada' },
-              ]}
-              className="w-44"
-            />
+      <div className="p-6 space-y-5">
+        {/* KPIs Row */}
+        <div className="flex flex-wrap gap-3">
+          <KpiCard label="Total" value={stats?.total || 0} color="purple" />
+          {stats?.byStatus && Object.entries(stats.byStatus).slice(0, 5).map(([status, count]) => {
+            const colors: Record<string, string> = {
+              'Por aprobar': 'amber',
+              'Abierto': 'cyan',
+              'Activa': 'emerald',
+              'Pendiente': 'amber',
+              'Compartir': 'cyan',
+            };
+            return (
+              <KpiCard key={status} label={status} value={count} color={colors[status] || 'fuchsia'} />
+            );
+          })}
+        </div>
+
+        {/* Control Bar */}
+        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4 relative z-30">
+          <div className="flex flex-col gap-4">
+            {/* Top Row: Search + Filter Toggle + Export */}
+            <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
+              {/* Search */}
+              <div className="relative flex-1 w-full lg:max-w-xl">
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
+                <input
+                  type="search"
+                  placeholder="Buscar artículo, descripción, asignado..."
+                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Filter Toggle */}
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                  : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
+                  }`}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                Filtros
+                {hasActiveFilters && (
+                  <span className="w-2 h-2 rounded-full bg-purple-400" />
+                )}
+              </button>
+
+              {/* Export CSV */}
+              <button
+                onClick={handleExportCSV}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200 transition-all"
+              >
+                <Download className="h-4 w-4" />
+                Exportar CSV
+              </button>
+            </div>
+
+            {/* Filters Row (Expandable) */}
+            {showFilters && (
+              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-zinc-800/50 relative z-50">
+                {/* Status Filter */}
+                <span className="text-xs text-zinc-500 mr-1">
+                  <Filter className="h-3 w-3 inline mr-1" />
+                  Filtrar:
+                </span>
+                <FilterChip
+                  label="Status"
+                  options={allStatuses}
+                  value={status}
+                  onChange={(val) => { setStatus(val); setPage(1); }}
+                  onClear={() => { setStatus(''); setPage(1); }}
+                />
+
+                {/* Period Filter */}
+                <PeriodFilterPopover
+                  catorcenasData={catorcenasData}
+                  yearInicio={yearInicio}
+                  yearFin={yearFin}
+                  catorcenaInicio={catorcenaInicio}
+                  catorcenaFin={catorcenaFin}
+                  onApply={(yi, yf, ci, cf) => {
+                    setYearInicio(yi);
+                    setYearFin(yf);
+                    setCatorcenaInicio(ci);
+                    setCatorcenaFin(cf);
+                    setPage(1);
+                  }}
+                  onClear={() => {
+                    setYearInicio(undefined);
+                    setYearFin(undefined);
+                    setCatorcenaInicio(undefined);
+                    setCatorcenaFin(undefined);
+                    setPage(1);
+                  }}
+                />
+
+                {/* Divider */}
+                <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+
+                {/* Sort Options */}
+                <span className="text-xs text-zinc-500 mr-1">
+                  <ArrowUpDown className="h-3 w-3 inline mr-1" />
+                  Ordenar:
+                </span>
+                <FilterChip
+                  label="Campo"
+                  options={['fecha', 'precio', 'inversion', 'status']}
+                  value={sortBy}
+                  onChange={(val) => { setSortBy(val); setPage(1); }}
+                  onClear={() => { setSortBy('fecha'); setPage(1); }}
+                />
+                <button
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 transition-all"
+                >
+                  {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
+                </button>
+
+                {/* Divider */}
+                <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+
+                {/* Group By */}
+                <FilterChip
+                  label="Agrupar"
+                  options={['status', 'asignado']}
+                  value={groupBy}
+                  onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); }}
+                  onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); }}
+                />
+
+                {/* Clear All */}
+                {hasActiveFilters && (
+                  <>
+                    <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+                    <button
+                      onClick={clearAllFilters}
+                      className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                    >
+                      <X className="h-3 w-3" />
+                      Limpiar todo
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        <DataTable
-          columns={columns}
-          data={data?.data || []}
-          loading={isLoading}
-          pagination={
-            data?.pagination
-              ? {
-                  page: data.pagination.page,
-                  totalPages: data.pagination.totalPages,
-                  onPageChange: setPage,
-                }
-              : undefined
-          }
-          emptyMessage="No se encontraron propuestas"
-        />
+        {/* Table */}
+        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Solicitud</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Artículo</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Precio</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Inversión</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Asignado</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fecha</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                        <span className="text-zinc-500 text-sm">Cargando propuestas...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : !data?.data || data.data.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <FileText className="h-12 w-12 text-zinc-700" />
+                        <span className="text-zinc-500 text-sm">No se encontraron propuestas</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : groupedData ? (
+                  // Grouped view
+                  groupedData.map(([groupName, items]) => (
+                    <React.Fragment key={groupName}>
+                      <GroupHeader
+                        groupName={groupName}
+                        count={items.length}
+                        expanded={expandedGroups.has(groupName)}
+                        onToggle={() => toggleGroup(groupName)}
+                      />
+                      {expandedGroups.has(groupName) && items.map((item, idx) => renderPropuestaRow(item, idx))}
+                    </React.Fragment>
+                  ))
+                ) : (
+                  // Flat view
+                  data.data.map((item, idx) => renderPropuestaRow(item, idx))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {data?.pagination && totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
+              <span className="text-sm text-purple-300/70">
+                Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{totalPages}</span>
+                <span className="text-purple-300/50 ml-2">({total} total)</span>
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                  className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  Anterior
+                </button>
+                <div className="flex items-center gap-1 px-2">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (page <= 3) {
+                      pageNum = i + 1;
+                    } else if (page >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = page - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setPage(pageNum)}
+                        className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${page === pageNum
+                          ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25'
+                          : 'border border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20'
+                          }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => setPage(Math.min(totalPages, page + 1))}
+                  disabled={page === totalPages}
+                  className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Modals */}
+      <StatusModal
+        isOpen={!!statusPropuesta}
+        onClose={() => setStatusPropuesta(null)}
+        propuesta={statusPropuesta}
+        onStatusChange={() => {
+          queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+          queryClient.invalidateQueries({ queryKey: ['propuestas-stats'] });
+        }}
+      />
+
+      <ApproveModal
+        isOpen={!!approvePropuesta}
+        onClose={() => setApprovePropuesta(null)}
+        propuesta={approvePropuesta}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+          queryClient.invalidateQueries({ queryKey: ['propuestas-stats'] });
+        }}
+      />
+
+      <AssignModal
+        isOpen={showAssignModal}
+        onClose={() => setShowAssignModal(false)}
+      />
     </div>
   );
 }

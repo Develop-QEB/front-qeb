@@ -43,6 +43,10 @@ export interface CampanasParams {
   page?: number;
   limit?: number;
   status?: string;
+  yearInicio?: number;
+  yearFin?: number;
+  catorcenaInicio?: number;
+  catorcenaFin?: number;
 }
 
 export const campanasService = {

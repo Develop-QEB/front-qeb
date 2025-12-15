@@ -43,6 +43,11 @@ export interface Cliente {
   T0_U_Cliente: string | null;
   T0_U_RazonSocial: string | null;
   T0_U_IDACA: number | null;
+  // Asesor correcto desde SAP
+  ASESOR_U_IDAsesor: string | null;
+  ASESOR_U_Asesor: string | null;
+  ASESOR_U_SAPCode: number | null;
+  ASESOR_U_UnidadNegocio: string | null;
   T1_U_Cliente: string | null;
   T1_U_IDACA: number | null;
   T1_U_IDCM: number | null;
