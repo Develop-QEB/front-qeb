@@ -337,7 +337,9 @@ interface SAPCuicItem {
   T0_U_Cliente: string;
   T1_U_UnidadNegocio: string;
   T0_U_Agencia: string;
-  T0_U_Asesor: string;
+  // Usar los campos correctos de Asesor
+  ASESOR_U_IDAsesor: string;
+  ASESOR_U_Asesor: string;
   T1_U_IDMarca: number;
   T2_U_Marca: string;
   T2_U_IDProducto: number;
@@ -1050,7 +1052,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       unidad_negocio: selectedCuic.T1_U_UnidadNegocio,
       marca_id: selectedCuic.T1_U_IDMarca,
       marca_nombre: selectedCuic.T2_U_Marca,
-      asesor: selectedCuic.T0_U_Asesor,
+      asesor: selectedCuic.ASESOR_U_Asesor,
       producto_id: selectedCuic.T2_U_IDProducto,
       producto_nombre: selectedCuic.T2_U_Producto,
       agencia: selectedCuic.T0_U_Agencia,
@@ -1318,7 +1320,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     </div>
                     <div className="flex justify-between">
                       <span className="text-zinc-500">Asesor:</span>
-                      <span className="text-emerald-400 font-medium">{selectedCuic.T0_U_Asesor || '-'}</span>
+                      <span className="text-emerald-400 font-medium">{selectedCuic.ASESOR_U_Asesor || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-zinc-500">Agencia:</span>

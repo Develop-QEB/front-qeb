@@ -18,7 +18,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; border: string; 
   'Aprobada': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30', gradient: 'from-emerald-600 to-green-600' },
   'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30', gradient: 'from-red-600 to-rose-600' },
   'Atendida': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30', gradient: 'from-cyan-600 to-blue-600' },
-  'Desactivado': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30', gradient: 'from-zinc-600 to-gray-600' },
+  'Desactivada': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30', gradient: 'from-zinc-600 to-gray-600' },
   'Ajustar': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30', gradient: 'from-orange-600 to-amber-600' },
 };
 
@@ -632,7 +632,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                   </div>
                   <div className="divide-y divide-violet-500/10">
                     {groupedCaras.map((group) => {
-                      const tarifaPublicaTotal = group.caras.reduce((sum, c) => sum + (c.tarifa_publica || 0), 0);
+                      const inversionTotal = group.caras.reduce((sum, c) => sum + ((c.tarifa_publica || 0) * (Number(c.caras) || 0)), 0);
                       return (
                         <div key={group.key}>
                           <button
@@ -666,8 +666,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                                 <span className="text-white text-sm font-bold">{group.totalCaras + group.totalBonificacion}</span>
                               </div>
                               <div className="flex items-center gap-1.5 pl-2 border-l border-violet-500/30">
-                                <span className="text-amber-400 text-xs">Tarifa:</span>
-                                <span className="text-amber-300 text-sm font-semibold">{formatCurrency(tarifaPublicaTotal)}</span>
+                                <span className="text-emerald-400 text-xs">Inversión:</span>
+                                <span className="text-emerald-300 text-sm font-semibold">{formatCurrency(inversionTotal)}</span>
                               </div>
                             </div>
                           </button>
@@ -684,22 +684,27 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                                       <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200">Renta</th>
                                       <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200">Bonif</th>
                                       <th className="px-3 py-2.5 text-center text-xs font-semibold text-white">Total</th>
-                                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-amber-300">Tarifa</th>
+                                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-amber-300">Tarifa Pública</th>
+                                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-emerald-300">Inversión</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-violet-500/10">
-                                    {group.caras.map((cara, idx) => (
-                                      <tr key={idx} className="hover:bg-violet-600/10 transition-colors">
-                                        <td className="px-3 py-2.5 text-zinc-200">{cara.ciudad || '-'}</td>
-                                        <td className="px-3 py-2.5 text-zinc-300">{cara.estados || '-'}</td>
-                                        <td className="px-3 py-2.5 text-zinc-300">{cara.formato || '-'}</td>
-                                        <td className="px-3 py-2.5 text-zinc-300">{cara.tipo || '-'}</td>
-                                        <td className="px-3 py-2.5 text-center text-white font-medium">{Number(cara.caras) || 0}</td>
-                                        <td className="px-3 py-2.5 text-center text-white font-medium">{Number(cara.bonificacion) || 0}</td>
-                                        <td className="px-3 py-2.5 text-center text-white font-bold">{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
-                                        <td className="px-3 py-2.5 text-right text-amber-300 font-medium">{formatCurrency(cara.tarifa_publica || 0)}</td>
-                                      </tr>
-                                    ))}
+                                    {group.caras.map((cara, idx) => {
+                                      const inversion = (cara.tarifa_publica || 0) * (Number(cara.caras) || 0);
+                                      return (
+                                        <tr key={idx} className="hover:bg-violet-600/10 transition-colors">
+                                          <td className="px-3 py-2.5 text-zinc-200">{cara.ciudad || '-'}</td>
+                                          <td className="px-3 py-2.5 text-zinc-300">{cara.estados || '-'}</td>
+                                          <td className="px-3 py-2.5 text-zinc-300">{cara.formato || '-'}</td>
+                                          <td className="px-3 py-2.5 text-zinc-300">{cara.tipo || '-'}</td>
+                                          <td className="px-3 py-2.5 text-center text-white font-medium">{Number(cara.caras) || 0}</td>
+                                          <td className="px-3 py-2.5 text-center text-white font-medium">{Number(cara.bonificacion) || 0}</td>
+                                          <td className="px-3 py-2.5 text-center text-white font-bold">{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
+                                          <td className="px-3 py-2.5 text-right text-amber-300 font-medium">{formatCurrency(cara.tarifa_publica || 0)}</td>
+                                          <td className="px-3 py-2.5 text-right text-emerald-300 font-medium">{formatCurrency(inversion)}</td>
+                                        </tr>
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               </div>
@@ -879,7 +884,7 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange }: Stat
   if (!isOpen || !solicitud) return null;
 
   const statusColor = STATUS_COLORS[solicitud.status] || DEFAULT_STATUS_COLOR;
-  const statusOptions = ['Pendiente', 'Aprobada', 'Rechazada', 'Desactivado', 'Ajustar'];
+  const statusOptions = ['Pendiente', 'Aprobada', 'Rechazada', 'Desactivada', 'Ajustar'];
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">

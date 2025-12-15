@@ -107,6 +107,244 @@ function FilterChip({
   );
 }
 
+// Period Filter Popover Component
+function PeriodFilterPopover({
+  catorcenasData,
+  yearInicio,
+  yearFin,
+  catorcenaInicio,
+  catorcenaFin,
+  onApply,
+  onClear
+}: {
+  catorcenasData: { years: number[]; data: Catorcena[] } | undefined;
+  yearInicio: number | undefined;
+  yearFin: number | undefined;
+  catorcenaInicio: number | undefined;
+  catorcenaFin: number | undefined;
+  onApply: (yearInicio: number, yearFin: number, catorcenaInicio?: number, catorcenaFin?: number) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [tempYearInicio, setTempYearInicio] = useState<number | undefined>(yearInicio);
+  const [tempYearFin, setTempYearFin] = useState<number | undefined>(yearFin);
+  const [tempCatorcenaInicio, setTempCatorcenaInicio] = useState<number | undefined>(catorcenaInicio);
+  const [tempCatorcenaFin, setTempCatorcenaFin] = useState<number | undefined>(catorcenaFin);
+
+  // Sync temp state when props change
+  useEffect(() => {
+    setTempYearInicio(yearInicio);
+    setTempYearFin(yearFin);
+    setTempCatorcenaInicio(catorcenaInicio);
+    setTempCatorcenaFin(catorcenaFin);
+  }, [yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+
+  const years = catorcenasData?.years || [];
+
+  const yearInicioOptions = useMemo(() => {
+    if (tempYearFin) {
+      return years.filter(y => y <= tempYearFin);
+    }
+    return years;
+  }, [years, tempYearFin]);
+
+  const yearFinOptions = useMemo(() => {
+    if (tempYearInicio) {
+      return years.filter(y => y >= tempYearInicio);
+    }
+    return years;
+  }, [years, tempYearInicio]);
+
+  const catorcenasInicioOptions = useMemo(() => {
+    if (!catorcenasData?.data || !tempYearInicio) return [];
+    const catorcenas = catorcenasData.data.filter(c => c.a_o === tempYearInicio);
+    if (tempYearInicio === tempYearFin && tempCatorcenaFin) {
+      return catorcenas.filter(c => c.numero_catorcena <= tempCatorcenaFin);
+    }
+    return catorcenas;
+  }, [catorcenasData, tempYearInicio, tempYearFin, tempCatorcenaFin]);
+
+  const catorcenasFinOptions = useMemo(() => {
+    if (!catorcenasData?.data || !tempYearFin) return [];
+    const catorcenas = catorcenasData.data.filter(c => c.a_o === tempYearFin);
+    if (tempYearInicio === tempYearFin && tempCatorcenaInicio) {
+      return catorcenas.filter(c => c.numero_catorcena >= tempCatorcenaInicio);
+    }
+    return catorcenas;
+  }, [catorcenasData, tempYearFin, tempYearInicio, tempCatorcenaInicio]);
+
+  const isActive = yearInicio !== undefined && yearFin !== undefined;
+  const canApply = tempYearInicio !== undefined && tempYearFin !== undefined;
+
+  const handleApply = () => {
+    if (canApply) {
+      onApply(tempYearInicio!, tempYearFin!, tempCatorcenaInicio, tempCatorcenaFin);
+      setOpen(false);
+    }
+  };
+
+  const handleClear = () => {
+    setTempYearInicio(undefined);
+    setTempYearFin(undefined);
+    setTempCatorcenaInicio(undefined);
+    setTempCatorcenaFin(undefined);
+    onClear();
+    setOpen(false);
+  };
+
+  const getDisplayText = () => {
+    if (!isActive) return 'Periodo';
+    let text = `${yearInicio}`;
+    if (catorcenaInicio) text += `/C${catorcenaInicio}`;
+    text += ` - ${yearFin}`;
+    if (catorcenaFin) text += `/C${catorcenaFin}`;
+    return text;
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${isActive
+          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+          }`}
+      >
+        <Calendar className="h-3 w-3" />
+        <span>{getDisplayText()}</span>
+        {isActive ? (
+          <X className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); handleClear(); }} />
+        ) : (
+          <ChevronDown className="h-3 w-3" />
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
+            <div className="p-3 border-b border-zinc-800">
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-purple-400" />
+                Filtro de Periodo
+              </h3>
+              <p className="text-[10px] text-zinc-500 mt-1">Selecciona año inicio y fin (obligatorios)</p>
+            </div>
+
+            <div className="p-3 space-y-3">
+              {/* Año Inicio y Catorcena Inicio */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Año Inicio *</label>
+                  <select
+                    value={tempYearInicio || ''}
+                    onChange={(e) => {
+                      const val = e.target.value ? parseInt(e.target.value) : undefined;
+                      setTempYearInicio(val);
+                      setTempCatorcenaInicio(undefined);
+                      if (val && tempYearFin && val > tempYearFin) {
+                        setTempYearFin(undefined);
+                        setTempCatorcenaFin(undefined);
+                      }
+                    }}
+                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  >
+                    <option value="">Seleccionar</option>
+                    {yearInicioOptions.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Inicio</label>
+                  <select
+                    value={tempCatorcenaInicio || ''}
+                    onChange={(e) => {
+                      const val = e.target.value ? parseInt(e.target.value) : undefined;
+                      setTempCatorcenaInicio(val);
+                      if (val && tempYearInicio === tempYearFin && tempCatorcenaFin && val > tempCatorcenaFin) {
+                        setTempCatorcenaFin(undefined);
+                      }
+                    }}
+                    disabled={!tempYearInicio}
+                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
+                  >
+                    <option value="">Todas</option>
+                    {catorcenasInicioOptions.map(c => (
+                      <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Año Fin y Catorcena Fin */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Año Fin *</label>
+                  <select
+                    value={tempYearFin || ''}
+                    onChange={(e) => {
+                      const val = e.target.value ? parseInt(e.target.value) : undefined;
+                      setTempYearFin(val);
+                      setTempCatorcenaFin(undefined);
+                      if (val && tempYearInicio && val < tempYearInicio) {
+                        setTempYearInicio(undefined);
+                        setTempCatorcenaInicio(undefined);
+                      }
+                    }}
+                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  >
+                    <option value="">Seleccionar</option>
+                    {yearFinOptions.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Fin</label>
+                  <select
+                    value={tempCatorcenaFin || ''}
+                    onChange={(e) => {
+                      const val = e.target.value ? parseInt(e.target.value) : undefined;
+                      setTempCatorcenaFin(val);
+                      if (val && tempYearInicio === tempYearFin && tempCatorcenaInicio && val < tempCatorcenaInicio) {
+                        setTempCatorcenaInicio(undefined);
+                      }
+                    }}
+                    disabled={!tempYearFin}
+                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
+                  >
+                    <option value="">Todas</option>
+                    {catorcenasFinOptions.map(c => (
+                      <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-zinc-800 flex items-center justify-between gap-2">
+              <button
+                onClick={handleClear}
+                className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+              >
+                Limpiar
+              </button>
+              <button
+                onClick={handleApply}
+                disabled={!canApply}
+                className="px-4 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-colors"
+              >
+                Aplicar Filtro
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Group Header for table
 function GroupHeader({
   groupName,
@@ -333,48 +571,6 @@ export function SolicitudesPage() {
     }) || null;
   }, [catorcenasData]);
 
-  // Filter year options: Year Fin must be >= Year Inicio
-  const yearInicioOptions = useMemo(() => {
-    if (!catorcenasData?.years) return [];
-    // If yearFin is set, only show years <= yearFin
-    if (yearFin) {
-      return catorcenasData.years.filter(y => y <= yearFin);
-    }
-    return catorcenasData.years;
-  }, [catorcenasData, yearFin]);
-
-  const yearFinOptions = useMemo(() => {
-    if (!catorcenasData?.years) return [];
-    // If yearInicio is set, only show years >= yearInicio
-    if (yearInicio) {
-      return catorcenasData.years.filter(y => y >= yearInicio);
-    }
-    return catorcenasData.years;
-  }, [catorcenasData, yearInicio]);
-
-  // Get catorcenas for selected years with range validation
-  const catorcenasInicioOptions = useMemo(() => {
-    if (!catorcenasData?.data || !yearInicio) return [];
-    const catorcenas = catorcenasData.data.filter(c => c.a_o === yearInicio);
-
-    // If same year, filter catorcena inicio to be <= catorcena fin
-    if (yearInicio === yearFin && catorcenaFin) {
-      return catorcenas.filter(c => c.numero_catorcena <= catorcenaFin);
-    }
-    return catorcenas;
-  }, [catorcenasData, yearInicio, yearFin, catorcenaFin]);
-
-  const catorcenasFinOptions = useMemo(() => {
-    if (!catorcenasData?.data || !yearFin) return [];
-    const catorcenas = catorcenasData.data.filter(c => c.a_o === yearFin);
-
-    // If same year, filter catorcena fin to be >= catorcena inicio
-    if (yearInicio === yearFin && catorcenaInicio) {
-      return catorcenas.filter(c => c.numero_catorcena >= catorcenaInicio);
-    }
-    return catorcenas;
-  }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
-
   // Group data
   const groupedData = useMemo(() => {
     if (!groupBy || !data?.data) return null;
@@ -403,7 +599,8 @@ export function SolicitudesPage() {
     });
   };
 
-  const hasActiveFilters = !!(status || yearInicio || yearFin || groupBy || sortBy !== 'fecha');
+  const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
+  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || sortBy !== 'fecha');
 
   const clearAllFilters = () => {
     setStatus('');
@@ -422,21 +619,21 @@ export function SolicitudesPage() {
     const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
 
     // Button enable/disable logic based on status
-    const isDesactivado = item.status === 'Desactivado';
+    const isDesactivada = item.status === 'Desactivada';
     const isAprobada = item.status === 'Aprobada' || item.status === 'Aprobada';
     const isAjustar = item.status === 'Ajustar';
     const isAtendida = item.status === 'Atendida';
 
     // Ver: siempre activo
     const canView = true;
-    // Editar: activo si no está Desactivado, no está Aprobada, no está Atendida
-    const canEdit = !isDesactivado && !isAprobada && !isAtendida;
+    // Editar: activo si no está Desactivada, no está Aprobada, no está Atendida
+    const canEdit = !isDesactivada && !isAprobada && !isAtendida;
     // Atender: solo activo si está Aprobada
     const canAtender = isAprobada;
     // Estatus: siempre activo
     const canChangeStatus = true;
-    // Eliminar: solo si no está Desactivado, Aprobada o Atendida
-    const canDelete = !isDesactivado && !isAprobada && !isAtendida;
+    // Eliminar: solo si no está Desactivada, Aprobada o Atendida
+    const canDelete = !isDesactivada && !isAprobada && !isAtendida;
 
     return (
       <tr key={`sol-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
@@ -479,58 +676,58 @@ export function SolicitudesPage() {
             {/* Ver */}
             <button
               onClick={(e) => { e.stopPropagation(); setViewSolicitudId(item.id); }}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/10 text-purple-400 text-xs hover:bg-purple-500/20 transition-all duration-200 border border-purple-500/20"
+              className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border border-purple-500/20 hover:border-purple-500/40 transition-all"
               title="Ver detalles"
             >
-              <Eye className="h-3 w-3" />
+              <Eye className="h-3.5 w-3.5" />
             </button>
 
             {/* Editar */}
             <button
               onClick={(e) => { e.stopPropagation(); setEditSolicitud(item); }}
               disabled={!canEdit}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all duration-200 border ${canEdit
-                ? 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border-blue-500/20'
+              className={`p-2 rounded-lg transition-all border ${canEdit
+                ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
                 : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
                 }`}
               title={canEdit ? 'Editar solicitud' : 'No disponible'}
             >
-              <Edit2 className="h-3 w-3" />
+              <Edit2 className="h-3.5 w-3.5" />
             </button>
 
             {/* Atender */}
             <button
               onClick={(e) => { e.stopPropagation(); setAtenderSolicitud(item); }}
               disabled={!canAtender}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all duration-200 border ${canAtender
-                ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border-cyan-500/20'
+              className={`p-2 rounded-lg transition-all border ${canAtender
+                ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
                 : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
                 }`}
               title={canAtender ? 'Atender solicitud' : 'Solo disponible para solicitudes aprobadas'}
             >
-              <PlayCircle className="h-3 w-3" />
+              <PlayCircle className="h-3.5 w-3.5" />
             </button>
 
             {/* Estatus/Comentarios */}
             <button
               onClick={(e) => { e.stopPropagation(); setStatusSolicitud(item); }}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 text-xs hover:bg-amber-500/20 transition-all duration-200 border border-amber-500/20"
+              className="p-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/20 hover:border-amber-500/40 transition-all"
               title="Ver/Cambiar estatus"
             >
-              <MessageSquare className="h-3 w-3" />
+              <MessageSquare className="h-3.5 w-3.5" />
             </button>
 
             {/* Eliminar */}
             <button
               onClick={(e) => { e.stopPropagation(); setDeleteId(item.id); }}
               disabled={!canDelete}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all duration-200 border ${canDelete
-                ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border-red-500/20'
+              className={`p-2 rounded-lg transition-all border ${canDelete
+                ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border-red-500/20 hover:border-red-500/40'
                 : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
                 }`}
               title={canDelete ? 'Eliminar solicitud' : 'No disponible'}
             >
-              <Trash2 className="h-3 w-3" />
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
         </td>
@@ -637,17 +834,17 @@ export function SolicitudesPage() {
         </div>
 
         {/* Control Bar */}
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-4 relative z-30">
+        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4 relative z-30">
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
               {/* Search */}
               <div className="relative flex-1 w-full lg:max-w-xl">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
                 <input
                   type="search"
                   placeholder="Buscar cliente, descripcion, marca..."
-                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/30 transition-all"
+                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -680,7 +877,7 @@ export function SolicitudesPage() {
               {/* Nueva Solicitud */}
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-purple-600 text-white hover:bg-purple-700 transition-all"
+                className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
               >
                 <Plus className="h-4 w-4" />
                 Nueva Solicitud
@@ -716,95 +913,28 @@ export function SolicitudesPage() {
                   </>
                 )}
 
-                {/* Year Range */}
-                <span className="text-xs text-zinc-500 mr-1">
-                  <Calendar className="h-3 w-3 inline mr-1" />
-                  Años:
-                </span>
-                <FilterChip
-                  label="Año Inicio"
-                  options={yearInicioOptions.map(String)}
-                  value={yearInicio?.toString() || ''}
-                  onChange={(val) => {
-                    const newYearInicio = parseInt(val);
-                    setYearInicio(newYearInicio);
-                    setCatorcenaInicio(undefined);
-                    // Reset yearFin if it becomes invalid
-                    if (yearFin && newYearInicio > yearFin) {
-                      setYearFin(undefined);
-                      setCatorcenaFin(undefined);
-                    }
+                {/* Period Filter */}
+                <PeriodFilterPopover
+                  catorcenasData={catorcenasData}
+                  yearInicio={yearInicio}
+                  yearFin={yearFin}
+                  catorcenaInicio={catorcenaInicio}
+                  catorcenaFin={catorcenaFin}
+                  onApply={(yi, yf, ci, cf) => {
+                    setYearInicio(yi);
+                    setYearFin(yf);
+                    setCatorcenaInicio(ci);
+                    setCatorcenaFin(cf);
                     setPage(1);
                   }}
                   onClear={() => {
                     setYearInicio(undefined);
-                    setCatorcenaInicio(undefined);
-                    setPage(1);
-                  }}
-                />
-                <FilterChip
-                  label="Año Fin"
-                  options={yearFinOptions.map(String)}
-                  value={yearFin?.toString() || ''}
-                  onChange={(val) => {
-                    const newYearFin = parseInt(val);
-                    setYearFin(newYearFin);
-                    setCatorcenaFin(undefined);
-                    // Reset yearInicio if it becomes invalid
-                    if (yearInicio && newYearFin < yearInicio) {
-                      setYearInicio(undefined);
-                      setCatorcenaInicio(undefined);
-                    }
-                    setPage(1);
-                  }}
-                  onClear={() => {
                     setYearFin(undefined);
+                    setCatorcenaInicio(undefined);
                     setCatorcenaFin(undefined);
                     setPage(1);
                   }}
                 />
-
-                {/* Catorcenas */}
-                {yearInicio && (
-                  <FilterChip
-                    label="Cat. Inicio"
-                    options={catorcenasInicioOptions.map(c => `Cat. ${c.numero_catorcena}`)}
-                    value={catorcenaInicio ? `Cat. ${catorcenaInicio}` : ''}
-                    onChange={(val) => {
-                      const num = parseInt(val.replace('Cat. ', ''));
-                      setCatorcenaInicio(num);
-                      // If same year and catorcenaFin becomes invalid, reset it
-                      if (yearInicio === yearFin && catorcenaFin && num > catorcenaFin) {
-                        setCatorcenaFin(undefined);
-                      }
-                      setPage(1);
-                    }}
-                    onClear={() => {
-                      setCatorcenaInicio(undefined);
-                      setPage(1);
-                    }}
-                  />
-                )}
-                {yearFin && (
-                  <FilterChip
-                    label="Cat. Fin"
-                    options={catorcenasFinOptions.map(c => `Cat. ${c.numero_catorcena}`)}
-                    value={catorcenaFin ? `Cat. ${catorcenaFin}` : ''}
-                    onChange={(val) => {
-                      const num = parseInt(val.replace('Cat. ', ''));
-                      setCatorcenaFin(num);
-                      // If same year and catorcenaInicio becomes invalid, reset it
-                      if (yearInicio === yearFin && catorcenaInicio && num < catorcenaInicio) {
-                        setCatorcenaInicio(undefined);
-                      }
-                      setPage(1);
-                    }}
-                    onClear={() => {
-                      setCatorcenaFin(undefined);
-                      setPage(1);
-                    }}
-                  />
-                )}
 
                 <div className="h-4 w-px bg-zinc-700 mx-1" />
 
@@ -869,7 +999,7 @@ export function SolicitudesPage() {
         )}
 
         {/* Data Table */}
-        <div className="relative z-10 rounded-2xl border border-zinc-800/80 bg-zinc-900/30 backdrop-blur-sm overflow-hidden">
+        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5 relative z-10">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -879,7 +1009,7 @@ export function SolicitudesPage() {
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-gradient-to-r from-purple-900/20 to-fuchsia-900/20 border-b border-purple-500/20">
+                    <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">ID</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fecha</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
@@ -920,22 +1050,23 @@ export function SolicitudesPage() {
 
               {/* Pagination */}
               {!groupBy && data?.pagination && totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800/50">
-                  <span className="text-xs text-zinc-500">
-                    Pagina {page} de {totalPages} ({data.pagination.total} total)
+                <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
+                  <span className="text-sm text-purple-300/70">
+                    Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{totalPages}</span>
+                    <span className="text-purple-300/50 ml-2">({data.pagination.total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
-                      className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                     >
                       Anterior
                     </button>
                     <button
                       onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                       disabled={page === totalPages}
-                      className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                     >
                       Siguiente
                     </button>
@@ -945,7 +1076,7 @@ export function SolicitudesPage() {
 
               {/* Grouped data info */}
               {groupBy && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800/50">
+                <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
                   <span className="text-xs text-zinc-500">
                     Mostrando {data?.data?.length || 0} solicitudes agrupadas
                   </span>
