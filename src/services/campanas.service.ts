@@ -6,37 +6,24 @@ export type { CampanaWithComments };
 export interface InventarioReservado {
   rsv_ids: string;
   id: number;
-  codigo_original: string;
   codigo_unico: string;
-  ubicacion: string | null;
-  tipo_de_cara: string | null;
-  cara: string | null;
+  solicitud_caras_id: number | null;
   mueble: string | null;
+  estado: string | null;
+  tipo_de_cara: string | null;
+  caras_totales: number;
   latitud: number;
   longitud: number;
   plaza: string | null;
-  estado: string | null;
-  municipio: string | null;
-  tipo_de_mueble: string | null;
-  ancho: number;
-  alto: number;
-  nivel_socioeconomico: string | null;
-  tarifa_publica: number | null;
-  tradicional_digital: string | null;
-  archivo: string | null;
-  espacios_ids: string | null;
   estatus_reserva: string | null;
-  calendario_id: number | null;
-  espacios: string | null;
-  solicitud_caras_id: number | null;
   articulo: string | null;
   tipo_medio: string | null;
   inicio_periodo: string | null;
   fin_periodo: string | null;
-  numero_catorcena: number | null;
-  anio_catorcena: number | null;
-  caras_totales: number;
+  tradicional_digital: string | null;
   grupo_completo_id: number | null;
+  numero_catorcena?: number | null;
+  anio_catorcena?: number | null;
 }
 
 export interface InventarioConAPS extends InventarioReservado {
