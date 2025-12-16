@@ -22,6 +22,7 @@ export interface InventarioReservado {
   alto: number;
   nivel_socioeconomico: string | null;
   tarifa_publica: number | null;
+  tradicional_digital: string | null;
   archivo: string | null;
   espacios_ids: string | null;
   estatus_reserva: string | null;
@@ -29,8 +30,11 @@ export interface InventarioReservado {
   espacios: string | null;
   solicitud_caras_id: number | null;
   articulo: string | null;
+  tipo_medio: string | null;
   inicio_periodo: string | null;
   fin_periodo: string | null;
+  numero_catorcena: number | null;
+  anio_catorcena: number | null;
   caras_totales: number;
   grupo_completo_id: number | null;
 }

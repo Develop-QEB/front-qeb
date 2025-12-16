@@ -52,6 +52,53 @@ const AVAILABLE_GROUPINGS: GroupConfig[] = [
   { field: 'estatus_reserva', label: 'Estatus' },
 ];
 
+// Helper para formatear inicio_periodo como "Catorcena X, Año YYYY"
+function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS): string {
+  if (item.numero_catorcena && item.anio_catorcena) {
+    return `Catorcena ${item.numero_catorcena}, ${item.anio_catorcena}`;
+  }
+  return item.inicio_periodo || 'Sin asignar';
+}
+
+// Helper para formatear articulo con info adicional
+function formatArticulo(item: InventarioReservado | InventarioConAPS): string {
+  console.log('formatArticulo item:', {
+    articulo: item.articulo,
+    solicitud_caras_id: item.solicitud_caras_id,
+    tradicional_digital: item.tradicional_digital,
+    caras_totales: item.caras_totales
+  });
+  const parts: string[] = [];
+
+  if (item.articulo) {
+    parts.push(item.articulo.toUpperCase());
+  }
+
+  if (item.solicitud_caras_id) {
+    parts.push(`Grupo ${item.solicitud_caras_id}`);
+  }
+
+  if (item.tradicional_digital) {
+    const tipo = item.tradicional_digital.charAt(0).toUpperCase() + item.tradicional_digital.slice(1).toLowerCase();
+    parts.push(`${tipo} (${item.caras_totales})`);
+  } else if (item.tipo_medio) {
+    parts.push(item.tipo_medio);
+  }
+
+  return parts.length > 0 ? parts.join(' | ') : 'Sin asignar';
+}
+
+// Helper para obtener el valor de agrupación formateado
+function getGroupValue(item: InventarioReservado | InventarioConAPS, field: GroupByField): string {
+  if (field === 'inicio_periodo') {
+    return formatInicioPeriodo(item);
+  }
+  if (field === 'articulo') {
+    return formatArticulo(item);
+  }
+  return String(item[field] || 'Sin asignar');
+}
+
 export function CampanaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -151,7 +198,7 @@ export function CampanaDetailPage() {
     const grouped: Record<string, InventarioReservado[] | Record<string, InventarioReservado[]>> = {};
 
     inventarioReservado.forEach(item => {
-      const firstKey = String(item[activeGroupings[0]] || 'Sin asignar');
+      const firstKey = getGroupValue(item, activeGroupings[0]);
 
       if (activeGroupings.length === 1) {
         if (!grouped[firstKey]) {
@@ -162,7 +209,7 @@ export function CampanaDetailPage() {
         if (!grouped[firstKey]) {
           grouped[firstKey] = {};
         }
-        const secondKey = String(item[activeGroupings[1]] || 'Sin asignar');
+        const secondKey = getGroupValue(item, activeGroupings[1]);
         if (!(grouped[firstKey] as Record<string, InventarioReservado[]>)[secondKey]) {
           (grouped[firstKey] as Record<string, InventarioReservado[]>)[secondKey] = [];
         }
@@ -278,7 +325,7 @@ export function CampanaDetailPage() {
     const grouped: Record<string, InventarioConAPS[] | Record<string, InventarioConAPS[]>> = {};
 
     inventarioConAPS.forEach(item => {
-      const firstKey = String(item[activeGroupingsAPS[0]] || 'Sin asignar');
+      const firstKey = getGroupValue(item, activeGroupingsAPS[0]);
 
       if (activeGroupingsAPS.length === 1) {
         if (!grouped[firstKey]) {
@@ -289,7 +336,7 @@ export function CampanaDetailPage() {
         if (!grouped[firstKey]) {
           grouped[firstKey] = {};
         }
-        const secondKey = String(item[activeGroupingsAPS[1]] || 'Sin asignar');
+        const secondKey = getGroupValue(item, activeGroupingsAPS[1]);
         if (!(grouped[firstKey] as Record<string, InventarioConAPS[]>)[secondKey]) {
           (grouped[firstKey] as Record<string, InventarioConAPS[]>)[secondKey] = [];
         }
