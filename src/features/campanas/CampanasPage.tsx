@@ -413,7 +413,6 @@ export function CampanasPage() {
         yearFin,
         catorcenaInicio,
         catorcenaFin,
-        search: debouncedSearch || undefined,
       }),
   });
 
