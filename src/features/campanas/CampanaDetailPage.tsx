@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioReservado, InventarioConAPS } from '../../services/campanas.service';
@@ -37,7 +37,7 @@ function InfoItem({ label, value, isDate }: InfoItemProps) {
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
-type GroupByField = 'inicio_periodo' | 'articulo' | 'plaza' | 'tipo_de_cara' | 'estatus_reserva';
+type GroupByField = 'inicio_periodo' | 'articulo' | 'plaza' | 'tipo_de_cara' | 'estatus_reserva' | 'aps';
 
 interface GroupConfig {
   field: GroupByField;
@@ -52,12 +52,38 @@ const AVAILABLE_GROUPINGS: GroupConfig[] = [
   { field: 'estatus_reserva', label: 'Estatus' },
 ];
 
+const AVAILABLE_GROUPINGS_APS: GroupConfig[] = [
+  { field: 'inicio_periodo', label: 'Inicio Periodo' },
+  { field: 'articulo', label: 'Artículo' },
+  { field: 'aps', label: 'APS' },
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'tipo_de_cara', label: 'Tipo de Cara' },
+  { field: 'estatus_reserva', label: 'Estatus' },
+];
+
+// Helper para calcular el número de catorcena a partir de una fecha
+function calcularCatorcena(fecha: Date): number {
+  const inicioAnio = new Date(fecha.getFullYear(), 0, 1);
+  const diffMs = fecha.getTime() - inicioAnio.getTime();
+  const diaDelAnio = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+  return Math.ceil(diaDelAnio / 14);
+}
+
 // Helper para formatear inicio_periodo como "Catorcena X, Año YYYY"
 function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS): string {
   if (item.numero_catorcena && item.anio_catorcena) {
     return `Catorcena ${item.numero_catorcena}, ${item.anio_catorcena}`;
   }
-  return item.inicio_periodo || 'Sin asignar';
+
+  // Si tenemos la fecha de inicio_periodo, calcular la catorcena
+  if (item.inicio_periodo) {
+    const fecha = new Date(item.inicio_periodo);
+    const catorcena = calcularCatorcena(fecha);
+    const anio = fecha.getFullYear();
+    return `Catorcena ${catorcena}, ${anio}`;
+  }
+
+  return 'Sin asignar';
 }
 
 // Helper para formatear articulo con info adicional
@@ -96,6 +122,10 @@ function getGroupValue(item: InventarioReservado | InventarioConAPS, field: Grou
   if (field === 'articulo') {
     return formatArticulo(item);
   }
+  if (field === 'aps') {
+    const apsItem = item as InventarioConAPS;
+    return apsItem.aps ? `APS ${apsItem.aps}` : 'Sin APS';
+  }
   return String(item[field] || 'Sin asignar');
 }
 
@@ -122,9 +152,14 @@ export function CampanaDetailPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // Estado para agrupación (con APS)
-  const [activeGroupingsAPS, setActiveGroupingsAPS] = useState<GroupByField[]>(['inicio_periodo', 'articulo']);
+  const [activeGroupingsAPS, setActiveGroupingsAPS] = useState<GroupByField[]>(['inicio_periodo', 'articulo', 'aps']);
   const [showGroupingConfigAPS, setShowGroupingConfigAPS] = useState(false);
   const [expandedGroupsAPS, setExpandedGroupsAPS] = useState<Set<string>>(new Set());
+
+  // Estado para modal de quitar APS
+  const [showRemoveAPSModal, setShowRemoveAPSModal] = useState(false);
+  const [codigoSolicitado, setCodigoSolicitado] = useState(false);
+  const [nipInput, setNipInput] = useState('');
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -268,16 +303,16 @@ export function CampanaDetailPage() {
     });
   };
 
-  // Toggle agrupación (con APS)
+  // Toggle agrupación (con APS) - soporta hasta 3 niveles
   const toggleGroupingAPS = (field: GroupByField) => {
     setActiveGroupingsAPS(prev => {
       if (prev.includes(field)) {
         return prev.filter(f => f !== field);
       }
-      if (prev.length < 2) {
+      if (prev.length < 3) {
         return [...prev, field];
       }
-      return [prev[1], field];
+      return [prev[1], prev[2], field];
     });
   };
 
@@ -316,13 +351,18 @@ export function CampanaDetailPage() {
     });
   };
 
-  // Agrupar datos del inventario con APS
+  // Tipo para agrupación de 3 niveles
+  type GroupedLevel3 = Record<string, InventarioConAPS[]>;
+  type GroupedLevel2 = Record<string, InventarioConAPS[] | GroupedLevel3>;
+  type GroupedLevel1 = Record<string, InventarioConAPS[] | GroupedLevel2>;
+
+  // Agrupar datos del inventario con APS (soporta hasta 3 niveles)
   const groupedInventarioAPS = useMemo(() => {
     if (activeGroupingsAPS.length === 0) {
       return { ungrouped: inventarioConAPS };
     }
 
-    const grouped: Record<string, InventarioConAPS[] | Record<string, InventarioConAPS[]>> = {};
+    const grouped: GroupedLevel1 = {};
 
     inventarioConAPS.forEach(item => {
       const firstKey = getGroupValue(item, activeGroupingsAPS[0]);
@@ -332,15 +372,29 @@ export function CampanaDetailPage() {
           grouped[firstKey] = [];
         }
         (grouped[firstKey] as InventarioConAPS[]).push(item);
-      } else {
+      } else if (activeGroupingsAPS.length === 2) {
         if (!grouped[firstKey]) {
           grouped[firstKey] = {};
         }
         const secondKey = getGroupValue(item, activeGroupingsAPS[1]);
-        if (!(grouped[firstKey] as Record<string, InventarioConAPS[]>)[secondKey]) {
-          (grouped[firstKey] as Record<string, InventarioConAPS[]>)[secondKey] = [];
+        if (!(grouped[firstKey] as GroupedLevel2)[secondKey]) {
+          (grouped[firstKey] as GroupedLevel2)[secondKey] = [];
         }
-        (grouped[firstKey] as Record<string, InventarioConAPS[]>)[secondKey].push(item);
+        ((grouped[firstKey] as GroupedLevel2)[secondKey] as InventarioConAPS[]).push(item);
+      } else {
+        // 3 niveles de agrupación
+        if (!grouped[firstKey]) {
+          grouped[firstKey] = {};
+        }
+        const secondKey = getGroupValue(item, activeGroupingsAPS[1]);
+        if (!(grouped[firstKey] as GroupedLevel2)[secondKey]) {
+          (grouped[firstKey] as GroupedLevel2)[secondKey] = {};
+        }
+        const thirdKey = getGroupValue(item, activeGroupingsAPS[2]);
+        if (!((grouped[firstKey] as GroupedLevel2)[secondKey] as GroupedLevel3)[thirdKey]) {
+          ((grouped[firstKey] as GroupedLevel2)[secondKey] as GroupedLevel3)[thirdKey] = [];
+        }
+        (((grouped[firstKey] as GroupedLevel2)[secondKey] as GroupedLevel3)[thirdKey] as InventarioConAPS[]).push(item);
       }
     });
 
@@ -620,6 +674,19 @@ export function CampanaDetailPage() {
               {/* Header con botón de agrupación */}
               <div className="flex items-center justify-between pb-2 flex-shrink-0">
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleSelectAll}
+                    className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
+                      selectedItems.size === inventarioReservado.length && inventarioReservado.length > 0
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+                    }`}
+                  >
+                    <Check className="h-3 w-3" />
+                    {selectedItems.size === inventarioReservado.length && inventarioReservado.length > 0
+                      ? 'Deseleccionar todo'
+                      : 'Seleccionar todo'}
+                  </button>
                   {selectedItems.size > 0 && (
                     <span className="text-xs text-purple-300">
                       {selectedItems.size} seleccionados
@@ -710,11 +777,11 @@ export function CampanaDetailPage() {
                           </button>
                         </th>
                         <th className="p-2 font-medium text-purple-300">Código</th>
+                        <th className="p-2 font-medium text-purple-300">Grupo ID</th>
+                        <th className="p-2 font-medium text-purple-300">Mueble</th>
+                        <th className="p-2 font-medium text-purple-300">Estado</th>
                         <th className="p-2 font-medium text-purple-300">Tipo</th>
-                        <th className="p-2 font-medium text-purple-300">Plaza</th>
-                        <th className="p-2 font-medium text-purple-300">Ubicación</th>
                         <th className="p-2 font-medium text-purple-300">Caras</th>
-                        <th className="p-2 font-medium text-purple-300">Estatus</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -741,25 +808,13 @@ export function CampanaDetailPage() {
                             </button>
                           </td>
                           <td className="p-2 text-white font-medium">{item.codigo_unico}</td>
+                          <td className="p-2 text-zinc-300">{item.solicitud_caras_id || '-'}</td>
+                          <td className="p-2 text-zinc-300">{item.mueble || '-'}</td>
+                          <td className="p-2 text-zinc-300">{item.estado || '-'}</td>
                           <td className="p-2 text-zinc-300">{item.tipo_de_cara || '-'}</td>
-                          <td className="p-2 text-zinc-300">{item.plaza || '-'}</td>
-                          <td className="p-2 text-zinc-400 max-w-[150px] truncate" title={item.ubicacion || ''}>
-                            {item.ubicacion || '-'}
-                          </td>
                           <td className="p-2 text-center">
                             <span className="px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-400">
                               {item.caras_totales}
-                            </span>
-                          </td>
-                          <td className="p-2">
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                              item.estatus_reserva === 'confirmado'
-                                ? 'bg-green-500/20 text-green-400'
-                                : item.estatus_reserva === 'pendiente'
-                                ? 'bg-yellow-500/20 text-yellow-400'
-                                : 'bg-zinc-500/20 text-zinc-400'
-                            }`}>
-                              {item.estatus_reserva || 'N/A'}
                             </span>
                           </td>
                         </tr>
@@ -830,6 +885,17 @@ export function CampanaDetailPage() {
                                         </button>
                                         {isSubExpanded && (
                                           <table className="w-full text-xs">
+                                            <thead>
+                                              <tr className="border-b border-border/30 text-left">
+                                                <th className="p-1.5 w-8"></th>
+                                                <th className="p-1.5 text-[10px] font-medium text-purple-300">Código</th>
+                                                <th className="p-1.5 text-[10px] font-medium text-purple-300">Grupo ID</th>
+                                                <th className="p-1.5 text-[10px] font-medium text-purple-300">Mueble</th>
+                                                <th className="p-1.5 text-[10px] font-medium text-purple-300">Estado</th>
+                                                <th className="p-1.5 text-[10px] font-medium text-purple-300">Tipo</th>
+                                                <th className="p-1.5 text-[10px] font-medium text-purple-300">Caras</th>
+                                              </tr>
+                                            </thead>
                                             <tbody>
                                               {subItems.map((item) => (
                                                 <tr
@@ -854,15 +920,13 @@ export function CampanaDetailPage() {
                                                     </button>
                                                   </td>
                                                   <td className="p-1.5 text-white font-medium">{item.codigo_unico}</td>
+                                                  <td className="p-1.5 text-zinc-400">{item.solicitud_caras_id || '-'}</td>
+                                                  <td className="p-1.5 text-zinc-400">{item.mueble || '-'}</td>
+                                                  <td className="p-1.5 text-zinc-400">{item.estado || '-'}</td>
                                                   <td className="p-1.5 text-zinc-400">{item.tipo_de_cara || '-'}</td>
-                                                  <td className="p-1.5 text-zinc-400">{item.plaza || '-'}</td>
-                                                  <td className="p-1.5">
-                                                    <span className={`px-1 py-0.5 rounded text-[10px] ${
-                                                      item.estatus_reserva === 'confirmado'
-                                                        ? 'bg-green-500/20 text-green-400'
-                                                        : 'bg-zinc-500/20 text-zinc-400'
-                                                    }`}>
-                                                      {item.estatus_reserva || 'N/A'}
+                                                  <td className="p-1.5 text-center">
+                                                    <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
+                                                      {item.caras_totales}
                                                     </span>
                                                   </td>
                                                 </tr>
@@ -877,6 +941,17 @@ export function CampanaDetailPage() {
                               ) : items ? (
                                 // Un solo nivel de agrupación
                                 <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="border-b border-border/30 text-left">
+                                      <th className="p-1.5 w-8"></th>
+                                      <th className="p-1.5 text-[10px] font-medium text-purple-300">Código</th>
+                                      <th className="p-1.5 text-[10px] font-medium text-purple-300">Grupo ID</th>
+                                      <th className="p-1.5 text-[10px] font-medium text-purple-300">Mueble</th>
+                                      <th className="p-1.5 text-[10px] font-medium text-purple-300">Estado</th>
+                                      <th className="p-1.5 text-[10px] font-medium text-purple-300">Tipo</th>
+                                      <th className="p-1.5 text-[10px] font-medium text-purple-300">Caras</th>
+                                    </tr>
+                                  </thead>
                                   <tbody>
                                     {items.map((item) => (
                                       <tr
@@ -901,18 +976,13 @@ export function CampanaDetailPage() {
                                           </button>
                                         </td>
                                         <td className="p-1.5 text-white font-medium">{item.codigo_unico}</td>
+                                        <td className="p-1.5 text-zinc-400">{item.solicitud_caras_id || '-'}</td>
+                                        <td className="p-1.5 text-zinc-400">{item.mueble || '-'}</td>
+                                        <td className="p-1.5 text-zinc-400">{item.estado || '-'}</td>
                                         <td className="p-1.5 text-zinc-400">{item.tipo_de_cara || '-'}</td>
-                                        <td className="p-1.5 text-zinc-400">{item.plaza || '-'}</td>
-                                        <td className="p-1.5 text-zinc-400 max-w-[100px] truncate">
-                                          {item.ubicacion || '-'}
-                                        </td>
-                                        <td className="p-1.5">
-                                          <span className={`px-1 py-0.5 rounded text-[10px] ${
-                                            item.estatus_reserva === 'confirmado'
-                                              ? 'bg-green-500/20 text-green-400'
-                                              : 'bg-zinc-500/20 text-zinc-400'
-                                          }`}>
-                                            {item.estatus_reserva || 'N/A'}
+                                        <td className="p-1.5 text-center">
+                                          <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
+                                            {item.caras_totales}
                                           </span>
                                         </td>
                                       </tr>
@@ -1029,6 +1099,26 @@ export function CampanaDetailPage() {
               {/* Header con botón de agrupación */}
               <div className="flex items-center justify-between pb-2 flex-shrink-0">
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleSelectAllAPS}
+                    className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
+                      selectedItemsAPS.size === inventarioConAPS.length && inventarioConAPS.length > 0
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+                    }`}
+                  >
+                    <Check className="h-3 w-3" />
+                    {selectedItemsAPS.size === inventarioConAPS.length && inventarioConAPS.length > 0
+                      ? 'Deseleccionar todo'
+                      : 'Seleccionar todo'}
+                  </button>
+                  <button
+                    onClick={() => setShowRemoveAPSModal(true)}
+                    className="flex items-center justify-center w-7 h-7 rounded-lg bg-red-900/50 hover:bg-red-900/70 border border-red-500/30 transition-colors"
+                    title="Quitar APS"
+                  >
+                    <Minus className="h-4 w-4 text-red-400" />
+                  </button>
                   {selectedItemsAPS.size > 0 && (
                     <span className="text-xs text-cyan-300">
                       {selectedItemsAPS.size} seleccionados
@@ -1052,9 +1142,9 @@ export function CampanaDetailPage() {
                   {showGroupingConfigAPS && (
                     <div className="absolute right-0 top-full mt-1 z-10 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wide px-2 py-1">
-                        Agrupar por (max 2)
+                        Agrupar por (max 3)
                       </p>
-                      {AVAILABLE_GROUPINGS.map(({ field, label }) => (
+                      {AVAILABLE_GROUPINGS_APS.map(({ field, label }) => (
                         <button
                           key={field}
                           onClick={() => toggleGroupingAPS(field)}
@@ -1077,6 +1167,9 @@ export function CampanaDetailPage() {
                           )}
                           {activeGroupingsAPS.indexOf(field) === 1 && (
                             <span className="ml-auto text-[10px] text-pink-400">2°</span>
+                          )}
+                          {activeGroupingsAPS.indexOf(field) === 2 && (
+                            <span className="ml-auto text-[10px] text-cyan-400">3°</span>
                           )}
                         </button>
                       ))}
@@ -1182,20 +1275,25 @@ export function CampanaDetailPage() {
                   </tbody>
                 </table>
               ) : (
-                // Con agrupación
+                // Con agrupación (soporta hasta 3 niveles)
                 <div className="space-y-2">
                   {Object.entries(groupedInventarioAPS).map(([groupKey, groupData]) => {
                     const isExpanded = expandedGroupsAPS.has(groupKey);
-                    const isNested = activeGroupingsAPS.length > 1 && typeof groupData === 'object' && !Array.isArray(groupData);
-                    const items = isNested ? null : (groupData as InventarioConAPS[]);
-                    const nestedGroups = isNested ? (groupData as Record<string, InventarioConAPS[]>) : null;
-                    const totalItems = isNested
-                      ? Object.values(nestedGroups!).reduce((sum, arr) => sum + arr.length, 0)
-                      : items!.length;
+                    const isLevel1Array = Array.isArray(groupData);
+
+                    // Calcular total de items recursivamente
+                    const countItems = (data: unknown): number => {
+                      if (Array.isArray(data)) return data.length;
+                      if (typeof data === 'object' && data !== null) {
+                        return Object.values(data).reduce((sum, val) => sum + countItems(val), 0);
+                      }
+                      return 0;
+                    };
+                    const totalItems = countItems(groupData);
 
                     return (
                       <div key={groupKey} className="border border-purple-900/30 rounded-lg overflow-hidden">
-                        {/* Cabecera del grupo */}
+                        {/* Cabecera del grupo nivel 1 */}
                         <button
                           onClick={() => toggleGroupAPS(groupKey)}
                           className="w-full flex items-center gap-2 px-3 py-2 bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
@@ -1206,7 +1304,7 @@ export function CampanaDetailPage() {
                             <ChevronRight className="h-4 w-4 text-purple-400" />
                           )}
                           <span className="text-xs font-medium text-purple-300">
-                            {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupingsAPS[0])?.label}:
+                            {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[0])?.label}:
                           </span>
                           <span className="text-xs text-white">{groupKey}</span>
                           <span className="ml-auto text-[10px] text-muted-foreground">
@@ -1217,88 +1315,22 @@ export function CampanaDetailPage() {
                         {/* Contenido expandido */}
                         {isExpanded && (
                           <div className="px-2 py-1">
-                            {isNested && nestedGroups ? (
-                              // Segundo nivel de agrupación
-                              <div className="space-y-1">
-                                {Object.entries(nestedGroups).map(([subGroupKey, subItems]) => {
-                                  const subGroupFullKey = `${groupKey}-${subGroupKey}`;
-                                  const isSubExpanded = expandedGroupsAPS.has(subGroupFullKey);
-
-                                  return (
-                                    <div key={subGroupKey} className="border border-purple-900/20 rounded-lg overflow-hidden ml-2">
-                                      <button
-                                        onClick={() => toggleGroupAPS(subGroupFullKey)}
-                                        className="w-full flex items-center gap-2 px-2 py-1.5 bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
-                                      >
-                                        {isSubExpanded ? (
-                                          <ChevronDown className="h-3 w-3 text-pink-400" />
-                                        ) : (
-                                          <ChevronRight className="h-3 w-3 text-pink-400" />
-                                        )}
-                                        <span className="text-[10px] font-medium text-pink-300">
-                                          {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupingsAPS[1])?.label}:
-                                        </span>
-                                        <span className="text-[10px] text-white">{subGroupKey}</span>
-                                        <span className="ml-auto text-[10px] text-muted-foreground">
-                                          {subItems.length}
-                                        </span>
-                                      </button>
-                                      {isSubExpanded && (
-                                        <table className="w-full text-xs">
-                                          <tbody>
-                                            {subItems.map((item) => (
-                                              <tr
-                                                key={item.rsv_ids}
-                                                id={`row-aps-${item.rsv_ids}`}
-                                                className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
-                                                  selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
-                                                }`}
-                                              >
-                                                <td className="p-1.5 w-8">
-                                                  <button
-                                                    onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
-                                                    className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
-                                                      selectedItemsAPS.has(String(item.rsv_ids))
-                                                        ? 'bg-cyan-600 border-cyan-600'
-                                                        : 'border-cyan-500/50 hover:border-cyan-400'
-                                                    }`}
-                                                  >
-                                                    {selectedItemsAPS.has(String(item.rsv_ids)) && (
-                                                      <Check className="h-2.5 w-2.5 text-white" />
-                                                    )}
-                                                  </button>
-                                                </td>
-                                                <td className="p-1.5 text-white font-medium">{item.codigo_unico}</td>
-                                                <td className="p-1.5 text-zinc-400">{item.tipo_de_cara || '-'}</td>
-                                                <td className="p-1.5 text-zinc-400">{item.plaza || '-'}</td>
-                                                <td className="p-1.5 text-center">
-                                                  <span className="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-400 text-[10px]">
-                                                    APS: {item.aps}
-                                                  </span>
-                                                </td>
-                                                <td className="p-1.5">
-                                                  <span className={`px-1 py-0.5 rounded text-[10px] ${
-                                                    item.estatus_reserva === 'confirmado'
-                                                      ? 'bg-green-500/20 text-green-400'
-                                                      : 'bg-zinc-500/20 text-zinc-400'
-                                                  }`}>
-                                                    {item.estatus_reserva || 'N/A'}
-                                                  </span>
-                                                </td>
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : items ? (
-                              // Un solo nivel de agrupación
+                            {isLevel1Array ? (
+                              // Solo 1 nivel - mostrar items directamente
                               <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b border-border/30 text-left">
+                                    <th className="p-1.5 w-8"></th>
+                                    <th className="p-1.5 text-[10px] font-medium text-purple-300">Código</th>
+                                    <th className="p-1.5 text-[10px] font-medium text-purple-300">Grupo ID</th>
+                                    <th className="p-1.5 text-[10px] font-medium text-purple-300">Mueble</th>
+                                    <th className="p-1.5 text-[10px] font-medium text-purple-300">Estado</th>
+                                    <th className="p-1.5 text-[10px] font-medium text-purple-300">Tipo</th>
+                                    <th className="p-1.5 text-[10px] font-medium text-purple-300">Caras</th>
+                                  </tr>
+                                </thead>
                                 <tbody>
-                                  {items.map((item) => (
+                                  {(groupData as InventarioConAPS[]).map((item) => (
                                     <tr
                                       key={item.rsv_ids}
                                       id={`row-aps-${item.rsv_ids}`}
@@ -1321,30 +1353,189 @@ export function CampanaDetailPage() {
                                         </button>
                                       </td>
                                       <td className="p-1.5 text-white font-medium">{item.codigo_unico}</td>
+                                      <td className="p-1.5 text-zinc-400">{item.solicitud_caras_id || '-'}</td>
+                                      <td className="p-1.5 text-zinc-400">{item.mueble || '-'}</td>
+                                      <td className="p-1.5 text-zinc-400">{item.estado || '-'}</td>
                                       <td className="p-1.5 text-zinc-400">{item.tipo_de_cara || '-'}</td>
-                                      <td className="p-1.5 text-zinc-400">{item.plaza || '-'}</td>
-                                      <td className="p-1.5 text-zinc-400 max-w-[100px] truncate">
-                                        {item.ubicacion || '-'}
-                                      </td>
                                       <td className="p-1.5 text-center">
-                                        <span className="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-400 text-[10px]">
-                                          APS: {item.aps}
-                                        </span>
-                                      </td>
-                                      <td className="p-1.5">
-                                        <span className={`px-1 py-0.5 rounded text-[10px] ${
-                                          item.estatus_reserva === 'confirmado'
-                                            ? 'bg-green-500/20 text-green-400'
-                                            : 'bg-zinc-500/20 text-zinc-400'
-                                        }`}>
-                                          {item.estatus_reserva || 'N/A'}
+                                        <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
+                                          {item.caras_totales}
                                         </span>
                                       </td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
-                            ) : null}
+                            ) : (
+                              // Nivel 2 de agrupación
+                              <div className="space-y-1">
+                                {Object.entries(groupData as Record<string, unknown>).map(([subGroupKey, subGroupData]) => {
+                                  const subGroupFullKey = `${groupKey}-${subGroupKey}`;
+                                  const isSubExpanded = expandedGroupsAPS.has(subGroupFullKey);
+                                  const isLevel2Array = Array.isArray(subGroupData);
+                                  const subTotalItems = countItems(subGroupData);
+
+                                  return (
+                                    <div key={subGroupKey} className="border border-purple-900/20 rounded-lg overflow-hidden ml-2">
+                                      <button
+                                        onClick={() => toggleGroupAPS(subGroupFullKey)}
+                                        className="w-full flex items-center gap-2 px-2 py-1.5 bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
+                                      >
+                                        {isSubExpanded ? (
+                                          <ChevronDown className="h-3 w-3 text-pink-400" />
+                                        ) : (
+                                          <ChevronRight className="h-3 w-3 text-pink-400" />
+                                        )}
+                                        <span className="text-[10px] font-medium text-pink-300">
+                                          {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[1])?.label}:
+                                        </span>
+                                        <span className="text-[10px] text-white">{subGroupKey}</span>
+                                        <span className="ml-auto text-[10px] text-muted-foreground">
+                                          {subTotalItems}
+                                        </span>
+                                      </button>
+                                      {isSubExpanded && (
+                                        <div className="px-2 py-1">
+                                          {isLevel2Array ? (
+                                            // Solo 2 niveles - mostrar items
+                                            <table className="w-full text-xs">
+                                              <thead>
+                                                <tr className="border-b border-border/30 text-left">
+                                                  <th className="p-1.5 w-8"></th>
+                                                  <th className="p-1.5 text-[10px] font-medium text-purple-300">Código</th>
+                                                  <th className="p-1.5 text-[10px] font-medium text-purple-300">Grupo ID</th>
+                                                  <th className="p-1.5 text-[10px] font-medium text-purple-300">Mueble</th>
+                                                  <th className="p-1.5 text-[10px] font-medium text-purple-300">Estado</th>
+                                                  <th className="p-1.5 text-[10px] font-medium text-purple-300">Tipo</th>
+                                                  <th className="p-1.5 text-[10px] font-medium text-purple-300">Caras</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {(subGroupData as InventarioConAPS[]).map((item) => (
+                                                  <tr
+                                                    key={item.rsv_ids}
+                                                    id={`row-aps-${item.rsv_ids}`}
+                                                    className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
+                                                      selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
+                                                    }`}
+                                                  >
+                                                    <td className="p-1.5 w-8">
+                                                      <button
+                                                        onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                                        className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                          selectedItemsAPS.has(String(item.rsv_ids))
+                                                            ? 'bg-cyan-600 border-cyan-600'
+                                                            : 'border-cyan-500/50 hover:border-cyan-400'
+                                                        }`}
+                                                      >
+                                                        {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                                          <Check className="h-2.5 w-2.5 text-white" />
+                                                        )}
+                                                      </button>
+                                                    </td>
+                                                    <td className="p-1.5 text-white font-medium">{item.codigo_unico}</td>
+                                                    <td className="p-1.5 text-zinc-400">{item.solicitud_caras_id || '-'}</td>
+                                                    <td className="p-1.5 text-zinc-400">{item.mueble || '-'}</td>
+                                                    <td className="p-1.5 text-zinc-400">{item.estado || '-'}</td>
+                                                    <td className="p-1.5 text-zinc-400">{item.tipo_de_cara || '-'}</td>
+                                                    <td className="p-1.5 text-center">
+                                                      <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
+                                                        {item.caras_totales}
+                                                      </span>
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          ) : (
+                                            // Nivel 3 de agrupación
+                                            <div className="space-y-1">
+                                              {Object.entries(subGroupData as Record<string, InventarioConAPS[]>).map(([thirdGroupKey, thirdItems]) => {
+                                                const thirdGroupFullKey = `${subGroupFullKey}-${thirdGroupKey}`;
+                                                const isThirdExpanded = expandedGroupsAPS.has(thirdGroupFullKey);
+
+                                                return (
+                                                  <div key={thirdGroupKey} className="border border-cyan-900/20 rounded-lg overflow-hidden ml-2">
+                                                    <button
+                                                      onClick={() => toggleGroupAPS(thirdGroupFullKey)}
+                                                      className="w-full flex items-center gap-2 px-2 py-1.5 bg-cyan-900/10 hover:bg-cyan-900/20 transition-colors"
+                                                    >
+                                                      {isThirdExpanded ? (
+                                                        <ChevronDown className="h-3 w-3 text-cyan-400" />
+                                                      ) : (
+                                                        <ChevronRight className="h-3 w-3 text-cyan-400" />
+                                                      )}
+                                                      <span className="text-[10px] font-medium text-cyan-300">
+                                                        {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[2])?.label}:
+                                                      </span>
+                                                      <span className="text-[10px] text-white">{thirdGroupKey}</span>
+                                                      <span className="ml-auto text-[10px] text-muted-foreground">
+                                                        {thirdItems.length}
+                                                      </span>
+                                                    </button>
+                                                    {isThirdExpanded && (
+                                                      <table className="w-full text-xs">
+                                                        <thead>
+                                                          <tr className="border-b border-border/30 text-left">
+                                                            <th className="p-1.5 w-8"></th>
+                                                            <th className="p-1.5 text-[10px] font-medium text-purple-300">Código</th>
+                                                            <th className="p-1.5 text-[10px] font-medium text-purple-300">Grupo ID</th>
+                                                            <th className="p-1.5 text-[10px] font-medium text-purple-300">Mueble</th>
+                                                            <th className="p-1.5 text-[10px] font-medium text-purple-300">Estado</th>
+                                                            <th className="p-1.5 text-[10px] font-medium text-purple-300">Tipo</th>
+                                                            <th className="p-1.5 text-[10px] font-medium text-purple-300">Caras</th>
+                                                          </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                          {thirdItems.map((item) => (
+                                                            <tr
+                                                              key={item.rsv_ids}
+                                                              id={`row-aps-${item.rsv_ids}`}
+                                                              className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
+                                                                selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
+                                                              }`}
+                                                            >
+                                                              <td className="p-1.5 w-8">
+                                                                <button
+                                                                  onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                                                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                                    selectedItemsAPS.has(String(item.rsv_ids))
+                                                                      ? 'bg-cyan-600 border-cyan-600'
+                                                                      : 'border-cyan-500/50 hover:border-cyan-400'
+                                                                  }`}
+                                                                >
+                                                                  {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                                                    <Check className="h-2.5 w-2.5 text-white" />
+                                                                  )}
+                                                                </button>
+                                                              </td>
+                                                              <td className="p-1.5 text-white font-medium">{item.codigo_unico}</td>
+                                                              <td className="p-1.5 text-zinc-400">{item.solicitud_caras_id || '-'}</td>
+                                                              <td className="p-1.5 text-zinc-400">{item.mueble || '-'}</td>
+                                                              <td className="p-1.5 text-zinc-400">{item.estado || '-'}</td>
+                                                              <td className="p-1.5 text-zinc-400">{item.tipo_de_cara || '-'}</td>
+                                                              <td className="p-1.5 text-center">
+                                                                <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
+                                                                  {item.caras_totales}
+                                                                </span>
+                                                              </td>
+                                                            </tr>
+                                                          ))}
+                                                        </tbody>
+                                                      </table>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1428,6 +1619,71 @@ export function CampanaDetailPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Quitar APS */}
+      {showRemoveAPSModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => {
+              setShowRemoveAPSModal(false);
+              setCodigoSolicitado(false);
+              setNipInput('');
+            }}
+          />
+          <div className="relative bg-[#1a1025] border border-red-900/30 rounded-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Minus className="h-5 w-5 text-red-400" />
+                Requiere autorización
+              </h3>
+              <button
+                onClick={() => {
+                  setShowRemoveAPSModal(false);
+                  setCodigoSolicitado(false);
+                  setNipInput('');
+                }}
+                className="p-1 hover:bg-red-900/30 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-zinc-300 mb-6">
+              Solicita el código al administrador
+            </p>
+
+            {!codigoSolicitado ? (
+              <div className="flex justify-center">
+                <button
+                  onClick={() => setCodigoSolicitado(true)}
+                  className="px-6 py-2 text-sm font-medium rounded-lg bg-purple-600 hover:bg-purple-700 transition-colors"
+                >
+                  Solicitar Código
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    value={nipInput}
+                    onChange={(e) => setNipInput(e.target.value)}
+                    placeholder="Ingresa el NIP"
+                    className="flex-1 px-3 py-2 text-sm rounded-lg bg-purple-900/20 border border-purple-900/30 focus:border-purple-500 focus:outline-none placeholder:text-muted-foreground"
+                  />
+                  <button
+                    disabled={!nipInput.trim()}
+                    className="px-4 py-2 text-sm font-medium rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Verificar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
