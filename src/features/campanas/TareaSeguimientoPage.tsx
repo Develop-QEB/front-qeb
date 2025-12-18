@@ -1149,8 +1149,8 @@ export function TareaSeguimientoPage() {
     filteredInventory.forEach((item) => {
       const catorcenaKey = `Catorcena: ${item.catorcena}, Año: ${item.anio}`;
       const apsKey = `APS: ${item.aps ?? 'Sin asignar'}`;
-      const arteKey = `Arte: ${estadoArteLabels[item.estado_arte]}`;
-      const tareaKey = `Tarea: ${estadoTareaLabels[item.estado_tarea]}`;
+      const arteKey = `Arte: ${estadoArteLabels[item.estado_arte || 'sin_revisar']}`;
+      const tareaKey = `Tarea: ${estadoTareaLabels[item.estado_tarea || 'sin_atender']}`;
 
       if (!groups[catorcenaKey]) groups[catorcenaKey] = {};
       if (!groups[catorcenaKey][apsKey]) groups[catorcenaKey][apsKey] = {};
