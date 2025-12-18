@@ -2,14 +2,17 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
-  ArrowUpDown, Calendar, Eye, DollarSign, FileText, Building2, MessageSquare,
-  CheckCircle, Users, Send, Loader2, User, Share2, UserPlus, Wrench
+  ArrowUpDown, Calendar, DollarSign, FileText, Building2, MessageSquare,
+  CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock,
+  Pencil, Trash2, Package, MapPin, Eye
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { Header } from '../../components/layout/Header';
 import { propuestasService, PropuestaComentario } from '../../services/propuestas.service';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { AssignInventarioModal } from './AssignInventarioModal';
 
 // Status badge colors
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -28,23 +31,35 @@ const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', 
 
 const STATUS_OPTIONS = ['Por aprobar', 'Compartir', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas', 'Pendiente'];
 
-// Simple KPI Card
-function KpiCard({ label, value, color }: { label: string; value: number | string; color: string }) {
-  const colorClasses: Record<string, string> = {
-    purple: 'bg-purple-500/10 border-purple-500/20 text-purple-300',
-    emerald: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300',
-    amber: 'bg-amber-500/10 border-amber-500/20 text-amber-300',
-    cyan: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-300',
-    fuchsia: 'bg-fuchsia-500/10 border-fuchsia-500/20 text-fuchsia-300',
-  };
+// Chart colors for dynamic status
+const CHART_COLORS = [
+  '#8b5cf6', // violet-500
+  '#d946ef', // fuchsia-500
+  '#ec4899', // pink-500
+  '#f43f5e', // rose-500
+  '#f59e0b', // amber-500
+  '#10b981', // emerald-500
+  '#06b6d4', // cyan-500
+  '#3b82f6', // blue-500
+];
 
-  return (
-    <div className={`px-4 py-3 rounded-xl border ${colorClasses[color]} transition-all hover:scale-[1.02]`}>
-      <p className="text-2xl font-bold text-white">{value}</p>
-      <p className="text-xs text-zinc-400">{label}</p>
-    </div>
-  );
-}
+// Custom Tooltip for Chart
+const CustomChartTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-zinc-900/90 border border-zinc-700/50 p-3 rounded-xl shadow-xl backdrop-blur-xl">
+        <p className="text-white font-medium mb-1">{payload[0].name}</p>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: payload[0].payload.fill }} />
+          <span className="text-zinc-300 text-sm">
+            {payload[0].value} propuestas ({payload[0].payload.percent}%)
+          </span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
 // Filter Chip Component with Search
 function FilterChip({
@@ -199,7 +214,8 @@ function PeriodFilterPopover({
   }, [catorcenasData, tempYearFin, tempYearInicio, tempCatorcenaInicio]);
 
   const isActive = yearInicio !== undefined && yearFin !== undefined;
-  const canApply = tempYearInicio !== undefined && tempYearFin !== undefined;
+  // Require all 4 fields to apply filter
+  const canApply = tempYearInicio !== undefined && tempYearFin !== undefined && tempCatorcenaInicio !== undefined && tempCatorcenaFin !== undefined;
 
   const handleApply = () => {
     if (canApply) {
@@ -253,7 +269,7 @@ function PeriodFilterPopover({
                 <Calendar className="h-4 w-4 text-purple-400" />
                 Filtro de Periodo
               </h3>
-              <p className="text-[10px] text-zinc-500 mt-1">Selecciona año inicio y fin (obligatorios)</p>
+              <p className="text-[10px] text-zinc-500 mt-1">Todos los campos son obligatorios</p>
             </div>
 
             <div className="p-3 space-y-3">
@@ -280,7 +296,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Inicio</label>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Inicio *</label>
                   <select
                     value={tempCatorcenaInicio || ''}
                     onChange={(e) => {
@@ -293,7 +309,7 @@ function PeriodFilterPopover({
                     disabled={!tempYearInicio}
                     className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
                   >
-                    <option value="">Todas</option>
+                    <option value="">Seleccionar</option>
                     {catorcenasInicioOptions.map(c => (
                       <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
                     ))}
@@ -324,7 +340,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Fin</label>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Fin *</label>
                   <select
                     value={tempCatorcenaFin || ''}
                     onChange={(e) => {
@@ -337,7 +353,7 @@ function PeriodFilterPopover({
                     disabled={!tempYearFin}
                     className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
                   >
-                    <option value="">Todas</option>
+                    <option value="">Seleccionar</option>
                     {catorcenasFinOptions.map(c => (
                       <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
                     ))}
@@ -666,21 +682,6 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* Precio */}
-          <div>
-            <label className="block text-sm text-zinc-400 mb-2">Precio Simulado</label>
-            <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-400" />
-              <input
-                type="number"
-                value={precio}
-                onChange={(e) => setPrecio(e.target.value)}
-                placeholder="0.00"
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-lg font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-              />
-            </div>
-          </div>
-
           {/* Asignados */}
           <div>
             <label className="block text-sm text-zinc-400 mb-2">
@@ -779,28 +780,6 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
   );
 }
 
-// ============ ASSIGN MODAL (Placeholder) ============
-function AssignModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md p-6 text-center">
-        <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mx-auto mb-4">
-          <Wrench className="h-8 w-8 text-purple-400" />
-        </div>
-        <h2 className="text-xl font-semibold text-white mb-2">Trabajando...</h2>
-        <p className="text-zinc-400 text-sm mb-6">Esta funcionalidad está en desarrollo.</p>
-        <button
-          onClick={onClose}
-          className="px-6 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
-        >
-          Cerrar
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export function PropuestasPage() {
   const queryClient = useQueryClient();
@@ -823,6 +802,7 @@ export function PropuestasPage() {
   const [statusPropuesta, setStatusPropuesta] = useState<Propuesta | null>(null);
   const [approvePropuesta, setApprovePropuesta] = useState<Propuesta | null>(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedPropuestaForAssign, setSelectedPropuestaForAssign] = useState<Propuesta | null>(null);
 
   // Debounce search
   useEffect(() => {
@@ -875,6 +855,35 @@ export function PropuestasPage() {
     setExpandedGroups(new Set());
     setPage(1);
   };
+
+  // Chart data from dynamic stats
+  const chartData = useMemo(() => {
+    if (!stats?.byStatus) return null;
+    const entries = Object.entries(stats.byStatus);
+    if (entries.length === 0) return null;
+
+    return entries.map(([statusName, count], index) => ({
+      label: statusName,
+      value: count,
+      color: CHART_COLORS[index % CHART_COLORS.length],
+      percent: stats.total > 0 ? ((count / stats.total) * 100).toFixed(1) : '0',
+    }));
+  }, [stats]);
+
+  // Get current catorcena
+  const currentCatorcena = useMemo((): Catorcena | null => {
+    if (!catorcenasData?.data) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return catorcenasData.data.find(c => {
+      const inicio = new Date(c.fecha_inicio);
+      const fin = new Date(c.fecha_fin);
+      inicio.setHours(0, 0, 0, 0);
+      fin.setHours(23, 59, 59, 999);
+      return today >= inicio && today <= fin;
+    }) || null;
+  }, [catorcenasData]);
 
   // Group data
   const groupedData = useMemo(() => {
@@ -969,46 +978,57 @@ export function PropuestasPage() {
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-1">
-            {/* Ver */}
-            <button
-              className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border border-purple-500/20 hover:border-purple-500/40 transition-all"
-              title="Ver detalles"
-            >
-              <Eye className="h-3.5 w-3.5" />
-            </button>
-
-            {/* Estatus/Comentarios */}
+            {/* Estatus/Comentarios - deshabilitado si Activa */}
             <button
               onClick={() => setStatusPropuesta(item)}
-              className="p-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/20 hover:border-amber-500/40 transition-all"
-              title="Ver/Cambiar estatus"
+              disabled={item.status === 'Activa'}
+              className={`p-2 rounded-lg border transition-all ${
+                item.status === 'Activa'
+                  ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+                  : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border-amber-500/20 hover:border-amber-500/40'
+              }`}
+              title={item.status === 'Activa' ? 'No disponible para propuestas activas' : 'Ver/Cambiar estatus'}
             >
               <MessageSquare className="h-3.5 w-3.5" />
             </button>
 
-            {/* Aprobar */}
+            {/* Aprobar - deshabilitado si Activa */}
             <button
               onClick={() => setApprovePropuesta(item)}
-              className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 transition-all"
-              title="Aprobar propuesta"
+              disabled={item.status === 'Activa'}
+              className={`p-2 rounded-lg border transition-all ${
+                item.status === 'Activa'
+                  ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+                  : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40'
+              }`}
+              title={item.status === 'Activa' ? 'Propuesta ya está activa' : 'Aprobar propuesta'}
             >
               <CheckCircle className="h-3.5 w-3.5" />
             </button>
 
-            {/* Asignar */}
+            {/* Asignar Inventario - deshabilitado si Activa */}
             <button
-              onClick={() => setShowAssignModal(true)}
-              className="p-2 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border border-fuchsia-500/20 hover:border-fuchsia-500/40 transition-all"
-              title="Asignar"
+              onClick={() => { setSelectedPropuestaForAssign(item); setShowAssignModal(true); }}
+              disabled={item.status === 'Activa'}
+              className={`p-2 rounded-lg border transition-all ${
+                item.status === 'Activa'
+                  ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+                  : 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
+              }`}
+              title={item.status === 'Activa' ? 'No disponible para propuestas activas' : 'Asignar a Inventario'}
             >
-              <UserPlus className="h-3.5 w-3.5" />
+              <MapPinned className="h-3.5 w-3.5" />
             </button>
 
-            {/* Compartir - disabled */}
+            {/* Compartir - solo habilitado cuando status es 'Compartir' */}
             <button
-              disabled
-              className="p-2 rounded-lg bg-zinc-500/10 text-zinc-500 border border-zinc-500/20 cursor-not-allowed opacity-50"
-              title="Compartir (próximamente)"
+              disabled={item.status !== 'Compartir'}
+              className={`p-2 rounded-lg border transition-all ${
+                item.status === 'Compartir'
+                  ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40'
+                  : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+              }`}
+              title={item.status === 'Compartir' ? 'Compartir propuesta' : 'Solo disponible en status Compartir'}
             >
               <Share2 className="h-3.5 w-3.5" />
             </button>
@@ -1026,21 +1046,94 @@ export function PropuestasPage() {
       <Header title="Propuestas" />
 
       <div className="p-6 space-y-5">
-        {/* KPIs Row */}
-        <div className="flex flex-wrap gap-3">
-          <KpiCard label="Total" value={stats?.total || 0} color="purple" />
-          {stats?.byStatus && Object.entries(stats.byStatus).slice(0, 5).map(([status, count]) => {
-            const colors: Record<string, string> = {
-              'Por aprobar': 'amber',
-              'Abierto': 'cyan',
-              'Activa': 'emerald',
-              'Pendiente': 'amber',
-              'Compartir': 'cyan',
-            };
-            return (
-              <KpiCard key={status} label={status} value={count} color={colors[status] || 'fuchsia'} />
-            );
-          })}
+        {/* Dashboard Grid - Same style as Solicitudes */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+          {/* Main KPI: Total */}
+          <div className="col-span-1 md:col-span-2 lg:col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none group-hover:bg-purple-500/20 transition-all duration-500" />
+            <div>
+              <p className="text-zinc-400 text-sm font-medium mb-1">Total Propuestas</p>
+              <h3 className="text-4xl font-bold text-white tracking-tight">
+                {stats?.total.toLocaleString() ?? '0'}
+              </h3>
+            </div>
+            <div className="mt-4 flex items-center gap-2">
+              <span className="text-xs px-2 py-1 rounded-full bg-zinc-800/80 text-zinc-300 border border-zinc-700/50">
+                Todas las catorcenas
+              </span>
+            </div>
+          </div>
+
+          {/* Chart Card */}
+          <div className="col-span-1 md:col-span-2 lg:col-span-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-4 flex items-center relative overflow-hidden">
+
+            {chartData ? (
+              <div className="w-full h-[140px] flex items-center">
+                <div className="h-full min-w-[140px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={55}
+                        paddingAngle={4}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {chartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip content={<CustomChartTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Legend / List */}
+                <div className="flex-1 flex flex-wrap gap-2 content-center pl-4 h-full overflow-y-auto custom-scrollbar">
+                  {chartData.map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-zinc-800/30 border border-zinc-800/50 min-w-[120px]">
+                      <div className="w-2 h-8 rounded-full" style={{ backgroundColor: item.color }} />
+                      <div>
+                        <div className="text-sm font-bold text-white">{item.value}</div>
+                        <div className="text-[10px] text-zinc-400 uppercase tracking-wide truncate max-w-[80px]" title={item.label}>{item.label}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="w-full h-[140px] flex items-center justify-center text-zinc-500 text-sm">
+                Cargando datos...
+              </div>
+            )}
+          </div>
+
+          {/* KPI: Por Aprobar Priority */}
+          <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute bottom-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl -mr-5 -mb-5 pointer-events-none group-hover:bg-amber-500/20 transition-all duration-500" />
+            <div>
+              <p className="text-zinc-400 text-sm font-medium mb-1">Por Aprobar / Pendiente</p>
+              <div className="flex items-baseline gap-2">
+                <h3 className="text-3xl font-bold text-amber-400">
+                  {((stats?.byStatus['Por aprobar'] || 0) + (stats?.byStatus['Pendiente'] || 0)).toLocaleString()}
+                </h3>
+                <span className="text-xs text-amber-500/80 font-medium">Atención requerida</span>
+              </div>
+            </div>
+
+            {/* Progress bar visual */}
+            <div className="mt-4 w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-amber-500 to-orange-500"
+                style={{ width: `${Math.min(100, (((stats?.byStatus['Por aprobar'] || 0) + (stats?.byStatus['Pendiente'] || 0)) / (stats?.total || 1)) * 100)}%` }}
+              />
+            </div>
+          </div>
+
         </div>
 
         {/* Control Bar */}
@@ -1100,6 +1193,19 @@ export function PropuestasPage() {
                   onChange={(val) => { setStatus(val); setPage(1); }}
                   onClear={() => { setStatus(''); setPage(1); }}
                 />
+
+                <div className="h-4 w-px bg-zinc-700 mx-1" />
+
+                {/* Current Catorcena Indicator */}
+                {currentCatorcena && (
+                  <>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs">
+                      <Clock className="h-3 w-3" />
+                      <span>Actual: Cat. {currentCatorcena.numero_catorcena} / {currentCatorcena.a_o}</span>
+                    </div>
+                    <div className="h-4 w-px bg-zinc-700 mx-1" />
+                  </>
+                )}
 
                 {/* Period Filter */}
                 <PeriodFilterPopover
@@ -1308,10 +1414,13 @@ export function PropuestasPage() {
         }}
       />
 
-      <AssignModal
-        isOpen={showAssignModal}
-        onClose={() => setShowAssignModal(false)}
-      />
+      {selectedPropuestaForAssign && (
+        <AssignInventarioModal
+          isOpen={showAssignModal}
+          onClose={() => { setShowAssignModal(false); setSelectedPropuestaForAssign(null); }}
+          propuesta={selectedPropuestaForAssign}
+        />
+      )}
     </div>
   );
 }
