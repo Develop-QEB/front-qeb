@@ -11,6 +11,7 @@ import { SolicitudesPage } from './features/solicitudes/SolicitudesPage';
 import { PropuestasPage } from './features/propuestas/PropuestasPage';
 import { CampanasPage } from './features/campanas/CampanasPage';
 import { CampanaDetailPage } from './features/campanas/CampanaDetailPage';
+import { TareaSeguimientoPage } from './features/campanas/TareaSeguimientoPage';
 import { NotificacionesPage } from './features/notificaciones/NotificacionesPage';
 import { CorreosPage } from './features/correos/CorreosPage';
 
@@ -46,6 +47,7 @@ function App() {
             <Route path="/propuestas" element={<PropuestasPage />} />
             <Route path="/campanas" element={<CampanasPage />} />
             <Route path="/campanas/detail/:id" element={<CampanaDetailPage />} />
+            <Route path="/campanas/:id/tareas" element={<TareaSeguimientoPage />} />
             <Route path="/notificaciones" element={<NotificacionesPage />} />
             <Route path="/correos" element={<CorreosPage />} />
           </Route>
