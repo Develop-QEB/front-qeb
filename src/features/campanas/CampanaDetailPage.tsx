@@ -403,12 +403,12 @@ const OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | '
 ];
 
 // Función para aplicar filtros a los datos
-function applyFilters<T extends Record<string, unknown>>(data: T[], filters: FilterCondition[]): T[] {
+function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
   if (filters.length === 0) return data;
 
   return data.filter(item => {
     return filters.every(filter => {
-      const fieldValue = item[filter.field];
+      const fieldValue = (item as Record<string, unknown>)[filter.field];
       const filterValue = filter.value;
 
       if (fieldValue === null || fieldValue === undefined) {
@@ -934,9 +934,9 @@ export function CampanaDetailPage() {
   // Seleccionar/deseleccionar todos
   const toggleSelectAll = () => {
     if (selectedItems.size === filteredInventarioReservado.length) {
-      setSelectedItems(new Set());
+      setSelectedItems(new Set<string>());
     } else {
-      setSelectedItems(new Set(filteredInventarioReservado.map(i => i.rsv_ids)));
+      setSelectedItems(new Set<string>(filteredInventarioReservado.map(i => i.rsv_ids)));
     }
   };
 
@@ -960,7 +960,7 @@ export function CampanaDetailPage() {
 
   // Columnas visibles (excluye las que están agrupadas) - Inventario APS
   const visibleColumnsAPS = useMemo(() => {
-    return TABLE_COLUMNS.filter(col => !activeGroupingsAPS.includes(col.field as GroupByFieldAPS));
+    return TABLE_COLUMNS.filter(col => !activeGroupingsAPS.includes(col.field as GroupByField));
   }, [activeGroupingsAPS]);
 
   // Toggle agrupación (con APS) - soporta hasta 3 niveles
@@ -1128,7 +1128,7 @@ export function CampanaDetailPage() {
       await campanasService.sendAuthorizationPIN(
         nuevoCodigo,
         user?.nombre || 'Usuario',
-        campana?.nombre_campania || campana?.campana || 'Sin nombre'
+        campana?.nombre_campania || campana?.nombre || 'Sin nombre'
       );
 
       // Mostrar input de NIP
