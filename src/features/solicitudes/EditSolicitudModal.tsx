@@ -611,11 +611,14 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
     return { renta, bonif, inversion };
   }, [newCaras]);
 
-  const grandTotals = {
-    renta: existingTotals.renta + newTotals.renta,
-    bonif: existingTotals.bonif + newTotals.bonif,
-    inversion: existingTotals.inversion + newTotals.inversion,
-  };
+  const grandTotals = useMemo(() => {
+    const renta = existingTotals.renta + newTotals.renta;
+    const bonif = existingTotals.bonif + newTotals.bonif;
+    const inversion = existingTotals.inversion + newTotals.inversion;
+    const totalCaras = renta + bonif;
+    const tarifaEfectiva = totalCaras > 0 ? inversion / totalCaras : 0;
+    return { renta, bonif, inversion, totalCaras, tarifaEfectiva };
+  }, [existingTotals, newTotals]);
 
   // ====== UPDATE MUTATION ======
   const updateMutation = useMutation({
@@ -739,9 +742,9 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
             <div className="space-y-6">
               {/* Grand Totals KPIs */}
               <div className="p-4 bg-gradient-to-r from-violet-600/10 via-purple-600/10 to-fuchsia-600/10 rounded-2xl border border-violet-500/20">
-                <div className="grid grid-cols-4 gap-6">
+                <div className="grid grid-cols-5 gap-4">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-white">{grandTotals.renta + grandTotals.bonif}</p>
+                    <p className="text-2xl font-bold text-white">{grandTotals.totalCaras}</p>
                     <p className="text-xs text-zinc-400 mt-1">Total Caras</p>
                   </div>
                   <div className="text-center">
@@ -754,159 +757,159 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-amber-400">{formatCurrency(grandTotals.inversion)}</p>
-                    <p className="text-xs text-zinc-400 mt-1">Inversión</p>
+                    <p className="text-xs text-zinc-400 mt-1">Inversión Total</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-purple-400">{formatCurrency(grandTotals.tarifaEfectiva)}</p>
+                    <p className="text-xs text-zinc-400 mt-1">Tarifa Efectiva</p>
                   </div>
                 </div>
               </div>
 
-              {/* CUIC Select + Editable Fields */}
-              <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50">
-                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-violet-400" />
-                  Cliente (CUIC)
-                </h3>
-                <SearchableSelect
-                  label="Seleccionar CUIC"
-                  options={cuicData || []}
-                  value={selectedCuic}
-                  onChange={setSelectedCuic}
-                  onClear={() => setSelectedCuic(null)}
-                  displayKey="T2_U_Marca"
-                  valueKey="CUIC"
-                  searchKeys={['T2_U_Marca', 'T2_U_Producto', 'T0_U_RazonSocial', 'CUIC']}
-                  loading={cuicLoading}
-                  renderOption={(item) => (
+              {/* Two Column Layout - Similar to ViewSolicitudModal */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {/* Campaign Info */}
+                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                  <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Campaña
+                  </h3>
+                  <div className="space-y-4">
                     <div>
-                      <div className="font-medium text-white">{item.T2_U_Marca || 'Sin marca'}</div>
-                      <div className="text-xs text-zinc-500">{item.CUIC} | {item.T2_U_Producto || 'Sin producto'}</div>
+                      <label className="text-xs text-zinc-500">Nombre Campaña</label>
+                      <input type="text" value={nombreCampania} onChange={(e) => setNombreCampania(e.target.value)}
+                        className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
                     </div>
-                  )}
-                  renderSelected={(item) => (
-                    <div className="text-left">
-                      <div className="font-medium">{item.T2_U_Marca || 'Sin marca'}</div>
-                      <div className="text-[10px] text-zinc-500">{item.CUIC} | {item.T2_U_Producto}</div>
+                    <div>
+                      <label className="text-xs text-zinc-500">Descripción</label>
+                      <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={2}
+                        className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none" />
                     </div>
-                  )}
-                />
+                    <div>
+                      <label className="text-xs text-zinc-500">Notas</label>
+                      <input type="text" value={notas} onChange={(e) => setNotas(e.target.value)}
+                        className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
+                    </div>
+                  </div>
+                </div>
 
-                {/* Editable client fields */}
-                {selectedCuic && (
-                  <div className="mt-4 grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="text-xs text-zinc-500 mb-1 block">Razón Social</label>
-                      <input
-                        type="text"
-                        value={editableRazonSocial}
-                        onChange={(e) => setEditableRazonSocial(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-zinc-500 mb-1 block">Asesor</label>
-                      <input
-                        type="text"
-                        value={editableAsesor}
-                        onChange={(e) => setEditableAsesor(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-emerald-400 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-zinc-500 mb-1 block">Categoría</label>
-                      <input
-                        type="text"
-                        value={editableCategoria}
-                        onChange={(e) => setEditableCategoria(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-amber-400 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Campaign Info */}
-              <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50">
-                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-violet-400" />
-                  Información de Campaña
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-zinc-500">Nombre Campaña</label>
-                    <input type="text" value={nombreCampania} onChange={(e) => setNombreCampania(e.target.value)}
-                      className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500">Notas</label>
-                    <input type="text" value={notas} onChange={(e) => setNotas(e.target.value)}
-                      className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-xs text-zinc-500">Descripción</label>
-                    <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={2}
-                      className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none" />
+                {/* Client Info */}
+                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                  <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Cliente
+                  </h3>
+                  <div className="space-y-4">
+                    <SearchableSelect
+                      label="Seleccionar CUIC"
+                      options={cuicData || []}
+                      value={selectedCuic}
+                      onChange={setSelectedCuic}
+                      onClear={() => setSelectedCuic(null)}
+                      displayKey="T2_U_Marca"
+                      valueKey="CUIC"
+                      searchKeys={['T2_U_Marca', 'T2_U_Producto', 'T0_U_RazonSocial', 'CUIC']}
+                      loading={cuicLoading}
+                      renderOption={(item) => (
+                        <div>
+                          <div className="font-medium text-white">{item.T2_U_Marca || 'Sin marca'}</div>
+                          <div className="text-xs text-zinc-500">{item.CUIC} | {item.T2_U_Producto || 'Sin producto'}</div>
+                        </div>
+                      )}
+                      renderSelected={(item) => (
+                        <div className="text-left">
+                          <div className="font-medium">{item.T2_U_Marca || 'Sin marca'}</div>
+                          <div className="text-[10px] text-zinc-500">{item.CUIC} | {item.T2_U_Producto}</div>
+                        </div>
+                      )}
+                    />
+                    {selectedCuic && (
+                      <>
+                        <div>
+                          <label className="text-xs text-zinc-500 mb-1 block">Razón Social</label>
+                          <input type="text" value={editableRazonSocial} onChange={(e) => setEditableRazonSocial(e.target.value)}
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs text-zinc-500 mb-1 block">Asesor</label>
+                            <input type="text" value={editableAsesor} onChange={(e) => setEditableAsesor(e.target.value)}
+                              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-emerald-400 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-zinc-500 mb-1 block">Categoría</label>
+                            <input type="text" value={editableCategoria} onChange={(e) => setEditableCategoria(e.target.value)}
+                              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-amber-400 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Dates with Catorcenas */}
-              <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50">
-                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-violet-400" />
-                  Período (Catorcenas)
-                </h3>
-                <div className="grid grid-cols-4 gap-4">
-                  <div>
-                    <label className="text-xs text-zinc-500">Año Inicio</label>
-                    <select value={yearInicio || ''} onChange={(e) => { setYearInicio(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaInicio(undefined); }}
-                      className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50">
-                      <option value="">Seleccionar</option>
-                      {yearInicioOptions.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500">Catorcena Inicio</label>
-                    <select value={catorcenaInicio || ''} onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                      disabled={!yearInicio}
-                      className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50">
-                      <option value="">Seleccionar</option>
-                      {catorcenasInicioOptions.map(c => <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500">Año Fin</label>
-                    <select value={yearFin || ''} onChange={(e) => { setYearFin(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaFin(undefined); }}
-                      className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50">
-                      <option value="">Seleccionar</option>
-                      {yearFinOptions.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500">Catorcena Fin</label>
-                    <select value={catorcenaFin || ''} onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                      disabled={!yearFin}
-                      className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50">
-                      <option value="">Seleccionar</option>
-                      {catorcenasFinOptions.map(c => <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>)}
-                    </select>
+              {/* Period and Asignados Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                {/* Dates with Catorcenas */}
+                <div className="lg:col-span-2 bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                  <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Período (Catorcenas)
+                  </h3>
+                  <div className="grid grid-cols-4 gap-3">
+                    <div>
+                      <label className="text-xs text-zinc-500">Año Inicio</label>
+                      <select value={yearInicio || ''} onChange={(e) => { setYearInicio(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaInicio(undefined); }}
+                        className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50">
+                        <option value="">Seleccionar</option>
+                        {yearInicioOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-zinc-500">Cat. Inicio</label>
+                      <select value={catorcenaInicio || ''} onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                        disabled={!yearInicio}
+                        className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50">
+                        <option value="">Seleccionar</option>
+                        {catorcenasInicioOptions.map(c => <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-zinc-500">Año Fin</label>
+                      <select value={yearFin || ''} onChange={(e) => { setYearFin(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaFin(undefined); }}
+                        className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50">
+                        <option value="">Seleccionar</option>
+                        {yearFinOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-zinc-500">Cat. Fin</label>
+                      <select value={catorcenaFin || ''} onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                        disabled={!yearFin}
+                        className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50">
+                        <option value="">Seleccionar</option>
+                        {catorcenasFinOptions.map(c => <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Asignados */}
-              <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50">
-                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                  <Users className="h-4 w-4 text-violet-400" />
-                  Asignados
-                </h3>
-                <MultiSelectTags
-                  label="usuario"
-                  options={users || []}
-                  selected={selectedAsignados}
-                  onChange={setSelectedAsignados}
-                  displayKey="nombre"
-                  valueKey="id"
-                  searchKey="nombre"
-                />
+                {/* Asignados */}
+                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                  <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Asignados
+                  </h3>
+                  <MultiSelectTags
+                    label="usuario"
+                    options={users || []}
+                    selected={selectedAsignados}
+                    onChange={setSelectedAsignados}
+                    displayKey="nombre"
+                    valueKey="id"
+                    searchKey="nombre"
+                  />
+                </div>
               </div>
 
               {/* Unified Caras Section */}
@@ -922,6 +925,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                       <span className="text-zinc-400">{grandTotals.renta} renta</span>
                       <span className="text-emerald-400">+{grandTotals.bonif} bonif</span>
                       <span className="text-amber-400 font-medium">{formatCurrency(grandTotals.inversion)}</span>
+                      <span className="text-purple-400 font-medium">TE: {formatCurrency(grandTotals.tarifaEfectiva)}</span>
                     </div>
                   </div>
                 </div>

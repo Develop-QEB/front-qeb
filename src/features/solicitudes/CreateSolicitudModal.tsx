@@ -346,6 +346,7 @@ interface SAPCuicItem {
   T2_U_Producto: string;
   T2_U_IDCategoria: number;
   T2_U_Categoria: string;
+  ACA_U_SAPCode: string;
 }
 
 interface SAPArticulo {
@@ -804,12 +805,46 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     enabled: isOpen,
   });
 
-  // Set default asignados on mount
+  // Reset form when opening modal in create mode (not edit mode)
   useEffect(() => {
-    if (traficoUsers && traficoUsers.length > 0 && selectedAsignados.length === 0) {
+    if (isOpen && !isEditMode) {
+      // Reset all form state for a fresh start
+      setStep(1);
+      setSelectedCuic(null);
+      setSelectedAsignados([]);
+      setNombreCampania('');
+      setDescripcion('');
+      setNotas('');
+      setYearInicio(undefined);
+      setYearFin(undefined);
+      setCatorcenaInicio(undefined);
+      setCatorcenaFin(undefined);
+      setCaras([]);
+      setArchivo(null);
+      setTipoArchivo(null);
+      setImu(false);
+      setExpandedCatorcenas(new Set());
+      setNewCara({
+        articulo: null,
+        estado: '',
+        ciudades: [],
+        formato: '',
+        tipo: '',
+        nse: [],
+        periodo: '',
+        renta: 1,
+        bonificacion: 0,
+        tarifaPublica: 0,
+      });
+    }
+  }, [isOpen, isEditMode]);
+
+  // Set default asignados when trafico users load (only if asignados is empty)
+  useEffect(() => {
+    if (isOpen && !isEditMode && traficoUsers && traficoUsers.length > 0 && selectedAsignados.length === 0) {
       setSelectedAsignados(traficoUsers);
     }
-  }, [traficoUsers]);
+  }, [traficoUsers, isOpen, isEditMode]);
 
   // Filter cities by estado
   const filteredCiudades = useMemo(() => {
@@ -925,7 +960,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     // Auto expand the catorcena
     setExpandedCatorcenas(prev => new Set(prev).add(`${catorcenaYear}-${catorcenaNum}`));
 
-    // Reset ALL form fields to allow creating a new cara with same solicitud
+    // Keep filter values intact, only reset quantities and period
+    setNewCara({
+      ...newCara,
+      periodo: '',
+      renta: 1,
+      bonificacion: 0,
+      // Keep articulo, estado, ciudades, formato, tipo, nse, tarifaPublica
+    });
+  };
+
+  // Clear all new cara fields
+  const handleClearNewCara = () => {
     setNewCara({
       articulo: null,
       estado: '',
@@ -977,11 +1023,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const totalRenta = caras.reduce((acc, c) => acc + c.renta, 0);
     const totalBonificacion = caras.reduce((acc, c) => acc + c.bonificacion, 0);
     const totalPrecio = caras.reduce((acc, c) => acc + c.precioTotal, 0);
-    // Average descuento
-    const avgDescuento = caras.length > 0
-      ? caras.reduce((acc, c) => acc + c.descuento, 0) / caras.length
-      : 0;
-    return { totalRenta, totalBonificacion, totalCaras: totalRenta, totalPrecio, avgDescuento };
+    const totalCarasAll = totalRenta + totalBonificacion;
+    // Tarifa Efectiva = Inversión Total / Total Caras (renta + bonificación)
+    const tarifaEfectiva = totalCarasAll > 0 ? totalPrecio / totalCarasAll : 0;
+    return { totalRenta, totalBonificacion, totalCaras: totalRenta, totalPrecio, tarifaEfectiva };
   }, [caras]);
 
   // Handle file upload
@@ -1058,6 +1103,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       agencia: selectedCuic.T0_U_Agencia,
       categoria_id: selectedCuic.T2_U_IDCategoria,
       categoria_nombre: selectedCuic.T2_U_Categoria,
+      card_code: selectedCuic.ACA_U_SAPCode,
       nombre_campania: nombreCampania,
       descripcion,
       notas,
@@ -1506,8 +1552,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <div className="text-xs text-zinc-400">Total Caras</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-400">{totals.avgDescuento.toFixed(1)}%</div>
-                    <div className="text-xs text-zinc-400">Descuento Prom.</div>
+                    <div className="text-2xl font-bold text-purple-400">{formatCurrency(totals.tarifaEfectiva)}</div>
+                    <div className="text-xs text-zinc-400">Tarifa Efectiva</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-amber-400">{formatCurrency(totals.totalPrecio)}</div>
@@ -1682,12 +1728,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     />
                   </div>
 
-                  {/* Tarifa Publica - Auto-calculated from ItemCode */}
+                  {/* Tarifa Publica - Editable */}
                   <div>
                     <label className="text-xs text-zinc-500">Tarifa Pública</label>
-                    <div className="w-full px-3 py-2 bg-zinc-800/50 border border-zinc-700 rounded-lg text-emerald-400 text-sm font-medium">
-                      {newCara.tarifaPublica > 0 ? formatCurrency(newCara.tarifaPublica) : 'Selecciona artículo'}
-                    </div>
+                    <input
+                      type="number"
+                      value={newCara.tarifaPublica || ''}
+                      onChange={(e) => setNewCara({ ...newCara, tarifaPublica: parseFloat(e.target.value) || 0 })}
+                      placeholder="0"
+                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-emerald-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                    />
                   </div>
                 </div>
 
@@ -1713,30 +1763,47 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                 {/* Preview calculation */}
                 {newCara.renta > 0 && newCara.tarifaPublica > 0 && (
-                  <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/30">
+                  <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/30 space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400">Vista previa:</span>
+                      <span className="text-zinc-400">Inversión (Tarifa Cliente):</span>
                       <span className="text-zinc-300">
-                        {newCara.renta} caras - {newCara.bonificacion} bonif. = {newCara.renta - newCara.bonificacion} cobradas × {formatCurrency(newCara.tarifaPublica)} = <span className="text-emerald-400 font-medium">{formatCurrency((newCara.renta - newCara.bonificacion) * newCara.tarifaPublica)}</span>
+                        {newCara.renta} caras × {formatCurrency(newCara.tarifaPublica)} = <span className="text-emerald-400 font-medium">{formatCurrency(newCara.renta * newCara.tarifaPublica)}</span>
                       </span>
                     </div>
-                    {newCara.bonificacion > 0 && (
-                      <div className="text-[10px] text-amber-400 mt-1">
-                        Descuento: {((newCara.bonificacion / newCara.renta) * 100).toFixed(1)}%
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-400">Caras Totales:</span>
+                      <span className="text-zinc-300">
+                        {newCara.renta} caras + {newCara.bonificacion} bonif. = <span className="text-blue-400 font-medium">{newCara.renta + newCara.bonificacion} caras totales</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-400">Tarifa Efectiva:</span>
+                      <span className="text-zinc-300">
+                        {formatCurrency(newCara.renta * newCara.tarifaPublica)} ÷ {newCara.renta + newCara.bonificacion} = <span className="text-purple-400 font-medium">{formatCurrency((newCara.renta * newCara.tarifaPublica) / (newCara.renta + newCara.bonificacion))}</span>
+                      </span>
+                    </div>
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={handleAddCara}
-                  disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo}
-                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors"
-                >
-                  <Plus className="h-4 w-4" />
-                  Agregar Cara
-                </button>
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleAddCara}
+                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Agregar Cara
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearNewCara}
+                    className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Limpiar Campos
+                  </button>
+                </div>
               </div>
 
               {/* Caras table - grouped by catorcena */}
@@ -1922,8 +1989,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <div className="text-xs text-zinc-400">Total Caras</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-400">{totals.avgDescuento.toFixed(1)}%</div>
-                    <div className="text-xs text-zinc-400">Descuento Prom.</div>
+                    <div className="text-2xl font-bold text-purple-400">{formatCurrency(totals.tarifaEfectiva)}</div>
+                    <div className="text-xs text-zinc-400">Tarifa Efectiva</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-amber-400">{formatCurrency(totals.totalPrecio)}</div>

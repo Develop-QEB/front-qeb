@@ -1,0 +1,2359 @@
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
+  FileText, MapPin, Layers, Pencil, Map, Package,
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown
+} from 'lucide-react';
+import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
+import { AdvancedMapComponent } from './AdvancedMapComponent';
+import { Propuesta } from '../../types';
+import { solicitudesService, UserOption } from '../../services/solicitudes.service';
+import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
+import { formatCurrency } from '../../lib/utils';
+
+const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
+
+// Dark map styles
+const DARK_MAP_STYLES = [
+  { elementType: 'geometry', stylers: [{ color: '#212121' }] },
+  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#c084fc' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#757575' }] },
+  { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#e879f9' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#383838' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#4a4a4a' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#a78bfa' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#181818' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#22d3ee' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#c084fc' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1e1e1e' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
+  { featureType: 'transit', elementType: 'labels.text.fill', stylers: [{ color: '#f472b6' }] },
+];
+
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  propuesta: Propuesta;
+}
+
+interface CaraItem {
+  localId: string;
+  id?: number;
+  ciudad: string;
+  estados: string;
+  tipo: string;
+  flujo: string;
+  bonificacion: number;
+  caras: number;
+  nivel_socioeconomico: string;
+  formato: string;
+  costo: number;
+  tarifa_publica: number;
+  inicio_periodo: string;
+  fin_periodo: string;
+  caras_flujo: number;
+  caras_contraflujo: number;
+  articulo: string;
+  descuento: number;
+  isEditing?: boolean;
+}
+
+interface ReservaItem {
+  id: string;
+  inventario_id: number;
+  codigo_unico: string;
+  tipo: 'Flujo' | 'Contraflujo' | 'Bonificacion';
+  catorcena: number;
+  anio: number;
+  latitud: number;
+  longitud: number;
+  plaza: string;
+  formato: string;
+  ubicacion?: string | null;
+}
+
+// View states for the modal
+type ViewState = 'main' | 'search-inventory';
+
+// Extended inventory item for processed data
+type ProcessedInventoryItem = InventarioDisponible & {
+  isCompleto?: boolean;
+  flujoId?: number;
+  contraflujoId?: number;
+  grupo?: string;
+};
+
+// Empty cara template
+const EMPTY_CARA: Omit<CaraItem, 'localId'> = {
+  ciudad: '',
+  estados: '',
+  tipo: '',
+  flujo: '',
+  bonificacion: 0,
+  caras: 0,
+  nivel_socioeconomico: '',
+  formato: '',
+  costo: 0,
+  tarifa_publica: 0,
+  inicio_periodo: '',
+  fin_periodo: '',
+  caras_flujo: 0,
+  caras_contraflujo: 0,
+  articulo: '',
+  descuento: 0,
+};
+
+export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
+  const queryClient = useQueryClient();
+  const mapRef = useRef<google.maps.Map | null>(null);
+
+  // Load Google Maps with required libraries
+  const { isLoaded: mapsLoaded } = useLoadScript({
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: ['places', 'geometry'],
+  });
+
+  // View state
+  const [viewState, setViewState] = useState<ViewState>('main');
+  const [selectedCaraForSearch, setSelectedCaraForSearch] = useState<CaraItem | null>(null);
+
+  // Editable propuesta fields
+  const [asignados, setAsignados] = useState<UserOption[]>([]);
+  const [nombreCampania, setNombreCampania] = useState('');
+  const [notas, setNotas] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [yearInicio, setYearInicio] = useState<number | undefined>();
+  const [yearFin, setYearFin] = useState<number | undefined>();
+  const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>();
+  const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
+
+  // Caras state
+  const [caras, setCaras] = useState<CaraItem[]>([]);
+  const [expandedCaras, setExpandedCaras] = useState<Set<string>>(new Set());
+  const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
+  const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
+
+  // New cara form
+  const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
+  const [showAddCaraForm, setShowAddCaraForm] = useState(false);
+
+  // Reservas state
+  const [reservas, setReservas] = useState<ReservaItem[]>([]);
+
+  // Inventory search state
+  const [searchFilters, setSearchFilters] = useState({
+    plaza: '',
+    tipo: '',
+    formato: '',
+  });
+  const [selectedInventory, setSelectedInventory] = useState<Set<number>>(new Set());
+
+  // Advanced inventory filters
+  const [showOnlyUnicos, setShowOnlyUnicos] = useState(false);
+  const [showOnlyCompletos, setShowOnlyCompletos] = useState(false);
+  const [groupByDistance, setGroupByDistance] = useState(false);
+  const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
+  const [tamanoGrupo, setTamanoGrupo] = useState(10);
+  const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
+  const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Expanded groups state for collapsible groups
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Grupo 1']));
+
+  // Tab state for search view (buscar / reservados)
+  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados'>('buscar');
+
+  // Disponibles data
+  const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // POI filter state
+  const [poiFilterIds, setPoiFilterIds] = useState<Set<number> | null>(null);
+
+  // Body scroll lock when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('modal-open');
+    } else {
+      document.body.classList.remove('modal-open');
+    }
+    return () => document.body.classList.remove('modal-open');
+  }, [isOpen]);
+
+  // Fetch solicitud full details
+  const { data: solicitudDetails, isLoading: detailsLoading } = useQuery({
+    queryKey: ['solicitud-full-details', propuesta.solicitud_id],
+    queryFn: () => solicitudesService.getFullDetails(propuesta.solicitud_id),
+    enabled: isOpen && !!propuesta.solicitud_id,
+  });
+
+  // Fetch users
+  const { data: users } = useQuery({
+    queryKey: ['solicitudes-users'],
+    queryFn: () => solicitudesService.getUsers(),
+    enabled: isOpen,
+  });
+
+  // Fetch catorcenas
+  const { data: catorcenasData } = useQuery({
+    queryKey: ['catorcenas'],
+    queryFn: () => solicitudesService.getCatorcenas(),
+    enabled: isOpen,
+  });
+
+  // Fetch inventory filters (always)
+  const { data: inventoryFilters } = useQuery({
+    queryKey: ['inventory-filters'],
+    queryFn: async () => {
+      const [tipos, plazas, estatus] = await Promise.all([
+        inventariosService.getTipos(),
+        inventariosService.getPlazas(),
+        inventariosService.getEstatus(),
+      ]);
+      return { tipos, plazas, estatus };
+    },
+    enabled: isOpen,
+  });
+
+  // Fetch inventory for map - without empty filters
+  const { data: inventoryData, isLoading: inventoryLoading, refetch: refetchInventory } = useQuery({
+    queryKey: ['inventarios-map', searchFilters.plaza, searchFilters.tipo],
+    queryFn: () => {
+      const params: { tipo?: string; plaza?: string } = {};
+      if (searchFilters.plaza) params.plaza = searchFilters.plaza;
+      if (searchFilters.tipo) params.tipo = searchFilters.tipo;
+      return inventariosService.getForMap(params);
+    },
+    enabled: isOpen && viewState === 'search-inventory',
+  });
+
+  // Fetch inventory filters from solicitudes service
+  const { data: solicitudFilters } = useQuery({
+    queryKey: ['inventario-filters'],
+    queryFn: () => solicitudesService.getInventarioFilters(),
+    enabled: isOpen,
+  });
+
+  // Initialize form from propuesta and solicitud details
+  useEffect(() => {
+    if (solicitudDetails && isOpen) {
+      // Set asignados
+      if (propuesta.asignado && propuesta.id_asignado) {
+        const asignadosNames = propuesta.asignado.split(',').map(s => s.trim());
+        const asignadosIds = propuesta.id_asignado.split(',').map(s => s.trim());
+        const asignadosList: UserOption[] = asignadosNames.map((name, idx) => ({
+          id: parseInt(asignadosIds[idx]) || 0,
+          nombre: name,
+          area: '',
+          puesto: '',
+        }));
+        setAsignados(asignadosList);
+      }
+
+      // Set campaign name
+      setNombreCampania(solicitudDetails.cotizacion?.nombre_campania || '');
+
+      // Set notes and description
+      setNotas(solicitudDetails.propuesta?.notas || '');
+      setDescripcion(solicitudDetails.propuesta?.descripcion || '');
+
+      // Set period from cotizacion dates
+      const cot = solicitudDetails.cotizacion;
+      if (cot?.fecha_inicio) {
+        const fechaInicio = new Date(cot.fecha_inicio);
+        setYearInicio(fechaInicio.getFullYear());
+        const dayOfYear = Math.floor((fechaInicio.getTime() - new Date(fechaInicio.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+        setCatorcenaInicio(Math.ceil(dayOfYear / 14));
+      }
+      if (cot?.fecha_fin) {
+        const fechaFin = new Date(cot.fecha_fin);
+        setYearFin(fechaFin.getFullYear());
+        const dayOfYear = Math.floor((fechaFin.getTime() - new Date(fechaFin.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+        setCatorcenaFin(Math.ceil(dayOfYear / 14));
+      }
+
+      // Set caras from solicitud
+      if (solicitudDetails.caras) {
+        const carasWithIds: CaraItem[] = solicitudDetails.caras.map((cara, idx) => ({
+          localId: `cara-${cara.id || idx}-${Date.now()}`,
+          id: cara.id,
+          ciudad: cara.ciudad || '',
+          estados: cara.estados || '',
+          tipo: cara.tipo || '',
+          flujo: cara.flujo || '',
+          bonificacion: Number(cara.bonificacion) || 0,
+          caras: Number(cara.caras) || 0,
+          nivel_socioeconomico: cara.nivel_socioeconomico || '',
+          formato: cara.formato || '',
+          costo: Number(cara.costo) || 0,
+          tarifa_publica: Number(cara.tarifa_publica) || 0,
+          inicio_periodo: cara.inicio_periodo || '',
+          fin_periodo: cara.fin_periodo || '',
+          caras_flujo: Number(cara.caras_flujo) || 0,
+          caras_contraflujo: Number(cara.caras_contraflujo) || 0,
+          articulo: cara.articulo || '',
+          descuento: Number(cara.descuento) || 0,
+        }));
+        setCaras(carasWithIds);
+      }
+    }
+  }, [solicitudDetails, propuesta, isOpen]);
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setViewState('main');
+      setSelectedCaraForSearch(null);
+      setSelectedInventory(new Set());
+      setShowAddCaraForm(false);
+      setEditingCaraId(null);
+      setNewCara(EMPTY_CARA);
+    }
+  }, [isOpen]);
+
+  // Expand all catorcenas by default when caras change
+  useEffect(() => {
+    if (caras.length > 0) {
+      const periodos = new Set(caras.map(c => c.inicio_periodo || 'Sin periodo'));
+      setExpandedCatorcenas(periodos);
+    }
+  }, [caras]);
+
+  // Calculate KPIs for caras
+  const carasKPIs = useMemo(() => {
+    const totalRenta = caras.reduce((acc, c) => acc + (c.caras || 0), 0);
+    const totalBonificacion = caras.reduce((acc, c) => acc + (c.bonificacion || 0), 0);
+    const totalInversion = caras.reduce((acc, c) => acc + ((c.caras || 0) * (c.tarifa_publica || 0)), 0);
+    return { totalRenta, totalBonificacion, totalInversion };
+  }, [caras]);
+
+  // Calculate KPIs for reservas
+  const reservasKPIs = useMemo(() => {
+    const flujo = reservas.filter(r => r.tipo === 'Flujo').length;
+    const contraflujo = reservas.filter(r => r.tipo === 'Contraflujo').length;
+    const bonificadas = reservas.filter(r => r.tipo === 'Bonificacion').length;
+    const renta = flujo + contraflujo; // Non-bonificadas
+    const total = reservas.length;
+
+    // Calculate money: sum tarifa_publica for each non-bonificada reserva
+    let dineroTotal = 0;
+    let digitales = 0;
+    reservas.forEach(reserva => {
+      // Find the cara this reserva belongs to
+      const cara = caras.find(c => reserva.id.startsWith(c.localId));
+      if (cara) {
+        // Only count money for non-bonificadas
+        if (reserva.tipo !== 'Bonificacion') {
+          dineroTotal += (cara.tarifa_publica || 0);
+        }
+        // Count digital types
+        if (cara.tipo?.toLowerCase().includes('digital')) {
+          digitales++;
+        }
+      }
+    });
+
+    return { flujo, contraflujo, bonificadas, renta, total, dineroTotal, digitales };
+  }, [reservas, caras]);
+
+  // Calculate remaining to assign for selected cara
+  const remainingToAssign = useMemo(() => {
+    if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0, bonificacion: 0 };
+
+    const caraReservas = reservas.filter(r => r.id.startsWith(selectedCaraForSearch.localId));
+    const flujoReservado = caraReservas.filter(r => r.tipo === 'Flujo').length;
+    const contraflujoReservado = caraReservas.filter(r => r.tipo === 'Contraflujo').length;
+    const bonificacionReservado = caraReservas.filter(r => r.tipo === 'Bonificacion').length;
+
+    return {
+      flujo: (selectedCaraForSearch.caras_flujo || 0) - flujoReservado,
+      contraflujo: (selectedCaraForSearch.caras_contraflujo || 0) - contraflujoReservado,
+      bonificacion: (selectedCaraForSearch.bonificacion || 0) - bonificacionReservado,
+    };
+  }, [selectedCaraForSearch, reservas]);
+
+  // Check if cara has reservas
+  const caraHasReservas = (localId: string) => {
+    return reservas.some(r => r.id.startsWith(localId));
+  };
+
+  // Get cara completion status
+  const getCaraCompletionStatus = (cara: CaraItem) => {
+    const caraReservas = reservas.filter(r => r.id.startsWith(cara.localId));
+    const flujoReservado = caraReservas.filter(r => r.tipo === 'Flujo').length;
+    const contraflujoReservado = caraReservas.filter(r => r.tipo === 'Contraflujo').length;
+    const bonificacionReservado = caraReservas.filter(r => r.tipo === 'Bonificacion').length;
+
+    const flujoCompleto = flujoReservado >= (cara.caras_flujo || 0);
+    const contraflujoCompleto = contraflujoReservado >= (cara.caras_contraflujo || 0);
+    const bonificacionCompleto = bonificacionReservado >= (cara.bonificacion || 0);
+
+    const totalRequerido = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
+    const totalReservado = flujoReservado + contraflujoReservado + bonificacionReservado;
+
+    return {
+      flujoReservado,
+      contraflujoReservado,
+      bonificacionReservado,
+      flujoCompleto,
+      contraflujoCompleto,
+      bonificacionCompleto,
+      isComplete: flujoCompleto && contraflujoCompleto && bonificacionCompleto,
+      totalReservado,
+      totalRequerido,
+    };
+  };
+
+  // Group caras by catorcena period with catorcena info
+  const carasGroupedByCatorcena = useMemo(() => {
+    const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
+    caras.forEach(cara => {
+      const periodo = cara.inicio_periodo || 'Sin periodo';
+      if (!groups[periodo]) {
+        // Try to find catorcena number from catorcenasData
+        const catorcenaInfo = catorcenasData?.data?.find(c => c.fecha_inicio === periodo);
+        groups[periodo] = {
+          caras: [],
+          catorcenaNum: catorcenaInfo?.numero_catorcena,
+          year: catorcenaInfo?.a_o
+        };
+      }
+      groups[periodo].caras.push(cara);
+    });
+    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [caras, catorcenasData]);
+
+  // Years options
+  const years = catorcenasData?.years || [];
+
+  // Available periods based on year range
+  const availablePeriods = useMemo(() => {
+    if (!catorcenasData?.data || !yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
+    return catorcenasData.data.filter(c => {
+      if (c.a_o < yearInicio || c.a_o > yearFin) return false;
+      if (c.a_o === yearInicio && c.numero_catorcena < catorcenaInicio) return false;
+      if (c.a_o === yearFin && c.numero_catorcena > catorcenaFin) return false;
+      return true;
+    });
+  }, [catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+
+  // Toggle catorcena expansion
+  const toggleCatorcena = (periodo: string) => {
+    setExpandedCatorcenas(prev => {
+      const next = new Set(prev);
+      if (next.has(periodo)) {
+        next.delete(periodo);
+      } else {
+        next.add(periodo);
+      }
+      return next;
+    });
+  };
+
+  // Toggle cara expansion
+  const toggleCara = (localId: string) => {
+    setExpandedCaras(prev => {
+      const next = new Set(prev);
+      if (next.has(localId)) next.delete(localId);
+      else next.add(localId);
+      return next;
+    });
+  };
+
+  // Handle cara deletion
+  const handleDeleteCara = (localId: string) => {
+    if (caraHasReservas(localId)) {
+      alert('No puedes eliminar una cara que tiene reservas. Primero elimina las reservas.');
+      return;
+    }
+    setCaras(prev => prev.filter(c => c.localId !== localId));
+    setReservas(prev => prev.filter(r => !r.id.startsWith(localId)));
+  };
+
+  // Handle edit cara
+  const handleEditCara = (cara: CaraItem) => {
+    if (caraHasReservas(cara.localId)) {
+      alert('No puedes editar una cara que tiene reservas. Primero elimina las reservas.');
+      return;
+    }
+    setEditingCaraId(cara.localId);
+    setNewCara({
+      ciudad: cara.ciudad,
+      estados: cara.estados,
+      tipo: cara.tipo,
+      flujo: cara.flujo,
+      bonificacion: cara.bonificacion,
+      caras: cara.caras,
+      nivel_socioeconomico: cara.nivel_socioeconomico,
+      formato: cara.formato,
+      costo: cara.costo,
+      tarifa_publica: cara.tarifa_publica,
+      inicio_periodo: cara.inicio_periodo,
+      fin_periodo: cara.fin_periodo,
+      caras_flujo: cara.caras_flujo,
+      caras_contraflujo: cara.caras_contraflujo,
+      articulo: cara.articulo,
+      descuento: cara.descuento,
+    });
+    setShowAddCaraForm(true);
+  };
+
+  // Handle save cara (add or update)
+  const handleSaveCara = () => {
+    if (!newCara.formato || !newCara.estados) {
+      alert('Por favor completa al menos el formato y estado');
+      return;
+    }
+
+    if (editingCaraId) {
+      // Update existing cara
+      setCaras(prev => prev.map(c =>
+        c.localId === editingCaraId
+          ? { ...c, ...newCara }
+          : c
+      ));
+      setEditingCaraId(null);
+    } else {
+      // Add new cara
+      const newCaraItem: CaraItem = {
+        ...newCara,
+        localId: `cara-new-${Date.now()}`,
+      };
+      setCaras(prev => [...prev, newCaraItem]);
+    }
+
+    setNewCara(EMPTY_CARA);
+    setShowAddCaraForm(false);
+  };
+
+  // Handle cancel cara form
+  const handleCancelCaraForm = () => {
+    setNewCara(EMPTY_CARA);
+    setShowAddCaraForm(false);
+    setEditingCaraId(null);
+  };
+
+  // Haversine distance calculation (in meters)
+  const haversineDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const toRadians = (degrees: number) => degrees * Math.PI / 180;
+    const R = 6371e3; // Earth radius in meters
+    const φ1 = toRadians(lat1);
+    const φ2 = toRadians(lat2);
+    const Δφ = toRadians(lat2 - lat1);
+    const Δλ = toRadians(lon2 - lon1);
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }, []);
+
+  // Filter for unique inventories (no flujo/contraflujo duplicates)
+  const filterUnicos = useCallback((inventarios: InventarioDisponible[]): InventarioDisponible[] => {
+    const seen = new Set<string>();
+    return inventarios.filter(inv => {
+      // Extract base code (without _Flujo or _Contraflujo)
+      const baseCode = inv.codigo_unico?.split('_')[0] || '';
+      const key = `${baseCode}|${inv.ubicacion}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, []);
+
+  // Filter for complete inventories - MERGE flujo/contraflujo pairs into single "completo" rows
+  const filterCompletos = useCallback((inventarios: InventarioDisponible[]): (InventarioDisponible & { isCompleto?: boolean; flujoId?: number; contraflujoId?: number })[] => {
+    // Group by base code and location
+    const groups: Record<string, InventarioDisponible[]> = {};
+    inventarios.forEach(inv => {
+      const baseCode = inv.codigo_unico?.split('_')[0] || '';
+      const key = `${baseCode}|${inv.plaza}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(inv);
+    });
+
+    // Merge pairs into single "completo" rows
+    const result: (InventarioDisponible & { isCompleto?: boolean; flujoId?: number; contraflujoId?: number })[] = [];
+    Object.entries(groups).forEach(([key, group]) => {
+      if (group.length >= 2) {
+        const baseCode = key.split('|')[0];
+        const flujoItem = group.find(g => g.tipo_de_cara === 'Flujo');
+        const contraflujoItem = group.find(g => g.tipo_de_cara === 'Contraflujo');
+
+        if (flujoItem && contraflujoItem) {
+          // Create merged "completo" item - use a virtual ID
+          const virtualId = flujoItem.id * 100000 + contraflujoItem.id;
+          result.push({
+            ...flujoItem,
+            id: virtualId,
+            codigo_unico: `${baseCode}_completo`,
+            tipo_de_cara: 'Completo' as any,
+            isCompleto: true,
+            flujoId: flujoItem.id,
+            contraflujoId: contraflujoItem.id,
+            ya_reservado_para_cara: flujoItem.ya_reservado_para_cara || contraflujoItem.ya_reservado_para_cara,
+          });
+        }
+      }
+    });
+    return result;
+  }, []);
+
+  // Group inventories by distance (anti-cannibalization)
+  const groupByDistanceFunc = useCallback((inventarios: ProcessedInventoryItem[]): ProcessedInventoryItem[] => {
+    if (inventarios.length === 0) return [];
+
+    const grupos: ProcessedInventoryItem[][] = [];
+    const remaining = [...inventarios];
+
+    while (remaining.length > 0) {
+      const grupo: ProcessedInventoryItem[] = [remaining.shift()!];
+
+      // Fill group up to tamanoGrupo
+      while (grupo.length < tamanoGrupo && remaining.length > 0) {
+        // Find candidate that maintains minimum distance
+        let bestIdx = -1;
+        let bestScore = Infinity;
+
+        for (let i = 0; i < remaining.length; i++) {
+          const candidate = remaining[i];
+          let minDist = Infinity;
+
+          // Check distance to all members of the group
+          for (const member of grupo) {
+            const dist = haversineDistance(
+              candidate.latitud, candidate.longitud,
+              member.latitud, member.longitud
+            );
+            if (dist < minDist) minDist = dist;
+          }
+
+          // Must be at least distanciaGrupos away
+          if (minDist >= distanciaGrupos) {
+            const score = Math.abs(minDist - distanciaGrupos * 1.2);
+            if (score < bestScore) {
+              bestScore = score;
+              bestIdx = i;
+            }
+          }
+        }
+
+        if (bestIdx >= 0) {
+          grupo.push(remaining.splice(bestIdx, 1)[0]);
+        } else {
+          break; // No more candidates that meet distance requirement
+        }
+      }
+
+      grupos.push(grupo);
+    }
+
+    // Add group number to each item
+    return grupos.flatMap((grupo, idx) =>
+      grupo.map(inv => ({ ...inv, grupo: `Grupo ${idx + 1}` }))
+    );
+  }, [tamanoGrupo, distanciaGrupos, haversineDistance]);
+
+  // Handle search inventory - open search view and fetch disponibles
+  const handleSearchInventory = async (cara: CaraItem) => {
+    setSelectedCaraForSearch(cara);
+    setViewState('search-inventory');
+    setShowOnlyUnicos(false);
+    setShowOnlyCompletos(false);
+    setGroupByDistance(false);
+    setSelectedInventory(new Set());
+    setFlujoFilter('Todos'); // Always start with all
+    setSortColumn('codigo_unico');
+    setSortDirection('asc');
+
+    // Fetch disponibles based on cara characteristics (gets all, filter in frontend)
+    setIsSearching(true);
+    try {
+      const response = await inventariosService.getDisponibles({
+        ciudad: cara.ciudad || undefined,
+        estado: cara.estados || undefined,
+        formato: cara.formato || undefined,
+        // Don't filter by flujo in backend - get all and filter in frontend
+        nse: cara.nivel_socioeconomico || undefined,
+        tipo: cara.tipo || undefined,
+        fecha_inicio: cara.inicio_periodo || undefined,
+        fecha_fin: cara.fin_periodo || undefined,
+        solicitudCaraId: cara.id,
+      });
+      setInventarioDisponible(response.data || []);
+    } catch (error) {
+      console.error('Error fetching disponibles:', error);
+      setInventarioDisponible([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Refetch disponibles with current filters
+  const handleRefetchDisponibles = async () => {
+    if (!selectedCaraForSearch) return;
+
+    setIsSearching(true);
+    try {
+      const response = await inventariosService.getDisponibles({
+        ciudad: selectedCaraForSearch.ciudad || undefined,
+        estado: selectedCaraForSearch.estados || undefined,
+        formato: selectedCaraForSearch.formato || undefined,
+        // Don't filter by flujo in backend - get all and filter in frontend
+        nse: selectedCaraForSearch.nivel_socioeconomico || undefined,
+        tipo: selectedCaraForSearch.tipo || undefined,
+        fecha_inicio: selectedCaraForSearch.inicio_periodo || undefined,
+        fecha_fin: selectedCaraForSearch.fin_periodo || undefined,
+        solicitudCaraId: selectedCaraForSearch.id,
+      });
+      setInventarioDisponible(response.data || []);
+    } catch (error) {
+      console.error('Error fetching disponibles:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Filtered and processed inventory data
+  const processedInventory = useMemo((): ProcessedInventoryItem[] => {
+    let data: ProcessedInventoryItem[] = [...inventarioDisponible];
+
+    // Apply POI filter (conservar con/sin POIs)
+    if (poiFilterIds !== null) {
+      data = data.filter(inv => poiFilterIds.has(inv.id));
+    }
+
+    // Filter by flujo (only if not "Todos") - skip if completos is active
+    if (flujoFilter && flujoFilter !== 'Todos' && !showOnlyCompletos) {
+      data = data.filter(inv => inv.tipo_de_cara === flujoFilter);
+    }
+
+    // Apply unique filter
+    if (showOnlyUnicos) {
+      data = filterUnicos(data);
+    }
+
+    // Apply complete filter (merges pairs into single rows)
+    if (showOnlyCompletos) {
+      data = filterCompletos(data);
+    }
+
+    // Apply distance grouping
+    if (groupByDistance) {
+      data = groupByDistanceFunc(data);
+    }
+
+    // Apply sorting
+    data.sort((a, b) => {
+      let aVal: string | number = '';
+      let bVal: string | number = '';
+
+      switch (sortColumn) {
+        case 'codigo_unico':
+          aVal = a.codigo_unico || '';
+          bVal = b.codigo_unico || '';
+          break;
+        case 'tipo_de_cara':
+          aVal = a.tipo_de_cara || '';
+          bVal = b.tipo_de_cara || '';
+          break;
+        case 'plaza':
+          aVal = a.plaza || '';
+          bVal = b.plaza || '';
+          break;
+        case 'nivel_socioeconomico':
+          aVal = a.nivel_socioeconomico || '';
+          bVal = b.nivel_socioeconomico || '';
+          break;
+        case 'ubicacion':
+          aVal = a.ubicacion || '';
+          bVal = b.ubicacion || '';
+          break;
+        default:
+          aVal = a.codigo_unico || '';
+          bVal = b.codigo_unico || '';
+      }
+
+      const aStr = String(aVal);
+      const bStr = String(bVal);
+      return sortDirection === 'asc'
+        ? aStr.localeCompare(bStr)
+        : bStr.localeCompare(aStr);
+    });
+
+    return data;
+  }, [inventarioDisponible, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, groupByDistance, filterUnicos, filterCompletos, groupByDistanceFunc, sortColumn, sortDirection]);
+
+  // Handle POI filter from map
+  const handlePOIFilter = useCallback((idsToKeep: number[]) => {
+    setPoiFilterIds(new Set(idsToKeep));
+  }, []);
+
+  // Clear POI filter
+  const clearPOIFilter = useCallback(() => {
+    setPoiFilterIds(null);
+  }, []);
+
+  // Clear all filters
+  const clearAllFilters = useCallback(() => {
+    setFlujoFilter('Todos');
+    setShowOnlyUnicos(false);
+    setShowOnlyCompletos(false);
+    setGroupByDistance(false);
+    setPoiFilterIds(null);
+  }, []);
+
+  // Handle sort
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Organize inventory by groups for collapsible display
+  const groupedInventory = useMemo(() => {
+    if (!groupByDistance) return null;
+
+    const groups: Record<string, ProcessedInventoryItem[]> = {};
+    processedInventory.forEach(inv => {
+      const groupName = inv.grupo || 'Sin grupo';
+      if (!groups[groupName]) groups[groupName] = [];
+      groups[groupName].push(inv);
+    });
+
+    return Object.entries(groups).sort((a, b) => {
+      // Sort by group number
+      const numA = parseInt(a[0].replace('Grupo ', '')) || 999;
+      const numB = parseInt(b[0].replace('Grupo ', '')) || 999;
+      return numA - numB;
+    });
+  }, [processedInventory, groupByDistance]);
+
+  // Toggle group expansion
+  const toggleGroupExpansion = (groupName: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupName)) next.delete(groupName);
+      else next.add(groupName);
+      return next;
+    });
+  };
+
+  // Select all in group
+  const selectAllInGroup = (items: ProcessedInventoryItem[]) => {
+    setSelectedInventory(prev => {
+      const next = new Set(prev);
+      items.forEach(inv => next.add(inv.id));
+      return next;
+    });
+  };
+
+  // Handle inventory selection
+  const toggleInventorySelection = (id: number) => {
+    setSelectedInventory(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Handle reserve (smart - detects flujo/contraflujo/completo automatically)
+  const handleReservar = () => {
+    if (!selectedCaraForSearch || selectedInventory.size === 0) return;
+
+    const newReservas: ReservaItem[] = [];
+    let flujoCount = 0;
+    let contraflujoCount = 0;
+
+    selectedInventory.forEach(invId => {
+      const inv = processedInventory.find(i => i.id === invId);
+      if (!inv) return;
+
+      // If it's a "completo" item, reserve both flujo and contraflujo
+      if (inv.isCompleto && inv.flujoId && inv.contraflujoId) {
+        // Find original items for coordinates
+        const flujoOrig = inventarioDisponible.find(i => i.id === inv.flujoId);
+        const contraflujoOrig = inventarioDisponible.find(i => i.id === inv.contraflujoId);
+
+        if (flujoOrig && flujoCount < remainingToAssign.flujo) {
+          newReservas.push({
+            id: `${selectedCaraForSearch.localId}-${inv.flujoId}-flujo-${Date.now()}`,
+            inventario_id: inv.flujoId,
+            codigo_unico: flujoOrig.codigo_unico || `INV-${inv.flujoId}`,
+            tipo: 'Flujo',
+            catorcena: catorcenaInicio || 1,
+            anio: yearInicio || new Date().getFullYear(),
+            latitud: flujoOrig.latitud || 0,
+            longitud: flujoOrig.longitud || 0,
+            plaza: flujoOrig.plaza || '',
+            formato: flujoOrig.tipo_de_mueble || '',
+            ubicacion: flujoOrig.ubicacion,
+          });
+          flujoCount++;
+        }
+
+        if (contraflujoOrig && contraflujoCount < remainingToAssign.contraflujo) {
+          newReservas.push({
+            id: `${selectedCaraForSearch.localId}-${inv.contraflujoId}-contraflujo-${Date.now()}`,
+            inventario_id: inv.contraflujoId,
+            codigo_unico: contraflujoOrig.codigo_unico || `INV-${inv.contraflujoId}`,
+            tipo: 'Contraflujo',
+            catorcena: catorcenaInicio || 1,
+            anio: yearInicio || new Date().getFullYear(),
+            latitud: contraflujoOrig.latitud || 0,
+            longitud: contraflujoOrig.longitud || 0,
+            plaza: contraflujoOrig.plaza || '',
+            formato: contraflujoOrig.tipo_de_mueble || '',
+            ubicacion: contraflujoOrig.ubicacion,
+          });
+          contraflujoCount++;
+        }
+      } else {
+        // Regular item - reserve based on tipo_de_cara
+        const tipo = inv.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo';
+        const canReserve = tipo === 'Flujo'
+          ? flujoCount < remainingToAssign.flujo
+          : contraflujoCount < remainingToAssign.contraflujo;
+
+        if (canReserve) {
+          newReservas.push({
+            id: `${selectedCaraForSearch.localId}-${invId}-${tipo.toLowerCase()}-${Date.now()}`,
+            inventario_id: invId,
+            codigo_unico: inv.codigo_unico || `INV-${invId}`,
+            tipo,
+            catorcena: catorcenaInicio || 1,
+            anio: yearInicio || new Date().getFullYear(),
+            latitud: inv.latitud || 0,
+            longitud: inv.longitud || 0,
+            plaza: inv.plaza || '',
+            formato: inv.tipo_de_mueble || '',
+            ubicacion: inv.ubicacion,
+          });
+          if (tipo === 'Flujo') flujoCount++;
+          else contraflujoCount++;
+        }
+      }
+    });
+
+    if (newReservas.length === 0) {
+      alert('No hay caras disponibles para reservar');
+      return;
+    }
+
+    setReservas(prev => [...prev, ...newReservas]);
+    setSelectedInventory(new Set());
+  };
+
+  // Handle reserve as bonificacion
+  const handleReserveAsBonificacion = () => {
+    if (!selectedCaraForSearch || selectedInventory.size === 0) return;
+    if (selectedInventory.size > remainingToAssign.bonificacion) {
+      alert(`Solo puedes reservar ${remainingToAssign.bonificacion} caras de bonificación`);
+      return;
+    }
+
+    const newReservas: ReservaItem[] = [];
+    selectedInventory.forEach(invId => {
+      const inv = processedInventory.find(i => i.id === invId);
+      if (inv) {
+        newReservas.push({
+          id: `${selectedCaraForSearch.localId}-${invId}-bonificacion-${Date.now()}`,
+          inventario_id: invId,
+          codigo_unico: inv.codigo_unico || `INV-${invId}`,
+          tipo: 'Bonificacion',
+          catorcena: catorcenaInicio || 1,
+          anio: yearInicio || new Date().getFullYear(),
+          latitud: inv.latitud || 0,
+          longitud: inv.longitud || 0,
+          plaza: inv.plaza || '',
+          formato: inv.tipo_de_mueble || '',
+          ubicacion: inv.ubicacion,
+        });
+      }
+    });
+
+    setReservas(prev => [...prev, ...newReservas]);
+    setSelectedInventory(new Set());
+  };
+
+  // Go back to main view
+  const handleBackToMain = () => {
+    setViewState('main');
+    setSelectedCaraForSearch(null);
+    setSelectedInventory(new Set());
+  };
+
+  // Handle save
+  const handleSave = () => {
+    console.log('Saving...', { asignados, nombreCampania, notas, descripcion, caras, reservas });
+    onClose();
+  };
+
+  // Get map center from processed inventory data
+  const mapCenter = useMemo(() => {
+    if (processedInventory && processedInventory.length > 0) {
+      const firstWithCoords = processedInventory.find(i => i.latitud && i.longitud);
+      if (firstWithCoords) {
+        return { lat: firstWithCoords.latitud, lng: firstWithCoords.longitud };
+      }
+    }
+    // Fallback to selected cara city or default
+    return { lat: 20.6597, lng: -103.3496 }; // Default: Guadalajara
+  }, [processedInventory]);
+
+  // Get map center for reservados
+  const reservadosMapCenter = useMemo(() => {
+    const caraReservas = reservas.filter(r => r.id.startsWith(selectedCaraForSearch?.localId || ''));
+    if (caraReservas.length > 0) {
+      const firstWithCoords = caraReservas.find(r => r.latitud && r.longitud);
+      if (firstWithCoords) {
+        return { lat: firstWithCoords.latitud, lng: firstWithCoords.longitud };
+      }
+    }
+    return mapCenter;
+  }, [reservas, selectedCaraForSearch, mapCenter]);
+
+  // Get reservas for current cara
+  const currentCaraReservas = useMemo(() => {
+    return reservas.filter(r => r.id.startsWith(selectedCaraForSearch?.localId || ''));
+  }, [reservas, selectedCaraForSearch]);
+
+  // Remove a reserva
+  const handleRemoveReserva = (reservaId: string) => {
+    setReservas(prev => prev.filter(r => r.id !== reservaId));
+  };
+
+  if (!isOpen) return null;
+
+  // Render inventory search view
+  if (viewState === 'search-inventory') {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
+
+        <div className="relative w-[95vw] max-w-[1600px] h-[90vh] bg-zinc-900 rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={handleBackToMain}
+                className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Buscar Inventario</h2>
+                <p className="text-sm text-zinc-400">
+                  {selectedCaraForSearch?.formato} - {selectedCaraForSearch?.ciudad || selectedCaraForSearch?.estados}
+                </p>
+              </div>
+            </div>
+            <button onClick={handleBackToMain} className="p-2 rounded-lg text-zinc-400 hover:text-white">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Compact KPIs with progress bars */}
+          <div className="px-6 py-3 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 via-zinc-900/95 to-zinc-900/90">
+            <div className="flex items-center gap-4">
+              {/* Flujo KPI */}
+              <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    Flujo
+                  </span>
+                  <span className="text-sm font-bold text-blue-400">
+                    {(selectedCaraForSearch?.caras_flujo || 0) - remainingToAssign.flujo} / {selectedCaraForSearch?.caras_flujo || 0}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, ((selectedCaraForSearch?.caras_flujo || 0) - remainingToAssign.flujo) / (selectedCaraForSearch?.caras_flujo || 1) * 100)}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-xs text-zinc-500">
+                  <span className="text-blue-400 font-medium">{remainingToAssign.flujo}</span> restantes
+                </div>
+              </div>
+
+              {/* Contraflujo KPI */}
+              <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-amber-500" />
+                    Contraflujo
+                  </span>
+                  <span className="text-sm font-bold text-amber-400">
+                    {(selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo} / {selectedCaraForSearch?.caras_contraflujo || 0}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, ((selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo) / (selectedCaraForSearch?.caras_contraflujo || 1) * 100)}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-xs text-zinc-500">
+                  <span className="text-amber-400 font-medium">{remainingToAssign.contraflujo}</span> restantes
+                </div>
+              </div>
+
+              {/* Bonificacion KPI */}
+              <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    Bonificación
+                  </span>
+                  <span className="text-sm font-bold text-emerald-400">
+                    {(selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion} / {selectedCaraForSearch?.bonificacion || 0}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, ((selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion) / (selectedCaraForSearch?.bonificacion || 1) * 100)}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-xs text-zinc-500">
+                  <span className="text-emerald-400 font-medium">{remainingToAssign.bonificacion}</span> restantes
+                </div>
+              </div>
+
+              {/* Selection count */}
+              <div className="flex flex-col items-center justify-center px-4 py-2 rounded-xl bg-purple-500/10 border border-purple-500/30 min-w-[100px]">
+                <div className="flex items-center gap-1.5">
+                  <Package className="h-4 w-4 text-purple-400" />
+                  <span className="text-xl font-bold text-purple-300">{searchViewTab === 'buscar' ? selectedInventory.size : currentCaraReservas.length}</span>
+                </div>
+                <span className="text-xs text-zinc-500">{searchViewTab === 'buscar' ? 'seleccionados' : 'reservados'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabs: Buscar / Reservados */}
+          <div className="px-6 py-2 border-b border-zinc-800 bg-zinc-900/70">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setSearchViewTab('buscar')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  searchViewTab === 'buscar'
+                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                }`}
+              >
+                <Search className="h-4 w-4" />
+                Buscar Disponibles
+              </button>
+              <button
+                onClick={() => setSearchViewTab('reservados')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  searchViewTab === 'reservados'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                }`}
+              >
+                <Layers className="h-4 w-4" />
+                Mis Reservados
+                {currentCaraReservas.length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-emerald-500/30 text-emerald-300 rounded-full text-xs">
+                    {currentCaraReservas.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Conditional Content based on tab */}
+          {searchViewTab === 'buscar' ? (
+            <>
+              {/* Filters */}
+          <div className="px-6 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Flujo Toggle */}
+              <div className="flex bg-zinc-800/80 rounded-lg p-0.5 border border-zinc-700/50">
+                {(['Todos', 'Flujo', 'Contraflujo'] as const).map(opt => (
+                  <button
+                    key={opt}
+                    onClick={() => setFlujoFilter(opt)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                      flujoFilter === opt
+                        ? opt === 'Todos' ? 'bg-purple-500 text-white shadow' :
+                          opt === 'Flujo' ? 'bg-blue-500 text-white shadow' : 'bg-amber-500 text-white shadow'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+
+              <div className="w-px h-6 bg-zinc-700" />
+
+              {/* Unique filter */}
+              <button
+                onClick={() => { setShowOnlyUnicos(!showOnlyUnicos); if (!showOnlyUnicos) setShowOnlyCompletos(false); }}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  showOnlyUnicos
+                    ? 'bg-cyan-500 text-white shadow'
+                    : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                }`}
+              >
+                <Grid className="h-3.5 w-3.5" />
+                Únicos
+                {showOnlyUnicos && (
+                  <X className="h-3 w-3 ml-0.5 hover:text-cyan-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicos(false); }} />
+                )}
+              </button>
+
+              {/* Complete filter */}
+              <button
+                onClick={() => { setShowOnlyCompletos(!showOnlyCompletos); if (!showOnlyCompletos) setShowOnlyUnicos(false); }}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  showOnlyCompletos
+                    ? 'bg-pink-500 text-white shadow'
+                    : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                }`}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Completos
+                {showOnlyCompletos && (
+                  <X className="h-3 w-3 ml-0.5 hover:text-pink-200" onClick={(e) => { e.stopPropagation(); setShowOnlyCompletos(false); }} />
+                )}
+              </button>
+
+              {/* Distance grouping */}
+              <button
+                onClick={() => setGroupByDistance(!groupByDistance)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  groupByDistance
+                    ? 'bg-green-500 text-white shadow'
+                    : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                }`}
+              >
+                <Ruler className="h-3.5 w-3.5" />
+                Agrupar
+                {groupByDistance && (
+                  <X className="h-3 w-3 ml-0.5 hover:text-green-200" onClick={(e) => { e.stopPropagation(); setGroupByDistance(false); }} />
+                )}
+              </button>
+              {groupByDistance && (
+                <>
+                  <select
+                    value={distanciaGrupos}
+                    onChange={(e) => setDistanciaGrupos(parseInt(e.target.value))}
+                    className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                  >
+                    <option value={100}>100m</option>
+                    <option value={200}>200m</option>
+                    <option value={500}>500m</option>
+                    <option value={1000}>1km</option>
+                  </select>
+                  <input
+                    type="number"
+                    value={tamanoGrupo}
+                    onChange={(e) => setTamanoGrupo(parseInt(e.target.value) || 10)}
+                    className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                    min={2}
+                    max={50}
+                  />
+                </>
+              )}
+
+              {/* POI filter chip */}
+              {poiFilterIds !== null && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-500 text-white shadow">
+                  <MapPin className="h-3.5 w-3.5" />
+                  Filtro POI ({poiFilterIds.size})
+                  <X className="h-3 w-3 ml-0.5 cursor-pointer hover:text-emerald-200" onClick={clearPOIFilter} />
+                </div>
+              )}
+
+              <div className="flex-1" />
+
+              {/* Stats & Actions */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500 px-2">
+                  <span className="text-purple-300 font-bold">{processedInventory.length}</span> resultados
+                </span>
+
+                {/* Clear all filters */}
+                {(flujoFilter !== 'Todos' || showOnlyUnicos || showOnlyCompletos || groupByDistance || poiFilterIds !== null) && (
+                  <button
+                    onClick={clearAllFilters}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Limpiar
+                  </button>
+                )}
+
+                {/* Refresh */}
+                <button
+                  onClick={handleRefetchDisponibles}
+                  disabled={isSearching}
+                  className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-purple-400 hover:bg-purple-500/10 transition-colors disabled:opacity-50"
+                  title="Recargar datos"
+                >
+                  <Search className={`h-4 w-4 ${isSearching ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Content - Map and Table */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* Table */}
+            <div className="w-1/2 border-r border-zinc-800 flex flex-col">
+              <div className="flex-1 overflow-auto">
+                {isSearching ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+                  </div>
+                ) : processedInventory.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-zinc-500">
+                    <MapPin className="h-12 w-12 mb-4 opacity-30" />
+                    <p className="text-lg">No hay inventario disponible</p>
+                    <p className="text-sm">Intenta cambiar los filtros o la cara seleccionada</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="bg-zinc-800/50 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs text-zinc-400 font-medium w-10">
+                          <input
+                            type="checkbox"
+                            checked={processedInventory.length > 0 && selectedInventory.size === processedInventory.length}
+                            onChange={() => {
+                              if (selectedInventory.size === processedInventory.length) {
+                                setSelectedInventory(new Set());
+                              } else {
+                                setSelectedInventory(new Set(processedInventory.map(i => i.id)));
+                              }
+                            }}
+                            className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                          />
+                        </th>
+                        <th
+                          className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                          onClick={() => handleSort('codigo_unico')}
+                        >
+                          <div className="flex items-center gap-1">
+                            Código
+                            {sortColumn === 'codigo_unico' && (
+                              sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                            )}
+                            {sortColumn !== 'codigo_unico' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                          </div>
+                        </th>
+                        <th
+                          className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                          onClick={() => handleSort('tipo_de_cara')}
+                        >
+                          <div className="flex items-center gap-1">
+                            Cara
+                            {sortColumn === 'tipo_de_cara' && (
+                              sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                            )}
+                            {sortColumn !== 'tipo_de_cara' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                          </div>
+                        </th>
+                        <th
+                          className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                          onClick={() => handleSort('plaza')}
+                        >
+                          <div className="flex items-center gap-1">
+                            Plaza
+                            {sortColumn === 'plaza' && (
+                              sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                            )}
+                            {sortColumn !== 'plaza' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                          </div>
+                        </th>
+                        <th
+                          className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                          onClick={() => handleSort('nivel_socioeconomico')}
+                        >
+                          <div className="flex items-center gap-1">
+                            NSE
+                            {sortColumn === 'nivel_socioeconomico' && (
+                              sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                            )}
+                            {sortColumn !== 'nivel_socioeconomico' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                          </div>
+                        </th>
+                        <th
+                          className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                          onClick={() => handleSort('ubicacion')}
+                        >
+                          <div className="flex items-center gap-1">
+                            Ubicación
+                            {sortColumn === 'ubicacion' && (
+                              sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                            )}
+                            {sortColumn !== 'ubicacion' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupByDistance && groupedInventory ? (
+                        // Grouped view with collapsible sections
+                        groupedInventory.map(([groupName, items]) => (
+                          <React.Fragment key={groupName}>
+                            {/* Group Header */}
+                            <tr
+                              className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
+                              onClick={() => toggleGroupExpansion(groupName)}
+                            >
+                              <td colSpan={6} className="px-3 py-2">
+                                <div className="flex items-center gap-3">
+                                  {expandedGroups.has(groupName) ? (
+                                    <ChevronDown className="h-4 w-4 text-purple-400" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 text-purple-400" />
+                                  )}
+                                  <span className="text-sm font-medium text-white">{groupName}</span>
+                                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                                    {items.length} sitios
+                                  </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      selectAllInGroup(items);
+                                    }}
+                                    className="ml-auto text-xs text-purple-400 hover:text-purple-300"
+                                  >
+                                    Seleccionar todos
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            {/* Group Items */}
+                            {expandedGroups.has(groupName) && items.map((inv) => (
+                              <tr
+                                key={inv.id}
+                                onClick={() => toggleInventorySelection(inv.id)}
+                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${
+                                  selectedInventory.has(inv.id)
+                                    ? 'bg-purple-500/10'
+                                    : inv.ya_reservado_para_cara
+                                      ? 'bg-green-500/5'
+                                      : 'hover:bg-zinc-800/30'
+                                }`}
+                              >
+                                <td className="px-3 py-2 pl-8">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedInventory.has(inv.id)}
+                                    onChange={() => toggleInventorySelection(inv.id)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                                    inv.tipo_de_cara === 'Flujo'
+                                      ? 'bg-blue-500/20 text-blue-300'
+                                      : inv.tipo_de_cara === 'Completo'
+                                        ? 'bg-purple-500/20 text-purple-300'
+                                        : 'bg-amber-500/20 text-amber-300'
+                                  }`}>
+                                    {inv.tipo_de_cara || '-'}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
+                                <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
+                                <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
+                                  {inv.ubicacion}
+                                </td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
+                        ))
+                      ) : (
+                        // Normal flat view
+                        processedInventory.map((inv) => (
+                          <tr
+                            key={inv.id}
+                            onClick={() => toggleInventorySelection(inv.id)}
+                            className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${
+                              selectedInventory.has(inv.id)
+                                ? 'bg-purple-500/10'
+                                : inv.ya_reservado_para_cara
+                                  ? 'bg-green-500/5'
+                                  : 'hover:bg-zinc-800/30'
+                            }`}
+                          >
+                            <td className="px-3 py-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedInventory.has(inv.id)}
+                                onChange={() => toggleInventorySelection(inv.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                            <td className="px-3 py-2">
+                              <span className={`px-2 py-0.5 rounded-full text-xs ${
+                                inv.tipo_de_cara === 'Flujo'
+                                  ? 'bg-blue-500/20 text-blue-300'
+                                  : inv.tipo_de_cara === 'Completo'
+                                    ? 'bg-purple-500/20 text-purple-300'
+                                    : 'bg-amber-500/20 text-amber-300'
+                              }`}>
+                                {inv.tipo_de_cara || '-'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
+                            <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
+                              {inv.ubicacion}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleReservar}
+                    disabled={selectedInventory.size === 0 || (remainingToAssign.flujo <= 0 && remainingToAssign.contraflujo <= 0)}
+                    className="flex-1 px-4 py-2.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-xl text-sm font-medium hover:bg-purple-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <Target className="h-4 w-4" />
+                    Reservar
+                  </button>
+                  <button
+                    onClick={handleReserveAsBonificacion}
+                    disabled={selectedInventory.size === 0 || remainingToAssign.bonificacion <= 0}
+                    className="flex-1 px-4 py-2.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-sm font-medium hover:bg-emerald-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <Gift className="h-4 w-4" />
+                    Bonificación
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Advanced Map */}
+            <div className="w-1/2">
+              {mapsLoaded ? (
+                <AdvancedMapComponent
+                  inventarios={processedInventory}
+                  selectedInventory={selectedInventory}
+                  onToggleSelection={toggleInventorySelection}
+                  mapCenter={mapCenter}
+                  onFilterByPOI={handlePOIFilter}
+                  hasPOIFilter={poiFilterIds !== null}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full bg-zinc-800">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+                </div>
+              )}
+            </div>
+          </div>
+            </>
+          ) : (
+            /* RESERVADOS TAB CONTENT */
+            <div className="flex-1 flex overflow-hidden">
+              {/* Reservados Table */}
+              <div className="w-1/2 flex flex-col border-r border-zinc-800">
+                {currentCaraReservas.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-zinc-500">
+                    <Layers className="h-16 w-16 mb-4 opacity-30" />
+                    <p className="text-lg font-medium">No hay reservas</p>
+                    <p className="text-sm">Agrega inventarios desde la pestaña "Buscar Disponibles"</p>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-auto">
+                    <table className="w-full">
+                      <thead className="sticky top-0 bg-zinc-900/95 backdrop-blur-sm z-10">
+                        <tr className="border-b border-zinc-800">
+                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Código</th>
+                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Tipo</th>
+                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Plaza</th>
+                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Ubicación</th>
+                          <th className="px-4 py-3 text-center text-xs text-zinc-400 font-medium">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentCaraReservas.map((reserva) => (
+                          <tr
+                            key={reserva.id}
+                            className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors"
+                          >
+                            <td className="px-4 py-3 text-zinc-300 font-mono text-sm">{reserva.codigo_unico}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 rounded-full text-xs ${
+                                reserva.tipo === 'Flujo'
+                                  ? 'bg-blue-500/20 text-blue-300'
+                                  : reserva.tipo === 'Bonificacion'
+                                    ? 'bg-emerald-500/20 text-emerald-300'
+                                    : 'bg-amber-500/20 text-amber-300'
+                              }`}>
+                                {reserva.tipo}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-zinc-300">{reserva.plaza}</td>
+                            <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
+                              {reserva.ubicacion || '-'}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => handleRemoveReserva(reserva.id)}
+                                className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                title="Quitar reserva"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Summary */}
+                {currentCaraReservas.length > 0 && (
+                  <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-4">
+                        <span className="text-zinc-500">
+                          <span className="text-blue-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Flujo').length}</span> Flujo
+                        </span>
+                        <span className="text-zinc-500">
+                          <span className="text-amber-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Contraflujo').length}</span> Contraflujo
+                        </span>
+                        <span className="text-zinc-500">
+                          <span className="text-emerald-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Bonificacion').length}</span> Bonificación
+                        </span>
+                      </div>
+                      <span className="text-zinc-400">
+                        Total: <span className="text-white font-medium">{currentCaraReservas.length}</span> reservados
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Map of Reservados */}
+              <div className="w-1/2">
+                {mapsLoaded ? (
+                  <GoogleMap
+                    mapContainerStyle={{ width: '100%', height: '100%' }}
+                    center={reservadosMapCenter}
+                    zoom={13}
+                    options={{
+                      styles: DARK_MAP_STYLES,
+                      disableDefaultUI: true,
+                      zoomControl: true,
+                    }}
+                  >
+                    {currentCaraReservas.map(reserva => (
+                      reserva.latitud && reserva.longitud && (
+                        <Marker
+                          key={reserva.id}
+                          position={{ lat: reserva.latitud, lng: reserva.longitud }}
+                          icon={{
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 10,
+                            fillColor: reserva.tipo === 'Flujo' ? '#3b82f6' : reserva.tipo === 'Bonificacion' ? '#10b981' : '#f59e0b',
+                            fillOpacity: 0.9,
+                            strokeColor: '#fff',
+                            strokeWeight: 2,
+                          }}
+                          title={`${reserva.codigo_unico} - ${reserva.tipo}`}
+                        />
+                      )
+                    ))}
+                  </GoogleMap>
+                ) : (
+                  <div className="flex items-center justify-center h-full bg-zinc-800">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Main view
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+
+      <div className="relative w-[95vw] max-w-[1400px] h-[90vh] bg-zinc-900 rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Asignar Inventario</h2>
+            <p className="text-sm text-zinc-400">Propuesta #{propuesta.id}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSave}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-xl text-sm font-medium hover:bg-purple-600 transition-colors"
+            >
+              <Save className="h-4 w-4" />
+              Guardar
+            </button>
+            <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:text-white">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-6 space-y-6">
+          {detailsLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+            </div>
+          ) : (
+            <>
+              {/* Section 1: Propuesta Summary */}
+              <div className="bg-zinc-800/30 rounded-2xl border border-zinc-700/50 overflow-hidden">
+                <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50">
+                  <h3 className="text-sm font-medium text-white flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-purple-400" />
+                    Resumen de Propuesta
+                  </h3>
+                </div>
+                <div className="p-5 space-y-4">
+                  {/* Client info - read only */}
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">CUIC</label>
+                      <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                        {solicitudDetails?.solicitud.cuic || '-'}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Razón Social</label>
+                      <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30 truncate">
+                        {solicitudDetails?.solicitud.razon_social || '-'}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Marca</label>
+                      <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                        {solicitudDetails?.solicitud.marca_nombre || '-'}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Asesor</label>
+                      <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                        {solicitudDetails?.solicitud.asesor || '-'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Editable fields */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Nombre de Campaña</label>
+                      <input
+                        type="text"
+                        value={nombreCampania}
+                        onChange={(e) => setNombreCampania(e.target.value)}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        placeholder="Nombre de la campaña"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Asignados</label>
+                      <div className="flex flex-wrap gap-1.5 min-h-[38px] p-2 bg-zinc-800 border border-zinc-700 rounded-lg">
+                        {asignados.length === 0 ? (
+                          <span className="text-zinc-500 text-sm">Sin asignar</span>
+                        ) : (
+                          asignados.map(user => (
+                            <span
+                              key={user.id}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-xs"
+                            >
+                              {user.nombre}
+                              <button
+                                onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
+                                className="hover:text-white"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Period */}
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Año Inicio</label>
+                      <select
+                        value={yearInicio || ''}
+                        onChange={(e) => setYearInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                      >
+                        <option value="">Seleccionar</option>
+                        {years.map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Catorcena Inicio</label>
+                      <select
+                        value={catorcenaInicio || ''}
+                        onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                      >
+                        <option value="">Seleccionar</option>
+                        {Array.from({ length: 26 }, (_, i) => i + 1).map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Año Fin</label>
+                      <select
+                        value={yearFin || ''}
+                        onChange={(e) => setYearFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                      >
+                        <option value="">Seleccionar</option>
+                        {years.map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Catorcena Fin</label>
+                      <select
+                        value={catorcenaFin || ''}
+                        onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                      >
+                        <option value="">Seleccionar</option>
+                        {Array.from({ length: 26 }, (_, i) => i + 1).map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Notes and Description */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Notas</label>
+                      <textarea
+                        value={notas}
+                        onChange={(e) => setNotas(e.target.value)}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20"
+                        placeholder="Notas adicionales..."
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Descripción</label>
+                      <textarea
+                        value={descripcion}
+                        onChange={(e) => setDescripcion(e.target.value)}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20"
+                        placeholder="Descripción de la propuesta..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Caras/Formatos */}
+              <div className="bg-zinc-800/30 rounded-2xl border border-zinc-700/50 overflow-hidden">
+                <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50 flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-white flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-purple-400" />
+                    Formatos / Caras
+                  </h3>
+                  <div className="flex items-center gap-4 text-xs">
+                    <span className="text-zinc-400">
+                      Renta: <span className="text-purple-300 font-medium">{carasKPIs.totalRenta}</span>
+                    </span>
+                    <span className="text-zinc-400">
+                      Bonificación: <span className="text-emerald-300 font-medium">{carasKPIs.totalBonificacion}</span>
+                    </span>
+                    <span className="text-zinc-400">
+                      Inversión: <span className="text-amber-300 font-medium">{formatCurrency(carasKPIs.totalInversion)}</span>
+                    </span>
+                    <button
+                      onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Agregar Cara
+                    </button>
+                  </div>
+                </div>
+
+                {/* Add/Edit Cara Form */}
+                {showAddCaraForm && (
+                  <div className="px-5 py-4 bg-zinc-800/50 border-b border-zinc-700/50">
+                    <h4 className="text-sm font-medium text-white mb-4">
+                      {editingCaraId ? 'Editar Cara' : 'Nueva Cara'}
+                    </h4>
+                    <div className="grid grid-cols-4 gap-4 mb-4">
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Estado</label>
+                        <select
+                          value={newCara.estados}
+                          onChange={(e) => setNewCara({ ...newCara, estados: e.target.value })}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {solicitudFilters?.estados.map(e => (
+                            <option key={e} value={e}>{e}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Ciudad</label>
+                        <select
+                          value={newCara.ciudad}
+                          onChange={(e) => setNewCara({ ...newCara, ciudad: e.target.value })}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {solicitudFilters?.ciudades
+                            .filter(c => !newCara.estados || c.estado === newCara.estados)
+                            .map(c => (
+                              <option key={c.ciudad} value={c.ciudad}>{c.ciudad}</option>
+                            ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Formato</label>
+                        <select
+                          value={newCara.formato}
+                          onChange={(e) => setNewCara({ ...newCara, formato: e.target.value })}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {solicitudFilters?.formatos.map(f => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Tipo</label>
+                        <select
+                          value={newCara.tipo}
+                          onChange={(e) => setNewCara({ ...newCara, tipo: e.target.value })}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          <option value="Tradicional">Tradicional</option>
+                          <option value="Digital">Digital</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-5 gap-4 mb-4">
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Caras Flujo</label>
+                        <input
+                          type="number"
+                          value={newCara.caras_flujo || ''}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            setNewCara({ ...newCara, caras_flujo: val, caras: val + (newCara.caras_contraflujo || 0) });
+                          }}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Caras Contraflujo</label>
+                        <input
+                          type="number"
+                          value={newCara.caras_contraflujo || ''}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            setNewCara({ ...newCara, caras_contraflujo: val, caras: (newCara.caras_flujo || 0) + val });
+                          }}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Bonificación</label>
+                        <input
+                          type="number"
+                          value={newCara.bonificacion || ''}
+                          onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Tarifa Pública</label>
+                        <input
+                          type="number"
+                          value={newCara.tarifa_publica || ''}
+                          onChange={(e) => setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">NSE</label>
+                        <select
+                          value={newCara.nivel_socioeconomico}
+                          onChange={(e) => setNewCara({ ...newCara, nivel_socioeconomico: e.target.value })}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {solicitudFilters?.nse.map(n => (
+                            <option key={n} value={n}>{n}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={handleCancelCaraForm}
+                        className="px-4 py-2 bg-zinc-700 text-zinc-300 rounded-lg text-sm hover:bg-zinc-600 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleSaveCara}
+                        className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors"
+                      >
+                        {editingCaraId ? 'Actualizar' : 'Agregar'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="divide-y divide-zinc-700/30">
+                  {caras.length === 0 ? (
+                    <div className="p-8 text-center text-zinc-500">
+                      <Layers className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                      <p>No hay formatos/caras en esta propuesta</p>
+                      <button
+                        onClick={() => setShowAddCaraForm(true)}
+                        className="mt-3 text-purple-400 hover:text-purple-300 text-sm"
+                      >
+                        Agregar primera cara
+                      </button>
+                    </div>
+                  ) : (
+                    carasGroupedByCatorcena.map(([periodo, groupData]) => {
+                      const isCatorcenaExpanded = expandedCatorcenas.has(periodo);
+                      const catorcenaLabel = groupData.catorcenaNum
+                        ? `Catorcena #${groupData.catorcenaNum}${groupData.year ? ` - ${groupData.year}` : ''}`
+                        : `Periodo: ${periodo}`;
+
+                      return (
+                        <div key={periodo}>
+                          {/* Period Header - Collapsible */}
+                          <div
+                            className="px-5 py-3 bg-purple-500/10 border-b border-purple-500/20 flex items-center gap-3 cursor-pointer hover:bg-purple-500/15 transition-colors"
+                            onClick={() => toggleCatorcena(periodo)}
+                          >
+                            <button className="text-purple-400">
+                              {isCatorcenaExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            </button>
+                            <span className="text-sm font-medium text-purple-300">
+                              {catorcenaLabel}
+                            </span>
+                            <span className="text-xs text-zinc-500">
+                              ({groupData.caras.length} {groupData.caras.length === 1 ? 'formato' : 'formatos'})
+                            </span>
+                          </div>
+
+                          {isCatorcenaExpanded && groupData.caras.map((cara) => {
+                            const isExpanded = expandedCaras.has(cara.localId);
+                            const caraReservas = reservas.filter(r => r.id.startsWith(cara.localId));
+                            const hasReservas = caraReservas.length > 0;
+                            const status = getCaraCompletionStatus(cara);
+                            const totalCaras = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
+                            const carasFaltantes = status.totalRequerido - status.totalReservado;
+
+                            return (
+                              <div key={cara.localId} className={`${status.isComplete ? 'bg-emerald-500/5' : 'bg-zinc-800/20'}`}>
+                                {/* Cara header */}
+                                <div
+                                  className="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-zinc-800/30 transition-colors"
+                                  onClick={() => toggleCara(cara.localId)}
+                                >
+                                  {/* Completion indicator */}
+                                  <div className={`w-2 h-2 rounded-full ${status.isComplete ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+
+                                  <button className="text-zinc-400">
+                                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                  </button>
+                                  <div className="flex-1 grid grid-cols-5 gap-3 text-sm">
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">Formato</span>
+                                      <p className="text-white font-medium">{cara.formato || '-'}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">Ciudad</span>
+                                      <p className="text-zinc-300">{cara.ciudad || cara.estados || '-'}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">Artículo</span>
+                                      <p className="text-zinc-300">{cara.articulo || '-'}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">Caras</span>
+                                      <p className="text-white font-medium">{totalCaras}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">Estado</span>
+                                      <p className={`text-xs font-medium ${status.isComplete ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                        {status.isComplete ? 'Completo' : `${carasFaltantes} cara${carasFaltantes !== 1 ? 's' : ''} faltante${carasFaltantes !== 1 ? 's' : ''}`}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleSearchInventory(cara); }}
+                                    disabled={status.isComplete}
+                                    className={`p-2 rounded-lg border transition-colors ${
+                                      status.isComplete
+                                        ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                        : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
+                                    }`}
+                                    title={status.isComplete ? 'Ya está completo' : 'Buscar inventario'}
+                                  >
+                                    <Search className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
+                                    disabled={hasReservas}
+                                    className={`p-2 rounded-lg border transition-colors ${
+                                      hasReservas
+                                        ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                                    }`}
+                                    title={hasReservas ? 'No se puede editar (tiene reservas)' : 'Editar'}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
+                                    disabled={hasReservas}
+                                    className={`p-2 rounded-lg border transition-colors ${
+                                      hasReservas
+                                        ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                        : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+                                    }`}
+                                    title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+
+                          {/* Expanded content - reservas */}
+                          {isExpanded && (
+                            <div className="px-5 py-3 bg-zinc-900/30 border-t border-zinc-700/30">
+                              {caraReservas.length === 0 ? (
+                                <div className="text-center py-4 text-zinc-500 text-sm">
+                                  <MapPin className="h-6 w-6 mx-auto mb-2 opacity-30" />
+                                  <p>Sin inventario reservado</p>
+                                  <button
+                                    onClick={() => handleSearchInventory(cara)}
+                                    className="mt-2 text-purple-400 hover:text-purple-300 text-xs"
+                                  >
+                                    Buscar inventario
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="text-zinc-500 text-xs">
+                                        <th className="text-left pb-2">Código</th>
+                                        <th className="text-left pb-2">Tipo</th>
+                                        <th className="text-left pb-2">Plaza</th>
+                                        <th className="text-left pb-2">Formato</th>
+                                        <th className="text-left pb-2">Ubicación</th>
+                                        <th className="text-right pb-2">Acciones</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {caraReservas.map(reserva => (
+                                        <tr key={reserva.id} className="border-t border-zinc-700/30">
+                                          <td className="py-2 text-zinc-300 font-mono text-xs">{reserva.codigo_unico}</td>
+                                          <td className="py-2">
+                                            <span className={`px-2 py-0.5 rounded-full text-xs ${
+                                              reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
+                                              reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' :
+                                              'bg-emerald-500/20 text-emerald-300'
+                                            }`}>
+                                              {reserva.tipo}
+                                            </span>
+                                          </td>
+                                          <td className="py-2 text-zinc-300">{reserva.plaza}</td>
+                                          <td className="py-2 text-zinc-300">{reserva.formato}</td>
+                                          <td className="py-2 text-zinc-400 truncate max-w-[200px]">{reserva.ubicacion}</td>
+                                          <td className="py-2 text-right">
+                                            <button
+                                              onClick={() => setReservas(prev => prev.filter(r => r.id !== reserva.id))}
+                                              className="p-1 text-red-400 hover:text-red-300"
+                                            >
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })
+            )}
+            </div>
+          </div>
+
+              {/* Section 3: Reservas Summary with Map and KPIs */}
+              {reservas.length > 0 && (
+                <div className="bg-zinc-800/30 rounded-2xl border border-zinc-700/50 overflow-hidden">
+                  <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50">
+                    <h3 className="text-sm font-medium text-white flex items-center gap-2">
+                      <Map className="h-4 w-4 text-purple-400" />
+                      Resumen de Reservas
+                    </h3>
+                  </div>
+                  <div className="flex min-h-[420px]">
+                    {/* KPIs Panel */}
+                    <div className="w-64 p-4 border-r border-zinc-700/50 bg-zinc-900/30 space-y-4 flex-shrink-0">
+                      {/* Total Reservadas */}
+                      <div className="p-3 bg-purple-500/10 rounded-xl border border-purple-500/20">
+                        <p className="text-xs text-zinc-400 mb-1">Total Reservadas</p>
+                        <p className="text-2xl font-bold text-purple-400">{reservasKPIs.total}</p>
+                      </div>
+
+                      {/* Renta vs Bonificadas */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20">
+                          <p className="text-xs text-zinc-400 mb-1">Renta</p>
+                          <p className="text-xl font-bold text-blue-400">{reservasKPIs.renta}</p>
+                        </div>
+                        <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                          <p className="text-xs text-zinc-400 mb-1">Bonificadas</p>
+                          <p className="text-xl font-bold text-emerald-400">{reservasKPIs.bonificadas}</p>
+                        </div>
+                      </div>
+
+                      {/* Digitales */}
+                      <div className="p-3 bg-cyan-500/10 rounded-xl border border-cyan-500/20">
+                        <p className="text-xs text-zinc-400 mb-1">Digitales</p>
+                        <p className="text-xl font-bold text-cyan-400">{reservasKPIs.digitales}</p>
+                      </div>
+
+                      {/* Dinero Acumulado */}
+                      <div className="p-3 bg-gradient-to-br from-amber-500/10 to-orange-500/10 rounded-xl border border-amber-500/20">
+                        <p className="text-xs text-zinc-400 mb-1">Inversión Acumulada</p>
+                        <p className="text-xl font-bold text-amber-400">
+                          ${reservasKPIs.dineroTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+
+                      {/* Breakdown */}
+                      <div className="pt-3 border-t border-zinc-700/50">
+                        <p className="text-xs text-zinc-500 mb-2">Desglose por tipo:</p>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-zinc-400">Flujo:</span>
+                            <span className="text-blue-300 font-medium">{reservasKPIs.flujo}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-400">Contraflujo:</span>
+                            <span className="text-amber-300 font-medium">{reservasKPIs.contraflujo}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-400">Bonificación:</span>
+                            <span className="text-emerald-300 font-medium">{reservasKPIs.bonificadas}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Map */}
+                    <div className="flex-1">
+                      {mapsLoaded ? (
+                        <GoogleMap
+                          mapContainerStyle={{ width: '100%', height: '100%' }}
+                          center={{ lat: 20.6597, lng: -103.3496 }}
+                          zoom={11}
+                          options={{
+                            styles: DARK_MAP_STYLES,
+                            disableDefaultUI: true,
+                            zoomControl: true,
+                          }}
+                        >
+                        {reservas.map(reserva => (
+                          reserva.latitud && reserva.longitud && (
+                            <Marker
+                              key={reserva.id}
+                              position={{ lat: reserva.latitud, lng: reserva.longitud }}
+                              icon={{
+                                path: google.maps.SymbolPath.CIRCLE,
+                                scale: 8,
+                                fillColor: reserva.tipo === 'Flujo' ? '#3b82f6' :
+                                           reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
+                                fillOpacity: 0.9,
+                                strokeColor: '#fff',
+                                strokeWeight: 2,
+                              }}
+                            />
+                          )
+                        ))}
+                        </GoogleMap>
+                      ) : (
+                        <div className="flex items-center justify-center h-full bg-zinc-800">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

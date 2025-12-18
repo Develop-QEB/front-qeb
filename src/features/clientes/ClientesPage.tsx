@@ -2,11 +2,260 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Users, Building2, Tag, Database, Cloud, Plus, Trash2,
-  Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal, Package, RefreshCw
+  Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal, Package, RefreshCw,
+  Eye, User, Calendar, Briefcase, Hash, FileText
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { clientesService } from '../../services/clientes.service';
 import { Cliente } from '../../types';
+
+// Helper para formatear fechas
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return '-';
+  try {
+    return new Date(dateStr).toLocaleDateString('es-MX', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+// ============ VIEW CLIENTE MODAL ============
+interface ViewClienteModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  cliente: Cliente | null;
+}
+
+function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
+  // Bloquear scroll del body cuando el modal está abierto
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  if (!isOpen || !cliente) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 isolate">
+      <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative z-50">
+        {/* Header */}
+        <div className="relative px-6 py-5 border-b border-purple-500/20 bg-gradient-to-r from-purple-600/20 via-fuchsia-600/15 to-pink-600/10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-purple-500/25">
+                <Users className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-white">Cliente</h2>
+                  <span className="font-mono text-sm px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    CUIC: {cliente.CUIC || '-'}
+                  </span>
+                </div>
+                <p className="text-zinc-400 text-sm">{cliente.T0_U_Cliente || 'Sin nombre'}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-xl transition-colors">
+              <X className="h-5 w-5 text-zinc-400" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-5">
+          <div className="space-y-5">
+            {/* Stats Row */}
+            <div className="bg-gradient-to-r from-purple-600/10 via-fuchsia-600/10 to-pink-600/10 rounded-2xl p-5 border border-purple-500/20">
+              <div className="grid grid-cols-4 gap-6">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-white font-mono">{cliente.CUIC || '-'}</p>
+                  <p className="text-xs text-zinc-400 mt-1">CUIC</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-purple-400 truncate">{cliente.T2_U_Marca || '-'}</p>
+                  <p className="text-xs text-zinc-400 mt-1">Marca</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-cyan-400 truncate">{cliente.T0_U_Agencia || '-'}</p>
+                  <p className="text-xs text-zinc-400 mt-1">Agencia</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-amber-400 truncate">{cliente.T2_U_Categoria || '-'}</p>
+                  <p className="text-xs text-zinc-400 mt-1">Categoría</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Two Column Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Información General */}
+              <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <h3 className="text-sm font-semibold text-purple-400 mb-4 flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Información General
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500 text-sm">ID</span>
+                    <span className="text-white text-sm font-mono">{cliente.id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500 text-sm">CUIC</span>
+                    <span className="text-purple-300 text-sm font-mono font-medium">{cliente.CUIC || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500 text-sm">Cliente</span>
+                    <span className="text-white text-sm font-medium truncate ml-4 max-w-[200px]">{cliente.T0_U_Cliente || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500 text-sm">Razón Social</span>
+                    <span className="text-white text-sm truncate ml-4 max-w-[200px]">{cliente.T0_U_RazonSocial || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500 text-sm">Unidad de Negocio</span>
+                    <span className="text-cyan-300 text-sm">{cliente.T1_U_UnidadNegocio || cliente.ASESOR_U_UnidadNegocio || '-'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Asesor Comercial */}
+              <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <h3 className="text-sm font-semibold text-purple-400 mb-4 flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Asesor Comercial
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500 text-sm">Asesor</span>
+                    <span className="text-emerald-400 text-sm font-medium">{cliente.ASESOR_U_Asesor || cliente.T0_U_Asesor || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500 text-sm">ID Asesor</span>
+                    <span className="text-white text-sm font-mono">{cliente.ASESOR_U_IDAsesor || cliente.T0_U_IDAsesor || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500 text-sm">Código SAP</span>
+                    <span className="text-white text-sm font-mono">{cliente.ASESOR_U_SAPCode || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500 text-sm">Unidad Asesor</span>
+                    <span className="text-white text-sm">{cliente.ASESOR_U_UnidadNegocio || '-'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Three Column Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              {/* Agencia */}
+              <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <h3 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Agencia
+                </h3>
+                <p className="text-white font-medium text-lg">{cliente.T0_U_Agencia || '-'}</p>
+                <p className="text-zinc-500 text-xs mt-1">ID: {cliente.T0_U_IDAgencia || '-'}</p>
+              </div>
+
+              {/* Marca y Producto */}
+              <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <h3 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
+                  <Tag className="h-4 w-4" />
+                  Marca & Producto
+                </h3>
+                <p className="text-fuchsia-300 font-medium">{cliente.T2_U_Marca || '-'}</p>
+                <p className="text-zinc-500 text-xs mt-0.5">ID Marca: {cliente.T1_U_IDMarca || '-'}</p>
+                <div className="mt-2 pt-2 border-t border-zinc-700/50">
+                  <p className="text-amber-300 font-medium">{cliente.T2_U_Producto || '-'}</p>
+                  <p className="text-zinc-500 text-xs mt-0.5">ID Producto: {cliente.T2_U_IDProducto || '-'}</p>
+                </div>
+              </div>
+
+              {/* Categoría */}
+              <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <h3 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
+                  <Layers className="h-4 w-4" />
+                  Categoría
+                </h3>
+                <p className="text-white font-medium text-lg">{cliente.T2_U_Categoria || '-'}</p>
+                <p className="text-zinc-500 text-xs mt-1">ID: {cliente.T2_U_IDCategoria || '-'}</p>
+              </div>
+            </div>
+
+            {/* Vigencias */}
+            <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+              <h3 className="text-sm font-semibold text-purple-400 mb-4 flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Vigencias
+              </h3>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <span className="text-zinc-500 text-xs block mb-1">Válido Desde (T1)</span>
+                  <span className="text-white text-sm">{formatDate(cliente.T1_U_ValidFrom)}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 text-xs block mb-1">Válido Hasta (T1)</span>
+                  <span className="text-white text-sm">{formatDate(cliente.T1_U_ValidTo)}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 text-xs block mb-1">Válido Desde (T2)</span>
+                  <span className="text-white text-sm">{formatDate(cliente.T2_U_ValidFrom)}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 text-xs block mb-1">Válido Hasta (T2)</span>
+                  <span className="text-white text-sm">{formatDate(cliente.T2_U_ValidTo)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* IDs Técnicos */}
+            <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+              <h3 className="text-sm font-semibold text-purple-400 mb-4 flex items-center gap-2">
+                <Hash className="h-4 w-4" />
+                IDs Técnicos
+              </h3>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <span className="text-zinc-500 text-xs block mb-1">T0 IDACA</span>
+                  <span className="text-white text-sm font-mono">{cliente.T0_U_IDACA || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 text-xs block mb-1">T1 IDACA</span>
+                  <span className="text-white text-sm font-mono">{cliente.T1_U_IDACA || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 text-xs block mb-1">T1 IDCM</span>
+                  <span className="text-white text-sm font-mono">{cliente.T1_U_IDCM || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 text-xs block mb-1">T2 IDCM</span>
+                  <span className="text-white text-sm font-mono">{cliente.T2_U_IDCM || '-'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-zinc-800 bg-zinc-900/50">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 border border-zinc-700">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Simple Stat Card - Solo número grande
 function StatCard({
@@ -260,6 +509,10 @@ export function ClientesPage() {
   const [page, setPage] = useState(1);
   const limit = 20;
 
+  // Estado para el modal de ver cliente
+  const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
+  const [showViewModal, setShowViewModal] = useState(false);
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -454,11 +707,20 @@ export function ClientesPage() {
       )}
       <td className="px-4 py-3">
         <div className="flex items-center gap-1">
+          {/* Botón Ver */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setSelectedCliente(item); setShowViewModal(true); }}
+            className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border border-purple-500/20 hover:border-purple-500/40 transition-all"
+            title="Ver detalles"
+          >
+            <Eye className="h-3.5 w-3.5" />
+          </button>
           {isDb ? (
             <button
               onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
               disabled={deleteMutation.isPending}
               className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 transition-all disabled:opacity-50"
+              title="Eliminar"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -467,6 +729,7 @@ export function ClientesPage() {
               onClick={(e) => { e.stopPropagation(); handleAddToDatabase(item); }}
               disabled={createMutation.isPending}
               className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 transition-all disabled:opacity-50"
+              title="Agregar a BD"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
@@ -748,6 +1011,13 @@ export function ClientesPage() {
           )}
         </div>
       </div>
+
+      {/* Modal Ver Cliente */}
+      <ViewClienteModal
+        isOpen={showViewModal}
+        onClose={() => { setShowViewModal(false); setSelectedCliente(null); }}
+        cliente={selectedCliente}
+      />
     </div>
   );
 }
