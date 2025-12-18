@@ -2453,8 +2453,8 @@ export function CampanaDetailPage() {
                         <td className="p-2 text-white font-medium">{item.codigo_unico}</td>
                         <td className="p-2 text-zinc-300">{item.tipo_de_cara || '-'}</td>
                         <td className="p-2 text-zinc-300">{item.plaza || '-'}</td>
-                        <td className="p-2 text-zinc-400 max-w-[150px] truncate" title={item.ubicacion || ''}>
-                          {item.ubicacion || '-'}
+                        <td className="p-2 text-zinc-400 max-w-[150px] truncate" title={item.mueble || ''}>
+                          {item.mueble || '-'}
                         </td>
                         <td className="p-2 text-center">
                           <span className="px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-400">

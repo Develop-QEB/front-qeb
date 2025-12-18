@@ -10,6 +10,31 @@ export interface InventariosParams {
   plaza?: string;
 }
 
+export interface DisponiblesParams {
+  ciudad?: string;
+  estado?: string;
+  formato?: string;
+  flujo?: string;
+  nse?: string;
+  tipo?: string;
+  fecha_inicio?: string;
+  fecha_fin?: string;
+  solicitudCaraId?: number;
+}
+
+export interface InventarioDisponible extends Inventario {
+  espacios: { id: number; inventario_id: number; numero_espacio: number }[];
+  espacios_count: number;
+  ya_reservado_para_cara: boolean;
+}
+
+export interface DisponiblesResponse {
+  success: boolean;
+  data: InventarioDisponible[];
+  total: number;
+  filtros_aplicados: DisponiblesParams;
+}
+
 export const inventariosService = {
   async getAll(params: InventariosParams = {}): Promise<PaginatedResponse<Inventario>> {
     const response = await api.get<PaginatedResponse<Inventario>>('/inventarios', { params });
@@ -60,6 +85,47 @@ export const inventariosService = {
     const response = await api.get<ApiResponse<string[]>>('/inventarios/estatus');
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener estatus');
+    }
+    return response.data.data;
+  },
+
+  async getDisponibles(params: DisponiblesParams = {}): Promise<DisponiblesResponse> {
+    const response = await api.get<DisponiblesResponse>('/inventarios/disponibles', { params });
+    return response.data;
+  },
+
+  async getEstados(): Promise<string[]> {
+    const response = await api.get<ApiResponse<string[]>>('/inventarios/estados');
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener estados');
+    }
+    return response.data.data;
+  },
+
+  async getCiudadesByEstado(estado?: string): Promise<string[]> {
+    const response = await api.get<ApiResponse<string[]>>('/inventarios/ciudades', {
+      params: estado ? { estado } : {}
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener ciudades');
+    }
+    return response.data.data;
+  },
+
+  async getFormatosByCiudad(ciudad?: string): Promise<string[]> {
+    const response = await api.get<ApiResponse<string[]>>('/inventarios/formatos', {
+      params: ciudad ? { ciudad } : {}
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener formatos');
+    }
+    return response.data.data;
+  },
+
+  async getNSE(): Promise<string[]> {
+    const response = await api.get<ApiResponse<string[]>>('/inventarios/nse');
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener NSE');
     }
     return response.data.data;
   },

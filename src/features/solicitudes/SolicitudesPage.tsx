@@ -752,12 +752,12 @@ export function SolicitudesPage() {
             <div>
               <p className="text-zinc-400 text-sm font-medium mb-1">Total Solicitudes</p>
               <h3 className="text-4xl font-bold text-white tracking-tight">
-                {stats?.total.toLocaleString() ?? '0'}
+                {(data?.pagination?.total ?? stats?.total ?? 0).toLocaleString()}
               </h3>
             </div>
             <div className="mt-4 flex items-center gap-2">
               <span className="text-xs px-2 py-1 rounded-full bg-zinc-800/80 text-zinc-300 border border-zinc-700/50">
-                Todas las catorcenas
+                {(status || debouncedSearch) ? 'Filtrado' : 'Todas las catorcenas'}
               </span>
             </div>
           </div>
