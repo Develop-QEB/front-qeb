@@ -268,6 +268,15 @@ export interface Campana {
   inversion: number | null;
   comentario_cambio_status: string | null;
   updated_at: string | null;
+  // Campos adicionales del listado
+  cliente_nombre: string | null;
+  cliente_razon_social: string | null;
+  creador_nombre: string | null;
+  catorcena_inicio_num: number | null;
+  catorcena_inicio_anio: number | null;
+  catorcena_fin_num: number | null;
+  catorcena_fin_anio: number | null;
+  has_aps: boolean | number | null;
 }
 
 export interface CampanaStats {
