@@ -1,22 +1,84 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
-  Calendar, Clock, Eye, Megaphone
+  Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { campanasService } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Campana, Catorcena } from '../../types';
 import { formatDate } from '../../lib/utils';
+import { EditCampanaModal } from './EditCampanaModal';
 
-// Status Colors matching other pages
+// Colors for dynamic tags
+const TAG_COLORS = [
+  { bg: 'bg-cyan-500/15', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+  { bg: 'bg-fuchsia-500/15', text: 'text-fuchsia-300', border: 'border-fuchsia-500/30' },
+  { bg: 'bg-amber-500/15', text: 'text-amber-300', border: 'border-amber-500/30' },
+  { bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  { bg: 'bg-rose-500/15', text: 'text-rose-300', border: 'border-rose-500/30' },
+  { bg: 'bg-sky-500/15', text: 'text-sky-300', border: 'border-sky-500/30' },
+  { bg: 'bg-violet-500/15', text: 'text-violet-300', border: 'border-violet-500/30' },
+  { bg: 'bg-orange-500/15', text: 'text-orange-300', border: 'border-orange-500/30' },
+  { bg: 'bg-teal-500/15', text: 'text-teal-300', border: 'border-teal-500/30' },
+  { bg: 'bg-pink-500/15', text: 'text-pink-300', border: 'border-pink-500/30' },
+];
+
+function getTagColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+}
+
+// Status Colors - colores únicos por cada tipo de status
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   'activa': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
   'inactiva': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
+  'finalizada': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
+  'por iniciar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+  'en curso': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+  'pendiente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
+  'cancelada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
+  'pausada': { bg: 'bg-yellow-500/20', text: 'text-yellow-300', border: 'border-yellow-500/30' },
 };
 
 const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
+
+function getStatusColor(status: string | null | undefined) {
+  if (!status) return DEFAULT_STATUS_COLOR;
+  const normalized = status.toLowerCase().trim();
+  // Si existe en nuestro mapa, usar ese color
+  if (STATUS_COLORS[normalized]) {
+    return STATUS_COLORS[normalized];
+  }
+  // Si no, generar un color dinámico basado en el nombre
+  return getTagColor(status);
+}
+
+// Period badge colors
+const PERIOD_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  'Pasada': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
+  'En curso': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'Futura': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+};
+
+// Calculate period status based on dates
+function getPeriodStatus(fechaInicio: string, fechaFin: string): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const inicio = new Date(fechaInicio);
+  const fin = new Date(fechaFin);
+  inicio.setHours(0, 0, 0, 0);
+  fin.setHours(23, 59, 59, 999);
+
+  if (today > fin) return 'Pasada';
+  if (today < inicio) return 'Futura';
+  return 'En curso';
+}
 
 // Filter Chip Component with Search
 function FilterChip({
@@ -345,19 +407,21 @@ function GroupHeader({
   groupName,
   count,
   expanded,
-  onToggle
+  onToggle,
+  colSpan
 }: {
   groupName: string;
   count: number;
   expanded: boolean;
   onToggle: () => void;
+  colSpan: number;
 }) {
   return (
     <tr
       onClick={onToggle}
       className="bg-purple-500/10 border-b border-purple-500/20 cursor-pointer hover:bg-purple-500/20 transition-colors"
     >
-      <td colSpan={8} className="px-4 py-3">
+      <td colSpan={colSpan} className="px-4 py-3">
         <div className="flex items-center gap-2">
           {expanded ? (
             <ChevronDown className="h-4 w-4 text-purple-400" />
@@ -374,7 +438,11 @@ function GroupHeader({
   );
 }
 
+// Status options
+const STATUS_OPTIONS = ['activa', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
+
 export function CampanasPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -386,6 +454,9 @@ export function CampanasPage() {
   const [groupBy, setGroupBy] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [selectedCatorcenaInicio, setSelectedCatorcenaInicio] = useState('');
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedCampana, setSelectedCampana] = useState<Campana | null>(null);
   const limit = 20;
 
   // Debounce search
@@ -431,29 +502,67 @@ export function CampanasPage() {
     }) || null;
   }, [catorcenasData]);
 
-  // Filter data locally for search
+  // Generate catorcena options for filter (sorted by year desc, then catorcena desc)
+  const catorcenaInicioOptions = useMemo(() => {
+    if (!catorcenasData?.data) return [];
+    return catorcenasData.data
+      .slice()
+      .sort((a, b) => {
+        if (b.a_o !== a.a_o) return b.a_o - a.a_o;
+        return b.numero_catorcena - a.numero_catorcena;
+      })
+      .map(c => `Catorcena ${c.numero_catorcena}, ${c.a_o}`);
+  }, [catorcenasData]);
+
+  // Filter data locally for search and catorcena inicio
   const filteredData = useMemo(() => {
     let items = data?.data || [];
+
+    // Filter by search
     if (debouncedSearch && items.length > 0) {
       const searchLower = debouncedSearch.toLowerCase();
       items = items.filter(c =>
         c.nombre?.toLowerCase().includes(searchLower) ||
         c.articulo?.toLowerCase().includes(searchLower) ||
+        c.cliente_nombre?.toLowerCase().includes(searchLower) ||
+        c.cliente_razon_social?.toLowerCase().includes(searchLower) ||
         String(c.id).includes(searchLower)
       );
     }
+
+    // Filter by catorcena inicio
+    if (selectedCatorcenaInicio && items.length > 0) {
+      // Parse "Catorcena X, YYYY" format
+      const match = selectedCatorcenaInicio.match(/Catorcena (\d+), (\d+)/);
+      if (match) {
+        const catNum = parseInt(match[1]);
+        const catYear = parseInt(match[2]);
+        items = items.filter(c =>
+          c.catorcena_inicio_num === catNum && c.catorcena_inicio_anio === catYear
+        );
+      }
+    }
+
     return items;
-  }, [data?.data, debouncedSearch]);
+  }, [data?.data, debouncedSearch, selectedCatorcenaInicio]);
 
   // Group data
   const groupedData = useMemo(() => {
     if (!groupBy || !filteredData.length) return null;
 
-    const groupKey = groupBy as keyof Campana;
     const groups: Record<string, Campana[]> = {};
 
     filteredData.forEach(item => {
-      const key = String(item[groupKey] || 'Sin asignar');
+      let key = 'Sin asignar';
+      if (groupBy === 'catorcena_inicio') {
+        key = item.catorcena_inicio_num && item.catorcena_inicio_anio
+          ? `Catorcena ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
+          : 'Sin catorcena';
+      } else if (groupBy === 'status') {
+        key = item.status || 'Sin status';
+      } else if (groupBy === 'cliente') {
+        key = item.cliente_nombre || item.cliente_razon_social || 'Sin cliente';
+      }
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     });
@@ -474,34 +583,47 @@ export function CampanasPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy);
+  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || debouncedSearch || selectedCatorcenaInicio);
 
   const clearAllFilters = () => {
+    setSearch('');
     setStatus('');
     setYearInicio(undefined);
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
+    setSelectedCatorcenaInicio('');
     setGroupBy('');
     setExpandedGroups(new Set());
     setPage(1);
   };
 
-  // Handle export CSV
+  // Handle export CSV with all columns
   const handleExportCSV = () => {
     if (!filteredData.length) return;
 
-    const headers = ['ID', 'Nombre', 'Articulo', 'Total Caras', 'Bonificacion', 'Fecha Inicio', 'Fecha Fin', 'Status'];
-    const rows = filteredData.map(c => [
-      c.id,
-      c.nombre || '',
-      c.articulo || '',
-      c.total_caras || '',
-      c.bonificacion ? `${c.bonificacion}%` : '',
-      formatDate(c.fecha_inicio),
-      formatDate(c.fecha_fin),
-      c.status
-    ]);
+    const headers = [
+      'Periodo', 'Creador', 'Campaña', 'Cliente', 'Estatus', 'Catorcena Inicio', 'Catorcena Fin', 'APS'
+    ];
+    const rows = filteredData.map(c => {
+      const periodStatus = getPeriodStatus(c.fecha_inicio, c.fecha_fin);
+      const catIni = c.catorcena_inicio_num && c.catorcena_inicio_anio
+        ? `Cat ${c.catorcena_inicio_num} ${c.catorcena_inicio_anio}`
+        : '-';
+      const catFin = c.catorcena_fin_num && c.catorcena_fin_anio
+        ? `Cat ${c.catorcena_fin_num} ${c.catorcena_fin_anio}`
+        : '-';
+      return [
+        periodStatus,
+        c.creador_nombre || '',
+        c.nombre || '',
+        c.cliente_nombre || c.cliente_razon_social || '',
+        c.status,
+        catIni,
+        catFin,
+        c.has_aps ? 'Si' : 'No'
+      ];
+    });
 
     const csvContent = [
       headers.join(','),
@@ -515,44 +637,104 @@ export function CampanasPage() {
     link.click();
   };
 
+  const handleOpenCampana = (id: number) => {
+    navigate(`/campanas/detail/${id}`);
+  };
+
+  const handleEditCampana = (campana: Campana) => {
+    setSelectedCampana(campana);
+    setEditModalOpen(true);
+  };
+
   const renderCampanaRow = (item: Campana, index: number) => {
-    const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
+    const statusColor = getStatusColor(item.status);
+    const periodStatus = getPeriodStatus(item.fecha_inicio, item.fecha_fin);
+    const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
+
+    const catIni = item.catorcena_inicio_num && item.catorcena_inicio_anio
+      ? `Cat ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
+      : '-';
+    const catFin = item.catorcena_fin_num && item.catorcena_fin_anio
+      ? `Cat ${item.catorcena_fin_num}, ${item.catorcena_fin_anio}`
+      : '-';
 
     return (
       <tr key={`campana-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
-        <td className="px-4 py-3">
-          <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">#{item.id}</span>
+        {/* Periodo */}
+        <td className="px-3 py-3">
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
+            {periodStatus}
+          </span>
         </td>
-        <td className="px-4 py-3">
-          <span className="font-semibold text-white">{item.nombre}</span>
+        {/* Creador */}
+        <td className="px-3 py-3">
+          {item.creador_nombre ? (() => {
+            const color = getTagColor(item.creador_nombre);
+            return (
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${color.bg} ${color.text} border ${color.border}`}>
+                {item.creador_nombre}
+              </span>
+            );
+          })() : (
+            <span className="text-zinc-500 text-xs">-</span>
+          )}
         </td>
-        <td className="px-4 py-3">
-          <span className="text-zinc-400 text-sm">{item.articulo || '-'}</span>
+        {/* Campaña */}
+        <td className="px-3 py-3">
+          <span className="font-semibold text-white text-sm">{item.nombre}</span>
         </td>
-        <td className="px-4 py-3">
-          <span className="text-fuchsia-300 text-sm font-medium">{item.total_caras || '-'}</span>
+        {/* Cliente */}
+        <td className="px-3 py-3">
+          {(item.cliente_nombre || item.cliente_razon_social) ? (() => {
+            const clienteName = item.cliente_nombre || item.cliente_razon_social || '';
+            const color = getTagColor(clienteName);
+            return (
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${color.bg} ${color.text} border ${color.border} max-w-[180px]`} title={clienteName}>
+                <span className="truncate">{clienteName}</span>
+              </span>
+            );
+          })() : (
+            <span className="text-zinc-500 text-xs">-</span>
+          )}
         </td>
-        <td className="px-4 py-3">
-          <span className="text-emerald-400 text-sm">{item.bonificacion ? `${item.bonificacion}%` : '-'}</span>
-        </td>
-        <td className="px-4 py-3">
-          <span className="text-zinc-400 text-sm">{formatDate(item.fecha_inicio)}</span>
-        </td>
-        <td className="px-4 py-3">
-          <span className="text-zinc-400 text-sm">{formatDate(item.fecha_fin)}</span>
-        </td>
-        <td className="px-4 py-3">
+        {/* Status */}
+        <td className="px-3 py-3">
           <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
             {item.status}
           </span>
         </td>
-        <td className="px-4 py-3">
+        {/* Cat. Inicio */}
+        <td className="px-3 py-3">
+          <span className="text-zinc-300 text-xs">{catIni}</span>
+        </td>
+        {/* Cat. Fin */}
+        <td className="px-3 py-3">
+          <span className="text-zinc-300 text-xs">{catFin}</span>
+        </td>
+        {/* APS */}
+        <td className="px-3 py-3 text-center">
+          {item.has_aps ? (
+            <Check className="h-4 w-4 text-emerald-400 mx-auto" />
+          ) : (
+            <Minus className="h-4 w-4 text-zinc-600 mx-auto" />
+          )}
+        </td>
+        {/* Acciones */}
+        <td className="px-3 py-3">
           <div className="flex items-center gap-1">
             <button
+              onClick={() => handleOpenCampana(item.id)}
               className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border border-purple-500/20 hover:border-purple-500/40 transition-all"
-              title="Ver detalles"
+              title="Abrir campaña"
             >
               <Eye className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => handleEditCampana(item)}
+              className="p-2 rounded-lg bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border border-zinc-500/20 hover:border-zinc-500/40 transition-all"
+              title="Editar campaña"
+            >
+              <Edit2 className="h-3.5 w-3.5" />
             </button>
           </div>
         </td>
@@ -562,6 +744,8 @@ export function CampanasPage() {
 
   const totalPages = data?.pagination?.totalPages || 1;
   const total = data?.pagination?.total ?? 0;
+  const startItem = (page - 1) * limit + 1;
+  const endItem = Math.min(page * limit, total);
 
   return (
     <div className="min-h-screen">
@@ -578,7 +762,7 @@ export function CampanasPage() {
                 <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
                 <input
                   type="search"
-                  placeholder="Buscar campaña, articulo..."
+                  placeholder="Buscar campaña, articulo, cliente..."
                   className="w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -620,10 +804,19 @@ export function CampanasPage() {
                 </span>
                 <FilterChip
                   label="Status"
-                  options={['activa', 'inactiva']}
+                  options={STATUS_OPTIONS}
                   value={status}
                   onChange={(val) => { setStatus(val); setPage(1); }}
                   onClear={() => { setStatus(''); setPage(1); }}
+                />
+
+                {/* Catorcena Inicio Filter */}
+                <FilterChip
+                  label="Catorcena Inicio"
+                  options={catorcenaInicioOptions}
+                  value={selectedCatorcenaInicio}
+                  onChange={(val) => { setSelectedCatorcenaInicio(val); setPage(1); }}
+                  onClear={() => { setSelectedCatorcenaInicio(''); setPage(1); }}
                 />
 
                 <div className="h-4 w-px bg-zinc-700 mx-1" />
@@ -671,20 +864,24 @@ export function CampanasPage() {
                 </span>
                 <FilterChip
                   label="Sin agrupar"
-                  options={['status', 'articulo']}
+                  options={['status', 'cliente', 'catorcena_inicio']}
                   value={groupBy}
                   onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); setPage(1); }}
                   onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); setPage(1); }}
                 />
 
+                {/* Clear All Filters Button */}
                 {hasActiveFilters && (
-                  <button
-                    onClick={clearAllFilters}
-                    className="ml-auto flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300"
-                  >
-                    <X className="h-3 w-3" />
-                    Limpiar
-                  </button>
+                  <>
+                    <div className="h-4 w-px bg-zinc-700 mx-1" />
+                    <button
+                      onClick={clearAllFilters}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                    >
+                      <X className="h-3 w-3" />
+                      Limpiar filtros
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -714,15 +911,15 @@ export function CampanasPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">ID</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Nombre</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Articulo</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Total Caras</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Bonificacion</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Inicio</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fin</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider"></th>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Periodo</th>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Creador</th>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Inicio</th>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Fin</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-purple-300 uppercase tracking-wider">APS</th>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -734,6 +931,7 @@ export function CampanasPage() {
                             count={items.length}
                             expanded={expandedGroups.has(groupName)}
                             onToggle={() => toggleGroup(groupName)}
+                            colSpan={9}
                           />
                           {expandedGroups.has(groupName) && items.map((item, idx) => renderCampanaRow(item, idx))}
                         </React.Fragment>
@@ -756,13 +954,15 @@ export function CampanasPage() {
               </div>
 
               {/* Pagination */}
-              {!groupBy && data?.pagination && totalPages > 1 && (
+              {!groupBy && data?.pagination && (
                 <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
                   <span className="text-sm text-purple-300/70">
-                    Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{totalPages}</span>
-                    <span className="text-purple-300/50 ml-2">({total} total)</span>
+                    Mostrando <span className="font-semibold text-purple-300">{startItem}–{endItem}</span> de <span className="font-semibold text-purple-300">{total}</span> campañas
                   </span>
                   <div className="flex items-center gap-2">
+                    <span className="text-sm text-purple-300/50 mr-2">
+                      Página {page} de {totalPages}
+                    </span>
                     <button
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
@@ -785,7 +985,7 @@ export function CampanasPage() {
               {groupBy && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
                   <span className="text-xs text-zinc-500">
-                    Mostrando {filteredData.length} campañas agrupadas
+                    Mostrando {filteredData.length} campañas agrupadas por {groupBy}
                   </span>
                 </div>
               )}
@@ -793,6 +993,16 @@ export function CampanasPage() {
           )}
         </div>
       </div>
+
+      {/* Edit Modal */}
+      <EditCampanaModal
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setSelectedCampana(null);
+        }}
+        campana={selectedCampana}
+      />
     </div>
   );
 }
