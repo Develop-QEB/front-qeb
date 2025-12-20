@@ -21,15 +21,16 @@ export function Header({ title }: HeaderProps) {
   });
 
   // Fetch correos stats for the badge
-  const { data: correosStats } = useQuery({
-    queryKey: ['correos-stats'],
-    queryFn: () => correosService.getStats(),
-    refetchInterval: 30000,
-    enabled: !!user,
-  });
+  // const { data: correosStats } = useQuery({
+  //   queryKey: ['correos-stats'],
+  //   queryFn: () => correosService.getStats(),
+  //   refetchInterval: 30000,
+  //   enabled: !!user,
+  // });
 
   const unreadCount = stats?.no_leidas || 0;
-  const unreadCorreos = correosStats?.no_leidos || 0;
+  // const unreadCorreos = correosStats?.no_leidos || 0;
+  const unreadCorreos = 0; // Temporalmente deshabilitado
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-purple-900/30 bg-[#1a1025]/80 backdrop-blur-sm px-6">
