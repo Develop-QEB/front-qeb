@@ -3,14 +3,19 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
-  Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown
+  Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown,
+  List, LayoutGrid, Building2, MapPin, Loader2, Package
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
-import { campanasService } from '../../services/campanas.service';
+import { campanasService, InventarioConAPS, InventarioReservado } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Campana, Catorcena } from '../../types';
+
+// Tipos para las vistas
+type ViewType = 'tabla' | 'catorcena';
 import { formatDate } from '../../lib/utils';
-import { EditCampanaModal } from './EditCampanaModal';
+import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 
 // Colors for dynamic tags
 const TAG_COLORS = [
@@ -64,6 +69,36 @@ const PERIOD_COLORS: Record<string, { bg: string; text: string; border: string }
   'Pasada': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
   'En curso': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
   'Futura': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+};
+
+// Colores para gráficas
+const CHART_COLORS = {
+  status: {
+    'activa': '#10b981',        // emerald
+    'finalizada': '#3b82f6',    // blue
+    'por iniciar': '#f59e0b',   // amber
+    'inactiva': '#6b7280',      // gray
+    'en curso': '#06b6d4',      // cyan
+    'cancelada': '#ef4444',     // red
+    'atendida': '#8b5cf6',      // violet
+    'pendiente': '#f97316',     // orange
+    'pausada': '#64748b',       // slate
+    'completada': '#22c55e',    // green
+    'en revisión': '#a855f7',   // purple
+    'en revision': '#a855f7',   // purple (sin acento)
+    'aprobada': '#14b8a6',      // teal
+    'rechazada': '#dc2626',     // red-600
+    'sin status': '#71717a',    // zinc
+  },
+  // Array de colores para estatus no definidos
+  statusFallback: [
+    '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6', '#84cc16',
+    '#f97316', '#0ea5e9', '#d946ef', '#facc15', '#fb7185'
+  ],
+  category: [
+    '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444',
+    '#ec4899', '#6366f1', '#14b8a6', '#84cc16', '#f97316'
+  ]
 };
 
 // Calculate period status based on dates
@@ -459,6 +494,16 @@ export function CampanasPage() {
   const [selectedCampana, setSelectedCampana] = useState<Campana | null>(null);
   const limit = 20;
 
+  // Estado para la vista activa (tabs)
+  const [activeView, setActiveView] = useState<ViewType>('tabla');
+
+  // Estado para la vista de catorcena
+  const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
+  const [expandedCampanas, setExpandedCampanas] = useState<Set<number>>(new Set());
+  const [expandedAPS, setExpandedAPS] = useState<Set<string>>(new Set()); // key: campanaId-aps
+  const [campanaInventarios, setCampanaInventarios] = useState<Record<number, InventarioConAPS[]>>({});
+  const [loadingInventarios, setLoadingInventarios] = useState<Set<number>>(new Set());
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -580,6 +625,206 @@ export function CampanasPage() {
       }
       return next;
     });
+  };
+
+  // Funciones para la vista de catorcena
+  const toggleCatorcena = (catorcenaKey: string) => {
+    setExpandedCatorcenas(prev => {
+      const next = new Set(prev);
+      if (next.has(catorcenaKey)) {
+        next.delete(catorcenaKey);
+      } else {
+        next.add(catorcenaKey);
+      }
+      return next;
+    });
+  };
+
+  const toggleCampana = async (campanaId: number) => {
+    const isExpanding = !expandedCampanas.has(campanaId);
+
+    setExpandedCampanas(prev => {
+      const next = new Set(prev);
+      if (next.has(campanaId)) {
+        next.delete(campanaId);
+      } else {
+        next.add(campanaId);
+      }
+      return next;
+    });
+
+    // Si estamos expandiendo y no tenemos los datos, cargarlos
+    if (isExpanding && !campanaInventarios[campanaId]) {
+      setLoadingInventarios(prev => new Set(prev).add(campanaId));
+      try {
+        // Llamar a ambos endpoints en paralelo: con APS y sin APS
+        const [conAPS, sinAPS] = await Promise.all([
+          campanasService.getInventarioConAPS(campanaId),
+          campanasService.getInventarioReservado(campanaId)
+        ]);
+
+        // Combinar ambos resultados, agregando aps: 0 a los sin APS
+        const sinAPSConFormato: InventarioConAPS[] = sinAPS.map(item => ({
+          ...item,
+          aps: 0 // Marcar explícitamente como sin APS
+        }));
+
+        const todosLosInventarios = [...conAPS, ...sinAPSConFormato];
+        setCampanaInventarios(prev => ({ ...prev, [campanaId]: todosLosInventarios }));
+      } catch (error) {
+        console.error('Error cargando inventario:', error);
+        setCampanaInventarios(prev => ({ ...prev, [campanaId]: [] }));
+      } finally {
+        setLoadingInventarios(prev => {
+          const next = new Set(prev);
+          next.delete(campanaId);
+          return next;
+        });
+      }
+    }
+  };
+
+  const toggleAPS = (campanaId: number, aps: number | null) => {
+    const key = `${campanaId}-${aps ?? 'sin-aps'}`;
+    setExpandedAPS(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  // Agrupar campañas por catorcena para la vista alternativa
+  const campanasPorCatorcena = useMemo(() => {
+    const groups: Record<string, { catorcena: { num: number; anio: number }; campanas: Campana[] }> = {};
+
+    filteredData.forEach(item => {
+      if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
+        const key = `${item.catorcena_inicio_anio}-${String(item.catorcena_inicio_num).padStart(2, '0')}`;
+        if (!groups[key]) {
+          groups[key] = {
+            catorcena: { num: item.catorcena_inicio_num, anio: item.catorcena_inicio_anio },
+            campanas: []
+          };
+        }
+        groups[key].campanas.push(item);
+      }
+    });
+
+    // Ordenar por año desc, luego por catorcena desc
+    return Object.entries(groups)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([key, value]) => ({ key, ...value }));
+  }, [filteredData]);
+
+  // Estadísticas para gráfica de Status
+  const statusChartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+
+    filteredData.forEach(item => {
+      const status = item.status?.toLowerCase() || 'sin status';
+      counts[status] = (counts[status] || 0) + 1;
+    });
+
+    let fallbackIndex = 0;
+    return Object.entries(counts)
+      .map(([name, value]) => {
+        let color = CHART_COLORS.status[name as keyof typeof CHART_COLORS.status];
+        if (!color) {
+          // Usar color del array fallback para estatus no definidos
+          color = CHART_COLORS.statusFallback[fallbackIndex % CHART_COLORS.statusFallback.length];
+          fallbackIndex++;
+        }
+        return {
+          name: name.charAt(0).toUpperCase() + name.slice(1),
+          value,
+          color
+        };
+      })
+      .sort((a, b) => b.value - a.value);
+  }, [filteredData]);
+
+  // Estadísticas para gráfica de Categoría de Mercado
+  const categoryChartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const total = filteredData.length;
+
+    filteredData.forEach(item => {
+      const category = item.T2_U_Categoria || 'Sin categoría';
+      counts[category] = (counts[category] || 0) + 1;
+    });
+
+    return Object.entries(counts)
+      .map(([name, value], index) => ({
+        name,
+        value,
+        percentage: total > 0 ? ((value / total) * 100).toFixed(1) : '0',
+        color: CHART_COLORS.category[index % CHART_COLORS.category.length]
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [filteredData]);
+
+  // Agrupar inventarios primero por APS, luego por grupo_completo_id
+  const getInventarioAgrupadoPorAPS = (inventarios: InventarioConAPS[]) => {
+    // Separar los que tienen APS de los que no
+    const conAPS: Record<number, InventarioConAPS[]> = {};
+    const sinAPS: InventarioConAPS[] = [];
+
+    inventarios.forEach(item => {
+      if (item.aps && item.aps > 0) {
+        if (!conAPS[item.aps]) {
+          conAPS[item.aps] = [];
+        }
+        conAPS[item.aps].push(item);
+      } else {
+        sinAPS.push(item);
+      }
+    });
+
+    // Función para agrupar por grupo_completo_id
+    const agruparPorGrupo = (items: InventarioConAPS[]) => {
+      const grupos: Record<string, InventarioConAPS[]> = {};
+      items.forEach(item => {
+        const grupoKey = item.grupo_completo_id ? `grupo-${item.grupo_completo_id}` : `individual-${item.id}`;
+        if (!grupos[grupoKey]) {
+          grupos[grupoKey] = [];
+        }
+        grupos[grupoKey].push(item);
+      });
+      return Object.entries(grupos).map(([key, groupItems]) => ({
+        key,
+        grupoId: groupItems[0]?.grupo_completo_id,
+        items: groupItems
+      }));
+    };
+
+    // Construir resultado: primero los con APS (ordenados desc), luego los sin APS
+    const resultado: { aps: number | null; totalItems: number; grupos: { key: string; grupoId: number | null; items: InventarioConAPS[] }[] }[] = [];
+
+    // Agregar los que tienen APS (ordenados descendente)
+    Object.entries(conAPS)
+      .sort((a, b) => Number(b[0]) - Number(a[0]))
+      .forEach(([apsValue, items]) => {
+        resultado.push({
+          aps: Number(apsValue),
+          totalItems: items.length,
+          grupos: agruparPorGrupo(items)
+        });
+      });
+
+    // Agregar los sin APS al final
+    if (sinAPS.length > 0) {
+      resultado.push({
+        aps: null, // null indica "Sin APS"
+        totalItems: sinAPS.length,
+        grupos: agruparPorGrupo(sinAPS)
+      });
+    }
+
+    return resultado;
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
@@ -742,16 +987,154 @@ export function CampanasPage() {
     );
   };
 
-  const totalPages = data?.pagination?.totalPages || 1;
-  const total = data?.pagination?.total ?? 0;
-  const startItem = (page - 1) * limit + 1;
-  const endItem = Math.min(page * limit, total);
+  // Calcular paginación basada en si hay filtros locales activos
+  const hasLocalFilters = !!(debouncedSearch || selectedCatorcenaInicio);
+  const totalPages = hasLocalFilters ? 1 : (data?.pagination?.totalPages || 1);
+  const total = hasLocalFilters ? filteredData.length : (data?.pagination?.total ?? 0);
+  const startItem = hasLocalFilters ? (filteredData.length > 0 ? 1 : 0) : ((page - 1) * limit + 1);
+  const endItem = hasLocalFilters ? filteredData.length : Math.min(page * limit, data?.pagination?.total ?? 0);
 
   return (
     <div className="min-h-screen">
       <Header title="Campañas" />
 
       <div className="p-6 space-y-5">
+        {/* Gráficas */}
+        {!isLoading && filteredData.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Gráfica de Estatus */}
+            <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4">
+              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-purple-400" />
+                Estatus de Campaña
+              </h3>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={70}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {statusChartData.map((entry, index) => (
+                        <Cell key={`cell-status-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#18181b',
+                        border: '1px solid rgba(139, 92, 246, 0.3)',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        color: '#fff'
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                      labelStyle={{ color: '#a1a1aa', fontWeight: 500 }}
+                      formatter={(value: number, _name: string, props: { payload?: { name?: string } }) => [
+                        `${value} campañas`,
+                        props.payload?.name || ''
+                      ]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2">
+                {statusChartData.map((item, index) => (
+                  <div key={index} className="flex items-center gap-1.5 text-xs min-w-0">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="text-zinc-400 truncate" title={item.name}>{item.name}</span>
+                    <span className="text-zinc-500 flex-shrink-0">({item.value})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Gráfica de Categoría de Mercado */}
+            <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4">
+              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                Categoría de Mercado
+              </h3>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categoryChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={70}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {categoryChartData.map((entry, index) => (
+                        <Cell key={`cell-cat-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#18181b',
+                        border: '1px solid rgba(6, 182, 212, 0.3)',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        color: '#fff'
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                      labelStyle={{ color: '#a1a1aa', fontWeight: 500 }}
+                      formatter={(value: number, _name: string, props: { payload?: { percentage?: string; name?: string } }) => [
+                        `${value} (${props.payload?.percentage || 0}%)`,
+                        props.payload?.name || ''
+                      ]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 max-h-20 overflow-y-auto">
+                {categoryChartData.slice(0, 8).map((item, index) => (
+                  <div key={index} className="flex items-center gap-1.5 text-xs min-w-0">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="text-zinc-400 truncate" title={item.name}>{item.name}</span>
+                    <span className="text-zinc-500 flex-shrink-0">{item.percentage}%</span>
+                  </div>
+                ))}
+                {categoryChartData.length > 8 && (
+                  <div className="col-span-2 text-xs text-zinc-500 text-center">+{categoryChartData.length - 8} más</div>
+                )}
+              </div>
+            </div>
+
+            {/* Tercera gráfica - Placeholder */}
+            <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4">
+              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                Resumen
+              </h3>
+              <div className="h-48 flex flex-col justify-center space-y-3">
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-800/50">
+                  <span className="text-zinc-400 text-sm">Total Campañas</span>
+                  <span className="text-white font-bold text-lg">{filteredData.length}</span>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-800/50">
+                  <span className="text-zinc-400 text-sm">Con APS</span>
+                  <span className="text-emerald-400 font-bold text-lg">
+                    {filteredData.filter(c => c.has_aps).length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-800/50">
+                  <span className="text-zinc-400 text-sm">Sin APS</span>
+                  <span className="text-amber-400 font-bold text-lg">
+                    {filteredData.filter(c => !c.has_aps).length}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Control Bar */}
         <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4 relative z-30">
           <div className="flex flex-col gap-4">
@@ -888,6 +1271,32 @@ export function CampanasPage() {
           </div>
         </div>
 
+        {/* Tabs de vista */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveView('tabla')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              activeView === 'tabla'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'
+            }`}
+          >
+            <List className="h-4 w-4" />
+            Vista Tabla
+          </button>
+          <button
+            onClick={() => setActiveView('catorcena')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              activeView === 'catorcena'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'
+            }`}
+          >
+            <LayoutGrid className="h-4 w-4" />
+            Vista por Catorcena
+          </button>
+        </div>
+
         {/* Info Badge */}
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2">
@@ -899,7 +1308,8 @@ export function CampanasPage() {
           </div>
         )}
 
-        {/* Data Table */}
+        {/* Vista de Tabla */}
+        {activeView === 'tabla' && (
         <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
@@ -992,17 +1402,279 @@ export function CampanasPage() {
             </>
           )}
         </div>
+        )}
+
+        {/* Vista por Catorcena */}
+        {activeView === 'catorcena' && (
+          <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+              </div>
+            ) : campanasPorCatorcena.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
+                  <Calendar className="w-8 h-8 text-purple-400" />
+                </div>
+                <p className="text-zinc-500">No hay campañas agrupadas por catorcena</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-zinc-800/50">
+                {campanasPorCatorcena.map(({ key, catorcena, campanas }) => (
+                  <div key={key} className="group">
+                    {/* Header de Catorcena */}
+                    <button
+                      onClick={() => toggleCatorcena(key)}
+                      className="w-full flex items-center gap-3 px-4 py-4 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30 hover:from-purple-900/40 hover:via-fuchsia-900/30 hover:to-purple-900/40 transition-all"
+                    >
+                      {expandedCatorcenas.has(key) ? (
+                        <ChevronDown className="h-5 w-5 text-purple-400" />
+                      ) : (
+                        <ChevronRight className="h-5 w-5 text-purple-400" />
+                      )}
+                      <Calendar className="h-5 w-5 text-purple-400" />
+                      <span className="font-semibold text-white text-sm">
+                        Catorcena {catorcena.num}, {catorcena.anio}
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                        {campanas.length} campañas
+                      </span>
+                      {/* Badge de catorcena actual */}
+                      {currentCatorcena &&
+                       currentCatorcena.numero_catorcena === catorcena.num &&
+                       currentCatorcena.a_o === catorcena.anio && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          En curso
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Contenido expandible de catorcena */}
+                    {expandedCatorcenas.has(key) && (
+                      <div className="bg-zinc-900/50">
+                        {campanas.map((campana) => {
+                          const statusColor = getStatusColor(campana.status);
+                          const periodStatus = getPeriodStatus(campana.fecha_inicio, campana.fecha_fin);
+                          const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
+                          const isExpanded = expandedCampanas.has(campana.id);
+                          const inventarios = campanaInventarios[campana.id] || [];
+                          const isLoadingInv = loadingInventarios.has(campana.id);
+                          const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
+
+                          return (
+                            <div key={campana.id} className="border-t border-zinc-800/30">
+                              {/* Header de Campaña */}
+                              <button
+                                onClick={() => toggleCampana(campana.id)}
+                                className="w-full flex items-center gap-3 px-6 py-3 hover:bg-zinc-800/30 transition-all"
+                              >
+                                {isLoadingInv ? (
+                                  <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
+                                ) : isExpanded ? (
+                                  <ChevronDown className="h-4 w-4 text-zinc-400" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-zinc-400" />
+                                )}
+                                <Megaphone className="h-4 w-4 text-zinc-500" />
+                                <span className="font-medium text-white text-sm flex-1 text-left truncate">
+                                  {campana.nombre}
+                                </span>
+
+                                {/* Badges de info */}
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
+                                  {periodStatus}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+                                  {campana.status}
+                                </span>
+                                {campana.has_aps ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                                    <Check className="h-3 w-3" /> APS
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-400 border border-zinc-500/30 flex items-center gap-1">
+                                    <Minus className="h-3 w-3" /> Sin APS
+                                  </span>
+                                )}
+
+                                {/* Acciones */}
+                                <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => handleOpenCampana(campana.id)}
+                                    className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all"
+                                    title="Ver campaña"
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleEditCampana(campana)}
+                                    className="p-1.5 rounded-lg bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border border-zinc-500/20 transition-all"
+                                    title="Editar campaña"
+                                  >
+                                    <Edit2 className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              </button>
+
+                              {/* Contenido expandible de Campaña - APS → Grupos → Inventarios */}
+                              {isExpanded && (
+                                <div className="bg-zinc-900/30 px-8 py-3">
+                                  {isLoadingInv ? (
+                                    <div className="flex items-center gap-2 text-zinc-500 text-sm py-2">
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      Cargando grupos e inventarios...
+                                    </div>
+                                  ) : inventarios.length === 0 ? (
+                                    <div className="flex items-center gap-2 text-zinc-500 text-sm py-2">
+                                      <Package className="h-4 w-4" />
+                                      No hay inventarios reservados con APS
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-4">
+                                      <div className="text-xs text-zinc-400">
+                                        {inventarios.length} inventarios · {apsAgrupados.length} APS asignados
+                                      </div>
+                                      {apsAgrupados.map((apsGroup) => {
+                                        const apsKey = `${campana.id}-${apsGroup.aps ?? 'sin-aps'}`;
+                                        const isAPSExpanded = expandedAPS.has(apsKey);
+                                        const tieneAPS = apsGroup.aps !== null;
+
+                                        return (
+                                          <div
+                                            key={`aps-${apsGroup.aps ?? 'sin-aps'}`}
+                                            className={`rounded-xl border overflow-hidden ${
+                                              tieneAPS
+                                                ? 'border-emerald-500/30 bg-emerald-500/5'
+                                                : 'border-amber-500/30 bg-amber-500/5'
+                                            }`}
+                                          >
+                                            {/* Header de APS - Clickeable */}
+                                            <button
+                                              onClick={() => toggleAPS(campana.id, apsGroup.aps)}
+                                              className={`w-full flex items-center gap-3 px-4 py-2.5 transition-all ${
+                                                tieneAPS
+                                                  ? 'bg-emerald-500/10 hover:bg-emerald-500/15'
+                                                  : 'bg-amber-500/10 hover:bg-amber-500/15'
+                                              }`}
+                                            >
+                                              {isAPSExpanded ? (
+                                                <ChevronDown className={`h-4 w-4 ${tieneAPS ? 'text-emerald-400' : 'text-amber-400'}`} />
+                                              ) : (
+                                                <ChevronRight className={`h-4 w-4 ${tieneAPS ? 'text-emerald-400' : 'text-amber-400'}`} />
+                                              )}
+                                              {tieneAPS ? (
+                                                <>
+                                                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                                                    <span className="text-emerald-300 font-bold text-xs">{apsGroup.aps}</span>
+                                                  </div>
+                                                  <span className="text-sm font-semibold text-emerald-200">
+                                                    APS {apsGroup.aps}
+                                                  </span>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                                                    <Minus className="h-4 w-4 text-amber-300" />
+                                                  </div>
+                                                  <span className="text-sm font-semibold text-amber-200">
+                                                    Sin APS asignado
+                                                  </span>
+                                                </>
+                                              )}
+                                              <span className={`px-2 py-0.5 rounded-full text-[10px] border ${
+                                                tieneAPS
+                                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                                  : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                              }`}>
+                                                {apsGroup.totalItems} sitios
+                                              </span>
+                                              <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-300 border border-zinc-500/30">
+                                                {apsGroup.grupos.length} grupos
+                                              </span>
+                                            </button>
+
+                                            {/* Grupos dentro de este APS - Colapsable */}
+                                            {isAPSExpanded && (
+                                              <div className={`p-3 space-y-2 border-t ${tieneAPS ? 'border-emerald-500/20' : 'border-amber-500/20'}`}>
+                                                {apsGroup.grupos.map((grupo) => (
+                                                  <div
+                                                    key={grupo.key}
+                                                    className="rounded-lg border border-zinc-700/50 bg-zinc-800/40 overflow-hidden"
+                                                  >
+                                                    <div className="flex items-center gap-3 px-3 py-2 bg-zinc-800/60">
+                                                      <Building2 className="h-4 w-4 text-cyan-400" />
+                                                      <span className="text-sm font-medium text-zinc-200">
+                                                        {grupo.grupoId ? `Grupo #${grupo.grupoId}` : 'Individual'}
+                                                      </span>
+                                                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                                        {grupo.items.length} sitios
+                                                      </span>
+                                                    </div>
+                                                    <div className="divide-y divide-zinc-700/30">
+                                                      {grupo.items.map((inv) => (
+                                                        <div
+                                                          key={inv.id}
+                                                          className="flex items-center gap-3 px-4 py-2 text-xs hover:bg-zinc-800/30 transition-colors"
+                                                        >
+                                                          <MapPin className="h-3 w-3 text-zinc-500" />
+                                                          <span className="text-zinc-300 font-mono">{inv.codigo_unico}</span>
+                                                          <span className="text-zinc-500">{inv.mueble || '-'}</span>
+                                                          <span className="text-zinc-500">{inv.plaza || '-'}</span>
+                                                          {inv.estado && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-zinc-700/50 text-zinc-400">
+                                                              {inv.estado}
+                                                            </span>
+                                                          )}
+                                                          {inv.tipo_medio && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-500/20 text-violet-300">
+                                                              {inv.tipo_medio}
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Footer info */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20">
+              <span className="text-xs text-zinc-500">
+                {campanasPorCatorcena.length} catorcenas · {filteredData.length} campañas
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Edit Modal */}
-      <EditCampanaModal
-        isOpen={editModalOpen}
-        onClose={() => {
-          setEditModalOpen(false);
-          setSelectedCampana(null);
-        }}
-        campana={selectedCampana}
-      />
+      {selectedCampana && (
+        <AssignInventarioCampanaModal
+          isOpen={editModalOpen}
+          onClose={() => {
+            setEditModalOpen(false);
+            setSelectedCampana(null);
+          }}
+          campana={selectedCampana}
+        />
+      )}
     </div>
   );
 }

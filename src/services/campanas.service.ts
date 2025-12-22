@@ -83,6 +83,38 @@ export interface InventarioConAPS extends InventarioReservado {
   aps: number;
 }
 
+export interface SolicitudCara {
+  id: number;
+  idquote: number;
+  ciudad: string | null;
+  estados: string | null;
+  tipo: string | null;
+  flujo: string | null;
+  bonificacion: number | null;
+  caras: number | null;
+  nivel_socioeconomico: string | null;
+  formato: string | null;
+  costo: number | null;
+  tarifa_publica: number | null;
+  inicio_periodo: string | null;
+  fin_periodo: string | null;
+  caras_flujo: number | null;
+  caras_contraflujo: number | null;
+  articulo: string | null;
+  descuento: number | null;
+}
+
+export interface CampanaUpdateData {
+  nombre?: string;
+  status?: string;
+  descripcion?: string;
+  notas?: string;
+  catorcenaInicioNum?: number;
+  catorcenaInicioAnio?: number;
+  catorcenaFinNum?: number;
+  catorcenaFinAnio?: number;
+}
+
 // Función para construir el payload de DeliveryNote para SAP
 export function buildDeliveryNote(
   campana: CampanaWithComments,
@@ -270,6 +302,22 @@ export const campanasService = {
     const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/remove-aps`, { reservaIds });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al quitar APS');
+    }
+    return response.data.data;
+  },
+
+  async getCaras(id: number): Promise<SolicitudCara[]> {
+    const response = await api.get<ApiResponse<SolicitudCara[]>>(`/campanas/${id}/caras`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener caras');
+    }
+    return response.data.data;
+  },
+
+  async update(id: number, data: CampanaUpdateData): Promise<Campana> {
+    const response = await api.patch<ApiResponse<Campana>>(`/campanas/${id}`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar campaña');
     }
     return response.data.data;
   },
