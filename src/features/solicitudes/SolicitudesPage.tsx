@@ -173,8 +173,8 @@ function PeriodFilterPopover({
     return catorcenas;
   }, [catorcenasData, tempYearFin, tempYearInicio, tempCatorcenaInicio]);
 
-  const isActive = yearInicio !== undefined && yearFin !== undefined;
-  const canApply = tempYearInicio !== undefined && tempYearFin !== undefined;
+  const isActive = yearInicio !== undefined && yearFin !== undefined && catorcenaInicio !== undefined && catorcenaFin !== undefined;
+  const canApply = tempYearInicio !== undefined && tempYearFin !== undefined && tempCatorcenaInicio !== undefined && tempCatorcenaFin !== undefined;
 
   const handleApply = () => {
     if (canApply) {

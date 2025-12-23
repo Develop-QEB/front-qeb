@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
-  FileText, MapPin, Layers, Pencil, Map, Package,
+  FileText, MapPin, Layers, Pencil, Map as MapIcon, Package,
   Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
@@ -10,6 +10,7 @@ import { AdvancedMapComponent } from './AdvancedMapComponent';
 import { Propuesta } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
+import { propuestasService, ReservaModalItem } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
@@ -74,6 +75,8 @@ interface ReservaItem {
   plaza: string;
   formato: string;
   ubicacion?: string | null;
+  solicitudCaraId?: number; // For linking to cara
+  reservaId?: number; // For existing reservas from DB
 }
 
 // View states for the modal
@@ -107,6 +110,8 @@ const EMPTY_CARA: Omit<CaraItem, 'localId'> = {
   descuento: 0,
 };
 
+const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
+
 export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const queryClient = useQueryClient();
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -114,7 +119,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   // Load Google Maps with required libraries
   const { isLoaded: mapsLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: ['places', 'geometry'],
+    libraries: LIBRARIES,
   });
 
   // View state
@@ -161,6 +166,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
+
+  // Custom Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+    confirmText?: string;
+    cancelText?: string;
+    isDestructive?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => { },
+  });
 
   // Expanded groups state for collapsible groups
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Grupo 1']));
@@ -171,6 +194,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   // Disponibles data
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // POI filter state
   const [poiFilterIds, setPoiFilterIds] = useState<Set<number> | null>(null);
@@ -205,6 +229,44 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     queryFn: () => solicitudesService.getCatorcenas(),
     enabled: isOpen,
   });
+
+  // Fetch existing reservas for this propuesta
+  const { data: existingReservas, isLoading: reservasLoading } = useQuery({
+    queryKey: ['propuesta-reservas-modal', propuesta.id],
+    queryFn: () => propuestasService.getReservasForModal(propuesta.id),
+    enabled: isOpen && !!propuesta.id,
+  });
+
+  // Load existing reservas into state when data arrives
+  useEffect(() => {
+    if (existingReservas && existingReservas.length > 0 && caras.length > 0) {
+      const loadedReservas: ReservaItem[] = existingReservas.map((r: ReservaModalItem) => {
+        // Find the cara that matches this reserva
+        const matchingCara = caras.find(c => c.id === r.solicitud_cara_id);
+        const tipo = r.estatus === 'Bonificado' ? 'Bonificacion' : (r.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo');
+
+        return {
+          id: matchingCara
+            ? `${matchingCara.localId}-${r.inventario_id}-${tipo.toLowerCase()}-${r.reserva_id}`
+            : `existing-${r.reserva_id}-${r.inventario_id}-${tipo.toLowerCase()}-${Date.now()}`,
+          inventario_id: r.inventario_id,
+          codigo_unico: r.codigo_unico || `INV-${r.inventario_id}`,
+          tipo: tipo as 'Flujo' | 'Contraflujo' | 'Bonificacion',
+          catorcena: catorcenaInicio || 1,
+          anio: yearInicio || new Date().getFullYear(),
+          latitud: Number(r.latitud) || 0,
+          longitud: Number(r.longitud) || 0,
+          plaza: r.plaza || '',
+          formato: r.formato || '',
+          ubicacion: r.ubicacion,
+          solicitudCaraId: r.solicitud_cara_id,
+          reservaId: r.reserva_id,
+        };
+      });
+
+      setReservas(loadedReservas);
+    }
+  }, [existingReservas, caras, catorcenaInicio, yearInicio]);
 
   // Fetch inventory filters (always)
   const { data: inventoryFilters } = useQuery({
@@ -365,7 +427,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const remainingToAssign = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0, bonificacion: 0 };
 
-    const caraReservas = reservas.filter(r => r.id.startsWith(selectedCaraForSearch.localId));
+    const caraReservas = reservas.filter(r =>
+      r.id.startsWith(selectedCaraForSearch.localId) || r.solicitudCaraId === selectedCaraForSearch.id
+    );
     const flujoReservado = caraReservas.filter(r => r.tipo === 'Flujo').length;
     const contraflujoReservado = caraReservas.filter(r => r.tipo === 'Contraflujo').length;
     const bonificacionReservado = caraReservas.filter(r => r.tipo === 'Bonificacion').length;
@@ -378,13 +442,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   }, [selectedCaraForSearch, reservas]);
 
   // Check if cara has reservas
-  const caraHasReservas = (localId: string) => {
-    return reservas.some(r => r.id.startsWith(localId));
+  const caraHasReservas = (localId: string, caraId?: number) => {
+    return reservas.some(r => r.id.startsWith(localId) || r.solicitudCaraId === caraId);
   };
 
   // Get cara completion status
   const getCaraCompletionStatus = (cara: CaraItem) => {
-    const caraReservas = reservas.filter(r => r.id.startsWith(cara.localId));
+    const caraReservas = reservas.filter(r =>
+      r.id.startsWith(cara.localId) || r.solicitudCaraId === cara.id
+    );
     const flujoReservado = caraReservas.filter(r => r.tipo === 'Flujo').length;
     const contraflujoReservado = caraReservas.filter(r => r.tipo === 'Contraflujo').length;
     const bonificacionReservado = caraReservas.filter(r => r.tipo === 'Bonificacion').length;
@@ -471,8 +537,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       alert('No puedes eliminar una cara que tiene reservas. Primero elimina las reservas.');
       return;
     }
-    setCaras(prev => prev.filter(c => c.localId !== localId));
-    setReservas(prev => prev.filter(r => !r.id.startsWith(localId)));
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Formato',
+      message: '¿Estás seguro de que deseas eliminar este formato de la propuesta?',
+      confirmText: 'Eliminar',
+      isDestructive: true,
+      onConfirm: () => {
+        setCaras(prev => prev.filter(c => c.localId !== localId));
+        setReservas(prev => prev.filter(r => !r.id.startsWith(localId)));
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      }
+    });
   };
 
   // Handle edit cara
@@ -547,8 +624,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     const Δφ = toRadians(lat2 - lat1);
     const Δλ = toRadians(lon2 - lon1);
     const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }, []);
@@ -723,6 +800,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const processedInventory = useMemo((): ProcessedInventoryItem[] => {
     let data: ProcessedInventoryItem[] = [...inventarioDisponible];
 
+    // Filter out items that are already reserved (in ANY group/context)
+    const reservedIds = new Set(reservas.map(r => r.inventario_id));
+    data = data.filter(inv => !reservedIds.has(inv.id));
+
     // Apply POI filter (conservar con/sin POIs)
     if (poiFilterIds !== null) {
       data = data.filter(inv => poiFilterIds.has(inv.id));
@@ -866,94 +947,143 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
   };
 
-  // Handle reserve (smart - detects flujo/contraflujo/completo automatically)
+  // Handle reserve (smart - detects flujo/contraflujo/completo automatically) - IMMEDIATE SAVE
   const handleReservar = () => {
     if (!selectedCaraForSearch || selectedInventory.size === 0) return;
 
-    const newReservas: ReservaItem[] = [];
-    let flujoCount = 0;
-    let contraflujoCount = 0;
+    // Check for pairs that could be grouped
+    const selectedItems = processedInventory.filter(i => selectedInventory.has(i.id));
+    const potentialPairs = new Set<string>();
 
-    selectedInventory.forEach(invId => {
-      const inv = processedInventory.find(i => i.id === invId);
-      if (!inv) return;
-
-      // If it's a "completo" item, reserve both flujo and contraflujo
-      if (inv.isCompleto && inv.flujoId && inv.contraflujoId) {
-        // Find original items for coordinates
-        const flujoOrig = inventarioDisponible.find(i => i.id === inv.flujoId);
-        const contraflujoOrig = inventarioDisponible.find(i => i.id === inv.contraflujoId);
-
-        if (flujoOrig && flujoCount < remainingToAssign.flujo) {
-          newReservas.push({
-            id: `${selectedCaraForSearch.localId}-${inv.flujoId}-flujo-${Date.now()}`,
-            inventario_id: inv.flujoId,
-            codigo_unico: flujoOrig.codigo_unico || `INV-${inv.flujoId}`,
-            tipo: 'Flujo',
-            catorcena: catorcenaInicio || 1,
-            anio: yearInicio || new Date().getFullYear(),
-            latitud: flujoOrig.latitud || 0,
-            longitud: flujoOrig.longitud || 0,
-            plaza: flujoOrig.plaza || '',
-            formato: flujoOrig.tipo_de_mueble || '',
-            ubicacion: flujoOrig.ubicacion,
-          });
-          flujoCount++;
-        }
-
-        if (contraflujoOrig && contraflujoCount < remainingToAssign.contraflujo) {
-          newReservas.push({
-            id: `${selectedCaraForSearch.localId}-${inv.contraflujoId}-contraflujo-${Date.now()}`,
-            inventario_id: inv.contraflujoId,
-            codigo_unico: contraflujoOrig.codigo_unico || `INV-${inv.contraflujoId}`,
-            tipo: 'Contraflujo',
-            catorcena: catorcenaInicio || 1,
-            anio: yearInicio || new Date().getFullYear(),
-            latitud: contraflujoOrig.latitud || 0,
-            longitud: contraflujoOrig.longitud || 0,
-            plaza: contraflujoOrig.plaza || '',
-            formato: contraflujoOrig.tipo_de_mueble || '',
-            ubicacion: contraflujoOrig.ubicacion,
-          });
-          contraflujoCount++;
-        }
-      } else {
-        // Regular item - reserve based on tipo_de_cara
-        const tipo = inv.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo';
-        const canReserve = tipo === 'Flujo'
-          ? flujoCount < remainingToAssign.flujo
-          : contraflujoCount < remainingToAssign.contraflujo;
-
-        if (canReserve) {
-          newReservas.push({
-            id: `${selectedCaraForSearch.localId}-${invId}-${tipo.toLowerCase()}-${Date.now()}`,
-            inventario_id: invId,
-            codigo_unico: inv.codigo_unico || `INV-${invId}`,
-            tipo,
-            catorcena: catorcenaInicio || 1,
-            anio: yearInicio || new Date().getFullYear(),
-            latitud: inv.latitud || 0,
-            longitud: inv.longitud || 0,
-            plaza: inv.plaza || '',
-            formato: inv.tipo_de_mueble || '',
-            ubicacion: inv.ubicacion,
-          });
-          if (tipo === 'Flujo') flujoCount++;
-          else contraflujoCount++;
+    selectedItems.forEach(item => {
+      const baseCode = item.codigo_unico?.split('_')[0]; // Assuming prefix_suffix format
+      if (baseCode) {
+        // Check if we have both Flujo and Contraflujo for this base code in selection
+        const hasFlujo = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && i.tipo_de_cara === 'Flujo');
+        const hasContra = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && i.tipo_de_cara === 'Contraflujo');
+        if (hasFlujo && hasContra) {
+          potentialPairs.add(baseCode);
         }
       }
     });
 
-    if (newReservas.length === 0) {
-      alert('No hay caras disponibles para reservar');
-      return;
-    }
+    const runReservation = async (shouldGroup: boolean) => {
+      const newReservas: { inventario_id: number; tipo: string; latitud: number; longitud: number }[] = [];
+      let flujoCount = 0;
+      let contraflujoCount = 0;
 
-    setReservas(prev => [...prev, ...newReservas]);
-    setSelectedInventory(new Set());
+      selectedInventory.forEach(invId => {
+        const inv = processedInventory.find(i => i.id === invId);
+        if (!inv) return;
+
+        // If it's a "completo" item, reserve both flujo and contraflujo
+        if (inv.isCompleto && inv.flujoId && inv.contraflujoId) {
+          // Find original items for coordinates
+          const flujoOrig = inventarioDisponible.find(i => i.id === inv.flujoId);
+          const contraflujoOrig = inventarioDisponible.find(i => i.id === inv.contraflujoId);
+
+          if (flujoOrig && flujoCount < remainingToAssign.flujo) {
+            newReservas.push({
+              inventario_id: inv.flujoId!,
+              tipo: 'Flujo',
+              latitud: flujoOrig.latitud || 0,
+              longitud: flujoOrig.longitud || 0,
+            });
+            flujoCount++;
+          }
+
+          if (contraflujoOrig && contraflujoCount < remainingToAssign.contraflujo) {
+            newReservas.push({
+              inventario_id: inv.contraflujoId!,
+              tipo: 'Contraflujo',
+              latitud: contraflujoOrig.latitud || 0,
+              longitud: contraflujoOrig.longitud || 0,
+            });
+            contraflujoCount++;
+          }
+        } else {
+          // Regular item - reserve based on tipo_de_cara
+          const tipo = inv.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo';
+          const canReserve = tipo === 'Flujo'
+            ? flujoCount < remainingToAssign.flujo
+            : contraflujoCount < remainingToAssign.contraflujo;
+
+          if (canReserve) {
+            newReservas.push({
+              inventario_id: invId,
+              tipo,
+              latitud: inv.latitud || 0,
+              longitud: inv.longitud || 0,
+            });
+            if (tipo === 'Flujo') flujoCount++;
+            else contraflujoCount++;
+          }
+        }
+      });
+
+      if (newReservas.length === 0) {
+        alert('No hay caras disponibles para reservar');
+        return;
+      }
+
+      // Call API immediately
+      setIsSaving(true);
+      try {
+        const clienteId = solicitudDetails?.propuesta?.cliente_id || propuesta.cliente_id;
+        const fechaInicio = selectedCaraForSearch.inicio_periodo || solicitudDetails?.cotizacion?.fecha_inicio || new Date().toISOString();
+        const fechaFin = selectedCaraForSearch.fin_periodo || solicitudDetails?.cotizacion?.fecha_fin || new Date().toISOString();
+
+        if (!clienteId) throw new Error("Cliente ID no encontrado");
+
+        const result = await propuestasService.createReservas(propuesta.id, {
+          reservas: newReservas,
+          solicitudCaraId: selectedCaraForSearch.id!,
+          clienteId,
+          fechaInicio,
+          fechaFin,
+          agruparComoCompleto: shouldGroup,
+        });
+
+        queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+        queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] }); // Refresh map
+        // Also refresh disponibles
+        handleRefetchDisponibles();
+
+        alert(`Se guardaron ${result.reservasCreadas} reservas exitosamente`);
+        setSelectedInventory(new Set());
+      } catch (error) {
+        console.error('Error saving reservas:', error);
+        alert(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      } finally {
+        setIsSaving(false);
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      }
+    };
+
+    // Prompt logic
+    if (potentialPairs.size > 0 && !agruparComoCompleto) {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Agrupar Inventario',
+        message: `Se detectaron ${potentialPairs.size} pares que pueden agruparse como "Completos". ¿Deseas agruparlos?`,
+        confirmText: 'Sí, Agrupar',
+        cancelText: 'No, Mantener Separados',
+        onConfirm: () => runReservation(true),
+        onCancel: () => runReservation(false)
+      });
+    } else {
+      // Ask for basic confirmation if requested
+      setConfirmModal({
+        isOpen: true,
+        title: 'Confirmar Reservación',
+        message: `¿Estás seguro de reservar ${selectedInventory.size} espacios?`,
+        confirmText: 'Reservar',
+        onConfirm: () => runReservation(agruparComoCompleto),
+      });
+    }
   };
 
-  // Handle reserve as bonificacion
+  // Handle reserve as bonificacion - IMMEDIATE SAVE
   const handleReserveAsBonificacion = () => {
     if (!selectedCaraForSearch || selectedInventory.size === 0) return;
     if (selectedInventory.size > remainingToAssign.bonificacion) {
@@ -961,28 +1091,60 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       return;
     }
 
-    const newReservas: ReservaItem[] = [];
-    selectedInventory.forEach(invId => {
-      const inv = processedInventory.find(i => i.id === invId);
-      if (inv) {
-        newReservas.push({
-          id: `${selectedCaraForSearch.localId}-${invId}-bonificacion-${Date.now()}`,
-          inventario_id: invId,
-          codigo_unico: inv.codigo_unico || `INV-${invId}`,
-          tipo: 'Bonificacion',
-          catorcena: catorcenaInicio || 1,
-          anio: yearInicio || new Date().getFullYear(),
-          latitud: inv.latitud || 0,
-          longitud: inv.longitud || 0,
-          plaza: inv.plaza || '',
-          formato: inv.tipo_de_mueble || '',
-          ubicacion: inv.ubicacion,
-        });
-      }
-    });
+    const runBonificacion = async () => {
+      const newReservas: { inventario_id: number; tipo: string; latitud: number; longitud: number }[] = [];
+      selectedInventory.forEach(invId => {
+        const inv = processedInventory.find(i => i.id === invId);
+        if (inv) {
+          newReservas.push({
+            inventario_id: invId,
+            tipo: 'Bonificacion',
+            latitud: inv.latitud || 0,
+            longitud: inv.longitud || 0,
+          });
+        }
+      });
 
-    setReservas(prev => [...prev, ...newReservas]);
-    setSelectedInventory(new Set());
+      // Call API immediately
+      setIsSaving(true);
+      try {
+        const clienteId = solicitudDetails?.propuesta?.cliente_id || propuesta.cliente_id;
+        const fechaInicio = selectedCaraForSearch.inicio_periodo || solicitudDetails?.cotizacion?.fecha_inicio || new Date().toISOString();
+        const fechaFin = selectedCaraForSearch.fin_periodo || solicitudDetails?.cotizacion?.fecha_fin || new Date().toISOString();
+
+        if (!clienteId) throw new Error("Cliente ID no encontrado");
+
+        const result = await propuestasService.createReservas(propuesta.id, {
+          reservas: newReservas,
+          solicitudCaraId: selectedCaraForSearch.id!,
+          clienteId,
+          fechaInicio,
+          fechaFin,
+          agruparComoCompleto: false, // Bonificaciones likely single
+        });
+
+        queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+        queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
+        handleRefetchDisponibles();
+
+        // alert(`Se guardaron ${result.reservasCreadas} bonificaciones exitosamente`);
+        setSelectedInventory(new Set());
+      } catch (error) {
+        console.error('Error saving bonificaciones:', error);
+        alert(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      } finally {
+        setIsSaving(false);
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      }
+    };
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirmar Bonificación',
+      message: `¿Estás seguro de bonificar ${selectedInventory.size} espacios?`,
+      confirmText: 'Bonificar',
+      onConfirm: runBonificacion,
+    });
   };
 
   // Go back to main view
@@ -992,11 +1154,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     setSelectedInventory(new Set());
   };
 
-  // Handle save
-  const handleSave = () => {
-    console.log('Saving...', { asignados, nombreCampania, notas, descripcion, caras, reservas });
-    onClose();
-  };
+  // Handle save - REMOVED (Immediate save implemented)
+  // const handleSave = async () => { ... }
 
   // Get map center from processed inventory data
   const mapCenter = useMemo(() => {
@@ -1012,7 +1171,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
   // Get map center for reservados
   const reservadosMapCenter = useMemo(() => {
-    const caraReservas = reservas.filter(r => r.id.startsWith(selectedCaraForSearch?.localId || ''));
+    const caraReservas = reservas.filter(r =>
+      r.id.startsWith(selectedCaraForSearch?.localId || '') ||
+      r.solicitudCaraId === selectedCaraForSearch?.id
+    );
     if (caraReservas.length > 0) {
       const firstWithCoords = caraReservas.find(r => r.latitud && r.longitud);
       if (firstWithCoords) {
@@ -1024,20 +1186,82 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
   // Get reservas for current cara
   const currentCaraReservas = useMemo(() => {
-    return reservas.filter(r => r.id.startsWith(selectedCaraForSearch?.localId || ''));
+    return reservas.filter(r =>
+      r.id.startsWith(selectedCaraForSearch?.localId || '') ||
+      r.solicitudCaraId === selectedCaraForSearch?.id
+    );
   }, [reservas, selectedCaraForSearch]);
 
-  // Remove a reserva
+  // Remove a reserva - IMMEDIATE DELETE
   const handleRemoveReserva = (reservaId: string) => {
-    setReservas(prev => prev.filter(r => r.id !== reservaId));
+    const reserva = reservas.find(r => r.id === reservaId);
+    if (!reserva || !reserva.reservaId) {
+      setReservas(prev => prev.filter(r => r.id !== reservaId));
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Reserva',
+      message: '¿Seguro que quieres eliminar esta reserva?',
+      confirmText: 'Eliminar',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          await propuestasService.deleteReservas(propuesta.id, [reserva.reservaId!]);
+          queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+          queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
+          handleRefetchDisponibles();
+
+          setReservas(prev => prev.filter(r => r.id !== reservaId));
+        } catch (error) {
+          console.error('Error deleting reserva:', error);
+          alert('Error al eliminar reserva');
+        } finally {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
   };
 
   if (!isOpen) return null;
+
+  // Confirmation modal content reused in both views
+  const confirmModalJSX = confirmModal.isOpen && (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))} />
+      <div className="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-6 w-[400px] animate-in fade-in zoom-in duration-200">
+        <h3 className="text-lg font-bold text-white mb-2">{confirmModal.title}</h3>
+        <p className="text-zinc-400 mb-6">{confirmModal.message}</p>
+        <div className="flex justify-end gap-3 flex">
+          <button
+            onClick={() => {
+              if (confirmModal.onCancel) confirmModal.onCancel();
+              setConfirmModal(prev => ({ ...prev, isOpen: false }));
+            }}
+            className="px-4 py-2 rounded-lg text-zinc-400 hover:bg-zinc-800 transition-colors text-sm font-medium"
+          >
+            {confirmModal.cancelText || 'Cancelar'}
+          </button>
+          <button
+            onClick={confirmModal.onConfirm}
+            className={`px-4 py-2 rounded-lg text-white transition-colors text-sm font-medium ${confirmModal.isDestructive
+              ? 'bg-red-500 hover:bg-red-600'
+              : 'bg-purple-500 hover:bg-purple-600'
+              }`}
+          >
+            {confirmModal.confirmText || 'Confirmar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   // Render inventory search view
   if (viewState === 'search-inventory') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {confirmModalJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
 
         <div className="relative w-[95vw] max-w-[1600px] h-[90vh] bg-zinc-900 rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden">
@@ -1147,22 +1371,20 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setSearchViewTab('buscar')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  searchViewTab === 'buscar'
-                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${searchViewTab === 'buscar'
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  }`}
               >
                 <Search className="h-4 w-4" />
                 Buscar Disponibles
               </button>
               <button
                 onClick={() => setSearchViewTab('reservados')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  searchViewTab === 'reservados'
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${searchViewTab === 'reservados'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  }`}
               >
                 <Layers className="h-4 w-4" />
                 Mis Reservados
@@ -1179,281 +1401,318 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
           {searchViewTab === 'buscar' ? (
             <>
               {/* Filters */}
-          <div className="px-6 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Flujo Toggle */}
-              <div className="flex bg-zinc-800/80 rounded-lg p-0.5 border border-zinc-700/50">
-                {(['Todos', 'Flujo', 'Contraflujo'] as const).map(opt => (
+              <div className="px-6 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Flujo Toggle */}
+                  <div className="flex bg-zinc-800/80 rounded-lg p-0.5 border border-zinc-700/50">
+                    {(['Todos', 'Flujo', 'Contraflujo'] as const).map(opt => (
+                      <button
+                        key={opt}
+                        onClick={() => setFlujoFilter(opt)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${flujoFilter === opt
+                          ? opt === 'Todos' ? 'bg-purple-500 text-white shadow' :
+                            opt === 'Flujo' ? 'bg-blue-500 text-white shadow' : 'bg-amber-500 text-white shadow'
+                          : 'text-zinc-400 hover:text-white'
+                          }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="w-px h-6 bg-zinc-700" />
+
+                  {/* Unique filter */}
                   <button
-                    key={opt}
-                    onClick={() => setFlujoFilter(opt)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                      flujoFilter === opt
-                        ? opt === 'Todos' ? 'bg-purple-500 text-white shadow' :
-                          opt === 'Flujo' ? 'bg-blue-500 text-white shadow' : 'bg-amber-500 text-white shadow'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
+                    onClick={() => { setShowOnlyUnicos(!showOnlyUnicos); if (!showOnlyUnicos) setShowOnlyCompletos(false); }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicos
+                      ? 'bg-cyan-500 text-white shadow'
+                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                      }`}
                   >
-                    {opt}
+                    <Grid className="h-3.5 w-3.5" />
+                    Únicos
+                    {showOnlyUnicos && (
+                      <X className="h-3 w-3 ml-0.5 hover:text-cyan-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicos(false); }} />
+                    )}
                   </button>
-                ))}
-              </div>
 
-              <div className="w-px h-6 bg-zinc-700" />
-
-              {/* Unique filter */}
-              <button
-                onClick={() => { setShowOnlyUnicos(!showOnlyUnicos); if (!showOnlyUnicos) setShowOnlyCompletos(false); }}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  showOnlyUnicos
-                    ? 'bg-cyan-500 text-white shadow'
-                    : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
-                }`}
-              >
-                <Grid className="h-3.5 w-3.5" />
-                Únicos
-                {showOnlyUnicos && (
-                  <X className="h-3 w-3 ml-0.5 hover:text-cyan-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicos(false); }} />
-                )}
-              </button>
-
-              {/* Complete filter */}
-              <button
-                onClick={() => { setShowOnlyCompletos(!showOnlyCompletos); if (!showOnlyCompletos) setShowOnlyUnicos(false); }}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  showOnlyCompletos
-                    ? 'bg-pink-500 text-white shadow'
-                    : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
-                }`}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                Completos
-                {showOnlyCompletos && (
-                  <X className="h-3 w-3 ml-0.5 hover:text-pink-200" onClick={(e) => { e.stopPropagation(); setShowOnlyCompletos(false); }} />
-                )}
-              </button>
-
-              {/* Distance grouping */}
-              <button
-                onClick={() => setGroupByDistance(!groupByDistance)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  groupByDistance
-                    ? 'bg-green-500 text-white shadow'
-                    : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
-                }`}
-              >
-                <Ruler className="h-3.5 w-3.5" />
-                Agrupar
-                {groupByDistance && (
-                  <X className="h-3 w-3 ml-0.5 hover:text-green-200" onClick={(e) => { e.stopPropagation(); setGroupByDistance(false); }} />
-                )}
-              </button>
-              {groupByDistance && (
-                <>
-                  <select
-                    value={distanciaGrupos}
-                    onChange={(e) => setDistanciaGrupos(parseInt(e.target.value))}
-                    className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                  {/* Complete filter */}
+                  <button
+                    onClick={() => { setShowOnlyCompletos(!showOnlyCompletos); if (!showOnlyCompletos) setShowOnlyUnicos(false); }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyCompletos
+                      ? 'bg-pink-500 text-white shadow'
+                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                      }`}
                   >
-                    <option value={100}>100m</option>
-                    <option value={200}>200m</option>
-                    <option value={500}>500m</option>
-                    <option value={1000}>1km</option>
-                  </select>
-                  <input
-                    type="number"
-                    value={tamanoGrupo}
-                    onChange={(e) => setTamanoGrupo(parseInt(e.target.value) || 10)}
-                    className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
-                    min={2}
-                    max={50}
-                  />
-                </>
-              )}
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    Completos
+                    {showOnlyCompletos && (
+                      <X className="h-3 w-3 ml-0.5 hover:text-pink-200" onClick={(e) => { e.stopPropagation(); setShowOnlyCompletos(false); }} />
+                    )}
+                  </button>
 
-              {/* POI filter chip */}
-              {poiFilterIds !== null && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-500 text-white shadow">
-                  <MapPin className="h-3.5 w-3.5" />
-                  Filtro POI ({poiFilterIds.size})
-                  <X className="h-3 w-3 ml-0.5 cursor-pointer hover:text-emerald-200" onClick={clearPOIFilter} />
+                  {/* Distance grouping */}
+                  <button
+                    onClick={() => setGroupByDistance(!groupByDistance)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${groupByDistance
+                      ? 'bg-green-500 text-white shadow'
+                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                      }`}
+                  >
+                    <Ruler className="h-3.5 w-3.5" />
+                    Agrupar
+                    {groupByDistance && (
+                      <X className="h-3 w-3 ml-0.5 hover:text-green-200" onClick={(e) => { e.stopPropagation(); setGroupByDistance(false); }} />
+                    )}
+                  </button>
+                  {groupByDistance && (
+                    <>
+                      <select
+                        value={distanciaGrupos}
+                        onChange={(e) => setDistanciaGrupos(parseInt(e.target.value))}
+                        className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                      >
+                        <option value={100}>100m</option>
+                        <option value={200}>200m</option>
+                        <option value={500}>500m</option>
+                        <option value={1000}>1km</option>
+                      </select>
+                      <input
+                        type="number"
+                        value={tamanoGrupo}
+                        onChange={(e) => setTamanoGrupo(parseInt(e.target.value) || 10)}
+                        className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        min={2}
+                        max={50}
+                      />
+                    </>
+                  )}
+
+                  {/* POI filter chip */}
+                  {poiFilterIds !== null && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-500 text-white shadow">
+                      <MapPin className="h-3.5 w-3.5" />
+                      Filtro POI ({poiFilterIds.size})
+                      <X className="h-3 w-3 ml-0.5 cursor-pointer hover:text-emerald-200" onClick={clearPOIFilter} />
+                    </div>
+                  )}
+
+                  <div className="flex-1" />
+
+                  {/* Stats & Actions */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-500 px-2">
+                      <span className="text-purple-300 font-bold">{processedInventory.length}</span> resultados
+                    </span>
+
+                    {/* Clear all filters */}
+                    {(flujoFilter !== 'Todos' || showOnlyUnicos || showOnlyCompletos || groupByDistance || poiFilterIds !== null) && (
+                      <button
+                        onClick={clearAllFilters}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Limpiar
+                      </button>
+                    )}
+
+                    {/* Refresh */}
+                    <button
+                      onClick={handleRefetchDisponibles}
+                      disabled={isSearching}
+                      className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-purple-400 hover:bg-purple-500/10 transition-colors disabled:opacity-50"
+                      title="Recargar datos"
+                    >
+                      <Search className={`h-4 w-4 ${isSearching ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
                 </div>
-              )}
-
-              <div className="flex-1" />
-
-              {/* Stats & Actions */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-500 px-2">
-                  <span className="text-purple-300 font-bold">{processedInventory.length}</span> resultados
-                </span>
-
-                {/* Clear all filters */}
-                {(flujoFilter !== 'Todos' || showOnlyUnicos || showOnlyCompletos || groupByDistance || poiFilterIds !== null) && (
-                  <button
-                    onClick={clearAllFilters}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    Limpiar
-                  </button>
-                )}
-
-                {/* Refresh */}
-                <button
-                  onClick={handleRefetchDisponibles}
-                  disabled={isSearching}
-                  className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-purple-400 hover:bg-purple-500/10 transition-colors disabled:opacity-50"
-                  title="Recargar datos"
-                >
-                  <Search className={`h-4 w-4 ${isSearching ? 'animate-spin' : ''}`} />
-                </button>
               </div>
-            </div>
-          </div>
 
-          {/* Content - Map and Table */}
-          <div className="flex-1 flex overflow-hidden">
-            {/* Table */}
-            <div className="w-1/2 border-r border-zinc-800 flex flex-col">
-              <div className="flex-1 overflow-auto">
-                {isSearching ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
-                  </div>
-                ) : processedInventory.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-zinc-500">
-                    <MapPin className="h-12 w-12 mb-4 opacity-30" />
-                    <p className="text-lg">No hay inventario disponible</p>
-                    <p className="text-sm">Intenta cambiar los filtros o la cara seleccionada</p>
-                  </div>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead className="bg-zinc-800/50 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs text-zinc-400 font-medium w-10">
-                          <input
-                            type="checkbox"
-                            checked={processedInventory.length > 0 && selectedInventory.size === processedInventory.length}
-                            onChange={() => {
-                              if (selectedInventory.size === processedInventory.length) {
-                                setSelectedInventory(new Set());
-                              } else {
-                                setSelectedInventory(new Set(processedInventory.map(i => i.id)));
-                              }
-                            }}
-                            className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
-                          />
-                        </th>
-                        <th
-                          className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
-                          onClick={() => handleSort('codigo_unico')}
-                        >
-                          <div className="flex items-center gap-1">
-                            Código
-                            {sortColumn === 'codigo_unico' && (
-                              sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                            )}
-                            {sortColumn !== 'codigo_unico' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                          </div>
-                        </th>
-                        <th
-                          className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
-                          onClick={() => handleSort('tipo_de_cara')}
-                        >
-                          <div className="flex items-center gap-1">
-                            Cara
-                            {sortColumn === 'tipo_de_cara' && (
-                              sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                            )}
-                            {sortColumn !== 'tipo_de_cara' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                          </div>
-                        </th>
-                        <th
-                          className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
-                          onClick={() => handleSort('plaza')}
-                        >
-                          <div className="flex items-center gap-1">
-                            Plaza
-                            {sortColumn === 'plaza' && (
-                              sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                            )}
-                            {sortColumn !== 'plaza' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                          </div>
-                        </th>
-                        <th
-                          className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
-                          onClick={() => handleSort('nivel_socioeconomico')}
-                        >
-                          <div className="flex items-center gap-1">
-                            NSE
-                            {sortColumn === 'nivel_socioeconomico' && (
-                              sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                            )}
-                            {sortColumn !== 'nivel_socioeconomico' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                          </div>
-                        </th>
-                        <th
-                          className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
-                          onClick={() => handleSort('ubicacion')}
-                        >
-                          <div className="flex items-center gap-1">
-                            Ubicación
-                            {sortColumn === 'ubicacion' && (
-                              sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                            )}
-                            {sortColumn !== 'ubicacion' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                          </div>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {groupByDistance && groupedInventory ? (
-                        // Grouped view with collapsible sections
-                        groupedInventory.map(([groupName, items]) => (
-                          <React.Fragment key={groupName}>
-                            {/* Group Header */}
-                            <tr
-                              className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
-                              onClick={() => toggleGroupExpansion(groupName)}
+              {/* Content - Map and Table */}
+              <div className="flex-1 flex overflow-hidden">
+                {/* Table */}
+                <div className="w-1/2 border-r border-zinc-800 flex flex-col">
+                  <div className="flex-1 overflow-auto">
+                    {isSearching ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+                      </div>
+                    ) : processedInventory.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-zinc-500">
+                        <MapPin className="h-12 w-12 mb-4 opacity-30" />
+                        <p className="text-lg">No hay inventario disponible</p>
+                        <p className="text-sm">Intenta cambiar los filtros o la cara seleccionada</p>
+                      </div>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead className="bg-zinc-800/50 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs text-zinc-400 font-medium w-10">
+                              <input
+                                type="checkbox"
+                                checked={processedInventory.length > 0 && selectedInventory.size === processedInventory.length}
+                                onChange={() => {
+                                  if (selectedInventory.size === processedInventory.length) {
+                                    setSelectedInventory(new Set());
+                                  } else {
+                                    setSelectedInventory(new Set(processedInventory.map(i => i.id)));
+                                  }
+                                }}
+                                className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                              />
+                            </th>
+                            <th
+                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              onClick={() => handleSort('codigo_unico')}
                             >
-                              <td colSpan={6} className="px-3 py-2">
-                                <div className="flex items-center gap-3">
-                                  {expandedGroups.has(groupName) ? (
-                                    <ChevronDown className="h-4 w-4 text-purple-400" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4 text-purple-400" />
-                                  )}
-                                  <span className="text-sm font-medium text-white">{groupName}</span>
-                                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
-                                    {items.length} sitios
-                                  </span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      selectAllInGroup(items);
-                                    }}
-                                    className="ml-auto text-xs text-purple-400 hover:text-purple-300"
+                              <div className="flex items-center gap-1">
+                                Código
+                                {sortColumn === 'codigo_unico' && (
+                                  sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                                )}
+                                {sortColumn !== 'codigo_unico' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                              </div>
+                            </th>
+                            <th
+                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              onClick={() => handleSort('tipo_de_cara')}
+                            >
+                              <div className="flex items-center gap-1">
+                                Cara
+                                {sortColumn === 'tipo_de_cara' && (
+                                  sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                                )}
+                                {sortColumn !== 'tipo_de_cara' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                              </div>
+                            </th>
+                            <th
+                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              onClick={() => handleSort('plaza')}
+                            >
+                              <div className="flex items-center gap-1">
+                                Plaza
+                                {sortColumn === 'plaza' && (
+                                  sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                                )}
+                                {sortColumn !== 'plaza' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                              </div>
+                            </th>
+                            <th
+                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              onClick={() => handleSort('nivel_socioeconomico')}
+                            >
+                              <div className="flex items-center gap-1">
+                                NSE
+                                {sortColumn === 'nivel_socioeconomico' && (
+                                  sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                                )}
+                                {sortColumn !== 'nivel_socioeconomico' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                              </div>
+                            </th>
+                            <th
+                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              onClick={() => handleSort('ubicacion')}
+                            >
+                              <div className="flex items-center gap-1">
+                                Ubicación
+                                {sortColumn === 'ubicacion' && (
+                                  sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                                )}
+                                {sortColumn !== 'ubicacion' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                              </div>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {groupByDistance && groupedInventory ? (
+                            // Grouped view with collapsible sections
+                            groupedInventory.map(([groupName, items]) => (
+                              <React.Fragment key={groupName}>
+                                {/* Group Header */}
+                                <tr
+                                  className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
+                                  onClick={() => toggleGroupExpansion(groupName)}
+                                >
+                                  <td colSpan={6} className="px-3 py-2">
+                                    <div className="flex items-center gap-3">
+                                      {expandedGroups.has(groupName) ? (
+                                        <ChevronDown className="h-4 w-4 text-purple-400" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4 text-purple-400" />
+                                      )}
+                                      <span className="text-sm font-medium text-white">{groupName}</span>
+                                      <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                                        {items.length} sitios
+                                      </span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          selectAllInGroup(items);
+                                        }}
+                                        className="ml-auto text-xs text-purple-400 hover:text-purple-300"
+                                      >
+                                        Seleccionar todos
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                                {/* Group Items */}
+                                {expandedGroups.has(groupName) && items.map((inv) => (
+                                  <tr
+                                    key={inv.id}
+                                    onClick={() => toggleInventorySelection(inv.id)}
+                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(inv.id)
+                                      ? 'bg-purple-500/10'
+                                      : inv.ya_reservado_para_cara
+                                        ? 'bg-green-500/5'
+                                        : 'hover:bg-zinc-800/30'
+                                      }`}
                                   >
-                                    Seleccionar todos
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                            {/* Group Items */}
-                            {expandedGroups.has(groupName) && items.map((inv) => (
+                                    <td className="px-3 py-2 pl-8">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedInventory.has(inv.id)}
+                                        onChange={() => toggleInventorySelection(inv.id)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                    <td className="px-3 py-2">
+                                      <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Flujo'
+                                        ? 'bg-blue-500/20 text-blue-300'
+                                        : inv.tipo_de_cara === 'Completo'
+                                          ? 'bg-purple-500/20 text-purple-300'
+                                          : 'bg-amber-500/20 text-amber-300'
+                                        }`}>
+                                        {inv.tipo_de_cara || '-'}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
+                                    <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
+                                    <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
+                                      {inv.ubicacion}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            ))
+                          ) : (
+                            // Normal flat view
+                            processedInventory.map((inv) => (
                               <tr
                                 key={inv.id}
                                 onClick={() => toggleInventorySelection(inv.id)}
-                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${
-                                  selectedInventory.has(inv.id)
-                                    ? 'bg-purple-500/10'
-                                    : inv.ya_reservado_para_cara
-                                      ? 'bg-green-500/5'
-                                      : 'hover:bg-zinc-800/30'
-                                }`}
+                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(inv.id)
+                                  ? 'bg-purple-500/10'
+                                  : inv.ya_reservado_para_cara
+                                    ? 'bg-green-500/5'
+                                    : 'hover:bg-zinc-800/30'
+                                  }`}
                               >
-                                <td className="px-3 py-2 pl-8">
+                                <td className="px-3 py-2">
                                   <input
                                     type="checkbox"
                                     checked={selectedInventory.has(inv.id)}
@@ -1464,13 +1723,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                 </td>
                                 <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
                                 <td className="px-3 py-2">
-                                  <span className={`px-2 py-0.5 rounded-full text-xs ${
-                                    inv.tipo_de_cara === 'Flujo'
-                                      ? 'bg-blue-500/20 text-blue-300'
-                                      : inv.tipo_de_cara === 'Completo'
-                                        ? 'bg-purple-500/20 text-purple-300'
-                                        : 'bg-amber-500/20 text-amber-300'
-                                  }`}>
+                                  <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Flujo'
+                                    ? 'bg-blue-500/20 text-blue-300'
+                                    : inv.tipo_de_cara === 'Completo'
+                                      ? 'bg-purple-500/20 text-purple-300'
+                                      : 'bg-amber-500/20 text-amber-300'
+                                    }`}>
                                     {inv.tipo_de_cara || '-'}
                                   </span>
                                 </td>
@@ -1480,98 +1738,65 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                   {inv.ubicacion}
                                 </td>
                               </tr>
-                            ))}
-                          </React.Fragment>
-                        ))
-                      ) : (
-                        // Normal flat view
-                        processedInventory.map((inv) => (
-                          <tr
-                            key={inv.id}
-                            onClick={() => toggleInventorySelection(inv.id)}
-                            className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${
-                              selectedInventory.has(inv.id)
-                                ? 'bg-purple-500/10'
-                                : inv.ya_reservado_para_cara
-                                  ? 'bg-green-500/5'
-                                  : 'hover:bg-zinc-800/30'
-                            }`}
-                          >
-                            <td className="px-3 py-2">
-                              <input
-                                type="checkbox"
-                                checked={selectedInventory.has(inv.id)}
-                                onChange={() => toggleInventorySelection(inv.id)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
-                              />
-                            </td>
-                            <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
-                            <td className="px-3 py-2">
-                              <span className={`px-2 py-0.5 rounded-full text-xs ${
-                                inv.tipo_de_cara === 'Flujo'
-                                  ? 'bg-blue-500/20 text-blue-300'
-                                  : inv.tipo_de_cara === 'Completo'
-                                    ? 'bg-purple-500/20 text-purple-300'
-                                    : 'bg-amber-500/20 text-amber-300'
-                              }`}>
-                                {inv.tipo_de_cara || '-'}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
-                            <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
-                            <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
-                              {inv.ubicacion}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                )}
-              </div>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
 
-              {/* Action buttons */}
-              <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleReservar}
-                    disabled={selectedInventory.size === 0 || (remainingToAssign.flujo <= 0 && remainingToAssign.contraflujo <= 0)}
-                    className="flex-1 px-4 py-2.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-xl text-sm font-medium hover:bg-purple-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    <Target className="h-4 w-4" />
-                    Reservar
-                  </button>
-                  <button
-                    onClick={handleReserveAsBonificacion}
-                    disabled={selectedInventory.size === 0 || remainingToAssign.bonificacion <= 0}
-                    className="flex-1 px-4 py-2.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-sm font-medium hover:bg-emerald-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    <Gift className="h-4 w-4" />
-                    Bonificación
-                  </button>
+                  {/* Action buttons */}
+                  <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 space-y-3">
+                    {/* Checkbox para agrupar flujo+contraflujo */}
+                    <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer hover:text-zinc-300 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={agruparComoCompleto}
+                        onChange={(e) => setAgruparComoCompleto(e.target.checked)}
+                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-pink-500 focus:ring-pink-500 focus:ring-offset-0"
+                      />
+                      <span>Agrupar Flujo + Contraflujo del mismo parabús como "Completo"</span>
+                    </label>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleReservar}
+                        disabled={selectedInventory.size === 0 || (remainingToAssign.flujo <= 0 && remainingToAssign.contraflujo <= 0)}
+                        className="flex-1 px-4 py-2.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-xl text-sm font-medium hover:bg-purple-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        <Target className="h-4 w-4" />
+                        Reservar
+                      </button>
+                      <button
+                        onClick={handleReserveAsBonificacion}
+                        disabled={selectedInventory.size === 0 || remainingToAssign.bonificacion <= 0}
+                        className="flex-1 px-4 py-2.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-sm font-medium hover:bg-emerald-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        <Gift className="h-4 w-4" />
+                        Bonificación
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Advanced Map */}
+                <div className="w-1/2">
+                  {mapsLoaded ? (
+                    <AdvancedMapComponent
+                      inventarios={processedInventory}
+                      selectedInventory={selectedInventory}
+                      onToggleSelection={toggleInventorySelection}
+                      mapCenter={mapCenter}
+                      onFilterByPOI={handlePOIFilter}
+                      hasPOIFilter={poiFilterIds !== null}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full bg-zinc-800">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-
-            {/* Advanced Map */}
-            <div className="w-1/2">
-              {mapsLoaded ? (
-                <AdvancedMapComponent
-                  inventarios={processedInventory}
-                  selectedInventory={selectedInventory}
-                  onToggleSelection={toggleInventorySelection}
-                  mapCenter={mapCenter}
-                  onFilterByPOI={handlePOIFilter}
-                  hasPOIFilter={poiFilterIds !== null}
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full bg-zinc-800">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
-                </div>
-              )}
-            </div>
-          </div>
             </>
           ) : (
             /* RESERVADOS TAB CONTENT */
@@ -1604,13 +1829,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                           >
                             <td className="px-4 py-3 text-zinc-300 font-mono text-sm">{reserva.codigo_unico}</td>
                             <td className="px-4 py-3">
-                              <span className={`px-2 py-1 rounded-full text-xs ${
-                                reserva.tipo === 'Flujo'
-                                  ? 'bg-blue-500/20 text-blue-300'
-                                  : reserva.tipo === 'Bonificacion'
-                                    ? 'bg-emerald-500/20 text-emerald-300'
-                                    : 'bg-amber-500/20 text-amber-300'
-                              }`}>
+                              <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
+                                ? 'bg-blue-500/20 text-blue-300'
+                                : reserva.tipo === 'Bonificacion'
+                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                  : 'bg-amber-500/20 text-amber-300'
+                                }`}>
                                 {reserva.tipo}
                               </span>
                             </td>
@@ -1714,13 +1938,6 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
             <p className="text-sm text-zinc-400">Propuesta #{propuesta.id}</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-xl text-sm font-medium hover:bg-purple-600 transition-colors"
-            >
-              <Save className="h-4 w-4" />
-              Guardar
-            </button>
             <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:text-white">
               <X className="h-5 w-5" />
             </button>
@@ -2094,7 +2311,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
                           {isCatorcenaExpanded && groupData.caras.map((cara) => {
                             const isExpanded = expandedCaras.has(cara.localId);
-                            const caraReservas = reservas.filter(r => r.id.startsWith(cara.localId));
+                            const caraReservas = reservas.filter(r =>
+                              r.id.startsWith(cara.localId) || r.solicitudCaraId === cara.id
+                            );
                             const hasReservas = caraReservas.length > 0;
                             const status = getCaraCompletionStatus(cara);
                             const totalCaras = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
@@ -2138,120 +2357,118 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleSearchInventory(cara); }}
-                                    disabled={status.isComplete}
-                                    className={`p-2 rounded-lg border transition-colors ${
-                                      status.isComplete
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleSearchInventory(cara); }}
+                                      disabled={status.isComplete}
+                                      className={`p-2 rounded-lg border transition-colors ${status.isComplete
                                         ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                         : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
-                                    }`}
-                                    title={status.isComplete ? 'Ya está completo' : 'Buscar inventario'}
-                                  >
-                                    <Search className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
-                                    disabled={hasReservas}
-                                    className={`p-2 rounded-lg border transition-colors ${
-                                      hasReservas
+                                        }`}
+                                      title={status.isComplete ? 'Ya está completo' : 'Buscar inventario'}
+                                    >
+                                      <Search className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
+                                      disabled={hasReservas}
+                                      className={`p-2 rounded-lg border transition-colors ${hasReservas
                                         ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                         : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
-                                    }`}
-                                    title={hasReservas ? 'No se puede editar (tiene reservas)' : 'Editar'}
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
-                                    disabled={hasReservas}
-                                    className={`p-2 rounded-lg border transition-colors ${
-                                      hasReservas
+                                        }`}
+                                      title={hasReservas ? 'No se puede editar (tiene reservas)' : 'Editar'}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
+                                      disabled={hasReservas}
+                                      className={`p-2 rounded-lg border transition-colors ${hasReservas
                                         ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                         : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
-                                    }`}
-                                    title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
+                                        }`}
+                                      title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
                                 </div>
-                              </div>
 
-                          {/* Expanded content - reservas */}
-                          {isExpanded && (
-                            <div className="px-5 py-3 bg-zinc-900/30 border-t border-zinc-700/30">
-                              {caraReservas.length === 0 ? (
-                                <div className="text-center py-4 text-zinc-500 text-sm">
-                                  <MapPin className="h-6 w-6 mx-auto mb-2 opacity-30" />
-                                  <p>Sin inventario reservado</p>
-                                  <button
-                                    onClick={() => handleSearchInventory(cara)}
-                                    className="mt-2 text-purple-400 hover:text-purple-300 text-xs"
-                                  >
-                                    Buscar inventario
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="text-zinc-500 text-xs">
-                                        <th className="text-left pb-2">Código</th>
-                                        <th className="text-left pb-2">Tipo</th>
-                                        <th className="text-left pb-2">Plaza</th>
-                                        <th className="text-left pb-2">Formato</th>
-                                        <th className="text-left pb-2">Ubicación</th>
-                                        <th className="text-right pb-2">Acciones</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {caraReservas.map(reserva => (
-                                        <tr key={reserva.id} className="border-t border-zinc-700/30">
-                                          <td className="py-2 text-zinc-300 font-mono text-xs">{reserva.codigo_unico}</td>
-                                          <td className="py-2">
-                                            <span className={`px-2 py-0.5 rounded-full text-xs ${
-                                              reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
-                                              reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' :
-                                              'bg-emerald-500/20 text-emerald-300'
-                                            }`}>
-                                              {reserva.tipo}
-                                            </span>
-                                          </td>
-                                          <td className="py-2 text-zinc-300">{reserva.plaza}</td>
-                                          <td className="py-2 text-zinc-300">{reserva.formato}</td>
-                                          <td className="py-2 text-zinc-400 truncate max-w-[200px]">{reserva.ubicacion}</td>
-                                          <td className="py-2 text-right">
-                                            <button
-                                              onClick={() => setReservas(prev => prev.filter(r => r.id !== reserva.id))}
-                                              className="p-1 text-red-400 hover:text-red-300"
-                                            >
-                                              <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                            </div>
-                          )}
+                                {/* Expanded content - reservas */}
+                                {isExpanded && (
+                                  <div className="px-5 py-3 bg-zinc-900/30 border-t border-zinc-700/30">
+                                    {caraReservas.length === 0 ? (
+                                      <div className="text-center py-4 text-zinc-500 text-sm">
+                                        <MapPin className="h-6 w-6 mx-auto mb-2 opacity-30" />
+                                        <p>Sin inventario reservado</p>
+                                        <button
+                                          onClick={() => handleSearchInventory(cara)}
+                                          className="mt-2 text-purple-400 hover:text-purple-300 text-xs"
+                                        >
+                                          Buscar inventario
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                          <thead>
+                                            <tr className="text-zinc-500 text-xs">
+                                              <th className="text-left pb-2">Código</th>
+                                              <th className="text-left pb-2">Tipo</th>
+                                              <th className="text-left pb-2">Plaza</th>
+                                              <th className="text-left pb-2">Formato</th>
+                                              <th className="text-left pb-2">Ubicación</th>
+                                              <th className="text-right pb-2">Acciones</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {caraReservas.map(reserva => (
+                                              <tr key={reserva.id} className="border-t border-zinc-700/30">
+                                                <td className="py-2 text-zinc-300 font-mono text-xs">{reserva.codigo_unico}</td>
+                                                <td className="py-2">
+                                                  <span className={`px-2 py-0.5 rounded-full text-xs ${reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
+                                                    reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' :
+                                                      'bg-emerald-500/20 text-emerald-300'
+                                                    }`}>
+                                                    {reserva.tipo}
+                                                  </span>
+                                                </td>
+                                                <td className="py-2 text-zinc-300">{reserva.plaza}</td>
+                                                <td className="py-2 text-zinc-300">{reserva.formato}</td>
+                                                <td className="py-2 text-zinc-400 truncate max-w-[200px]">{reserva.ubicacion}</td>
+                                                <td className="py-2 text-right">
+                                                  {/* Removed as per request to only allow deletion from searcher 
+                                                  <button
+                                                    onClick={() => setReservas(prev => prev.filter(r => r.id !== reserva.id))}
+                                                    className="p-1 text-red-400 hover:text-red-300"
+                                                  >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                  </button>
+                                                  */}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       );
-                    })}
-                  </div>
-                );
-              })
-            )}
-            </div>
-          </div>
+                    })
+                  )}
+                </div>
+              </div>
 
               {/* Section 3: Reservas Summary with Map and KPIs */}
               {reservas.length > 0 && (
                 <div className="bg-zinc-800/30 rounded-2xl border border-zinc-700/50 overflow-hidden">
                   <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50">
                     <h3 className="text-sm font-medium text-white flex items-center gap-2">
-                      <Map className="h-4 w-4 text-purple-400" />
+                      <MapIcon className="h-4 w-4 text-purple-400" />
                       Resumen de Reservas
                     </h3>
                   </div>
@@ -2323,23 +2540,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                             zoomControl: true,
                           }}
                         >
-                        {reservas.map(reserva => (
-                          reserva.latitud && reserva.longitud && (
-                            <Marker
-                              key={reserva.id}
-                              position={{ lat: reserva.latitud, lng: reserva.longitud }}
-                              icon={{
-                                path: google.maps.SymbolPath.CIRCLE,
-                                scale: 8,
-                                fillColor: reserva.tipo === 'Flujo' ? '#3b82f6' :
-                                           reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
-                                fillOpacity: 0.9,
-                                strokeColor: '#fff',
-                                strokeWeight: 2,
-                              }}
-                            />
-                          )
-                        ))}
+                          {reservas.map(reserva => (
+                            reserva.latitud && reserva.longitud && (
+                              <Marker
+                                key={reserva.id}
+                                position={{ lat: reserva.latitud, lng: reserva.longitud }}
+                                icon={{
+                                  path: google.maps.SymbolPath.CIRCLE,
+                                  scale: 8,
+                                  fillColor: reserva.tipo === 'Flujo' ? '#3b82f6' :
+                                    reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
+                                  fillOpacity: 0.9,
+                                  strokeColor: '#fff',
+                                  strokeWeight: 2,
+                                }}
+                              />
+                            )
+                          ))}
                         </GoogleMap>
                       ) : (
                         <div className="flex items-center justify-center h-full bg-zinc-800">
@@ -2354,6 +2571,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
           )}
         </div>
       </div>
+      {/* Confirmation Modal */}
+      {confirmModalJSX}
+
+      {/* Loading Overlay */}
+      {isSaving && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="flex flex-col items-center gap-4 p-6 bg-zinc-900 rounded-2xl border border-zinc-800 shadow-xl">
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-zinc-700 border-t-purple-500" />
+            <p className="text-zinc-300 font-medium animate-pulse">Procesando...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

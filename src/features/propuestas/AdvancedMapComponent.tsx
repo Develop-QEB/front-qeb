@@ -82,6 +82,30 @@ export function AdvancedMapComponent({
   // Panel collapsed
   const [panelCollapsed, setPanelCollapsed] = useState(false);
 
+  // Calculate location groups to determine if Flujo and Contraflujo are at same position
+  const locationFlowMap = useMemo(() => {
+    const map = new Map<string, { hasFlujo: boolean; hasContraflujo: boolean }>();
+
+    inventarios.forEach(inv => {
+      if (!inv.latitud || !inv.longitud) return;
+      // Round to 5 decimal places to group nearby points
+      const key = `${inv.latitud.toFixed(5)},${inv.longitud.toFixed(5)}`;
+
+      if (!map.has(key)) {
+        map.set(key, { hasFlujo: false, hasContraflujo: false });
+      }
+
+      const entry = map.get(key)!;
+      if (inv.tipo_de_cara === 'Flujo') {
+        entry.hasFlujo = true;
+      } else if (inv.tipo_de_cara === 'Contraflujo') {
+        entry.hasContraflujo = true;
+      }
+    });
+
+    return map;
+  }, [inventarios]);
+
   // Calculate which inventarios are in range
   const { inRangeSet, outOfRangeSet } = useMemo(() => {
     const inRange = new Set<number>();
@@ -284,15 +308,29 @@ export function AdvancedMapComponent({
     return colors[type];
   };
 
-  // Get inventory marker color
+  // Get inventory marker color based on Flujo/Contraflujo
+  // Flujo = Rojo (#ef4444), Contraflujo = Azul (#3b82f6), Ambos = Morado (#a855f7)
   const getInventoryColor = (inv: InventarioDisponible) => {
-    if (selectedInventory.has(inv.id)) return '#facc15';
-    if (inv.ya_reservado_para_cara) return '#22c55e';
+    if (selectedInventory.has(inv.id)) return '#facc15'; // Amarillo - seleccionado
+    if (inv.ya_reservado_para_cara) return '#22c55e'; // Verde - ya reservado
+
     if (poiMarkers.length > 0) {
-      if (inRangeSet.has(inv.id)) return '#a855f7';
-      return '#6b7280';
+      if (inRangeSet.has(inv.id)) return '#a855f7'; // Morado - en rango de POI
+      return '#6b7280'; // Gris - fuera de rango
     }
-    return inv.tipo_de_cara === 'Flujo' ? '#8b5cf6' : '#c084fc';
+
+    // Check if this location has both Flujo and Contraflujo
+    if (inv.latitud && inv.longitud) {
+      const key = `${inv.latitud.toFixed(5)},${inv.longitud.toFixed(5)}`;
+      const locationInfo = locationFlowMap.get(key);
+
+      if (locationInfo?.hasFlujo && locationInfo?.hasContraflujo) {
+        return '#a855f7'; // Morado - ambos en la misma ubicación
+      }
+    }
+
+    // Single type at location
+    return inv.tipo_de_cara === 'Flujo' ? '#ef4444' : '#3b82f6'; // Rojo / Azul
   };
 
   // Center map on inventory bounds
@@ -604,6 +642,33 @@ export function AdvancedMapComponent({
         >
           <LocateFixed className="h-5 w-5" />
         </button>
+
+        {/* Color Legend */}
+        <div className="absolute bottom-4 right-3 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-2.5 text-xs space-y-1.5">
+          <div className="text-zinc-400 font-medium mb-1.5">Leyenda</div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-red-500" />
+            <span className="text-zinc-300">Flujo</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-blue-500" />
+            <span className="text-zinc-300">Contraflujo</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-purple-500" />
+            <span className="text-zinc-300">Ambos</span>
+          </div>
+          <div className="border-t border-zinc-700 pt-1.5 mt-1.5">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-yellow-400" />
+              <span className="text-zinc-300">Seleccionado</span>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-3 h-3 rounded-full bg-emerald-500" />
+              <span className="text-zinc-300">Ya reservado</span>
+            </div>
+          </div>
+        </div>
 
         <GoogleMap
           mapContainerStyle={{ width: '100%', height: '100%' }}

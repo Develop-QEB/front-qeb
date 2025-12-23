@@ -525,9 +525,9 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
           estado: c.estados || '',
           tipo: c.tipo || '',
           formato: c.formato || '',
-          caras: c.caras || 0,
-          bonificacion: c.bonificacion || 0,
-          tarifa_publica: c.tarifa_publica || 0,
+          caras: Number(c.caras) || 0,
+          bonificacion: Number(c.bonificacion) || 0,
+          tarifa_publica: Number(c.tarifa_publica) || 0,
           nivel_socioeconomico: c.nivel_socioeconomico || '',
           inicio_periodo: c.inicio_periodo || '',
           fin_periodo: c.fin_periodo || '',
@@ -543,7 +543,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
     setForceRefreshSap(prev => prev + 1);
   };
 
-  const updateExistingCara = (id: number, field: 'caras' | 'bonificacion', value: number) => {
+  const updateExistingCara = (id: number, field: 'caras' | 'bonificacion' | 'tarifa_publica', value: number) => {
     setExistingCaras(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
   };
 
@@ -931,111 +931,8 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                 </div>
 
                 <div className="p-5 space-y-6">
-                  {/* Existing Caras Table */}
-                  {existingCaras.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xs font-medium text-violet-300">Caras Existentes ({existingCaras.length})</span>
-                        <div className="flex-1 h-px bg-violet-500/20"></div>
-                        <span className="text-xs text-zinc-500">{formatCurrency(existingTotals.inversion)}</span>
-                      </div>
-                      <div className="overflow-x-auto rounded-xl border border-violet-500/20 bg-zinc-900/50">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="bg-violet-600/20">
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Ciudad</th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Estado</th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Formato</th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Tipo</th>
-                              <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200">Renta</th>
-                              <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200">Bonif</th>
-                              <th className="px-3 py-2.5 text-right text-xs font-semibold text-amber-300">Tarifa Púb.</th>
-                              <th className="px-3 py-2.5 text-right text-xs font-semibold text-emerald-300">Inversión</th>
-                              <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200"></th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-violet-500/10">
-                            {existingCaras.map((cara) => {
-                              const inversion = cara.tarifa_publica * cara.caras;
-                              return (
-                                <tr key={cara.id} className="hover:bg-violet-600/10 transition-colors">
-                                  <td className="px-3 py-2.5 text-zinc-400">{cara.ciudad || '-'}</td>
-                                  <td className="px-3 py-2.5 text-zinc-400">{cara.estado || '-'}</td>
-                                  <td className="px-3 py-2.5 text-zinc-400">{cara.formato || '-'}</td>
-                                  <td className="px-3 py-2.5 text-zinc-400">{cara.tipo || '-'}</td>
-                                  <td className="px-3 py-2.5">
-                                    <input type="number" min={0} value={cara.caras}
-                                      onChange={(e) => updateExistingCara(cara.id, 'caras', parseInt(e.target.value) || 0)}
-                                      className="w-16 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
-                                  </td>
-                                  <td className="px-3 py-2.5">
-                                    <input type="number" min={0} value={cara.bonificacion}
-                                      onChange={(e) => updateExistingCara(cara.id, 'bonificacion', parseInt(e.target.value) || 0)}
-                                      className="w-16 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-emerald-400 text-xs text-center focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
-                                  </td>
-                                  <td className="px-3 py-2.5 text-right text-amber-300 font-medium">{formatCurrency(cara.tarifa_publica)}</td>
-                                  <td className="px-3 py-2.5 text-right text-emerald-300 font-medium">{formatCurrency(inversion)}</td>
-                                  <td className="px-3 py-2.5 text-center">
-                                    <button onClick={() => removeExistingCara(cara.id)} className="p-1 hover:bg-red-500/20 rounded text-red-400">
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* New Caras Table */}
-                  {newCaras.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xs font-medium text-emerald-300">Nuevas Caras ({newCaras.length})</span>
-                        <div className="flex-1 h-px bg-emerald-500/20"></div>
-                        <span className="text-xs text-zinc-500">{formatCurrency(newTotals.inversion)}</span>
-                      </div>
-                      <div className="overflow-x-auto rounded-xl border border-emerald-500/20 bg-zinc-900/50">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="bg-emerald-600/20">
-                              <th className="px-3 py-2 text-left text-xs text-emerald-200">Artículo</th>
-                              <th className="px-3 py-2 text-left text-xs text-emerald-200">Estado</th>
-                              <th className="px-3 py-2 text-left text-xs text-emerald-200">Formato</th>
-                              <th className="px-3 py-2 text-center text-xs text-emerald-200">Renta</th>
-                              <th className="px-3 py-2 text-center text-xs text-emerald-200">Bonif</th>
-                              <th className="px-3 py-2 text-right text-xs text-amber-300">Tarifa</th>
-                              <th className="px-3 py-2 text-right text-xs text-emerald-300">Inversión</th>
-                              <th className="px-3 py-2"></th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-emerald-500/10">
-                            {newCaras.map((cara) => (
-                              <tr key={cara.tempId} className="hover:bg-emerald-600/10">
-                                <td className="px-3 py-2 text-white text-xs">{cara.articulo.ItemCode}</td>
-                                <td className="px-3 py-2 text-zinc-300 text-xs">{cara.estado}</td>
-                                <td className="px-3 py-2 text-zinc-300 text-xs">{cara.formato}</td>
-                                <td className="px-3 py-2 text-center text-white">{cara.renta}</td>
-                                <td className="px-3 py-2 text-center text-emerald-400">{cara.bonificacion}</td>
-                                <td className="px-3 py-2 text-right text-amber-300">{formatCurrency(cara.tarifaPublica)}</td>
-                                <td className="px-3 py-2 text-right text-emerald-300 font-medium">{formatCurrency(cara.tarifaPublica * cara.renta)}</td>
-                                <td className="px-3 py-2 text-center">
-                                  <button onClick={() => removeNewCara(cara.tempId)} className="p-1 hover:bg-red-500/20 rounded text-red-400">
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Add New Cara Form */}
-                  <div className="pt-4 border-t border-violet-500/20">
+                  {/* Add New Cara Form - ARRIBA */}
+                  <div className="pb-4 border-b border-violet-500/20">
                     <div className="flex items-center gap-2 mb-4">
                       <Plus className="h-4 w-4 text-emerald-400" />
                       <span className="text-sm font-medium text-white">Agregar Nueva Cara</span>
@@ -1175,6 +1072,113 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                       Agregar Cara
                     </button>
                   </div>
+
+                  {/* New Caras Table - ABAJO */}
+                  {newCaras.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xs font-medium text-emerald-300">Nuevas Caras ({newCaras.length})</span>
+                        <div className="flex-1 h-px bg-emerald-500/20"></div>
+                        <span className="text-xs text-zinc-500">{formatCurrency(newTotals.inversion)}</span>
+                      </div>
+                      <div className="overflow-x-auto rounded-xl border border-emerald-500/20 bg-zinc-900/50">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-emerald-600/20">
+                              <th className="px-3 py-2 text-left text-xs text-emerald-200">Artículo</th>
+                              <th className="px-3 py-2 text-left text-xs text-emerald-200">Estado</th>
+                              <th className="px-3 py-2 text-left text-xs text-emerald-200">Formato</th>
+                              <th className="px-3 py-2 text-center text-xs text-emerald-200">Renta</th>
+                              <th className="px-3 py-2 text-center text-xs text-emerald-200">Bonif</th>
+                              <th className="px-3 py-2 text-right text-xs text-amber-300">Tarifa</th>
+                              <th className="px-3 py-2 text-right text-xs text-emerald-300">Inversión</th>
+                              <th className="px-3 py-2"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-emerald-500/10">
+                            {newCaras.map((cara) => (
+                              <tr key={cara.tempId} className="hover:bg-emerald-600/10">
+                                <td className="px-3 py-2 text-white text-xs">{cara.articulo.ItemCode}</td>
+                                <td className="px-3 py-2 text-zinc-300 text-xs">{cara.estado}</td>
+                                <td className="px-3 py-2 text-zinc-300 text-xs">{cara.formato}</td>
+                                <td className="px-3 py-2 text-center text-white">{cara.renta}</td>
+                                <td className="px-3 py-2 text-center text-emerald-400">{cara.bonificacion}</td>
+                                <td className="px-3 py-2 text-right text-amber-300">{formatCurrency(cara.tarifaPublica)}</td>
+                                <td className="px-3 py-2 text-right text-emerald-300 font-medium">{formatCurrency(cara.tarifaPublica * cara.renta)}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <button onClick={() => removeNewCara(cara.tempId)} className="p-1 hover:bg-red-500/20 rounded text-red-400">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Existing Caras Table - ABAJO */}
+                  {existingCaras.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xs font-medium text-violet-300">Caras Existentes ({existingCaras.length})</span>
+                        <div className="flex-1 h-px bg-violet-500/20"></div>
+                        <span className="text-xs text-zinc-500">{formatCurrency(existingTotals.inversion)}</span>
+                      </div>
+                      <div className="overflow-x-auto rounded-xl border border-violet-500/20 bg-zinc-900/50">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-violet-600/20">
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Ciudad</th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Estado</th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Formato</th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Tipo</th>
+                              <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200">Renta</th>
+                              <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200">Bonif</th>
+                              <th className="px-3 py-2.5 text-right text-xs font-semibold text-amber-300">Tarifa Púb.</th>
+                              <th className="px-3 py-2.5 text-right text-xs font-semibold text-emerald-300">Inversión</th>
+                              <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-violet-500/10">
+                            {existingCaras.map((cara) => {
+                              const inversion = cara.tarifa_publica * cara.caras;
+                              return (
+                                <tr key={cara.id} className="hover:bg-violet-600/10 transition-colors">
+                                  <td className="px-3 py-2.5 text-zinc-400">{cara.ciudad || '-'}</td>
+                                  <td className="px-3 py-2.5 text-zinc-400">{cara.estado || '-'}</td>
+                                  <td className="px-3 py-2.5 text-zinc-400">{cara.formato || '-'}</td>
+                                  <td className="px-3 py-2.5 text-zinc-400">{cara.tipo || '-'}</td>
+                                  <td className="px-3 py-2.5">
+                                    <input type="number" min={0} value={cara.caras}
+                                      onChange={(e) => updateExistingCara(cara.id, 'caras', parseInt(e.target.value) || 0)}
+                                      className="w-16 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <input type="number" min={0} value={cara.bonificacion}
+                                      onChange={(e) => updateExistingCara(cara.id, 'bonificacion', parseInt(e.target.value) || 0)}
+                                      className="w-16 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-emerald-400 text-xs text-center focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right">
+                                    <input type="number" min={0} value={cara.tarifa_publica}
+                                      onChange={(e) => updateExistingCara(cara.id, 'tarifa_publica', parseFloat(e.target.value) || 0)}
+                                      className="w-24 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-amber-300 text-xs text-right focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right text-emerald-300 font-medium">{formatCurrency(inversion)}</td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    <button onClick={() => removeExistingCara(cara.id)} className="p-1 hover:bg-red-500/20 rounded text-red-400">
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
