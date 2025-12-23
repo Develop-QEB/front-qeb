@@ -13,12 +13,17 @@ import { formatCurrency, formatDate } from '../../lib/utils';
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
-// Dark map styles
+// IMU Brand Colors
+const IMU_BLUE = '#0054A6';
+const IMU_GREEN = '#7AB800';
+const IMU_DARK = '#003B71';
+
+// Dark map styles with IMU colors
 const DARK_MAP_STYLES = [
   { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
   { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a2e' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#a78bfa' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#60a5fa' }] },
   { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f0f1a' }] },
 ];
@@ -392,12 +397,12 @@ export function CompartirPropuestaPage() {
   };
 
   const isLoading = loadingDetails || loadingInventario;
-  const COLORS = ['#a855f7', '#8b5cf6', '#7c3aed', '#6d28d9', '#5b21b6'];
+  const COLORS = ['#0054A6', '#0066CC', '#0077E6', '#3399FF', '#66B3FF']; // IMU Blue palette
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-zinc-950">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
       </div>
     );
   }
@@ -413,7 +418,7 @@ export function CompartirPropuestaPage() {
             </button>
             <div>
               <div className="flex items-center gap-2">
-                <Share2 className="h-5 w-5 text-purple-500" />
+                <Share2 className="h-5 w-5 text-blue-500" />
                 <h1 className="text-xl font-bold text-white">Vista Compartir</h1>
               </div>
               <p className="text-sm text-zinc-400">Propuesta #{propuestaId}</p>
@@ -423,7 +428,7 @@ export function CompartirPropuestaPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleCopyLink}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
             >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? 'Copiado!' : 'Copiar Enlace'}
@@ -448,7 +453,7 @@ export function CompartirPropuestaPage() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Campaign Header */}
-        <div className="bg-gradient-to-r from-purple-900/40 to-violet-900/30 rounded-2xl p-6 border border-purple-500/20">
+        <div className="bg-gradient-to-r from-blue-900/40 to-cyan-900/30 rounded-2xl p-6 border border-blue-500/20">
           <h2 className="text-2xl font-bold text-white mb-2">
             {details?.cotizacion?.nombre_campania || 'Propuesta sin nombre'}
           </h2>
@@ -457,10 +462,10 @@ export function CompartirPropuestaPage() {
             <p className="text-sm text-zinc-500 mt-2">Notas: {details.propuesta.notas}</p>
           )}
           <div className="flex gap-4 mt-4 text-sm">
-            <span className="text-purple-300">
+            <span className="text-blue-300">
               Inicio: {details?.cotizacion?.fecha_inicio ? formatDate(details.cotizacion.fecha_inicio) : 'N/A'}
             </span>
-            <span className="text-purple-300">
+            <span className="text-blue-300">
               Fin: {details?.cotizacion?.fecha_fin ? formatDate(details.cotizacion.fecha_fin) : 'N/A'}
             </span>
           </div>
@@ -544,7 +549,7 @@ export function CompartirPropuestaPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: 'Total Caras', value: kpis.total, color: 'text-white' },
-            { label: 'En Renta', value: kpis.renta, color: 'text-purple-400' },
+            { label: 'En Renta', value: kpis.renta, color: 'text-blue-400' },
             { label: 'Bonificadas', value: kpis.bonificadas, color: 'text-emerald-400' },
             { label: 'Inversión Total', value: formatCurrency(kpis.inversion), color: 'text-amber-400' },
           ].map(({ label, value, color }) => (
@@ -565,7 +570,7 @@ export function CompartirPropuestaPage() {
                 placeholder="Buscar..."
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
-                className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
 
@@ -577,7 +582,7 @@ export function CompartirPropuestaPage() {
                   key={field}
                   onClick={() => toggleGrouping(field)}
                   className={`px-2 py-1 rounded text-xs ${activeGroupings.includes(field)
-                    ? 'bg-purple-600 text-white'
+                    ? 'bg-blue-600 text-white'
                     : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                     }`}
                 >
@@ -624,13 +629,13 @@ export function CompartirPropuestaPage() {
                   className="w-full flex items-center gap-2 px-4 py-3 bg-zinc-800/50 hover:bg-zinc-800 text-left"
                 >
                   {expandedGroups.has(groupKey) ? (
-                    <ChevronDown className="h-4 w-4 text-purple-400" />
+                    <ChevronDown className="h-4 w-4 text-blue-400" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 text-purple-400" />
+                    <ChevronRight className="h-4 w-4 text-blue-400" />
                   )}
                   <span className="text-sm font-medium text-white">{groupKey}</span>
                   <span className="text-xs text-zinc-500">({items.length} items)</span>
-                  <span className="ml-auto text-xs text-purple-400">
+                  <span className="ml-auto text-xs text-blue-400">
                     {items.reduce((sum, i) => sum + i.caras_totales, 0)} caras
                   </span>
                 </button>
@@ -650,7 +655,7 @@ export function CompartirPropuestaPage() {
                     <tbody>
                       {items.map((item, idx) => (
                         <tr key={idx} className="border-t border-zinc-800/50 hover:bg-zinc-800/30">
-                          <td className="px-4 py-2 text-purple-300 font-mono text-xs">{item.codigo_unico}</td>
+                          <td className="px-4 py-2 text-blue-300 font-mono text-xs">{item.codigo_unico}</td>
                           <td className="px-4 py-2 text-zinc-300">{item.plaza}</td>
                           <td className="px-4 py-2 text-zinc-400 text-xs truncate max-w-[200px]">{item.ubicacion}</td>
                           <td className="px-4 py-2 text-zinc-300">{item.tipo_de_cara}</td>
@@ -670,7 +675,7 @@ export function CompartirPropuestaPage() {
         {/* Map */}
         <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
           <div className="p-4 border-b border-zinc-800 flex items-center gap-4">
-            <Map className="h-5 w-5 text-purple-500" />
+            <Map className="h-5 w-5 text-blue-500" />
             <h3 className="text-lg font-semibold text-white">Mapa de Reservas</h3>
 
             <div className="flex items-center gap-2 ml-auto">

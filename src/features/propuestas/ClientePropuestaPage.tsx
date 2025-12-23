@@ -345,7 +345,7 @@ export function ClientePropuestaPage() {
     setExpandedGroups(next);
   };
 
-  const COLORS = ['#50277a', '#6b3fa0', '#8b5cf6', '#a78bfa', '#c4b5fd'];
+  const COLORS = ['#0054A6', '#0066CC', '#0077E6', '#3399FF', '#66B3FF']; // IMU Blue palette
 
   if (isLoading) {
     return (
