@@ -199,6 +199,17 @@ export interface Propuesta {
   comentario_cambio_status: string;
   articulo: string;
   updated_at: string | null;
+  // Campos adicionales del JOIN
+  marca_nombre?: string;
+  creador_nombre?: string;
+  nombre_comercial?: string;
+  campana_nombre?: string;
+  nombre_campania?: string;
+  usuario_nombre?: string;
+  catorcena_inicio?: number | null;
+  anio_inicio?: number | null;
+  catorcena_fin?: number | null;
+  anio_fin?: number | null;
 }
 
 export interface PropuestaStats {

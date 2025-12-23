@@ -975,10 +975,14 @@ export function PropuestasPage() {
           <span className="font-medium text-amber-400">{formatCurrency(item.inversion)}</span>
         </td>
         <td className="px-4 py-3">
-          <span className="text-zinc-400 text-sm">{item.catorcena_inicio ? `C${item.catorcena_inicio}` : '-'}</span>
+          <span className="text-zinc-400 text-sm">
+            {item.catorcena_inicio ? `C${item.catorcena_inicio} / ${item.anio_inicio}` : '-'}
+          </span>
         </td>
         <td className="px-4 py-3">
-          <span className="text-zinc-400 text-sm">{item.catorcena_fin ? `C${item.catorcena_fin}` : '-'}</span>
+          <span className="text-zinc-400 text-sm">
+            {item.catorcena_fin ? `C${item.catorcena_fin} / ${item.anio_fin}` : '-'}
+          </span>
         </td>
         <td className="px-4 py-3">
           <button
