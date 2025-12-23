@@ -16,15 +16,29 @@ const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 const IMU_BLUE = '#0054A6';
 const IMU_GREEN = '#7AB800';
 const IMU_DARK = '#003B71';
+const IMU_LIGHT_BLUE = '#E6F0FA';
+const IMU_LIGHT_GREEN = '#F0F9E6';
 
-// IMU Map styles (Dark)
+// IMU Map styles (Light - Clean Professional)
 const IMU_MAP_STYLES = [
-  { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
+  { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
   { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a2e' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#a78bfa' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f0f1a' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+  { featureType: 'administrative.land_parcel', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#c5e8c5' }] },
+  { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#7AB800' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+  { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dadada' }] },
+  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+  { featureType: 'road.local', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+  { featureType: 'transit.line', elementType: 'geometry', stylers: [{ color: '#e5e5e5' }] },
+  { featureType: 'transit.station', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9e4f5' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#0054A6' }] },
 ];
 
 interface InventarioReservado {
@@ -47,7 +61,17 @@ interface InventarioReservado {
 }
 
 interface PublicPropuestaData {
-  propuesta: { id: number; status: string; descripcion: string; notas: string; fecha: string };
+  propuesta: {
+    id: number;
+    status: string;
+    descripcion: string;
+    notas: string;
+    fecha: string;
+    catorcena_inicio: number | null;
+    anio_inicio: number | null;
+    catorcena_fin: number | null;
+    anio_fin: number | null;
+  };
   solicitud: { cuic: string; cliente: string; razon_social: string; unidad_negocio: string; marca_nombre: string; asesor: string; agencia: string; producto_nombre: string; categoria_nombre: string } | null;
   cotizacion: { nombre_campania: string; fecha_inicio: string; fecha_fin: string; numero_caras: number; bonificacion: number; precio: number } | null;
   campania: { id: number; nombre: string; status: string } | null;
@@ -220,102 +244,242 @@ export function ClientePropuestaPage() {
   };
 
   const handleGeneratePDF = async () => {
-    const { jsPDF } = await import('jspdf');
-    await import('jspdf-autotable');
+    try {
+      const { jsPDF } = await import('jspdf');
+      const autoTable = (await import('jspdf-autotable')).default;
 
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
     const marginX = 15;
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     let y = 15;
 
-    // Header with IMU colors
-    doc.setFillColor(0, 84, 166); // IMU Blue
-    doc.rect(0, 0, pageWidth, 20, 'F');
-    doc.setFontSize(16);
+    // IMU Brand Colors
+    const IMU_BLUE = [0, 84, 166]; // #0054A6
+    const IMU_GREEN = [122, 184, 0]; // #7AB800
+
+    // URL for client view
+    const clientViewUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}`;
+
+    // Helper function for section titles
+    const addSectionTitle = (title: string, yPos: number) => {
+      doc.setFillColor(IMU_BLUE[0], IMU_BLUE[1], IMU_BLUE[2]);
+      doc.rect(marginX, yPos, pageWidth - marginX * 2, 7, 'F');
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(255, 255, 255);
+      doc.text(title, marginX + 4, yPos + 5);
+      return yPos + 12;
+    };
+
+    // Helper for compact field rows
+    const createFieldRow = (fields: { label: string; value: string }[], yPos: number) => {
+      const fieldWidth = (pageWidth - marginX * 2) / fields.length;
+
+      fields.forEach((field, idx) => {
+        const x = marginX + (fieldWidth * idx);
+
+        // Field background
+        doc.setFillColor(252, 252, 252);
+        doc.setDrawColor(220, 220, 220);
+        doc.rect(x + 1, yPos, fieldWidth - 2, 14, 'FD');
+
+        // Label
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(IMU_BLUE[0], IMU_BLUE[1], IMU_BLUE[2]);
+        doc.text(field.label, x + 3, yPos + 4);
+
+        // Value
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(field.value === 'N/A' ? 150 : 40, field.value === 'N/A' ? 150 : 40, field.value === 'N/A' ? 150 : 40);
+        const valueText = doc.splitTextToSize(field.value, fieldWidth - 6);
+        doc.text(valueText[0] || '', x + 3, yPos + 10);
+      });
+
+      return yPos + 18;
+    };
+
+    // ========== HEADER ==========
+    doc.setFillColor(IMU_BLUE[0], IMU_BLUE[1], IMU_BLUE[2]);
+    doc.rect(0, 0, pageWidth, 22, 'F');
+
+    // Green accent line
+    doc.setFillColor(IMU_GREEN[0], IMU_GREEN[1], IMU_GREEN[2]);
+    doc.rect(0, 20, pageWidth, 2, 'F');
+
+    // Title
+    doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 255, 255);
-    doc.text('IMU - PROPUESTA DE CAMPAÑA PUBLICITARIA', pageWidth / 2, 12, { align: 'center' });
+    doc.text('PROPUESTA DE CAMPAÑA PUBLICITARIA', pageWidth / 2, 13, { align: 'center' });
 
+    // Date
     const fechaActual = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
-    doc.setFontSize(9);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
     doc.text(fechaActual, pageWidth - marginX, 8, { align: 'right' });
+
+    // Link to client view
+    doc.setTextColor(200, 230, 255);
+    const linkText = 'Ver propuesta en línea';
+    const linkWidth = doc.getTextWidth(linkText);
+    doc.textWithLink(linkText, pageWidth - marginX - linkWidth, 15, { url: clientViewUrl });
 
     y = 30;
 
-    // Client info
-    doc.setFillColor(0, 84, 166);
-    doc.rect(marginX, y, pageWidth - marginX * 2, 6, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.text('INFORMACIÓN DEL CLIENTE', marginX + 3, y + 4);
-    y += 10;
+    // ========== INFORMACIÓN DEL CLIENTE ==========
+    y = addSectionTitle('INFORMACIÓN DEL CLIENTE', y);
 
-    doc.setFontSize(8);
-    doc.setTextColor(0, 0, 0);
-    const clientFields = [
-      ['CUIC', data?.solicitud?.cuic],
-      ['Cliente', data?.solicitud?.cliente],
-      ['Razón Social', data?.solicitud?.razon_social],
-      ['Marca', data?.solicitud?.marca_nombre],
+    // Row 1: Cliente, Razón Social, Marca
+    y = createFieldRow([
+      { label: 'Cliente', value: data?.solicitud?.cliente || 'N/A' },
+      { label: 'Razón Social', value: data?.solicitud?.razon_social || 'N/A' },
+      { label: 'Marca', value: data?.solicitud?.marca_nombre || 'N/A' },
+    ], y);
+
+    // Row 2: Asesor, Agencia, Producto, Categoría
+    y = createFieldRow([
+      { label: 'Asesor Comercial', value: data?.solicitud?.asesor || 'N/A' },
+      { label: 'Agencia', value: data?.solicitud?.agencia || 'N/A' },
+      { label: 'Producto', value: data?.solicitud?.producto_nombre || 'N/A' },
+      { label: 'Categoría', value: data?.solicitud?.categoria_nombre || 'N/A' },
+    ], y);
+
+    y += 5;
+
+    // ========== DATOS DE LA CAMPAÑA ==========
+    y = addSectionTitle('DATOS DE LA CAMPAÑA', y);
+
+    // Nombre de campaña
+    y = createFieldRow([
+      { label: 'Nombre de Campaña', value: data?.cotizacion?.nombre_campania || 'N/A' },
+    ], y);
+
+    y += 3;
+
+    // ========== PERIODO DE CAMPAÑA ==========
+    y = addSectionTitle('PERIODO DE CAMPAÑA', y);
+
+    // Get catorcena info from propuesta
+    const catorcenaInicioStr = data?.propuesta?.catorcena_inicio && data?.propuesta?.anio_inicio
+      ? `Catorcena ${data.propuesta.catorcena_inicio} - ${data.propuesta.anio_inicio}`
+      : (data?.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : 'N/A');
+
+    const catorcenaFinStr = data?.propuesta?.catorcena_fin && data?.propuesta?.anio_fin
+      ? `Catorcena ${data.propuesta.catorcena_fin} - ${data.propuesta.anio_fin}`
+      : (data?.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : 'N/A');
+
+    y = createFieldRow([
+      { label: 'Catorcena de Inicio', value: catorcenaInicioStr },
+      { label: 'Catorcena de Fin', value: catorcenaFinStr },
+    ], y);
+
+    y += 5;
+
+    // ========== RESUMEN DE INVERSIÓN ==========
+    y = addSectionTitle('RESUMEN DE INVERSIÓN', y);
+
+    // KPI boxes with colors
+    const kpiBoxWidth = (pageWidth - marginX * 2 - 15) / 4;
+    const kpiItems = [
+      { label: 'Caras Facturadas', value: String(kpis.total), color: IMU_BLUE },
+      { label: 'Total de Caras', value: String(kpis.renta), color: [66, 133, 244] },
+      { label: 'Caras Bonificadas', value: String(kpis.bonificadas), color: IMU_GREEN },
+      { label: 'Inversión Total', value: formatCurrency(kpis.inversion), color: [0, 59, 113] },
     ];
-    clientFields.forEach(([label, value], idx) => {
-      doc.setFont('helvetica', 'bold');
-      doc.text(`${label}:`, marginX + (idx % 4) * 65, y);
+
+    kpiItems.forEach((kpi, idx) => {
+      const x = marginX + idx * (kpiBoxWidth + 5);
+      doc.setFillColor(kpi.color[0], kpi.color[1], kpi.color[2]);
+      doc.roundedRect(x, y, kpiBoxWidth, 20, 2, 2, 'F');
+
+      doc.setFontSize(8);
+      doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'normal');
-      doc.text(String(value || 'N/A'), marginX + (idx % 4) * 65 + 20, y);
-    });
-    y += 15;
+      doc.text(kpi.label, x + kpiBoxWidth / 2, y + 6, { align: 'center' });
 
-    // Campaign
-    doc.setFillColor(0, 84, 166);
-    doc.rect(marginX, y, pageWidth - marginX * 2, 6, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.text('PROPUESTA', marginX + 3, y + 4);
-    y += 10;
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Campaña:', marginX, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(data?.cotizacion?.nombre_campania || 'N/A', marginX + 25, y);
-    y += 15;
-
-    // KPIs
-    doc.setFillColor(0, 84, 166);
-    doc.rect(marginX, y, pageWidth - marginX * 2, 6, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.text('MÉTRICAS', marginX + 3, y + 4);
-    y += 10;
-
-    doc.setTextColor(0, 0, 0);
-    [['Total', kpis.total], ['Renta', kpis.renta], ['Bonificadas', kpis.bonificadas], ['Inversión', formatCurrency(kpis.inversion)]].forEach(([l, v], i) => {
+      doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text(String(l), marginX + i * 60, y);
-      doc.setFont('helvetica', 'normal');
-      doc.text(String(v), marginX + i * 60, y + 5);
+      doc.text(kpi.value, x + kpiBoxWidth / 2, y + 15, { align: 'center' });
     });
-    y += 15;
 
-    // Table
+    y += 30;
+
+    // ========== TABLA DE INVENTARIO ==========
+    y = addSectionTitle('INVENTARIO RESERVADO', y);
+
     if (inventario.length > 0) {
-      (doc as any).autoTable({
-        head: [['Código', 'Plaza', 'Tipo', 'Formato', 'Caras', 'Tarifa']],
-        body: inventario.map(i => [i.codigo_unico, i.plaza, i.tipo_de_cara, i.tipo_de_mueble, i.caras_totales, formatCurrency(i.tarifa_publica || 0)]),
+      // Only show: Plaza (Ciudad), Ubicación, Formato, Tipo de Cara (as Orientación), Caras, Periodo
+      autoTable(doc, {
+        head: [['Ciudad', 'Ubicación', 'Formato', 'Orientación', 'Caras', 'Periodo']],
+        body: inventario.map(i => [
+          i.plaza || '-',
+          i.ubicacion || '-',
+          i.tipo_de_mueble || '-',
+          i.tipo_de_cara || '-',
+          String(i.caras_totales || 0),
+          formatInicioPeriodo(i),
+        ]),
         startY: y,
         margin: { left: marginX, right: marginX },
-        styles: { fontSize: 7 },
-        headStyles: { fillColor: [0, 84, 166] },
+        styles: {
+          fontSize: 8,
+          cellPadding: 3,
+          textColor: [40, 40, 40],
+        },
+        headStyles: {
+          fillColor: [IMU_BLUE[0], IMU_BLUE[1], IMU_BLUE[2]],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 9,
+        },
+        alternateRowStyles: {
+          fillColor: [245, 250, 255],
+        },
+        columnStyles: {
+          0: { cellWidth: 35 },
+          1: { cellWidth: 80 },
+          4: { halign: 'center', cellWidth: 20 },
+          5: { cellWidth: 45 },
+        },
       });
     }
 
-    // Footer
-    const pageHeight = doc.internal.pageSize.getHeight();
-    doc.setFillColor(0, 84, 166);
-    doc.rect(0, pageHeight - 15, pageWidth, 15, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(10);
-    doc.text('IMU. desarrollado por QEB', pageWidth / 2, pageHeight - 7, { align: 'center' });
+    // ========== FOOTER ON ALL PAGES ==========
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
 
-    doc.save(`Propuesta_${propuestaId}.pdf`);
+      // Footer bar
+      doc.setFillColor(IMU_BLUE[0], IMU_BLUE[1], IMU_BLUE[2]);
+      doc.rect(0, pageHeight - 14, pageWidth, 14, 'F');
+
+      // Green accent
+      doc.setFillColor(IMU_GREEN[0], IMU_GREEN[1], IMU_GREEN[2]);
+      doc.rect(0, pageHeight - 14, 4, 14, 'F');
+
+      // Footer text
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('IMU - Grupo IMU', marginX + 5, pageHeight - 6);
+
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Desarrollado por QEB', marginX + 5, pageHeight - 2);
+
+      // Page number
+      doc.setFontSize(8);
+      doc.text(`Página ${i} de ${totalPages}`, pageWidth - marginX, pageHeight - 5, { align: 'right' });
+    }
+
+    doc.save(`Propuesta_${data?.cotizacion?.nombre_campania || propuestaId}.pdf`);
+    } catch (error) {
+      console.error('Error generando PDF:', error);
+      alert('Error al generar el PDF. Revisa la consola para más detalles.');
+    }
   };
 
   const handlePOIPlaceChanged = () => {
@@ -345,45 +509,51 @@ export function ClientePropuestaPage() {
     setExpandedGroups(next);
   };
 
-  const COLORS = ['#0054A6', '#0066CC', '#0077E6', '#3399FF', '#66B3FF']; // IMU Blue palette
+  const COLORS = ['#0054A6', '#7AB800', '#003B71', '#5FA800', '#0077E6', '#8BC34A']; // IMU Blue & Green palette
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-zinc-900">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-white via-blue-50 to-green-50">
+        <div className="text-center">
+          <img src="/logo-grupo-imu.png" alt="IMU" className="h-20 w-auto mx-auto mb-4 animate-pulse" />
+          <Loader2 className="h-8 w-8 animate-spin text-[#0054A6] mx-auto" />
+          <p className="text-gray-500 mt-2">Cargando propuesta...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-zinc-900">
-        <p className="text-red-400">Error al cargar la propuesta</p>
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-white via-blue-50 to-green-50">
+        <div className="text-center">
+          <img src="/logo-grupo-imu.png" alt="IMU" className="h-16 w-auto mx-auto mb-4" />
+          <p className="text-red-600 font-medium">Error al cargar la propuesta</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-gradient-to-br from-white via-blue-50/30 to-green-50/30 text-gray-800">
       {/* Header */}
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-zinc-900 shadow-xl border-b border-zinc-800">
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur shadow-md border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white">
-              {/* Use IMU Logo or Icon */}
-              <img src="/logo-grupo-imu.png" alt="IMU" className="h-8 w-auto object-contain" />
+          <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center">
+              {/* Large IMU Logo */}
+              <img src="/logo-grupo-imu.png" alt="IMU" className="h-14 w-auto object-contain" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">Propuesta de Campaña</h1>
-              <p className="text-sm text-zinc-400">#{propuestaId}</p>
+            <div className="border-l border-gray-300 pl-4">
+              <h1 className="text-xl font-bold text-[#0054A6]">Propuesta de Campaña</h1>
+              <p className="text-sm text-gray-500">Referencia #{propuestaId}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={handleDownloadKML} className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium">
+            <button onClick={handleDownloadKML} className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-sm font-medium shadow-sm transition-colors">
               <Map className="h-4 w-4" /> KML
             </button>
-            <button onClick={handleGeneratePDF} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
+            <button onClick={handleGeneratePDF} className="flex items-center gap-2 px-4 py-2 bg-[#0054A6] hover:bg-[#003B71] text-white rounded-lg text-sm font-medium shadow-sm transition-colors">
               <FileText className="h-4 w-4" /> PDF
             </button>
           </div>
@@ -392,160 +562,174 @@ export function ClientePropuestaPage() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Campaign Header */}
-        <div className="bg-zinc-900 rounded-2xl p-6 shadow-sm border border-zinc-800">
-          <h2 className="text-2xl font-bold mb-2 text-white">
-            {data?.cotizacion?.nombre_campania || 'Propuesta'}
-          </h2>
-          <p className="text-zinc-400">{data?.propuesta?.descripcion || ''}</p>
-          <div className="flex gap-4 mt-4 text-sm text-zinc-500">
-            <span>Inicio: {data?.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : 'N/A'}</span>
-            <span>Fin: {data?.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : 'N/A'}</span>
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-2xl font-bold mb-2 text-[#0054A6]">
+                {data?.cotizacion?.nombre_campania || 'Propuesta'}
+              </h2>
+              <p className="text-gray-600">{data?.propuesta?.descripcion || ''}</p>
+            </div>
+            <div className="bg-[#7AB800]/10 text-[#7AB800] px-3 py-1 rounded-full text-sm font-medium">
+              {data?.propuesta?.status || 'Propuesta'}
+            </div>
+          </div>
+          <div className="flex gap-6 mt-4 text-sm text-gray-500 border-t border-gray-100 pt-4">
+            <span className="flex items-center gap-1">
+              <span className="font-medium text-gray-700">Inicio:</span> {data?.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : 'N/A'}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="font-medium text-gray-700">Fin:</span> {data?.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : 'N/A'}
+            </span>
           </div>
         </div>
 
         {/* Client Info */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Cliente', value: data?.solicitud?.cliente },
-            { label: 'Razón Social', value: data?.solicitud?.razon_social },
-            { label: 'Marca', value: data?.solicitud?.marca_nombre },
-            { label: 'Asesor', value: data?.solicitud?.asesor },
-          ].map(({ label, value }) => (
-            <div key={label} className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-              <p className="text-xs text-zinc-500">{label}</p>
-              <p className="text-sm font-medium truncate text-white">{value || 'N/A'}</p>
+            { label: 'Cliente', value: data?.solicitud?.cliente, icon: '👤' },
+            { label: 'Razón Social', value: data?.solicitud?.razon_social, icon: '🏢' },
+            { label: 'Marca', value: data?.solicitud?.marca_nombre, icon: '🏷️' },
+            { label: 'Asesor', value: data?.solicitud?.asesor, icon: '💼' },
+          ].map(({ label, value, icon }) => (
+            <div key={label} className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm">{icon}</span>
+                <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
+              </div>
+              <p className="text-sm font-semibold truncate text-[#0054A6]">{value || 'N/A'}</p>
             </div>
           ))}
         </div>
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-zinc-900 rounded-2xl p-6 shadow-sm border border-zinc-800">
-            <h3 className="text-lg font-semibold mb-4 text-white">Reservas por Ciudad</h3>
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+            <h3 className="text-lg font-semibold mb-4 text-[#0054A6]">Reservas por Ciudad</h3>
             {chartCiudades.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={chartCiudades} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                  <XAxis type="number" stroke="#888" />
-                  <YAxis dataKey="name" type="category" stroke="#888" width={100} tick={{ fontSize: 11 }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis type="number" stroke="#6b7280" />
+                  <YAxis dataKey="name" type="category" stroke="#6b7280" width={100} tick={{ fontSize: 11 }} />
                   <Tooltip
-                    contentStyle={{ background: '#18181b', border: '1px solid #333', borderRadius: '8px' }}
-                    itemStyle={{ color: '#e4e4e7' }}
-                    labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
-                    cursor={{ fill: 'rgba(0, 169, 224, 0.1)' }}
+                    contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                    itemStyle={{ color: '#374151' }}
+                    labelStyle={{ color: '#6b7280', marginBottom: '4px', fontWeight: 600 }}
+                    cursor={{ fill: 'rgba(0, 84, 166, 0.05)' }}
                   />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                     {chartCiudades.map((_, idx) => <Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            ) : <p className="text-zinc-500 text-center py-10">No hay inventario reservado</p>}
+            ) : <p className="text-gray-500 text-center py-10">No hay inventario reservado</p>}
           </div>
 
-          <div className="bg-zinc-900 rounded-2xl p-6 shadow-sm border border-zinc-800">
-            <h3 className="text-lg font-semibold mb-4 text-white">Reservas por Tipo</h3>
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+            <h3 className="text-lg font-semibold mb-4 text-[#0054A6]">Reservas por Tipo</h3>
             {chartFormatos.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={chartFormatos}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                  <XAxis dataKey="name" stroke="#888" tick={{ fontSize: 10 }} />
-                  <YAxis stroke="#888" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="name" stroke="#6b7280" tick={{ fontSize: 10 }} />
+                  <YAxis stroke="#6b7280" />
                   <Tooltip
-                    contentStyle={{ background: '#18181b', border: '1px solid #333', borderRadius: '8px' }}
-                    itemStyle={{ color: '#e4e4e7' }}
-                    labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
-                    cursor={{ fill: 'rgba(0, 169, 224, 0.1)' }}
+                    contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                    itemStyle={{ color: '#374151' }}
+                    labelStyle={{ color: '#6b7280', marginBottom: '4px', fontWeight: 600 }}
+                    cursor={{ fill: 'rgba(0, 84, 166, 0.05)' }}
                   />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                     {chartFormatos.map((_, idx) => <Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            ) : <p className="text-zinc-500 text-center py-10">No hay inventario reservado</p>}
+            ) : <p className="text-gray-500 text-center py-10">No hay inventario reservado</p>}
           </div>
         </div>
 
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Total Caras', value: kpis.total, color: 'text-white' },
-            { label: 'En Renta', value: kpis.renta, color: 'text-blue-400' },
-            { label: 'Bonificadas', value: kpis.bonificadas, color: 'text-emerald-400' },
-            { label: 'Inversión Total', value: formatCurrency(kpis.inversion), color: 'text-amber-400' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 text-center">
-              <p className={`text-2xl font-bold ${color}`}>{value}</p>
-              <p className="text-xs text-zinc-500 mt-1">{label}</p>
+            { label: 'Total Caras', value: kpis.total, bg: 'bg-gradient-to-br from-[#0054A6] to-[#003B71]', textColor: 'text-white' },
+            { label: 'En Renta', value: kpis.renta, bg: 'bg-gradient-to-br from-blue-500 to-blue-600', textColor: 'text-white' },
+            { label: 'Bonificadas', value: kpis.bonificadas, bg: 'bg-gradient-to-br from-[#7AB800] to-[#5FA800]', textColor: 'text-white' },
+            { label: 'Inversión Total', value: formatCurrency(kpis.inversion), bg: 'bg-gradient-to-br from-amber-500 to-amber-600', textColor: 'text-white' },
+          ].map(({ label, value, bg, textColor }) => (
+            <div key={label} className={`${bg} rounded-xl p-5 text-center shadow-lg`}>
+              <p className={`text-3xl font-bold ${textColor}`}>{value}</p>
+              <p className="text-xs text-white/80 mt-1 uppercase tracking-wide">{label}</p>
             </div>
           ))}
         </div>
 
         {/* Table */}
-        <div className="bg-zinc-900 rounded-2xl shadow-sm border border-zinc-800 overflow-hidden">
-          <div className="p-4 border-b border-zinc-800 flex flex-wrap items-center gap-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-4 border-b border-gray-200 flex flex-wrap items-center gap-4 bg-gray-50">
             <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-zinc-400" />
+              <Filter className="h-4 w-4 text-gray-500" />
               <input
                 type="text"
                 placeholder="Buscar..."
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
-                className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#0054A6] focus:border-transparent"
               />
             </div>
             <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-zinc-400" />
+              <Layers className="h-4 w-4 text-gray-500" />
               {(['numero_catorcena', 'articulo', 'plaza'] as GroupByField[]).map(field => (
                 <button
                   key={field}
                   onClick={() => toggleGrouping(field)}
-                  className={`px-2 py-1 rounded text-xs ${activeGroupings.includes(field) ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${activeGroupings.includes(field) ? 'bg-[#0054A6] text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
                 >
                   {field === 'numero_catorcena' ? 'Catorcena' : field}
                 </button>
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <ArrowUpDown className="h-4 w-4 text-zinc-400" />
-              <select value={sortField} onChange={(e) => setSortField(e.target.value)} className="px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-xs text-white">
+              <ArrowUpDown className="h-4 w-4 text-gray-500" />
+              <select value={sortField} onChange={(e) => setSortField(e.target.value)} className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700">
                 <option value="">Sin ordenar</option>
                 <option value="plaza">Plaza</option>
                 <option value="tipo_de_cara">Tipo</option>
               </select>
             </div>
-            <button onClick={handleDownloadCSV} className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-emerald-600/20 text-emerald-400 border border-emerald-600/50 hover:bg-emerald-600/30 rounded-lg text-sm">
+            <button onClick={handleDownloadCSV} className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-[#7AB800] hover:bg-[#5FA800] text-white rounded-lg text-sm font-medium shadow-sm transition-colors">
               <FileSpreadsheet className="h-4 w-4" /> CSV
             </button>
           </div>
 
-          <div className="max-h-[500px] overflow-auto custom-scrollbar">
+          <div className="max-h-[500px] overflow-auto">
             {Object.entries(groupedData).map(([groupKey, items]) => (
-              <div key={groupKey} className="border-b border-zinc-800">
-                <button onClick={() => toggleGroup(groupKey)} className="w-full flex items-center gap-2 px-4 py-3 bg-zinc-900 hover:bg-zinc-800 text-left transition-colors">
-                  {expandedGroups.has(groupKey) ? <ChevronDown className="h-4 w-4 text-blue-400" /> : <ChevronRight className="h-4 w-4 text-blue-400" />}
-                  <span className="text-sm font-medium text-white">{groupKey}</span>
-                  <span className="text-xs text-zinc-500">({items.length})</span>
-                  <span className="ml-auto text-xs text-blue-400">{items.reduce((s, i) => s + i.caras_totales, 0)} caras</span>
+              <div key={groupKey} className="border-b border-gray-200">
+                <button onClick={() => toggleGroup(groupKey)} className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left transition-colors">
+                  {expandedGroups.has(groupKey) ? <ChevronDown className="h-4 w-4 text-[#0054A6]" /> : <ChevronRight className="h-4 w-4 text-[#0054A6]" />}
+                  <span className="text-sm font-medium text-gray-800">{groupKey}</span>
+                  <span className="text-xs text-gray-500">({items.length})</span>
+                  <span className="ml-auto text-xs font-semibold text-[#0054A6]">{items.reduce((s, i) => s + i.caras_totales, 0)} caras</span>
                 </button>
                 {expandedGroups.has(groupKey) && (
                   <table className="w-full text-sm">
-                    <thead><tr className="bg-zinc-800/50 text-xs text-zinc-500">
-                      <th className="px-4 py-2 text-left">Código</th>
-                      <th className="px-4 py-2 text-left">Plaza</th>
-                      <th className="px-4 py-2 text-left">Ubicación</th>
-                      <th className="px-4 py-2 text-left">Tipo</th>
-                      <th className="px-4 py-2 text-center">Caras</th>
-                      <th className="px-4 py-2 text-right">Tarifa</th>
+                    <thead><tr className="bg-[#0054A6]/5 text-xs text-gray-600">
+                      <th className="px-4 py-2 text-left font-semibold">Código</th>
+                      <th className="px-4 py-2 text-left font-semibold">Plaza</th>
+                      <th className="px-4 py-2 text-left font-semibold">Ubicación</th>
+                      <th className="px-4 py-2 text-left font-semibold">Tipo</th>
+                      <th className="px-4 py-2 text-center font-semibold">Caras</th>
+                      <th className="px-4 py-2 text-right font-semibold">Tarifa</th>
                     </tr></thead>
                     <tbody>
                       {items.map((item, idx) => (
-                        <tr key={idx} className="border-t border-zinc-800 hover:bg-zinc-800/50">
-                          <td className="px-4 py-2 font-mono text-xs text-blue-300">{item.codigo_unico}</td>
-                          <td className="px-4 py-2 text-zinc-300">{item.plaza}</td>
-                          <td className="px-4 py-2 text-zinc-500 text-xs truncate max-w-[200px]">{item.ubicacion}</td>
-                          <td className="px-4 py-2 text-zinc-400">{item.tipo_de_cara}</td>
-                          <td className="px-4 py-2 text-center font-medium text-white">{item.caras_totales}</td>
-                          <td className="px-4 py-2 text-right text-emerald-400">{formatCurrency(item.tarifa_publica || 0)}</td>
+                        <tr key={idx} className="border-t border-gray-100 hover:bg-blue-50/50 transition-colors">
+                          <td className="px-4 py-2 font-mono text-xs text-[#0054A6] font-medium">{item.codigo_unico}</td>
+                          <td className="px-4 py-2 text-gray-700">{item.plaza}</td>
+                          <td className="px-4 py-2 text-gray-500 text-xs truncate max-w-[200px]">{item.ubicacion}</td>
+                          <td className="px-4 py-2 text-gray-600">{item.tipo_de_cara}</td>
+                          <td className="px-4 py-2 text-center font-semibold text-gray-800">{item.caras_totales}</td>
+                          <td className="px-4 py-2 text-right font-medium text-[#7AB800]">{formatCurrency(item.tarifa_publica || 0)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -557,12 +741,12 @@ export function ClientePropuestaPage() {
         </div>
 
         {/* Map */}
-        <div className="bg-zinc-900 rounded-2xl shadow-sm border border-zinc-800 overflow-hidden">
-          <div className="p-4 border-b border-zinc-800 flex items-center gap-4">
-            <Map className="h-5 w-5 text-blue-500" />
-            <h3 className="text-lg font-semibold text-white">Mapa de Ubicaciones</h3>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-4 border-b border-gray-200 flex items-center gap-4 bg-gray-50">
+            <Map className="h-5 w-5 text-[#0054A6]" />
+            <h3 className="text-lg font-semibold text-[#0054A6]">Mapa de Ubicaciones</h3>
             <div className="flex items-center gap-2 ml-auto">
-              <select value={searchRange} onChange={(e) => setSearchRange(parseInt(e.target.value))} className="px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-white">
+              <select value={searchRange} onChange={(e) => setSearchRange(parseInt(e.target.value))} className="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-700">
                 <option value={100}>100m</option>
                 <option value={300}>300m</option>
                 <option value={500}>500m</option>
@@ -570,11 +754,11 @@ export function ClientePropuestaPage() {
               </select>
               {isLoaded && (
                 <Autocomplete onLoad={(ac) => { autocompleteRef.current = ac; }} onPlaceChanged={handlePOIPlaceChanged} options={{ componentRestrictions: { country: 'mx' } }}>
-                  <input type="text" value={poiSearch} onChange={(e) => setPoiSearch(e.target.value)} placeholder="Buscar POI..." className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white" />
+                  <input type="text" value={poiSearch} onChange={(e) => setPoiSearch(e.target.value)} placeholder="Buscar POI..." className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm w-48 focus:outline-none focus:ring-2 focus:ring-[#0054A6] text-gray-700" />
                 </Autocomplete>
               )}
               {poiMarkers.length > 0 && (
-                <button onClick={() => setPoiMarkers([])} className="px-3 py-1.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30">Limpiar</button>
+                <button onClick={() => setPoiMarkers([])} className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs hover:bg-red-100 transition-colors">Limpiar</button>
               )}
             </div>
           </div>
@@ -594,30 +778,42 @@ export function ClientePropuestaPage() {
                       position={{ lat: item.latitud, lng: item.longitud }}
                       icon={{
                         path: google.maps.SymbolPath.CIRCLE,
-                        scale: 7,
+                        scale: 8,
                         fillColor: IMU_BLUE,
-                        fillOpacity: 0.9,
-                        strokeColor: '#fff',
-                        strokeWeight: 1.5,
+                        fillOpacity: 1,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 2,
                       }}
                     />
                   )
                 ))}
                 {poiMarkers.map(marker => (
-                  <Circle key={marker.id} center={marker.position} radius={marker.range} options={{ strokeColor: IMU_BLUE, strokeOpacity: 0.7, strokeWeight: 2, fillColor: IMU_BLUE, fillOpacity: 0.15 }} />
+                  <Circle key={marker.id} center={marker.position} radius={marker.range} options={{ strokeColor: IMU_GREEN, strokeOpacity: 0.8, strokeWeight: 2, fillColor: IMU_GREEN, fillOpacity: 0.15 }} />
                 ))}
               </GoogleMap>
             ) : (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+              <div className="flex items-center justify-center h-full bg-gray-50">
+                <Loader2 className="h-8 w-8 animate-spin text-[#0054A6]" />
               </div>
             )}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="text-center py-6 text-sm text-gray-400">
-          IMU - Grupo IMU &copy; {new Date().getFullYear()}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mt-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <img src="/logo-grupo-imu.png" alt="IMU" className="h-10 w-auto" />
+              <div className="border-l border-gray-200 pl-4">
+                <p className="text-sm font-medium text-gray-700">Grupo IMU</p>
+                <p className="text-xs text-gray-500">Soluciones en publicidad exterior</p>
+              </div>
+            </div>
+            <div className="text-center md:text-right">
+              <p className="text-sm text-gray-500">&copy; {new Date().getFullYear()} Todos los derechos reservados</p>
+              <p className="text-xs text-gray-400 mt-1">Esta propuesta es confidencial y de uso exclusivo para el destinatario</p>
+            </div>
+          </div>
         </div>
       </main>
     </div>

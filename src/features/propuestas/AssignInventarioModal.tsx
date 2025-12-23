@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, Download, Eye
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
@@ -61,7 +61,90 @@ interface CaraItem {
   articulo: string;
   descuento: number;
   isEditing?: boolean;
+  catorcena_inicio?: number;
+  anio_inicio?: number;
+  catorcena_fin?: number;
+  anio_fin?: number;
 }
+
+// SAP Articulo interface
+interface SAPArticulo {
+  ItemCode: string;
+  ItemName: string;
+}
+
+// Tarifa publica lookup map based on ItemCode
+const TARIFA_PUBLICA_MAP: Record<string, number> = {
+  'RT-BL-COB-MX': 2500, 'RT-BP1-SEC1-01-NAUC': 110000, 'RT-BP1-SEC1-02-NAUC': 110000,
+  'RT-BP2-SEC1-01-NAUC': 50000, 'RT-BP2-SEC1-02-NAUC': 50000, 'RT-BP3-SEC1-01-NAUC': 60000,
+  'RT-BP3-SEC1-02-NAUC': 60000, 'RT-BP4-SEC1-01-NAUC': 55000, 'RT-BP5-SEC1-01-NAUC': 36667,
+  'RT-CL-COB-MX': 6127, 'RT-CL-PRA-MX': 9190, 'RT-DIG-01-MR': 9842, 'RT-DIG-01-MX': 9482,
+  'RT-DIG-01-PB': 8500, 'RT-ES-DIG-EM': 40000, 'RT-KCD-GDL-FL': 35000, 'RT-KCD-GDL-PER': 26900,
+  'RT-KCS-AGS': 27500, 'RT-KCS-GDL': 30000, 'RT-KCS-LEN': 27500, 'RT-KCS-MEX-PER': 60000,
+  'RT-KCS-SLP': 27500, 'RT-KCS-ZAP': 30000, 'RT-P1-COB-GD': 6127, 'RT-P1-COB-MX': 6127,
+  'RT-P1-COB-ZP': 6127, 'RT-P2-COB-GD': 5000, 'RT-P2-COB-MR': 4000, 'RT-P2-COB-MX': 5000,
+};
+
+// Ciudad -> Estado mapping for auto-selection
+const CIUDAD_ESTADO_MAP: Record<string, string> = {
+  'GUADALAJARA': 'Jalisco', 'ZAPOPAN': 'Jalisco', 'TLAQUEPAQUE': 'Jalisco', 'TONALA': 'Jalisco',
+  'TLAJOMULCO': 'Jalisco', 'PUERTO VALLARTA': 'Jalisco', 'MONTERREY': 'Nuevo León',
+  'SAN PEDRO': 'Nuevo León', 'SAN NICOLAS': 'Nuevo León', 'APODACA': 'Nuevo León',
+  'ESCOBEDO': 'Nuevo León', 'SANTA CATARINA': 'Nuevo León', 'CIUDAD DE MEXICO': 'Ciudad de México',
+  'CDMX': 'Ciudad de México', 'MEXICO': 'Ciudad de México', 'DF': 'Ciudad de México',
+  'TIJUANA': 'Baja California', 'MEXICALI': 'Baja California', 'LEON': 'Guanajuato',
+  'IRAPUATO': 'Guanajuato', 'CELAYA': 'Guanajuato', 'QUERETARO': 'Querétaro', 'PUEBLA': 'Puebla',
+  'MERIDA': 'Yucatán', 'CANCUN': 'Quintana Roo', 'PLAYA DEL CARMEN': 'Quintana Roo',
+  'CHIHUAHUA': 'Chihuahua', 'JUAREZ': 'Chihuahua', 'HERMOSILLO': 'Sonora', 'CULIACAN': 'Sinaloa',
+  'MAZATLAN': 'Sinaloa', 'TORREON': 'Coahuila', 'SALTILLO': 'Coahuila', 'AGUASCALIENTES': 'Aguascalientes',
+  'MORELIA': 'Michoacán', 'SAN LUIS POTOSI': 'San Luis Potosí', 'TAMPICO': 'Tamaulipas',
+  'VERACRUZ': 'Veracruz', 'OAXACA': 'Oaxaca', 'ACAPULCO': 'Guerrero', 'CUERNAVACA': 'Morelos',
+  'TOLUCA': 'Estado de México', 'PACHUCA': 'Hidalgo', 'ZACATECAS': 'Zacatecas', 'DURANGO': 'Durango',
+};
+
+// Formato auto-detection from article name
+const getFormatoFromArticulo = (itemName: string): string => {
+  if (!itemName) return '';
+  const name = itemName.toUpperCase();
+  if (name.includes('PARABUS')) return 'PARABUS';
+  if (name.includes('CASETA DE TAXIS')) return 'CASETA DE TAXIS';
+  if (name.includes('METROPOLITANO PARALELO')) return 'METROPOLITANO PARALELO';
+  if (name.includes('METROPOLITANO PERPENDICULAR')) return 'METROPOLITANO PERPENDICULAR';
+  if (name.includes('COLUMNA RECARGA')) return 'COLUMNA RECARGA';
+  if (name.includes('MUPI DE PIEDRA')) return 'MUPI DE PIEDRA';
+  if (name.includes('MUPI')) return 'MUPI';
+  if (name.includes('COLUMNA')) return 'COLUMNA';
+  if (name.includes('BOLERO')) return 'BOLERO';
+  return '';
+};
+
+// Tipo auto-detection from article name
+const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' | '' => {
+  if (!itemName) return '';
+  const name = itemName.toUpperCase();
+  if (name.includes('DIGITAL') || name.includes('DIG')) return 'Digital';
+  if (name.includes('TRADICIONAL') || name.includes('RENTA')) return 'Tradicional';
+  return '';
+};
+
+// Get tarifa from ItemCode
+const getTarifaFromItemCode = (itemCode: string): number => {
+  if (!itemCode) return 0;
+  const code = itemCode.toUpperCase().trim();
+  return TARIFA_PUBLICA_MAP[code] || 850;
+};
+
+// Extract city/state from article name
+const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string } | null => {
+  if (!itemName) return null;
+  const name = itemName.toUpperCase();
+  for (const [ciudad, estado] of Object.entries(CIUDAD_ESTADO_MAP)) {
+    if (name.includes(ciudad)) {
+      return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
+    }
+  }
+  return null;
+};
 
 interface ReservaItem {
   id: string;
@@ -81,6 +164,73 @@ interface ReservaItem {
 
 // View states for the modal
 type ViewState = 'main' | 'search-inventory';
+
+// MultiSelect component for checkbox-based multi-selection
+interface MultiSelectProps {
+  options: string[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  placeholder?: string;
+}
+
+function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Seleccionar...' }: MultiSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleOption = (option: string) => {
+    if (selected.includes(option)) {
+      onChange(selected.filter(s => s !== option));
+    } else {
+      onChange([...selected, option]);
+    }
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex items-center justify-between"
+      >
+        <span className={selected.length === 0 ? 'text-zinc-500' : ''}>
+          {selected.length === 0 ? placeholder : selected.length === 1 ? selected[0] : `${selected.length} seleccionados`}
+        </span>
+        <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {isOpen && (
+        <div className="absolute z-50 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+          {options.map(option => (
+            <label
+              key={option}
+              className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 cursor-pointer text-sm text-white"
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(option)}
+                onChange={() => toggleOption(option)}
+                className="rounded bg-zinc-700 border-zinc-600 text-purple-500 focus:ring-purple-500/50"
+              />
+              {option}
+            </label>
+          ))}
+          {options.length === 0 && (
+            <div className="px-3 py-2 text-zinc-500 text-sm">Sin opciones</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Extended inventory item for processed data
 type ProcessedInventoryItem = InventarioDisponible & {
@@ -108,7 +258,128 @@ const EMPTY_CARA: Omit<CaraItem, 'localId'> = {
   caras_contraflujo: 0,
   articulo: '',
   descuento: 0,
+  catorcena_inicio: undefined,
+  anio_inicio: undefined,
+  catorcena_fin: undefined,
+  anio_fin: undefined,
 };
+
+// Searchable Select Component for articulos
+function SearchableSelect({
+  label,
+  options,
+  value,
+  onChange,
+  onClear,
+  displayKey,
+  valueKey,
+  searchKeys,
+  renderOption,
+  renderSelected,
+  loading,
+}: {
+  label: string;
+  options: any[];
+  value: any;
+  onChange: (item: any) => void;
+  onClear: () => void;
+  displayKey: string;
+  valueKey: string;
+  searchKeys: string[];
+  renderOption?: (item: any) => React.ReactNode;
+  renderSelected?: (item: any) => React.ReactNode;
+  loading?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm) return options;
+    const term = searchTerm.toLowerCase();
+    return options.filter(opt =>
+      searchKeys.some(key => String(opt[key] || '').toLowerCase().includes(term))
+    );
+  }, [options, searchTerm, searchKeys]);
+
+  const handleClose = () => {
+    setOpen(false);
+    setSearchTerm('');
+  };
+
+  const displayValue = value ? (renderSelected ? null : String(value[displayKey])) : '';
+
+  return (
+    <div className="relative flex-1">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all ${value
+          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+          : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600'
+          }`}
+      >
+        <span className="truncate text-left flex-1">
+          {value && renderSelected ? renderSelected(value) : (displayValue || label)}
+        </span>
+        {value ? (
+          <X className="h-4 w-4 hover:text-white flex-shrink-0" onClick={(e) => { e.stopPropagation(); onClear(); }} />
+        ) : (
+          <ChevronDown className="h-4 w-4 flex-shrink-0" />
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={handleClose} />
+          <div className="absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
+            <div className="p-2 border-b border-zinc-800">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder={`Buscar ${label.toLowerCase()}...`}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  autoFocus
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            </div>
+            <div className="max-h-72 overflow-auto">
+              {loading ? (
+                <div className="px-3 py-4 text-center text-zinc-500 text-sm">Cargando...</div>
+              ) : filteredOptions.length === 0 ? (
+                <div className="px-3 py-4 text-center text-zinc-500 text-sm">
+                  {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
+                </div>
+              ) : (
+                filteredOptions.map((option, idx) => (
+                  <button
+                    key={`${option[valueKey]}-${idx}`}
+                    type="button"
+                    onClick={() => { onChange(option); handleClose(); }}
+                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b border-zinc-800/50 last:border-0 ${value && value[valueKey] === option[valueKey]
+                      ? 'bg-purple-500/20 text-purple-300'
+                      : 'text-zinc-300 hover:bg-zinc-800'
+                      }`}
+                  >
+                    {renderOption ? renderOption(option) : (
+                      <span>{option[displayKey]}</span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
+              Mostrando {filteredOptions.length} de {options.length} opciones
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
@@ -144,6 +415,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
+  const [selectedArticulo, setSelectedArticulo] = useState<SAPArticulo | null>(null);
   const [showAddCaraForm, setShowAddCaraForm] = useState(false);
 
   // Reservas state
@@ -236,6 +508,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     enabled: isOpen,
   });
 
+  // Fetch articulos from SAP
+  const { data: articulosData, isLoading: articulosLoading } = useQuery({
+    queryKey: ['sap-articulos'],
+    queryFn: async () => {
+      try {
+        const response = await fetch('https://binding-convinced-ride-foto.trycloudflare.com/articulos');
+        if (!response.ok) throw new Error('Error fetching articulos');
+        const data = await response.json();
+        return (data.value || data) as SAPArticulo[];
+      } catch {
+        return [] as SAPArticulo[];
+      }
+    },
+    enabled: isOpen,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Fetch existing reservas for this propuesta
   const { data: existingReservas, isLoading: reservasLoading } = useQuery({
     queryKey: ['propuesta-reservas-modal', propuesta.id],
@@ -310,16 +599,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   // Initialize form from propuesta and solicitud details
   useEffect(() => {
     if (solicitudDetails && isOpen) {
-      // Set asignados
+      // Set asignados - match with users to get area
       if (propuesta.asignado && propuesta.id_asignado) {
         const asignadosNames = propuesta.asignado.split(',').map(s => s.trim());
         const asignadosIds = propuesta.id_asignado.split(',').map(s => s.trim());
-        const asignadosList: UserOption[] = asignadosNames.map((name, idx) => ({
-          id: parseInt(asignadosIds[idx]) || 0,
-          nombre: name,
-          area: '',
-          puesto: '',
-        }));
+        const asignadosList: UserOption[] = asignadosNames.map((name, idx) => {
+          const userId = parseInt(asignadosIds[idx]) || 0;
+          // Try to find the user in the users list to get their area
+          const foundUser = users?.find((u: UserOption) => u.id === userId);
+          return {
+            id: userId,
+            nombre: name,
+            area: foundUser?.area || '',
+            puesto: foundUser?.puesto || '',
+          };
+        });
         setAsignados(asignadosList);
       }
 
@@ -370,7 +664,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         setCaras(carasWithIds);
       }
     }
-  }, [solicitudDetails, propuesta, isOpen]);
+  }, [solicitudDetails, propuesta, isOpen, users]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -381,6 +675,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       setShowAddCaraForm(false);
       setEditingCaraId(null);
       setNewCara(EMPTY_CARA);
+      setSelectedArticulo(null);
     }
   }, [isOpen]);
 
@@ -611,12 +906,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     }
 
     setNewCara(EMPTY_CARA);
+    setSelectedArticulo(null);
     setShowAddCaraForm(false);
   };
 
   // Handle cancel cara form
   const handleCancelCaraForm = () => {
     setNewCara(EMPTY_CARA);
+    setSelectedArticulo(null);
     setShowAddCaraForm(false);
     setEditingCaraId(null);
   };
@@ -1148,25 +1445,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       }
     };
 
-    // Prompt logic
-    if (potentialPairs.size > 0 && !agruparComoCompleto) {
+    // Prompt logic - siempre mostrar modal con opción de agrupar si hay pares
+    if (potentialPairs.size > 0) {
       setConfirmModal({
         isOpen: true,
-        title: 'Agrupar Inventario',
-        message: `Se detectaron ${potentialPairs.size} pares que pueden agruparse como "Completos". ¿Deseas agruparlos?`,
+        title: 'Agrupar como Completo',
+        message: `Se detectaron ${potentialPairs.size} pares Flujo + Contraflujo del mismo parabús. ¿Deseas agruparlos como "Completo"?`,
         confirmText: 'Sí, Agrupar',
         cancelText: 'No, Mantener Separados',
         onConfirm: () => runReservation(true),
         onCancel: () => runReservation(false)
       });
     } else {
-      // Ask for basic confirmation if requested
+      // Sin pares, confirmar reservación normal
       setConfirmModal({
         isOpen: true,
         title: 'Confirmar Reservación',
         message: `¿Estás seguro de reservar ${selectedInventory.size} espacios?`,
         confirmText: 'Reservar',
-        onConfirm: () => runReservation(agruparComoCompleto),
+        onConfirm: () => runReservation(false),
       });
     }
   };
@@ -1909,17 +2206,6 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
                   {/* Action buttons */}
                   <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 space-y-3">
-                    {/* Checkbox para agrupar flujo+contraflujo */}
-                    <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer hover:text-zinc-300 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={agruparComoCompleto}
-                        onChange={(e) => setAgruparComoCompleto(e.target.checked)}
-                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-pink-500 focus:ring-pink-500 focus:ring-offset-0"
-                      />
-                      <span>Agrupar Flujo + Contraflujo del mismo parabús como "Completo"</span>
-                    </label>
-
                     <div className="flex items-center gap-3">
                       <button
                         onClick={handleReservar}
@@ -2100,6 +2386,30 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
             <p className="text-sm text-zinc-400">Propuesta #{propuesta.id}</p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Archivo de solicitud */}
+            {solicitudDetails?.solicitud?.archivo && (
+              <div className="flex items-center gap-2">
+                <a
+                  href={solicitudDetails.solicitud.archivo}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-lg text-xs font-medium hover:bg-violet-500/30 transition-colors"
+                  title="Ver archivo de solicitud"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  Ver Archivo
+                </a>
+                <a
+                  href={solicitudDetails.solicitud.archivo}
+                  download
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-medium hover:bg-emerald-500/30 transition-colors"
+                  title="Descargar archivo de solicitud"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Descargar
+                </a>
+              </div>
+            )}
             <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:text-white">
               <X className="h-5 w-5" />
             </button>
@@ -2164,7 +2474,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Asignados</label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-zinc-500">Asignados</label>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const asignadosStr = asignados.map(u => u.nombre).join(', ');
+                              const idsStr = asignados.map(u => u.id).join(',');
+                              await propuestasService.updateAsignados(propuesta.id, asignadosStr, idsStr);
+                              alert('Asignados actualizados correctamente');
+                            } catch (error) {
+                              alert('Error al actualizar asignados');
+                            }
+                          }}
+                          className="flex items-center gap-1 px-2 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 rounded text-xs transition-colors"
+                        >
+                          <Save className="h-3 w-3" />
+                          Guardar
+                        </button>
+                      </div>
                       <div className="flex flex-wrap gap-1.5 min-h-[38px] p-2 bg-zinc-800 border border-zinc-700 rounded-lg">
                         {asignados.length === 0 ? (
                           <span className="text-zinc-500 text-sm">Sin asignar</span>
@@ -2172,12 +2500,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                           asignados.map(user => (
                             <span
                               key={user.id}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-xs"
+                              className="inline-flex items-center gap-1.5 px-2 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg text-xs"
                             >
-                              {user.nombre}
+                              <span className="font-medium">{user.nombre}</span>
+                              <span className="text-purple-400/70 text-[10px] px-1 py-0.5 bg-purple-500/10 rounded">{user.area || 'Sin área'}</span>
                               <button
                                 onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
-                                className="hover:text-white"
+                                className="hover:text-white ml-0.5"
                               >
                                 <X className="h-3 w-3" />
                               </button>
@@ -2185,6 +2514,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                           ))
                         )}
                       </div>
+                      {/* User selector dropdown */}
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const userId = parseInt(e.target.value);
+                          const selectedUser = users?.find((u: UserOption) => u.id === userId);
+                          if (selectedUser && !asignados.find(a => a.id === userId)) {
+                            setAsignados(prev => [...prev, selectedUser]);
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                      >
+                        <option value="">+ Agregar asignado...</option>
+                        {users?.filter((u: UserOption) => !asignados.find(a => a.id === u.id)).map((u: UserOption) => (
+                          <option key={u.id} value={u.id}>{u.nombre} - {u.area}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
@@ -2286,7 +2632,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       Inversión: <span className="text-amber-300 font-medium">{formatCurrency(carasKPIs.totalInversion)}</span>
                     </span>
                     <button
-                      onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); }}
+                      onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); }}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -2301,47 +2647,150 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     <h4 className="text-sm font-medium text-white mb-4">
                       {editingCaraId ? 'Editar Cara' : 'Nueva Cara'}
                     </h4>
-                    <div className="grid grid-cols-4 gap-4 mb-4">
+
+                    {/* Artículo selector */}
+                    <div className="mb-4">
+                      <label className="text-xs text-zinc-500 mb-1 block">Artículo SAP</label>
+                      <SearchableSelect
+                        label="Seleccionar artículo"
+                        options={articulosData || []}
+                        value={selectedArticulo}
+                        onChange={(item: SAPArticulo) => {
+                          setSelectedArticulo(item);
+                          // Auto-complete all fields from article
+                          const tarifa = getTarifaFromItemCode(item.ItemCode);
+                          const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
+                          const formato = getFormatoFromArticulo(item.ItemName);
+                          const tipo = getTipoFromName(item.ItemName);
+                          setNewCara({
+                            ...newCara,
+                            articulo: item.ItemCode,
+                            tarifa_publica: tarifa,
+                            estados: ciudadEstado?.estado || newCara.estados,
+                            ciudad: ciudadEstado?.ciudad || newCara.ciudad,
+                            formato: formato || newCara.formato,
+                            tipo: tipo || newCara.tipo,
+                          });
+                        }}
+                        onClear={() => {
+                          setSelectedArticulo(null);
+                          setNewCara({ ...newCara, articulo: '', tarifa_publica: 0, estados: '', ciudad: '', formato: '', tipo: '' });
+                        }}
+                        displayKey="ItemName"
+                        valueKey="ItemCode"
+                        searchKeys={['ItemCode', 'ItemName']}
+                        loading={articulosLoading}
+                        renderOption={(item: SAPArticulo) => (
+                          <div>
+                            <div className="font-medium text-white">{item.ItemCode}</div>
+                            <div className="text-xs text-zinc-500">{item.ItemName}</div>
+                          </div>
+                        )}
+                        renderSelected={(item: SAPArticulo) => (
+                          <div className="text-left">
+                            <div className="font-medium text-sm">{item.ItemCode}</div>
+                            <div className="text-[10px] text-zinc-500 truncate">{item.ItemName}</div>
+                          </div>
+                        )}
+                      />
+                    </div>
+
+                    {/* Catorcena - solo una, filtrada por rango de propuesta */}
+                    <div className="mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Estado</label>
+                        <label className="text-xs text-zinc-500">
+                          Catorcena
+                          {propuesta.catorcena_inicio && propuesta.anio_inicio && propuesta.catorcena_fin && propuesta.anio_fin && (
+                            <span className="text-zinc-600 ml-1">
+                              (Rango: {propuesta.catorcena_inicio}/{propuesta.anio_inicio} - {propuesta.catorcena_fin}/{propuesta.anio_fin})
+                            </span>
+                          )}
+                        </label>
                         <select
-                          value={newCara.estados}
-                          onChange={(e) => setNewCara({ ...newCara, estados: e.target.value })}
+                          value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              const [year, cat] = e.target.value.split('-').map(Number);
+                              const period = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
+                              setNewCara({
+                                ...newCara,
+                                catorcena_inicio: cat,
+                                anio_inicio: year,
+                                catorcena_fin: cat,
+                                anio_fin: year,
+                                inicio_periodo: period?.fecha_inicio || '',
+                                fin_periodo: period?.fecha_fin || ''
+                              });
+                            } else {
+                              setNewCara({
+                                ...newCara,
+                                catorcena_inicio: undefined,
+                                anio_inicio: undefined,
+                                catorcena_fin: undefined,
+                                anio_fin: undefined,
+                                inicio_periodo: '',
+                                fin_periodo: ''
+                              });
+                            }
+                          }}
                           className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
                         >
-                          <option value="">Seleccionar</option>
-                          {solicitudFilters?.estados.map(e => (
-                            <option key={e} value={e}>{e}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Ciudad</label>
-                        <select
-                          value={newCara.ciudad}
-                          onChange={(e) => setNewCara({ ...newCara, ciudad: e.target.value })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                        >
-                          <option value="">Seleccionar</option>
-                          {solicitudFilters?.ciudades
-                            .filter(c => !newCara.estados || c.estado === newCara.estados)
+                          <option value="">Seleccionar catorcena</option>
+                          {catorcenasData?.data
+                            .filter(c => {
+                              // Filtrar solo catorcenas dentro del rango de la propuesta
+                              if (!propuesta.catorcena_inicio || !propuesta.anio_inicio || !propuesta.catorcena_fin || !propuesta.anio_fin) {
+                                return true; // Si no hay rango, mostrar todas
+                              }
+                              const catValue = c.a_o * 100 + c.numero_catorcena;
+                              const minValue = propuesta.anio_inicio * 100 + propuesta.catorcena_inicio;
+                              const maxValue = propuesta.anio_fin * 100 + propuesta.catorcena_fin;
+                              return catValue >= minValue && catValue <= maxValue;
+                            })
                             .map(c => (
-                              <option key={c.ciudad} value={c.ciudad}>{c.ciudad}</option>
+                              <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
+                                Catorcena {c.numero_catorcena} / {c.a_o}
+                              </option>
                             ))}
                         </select>
                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Formato</label>
-                        <select
-                          value={newCara.formato}
-                          onChange={(e) => setNewCara({ ...newCara, formato: e.target.value })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                        >
-                          <option value="">Seleccionar</option>
-                          {solicitudFilters?.formatos.map(f => (
-                            <option key={f} value={f}>{f}</option>
-                          ))}
-                        </select>
+                        <label className="text-xs text-zinc-500">Estados {newCara.estados && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
+                        <MultiSelectDropdown
+                          options={solicitudFilters?.estados || []}
+                          selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
+                          onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
+                          placeholder="Seleccionar estados..."
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Ciudades {newCara.ciudad && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        <MultiSelectDropdown
+                          options={
+                            solicitudFilters?.ciudades
+                              .filter(c => {
+                                if (!newCara.estados) return true;
+                                const selectedEstados = newCara.estados.split(',').map(s => s.trim());
+                                return selectedEstados.includes(c.estado);
+                              })
+                              .map(c => c.ciudad) || []
+                          }
+                          selected={newCara.ciudad ? newCara.ciudad.split(',').map(s => s.trim()).filter(Boolean) : []}
+                          onChange={(selected) => setNewCara({ ...newCara, ciudad: selected.join(', ') })}
+                          placeholder="Seleccionar ciudades..."
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Formatos {newCara.formato && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
+                        <MultiSelectDropdown
+                          options={solicitudFilters?.formatos || []}
+                          selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
+                          onChange={(selected) => setNewCara({ ...newCara, formato: selected.join(', ') })}
+                          placeholder="Seleccionar formatos..."
+                        />
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">Tipo</label>
@@ -2404,17 +2853,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">NSE</label>
-                        <select
-                          value={newCara.nivel_socioeconomico}
-                          onChange={(e) => setNewCara({ ...newCara, nivel_socioeconomico: e.target.value })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                        >
-                          <option value="">Seleccionar</option>
-                          {solicitudFilters?.nse.map(n => (
-                            <option key={n} value={n}>{n}</option>
-                          ))}
-                        </select>
+                        <label className="text-xs text-zinc-500">NSE {newCara.nivel_socioeconomico && <span className="text-purple-400">({newCara.nivel_socioeconomico.split(',').filter(Boolean).length})</span>}</label>
+                        <MultiSelectDropdown
+                          options={solicitudFilters?.nse || []}
+                          selected={newCara.nivel_socioeconomico ? newCara.nivel_socioeconomico.split(',').map(s => s.trim()).filter(Boolean) : []}
+                          onChange={(selected) => setNewCara({ ...newCara, nivel_socioeconomico: selected.join(', ') })}
+                          placeholder="Seleccionar NSE..."
+                        />
                       </div>
                     </div>
                     <div className="flex justify-end gap-2">

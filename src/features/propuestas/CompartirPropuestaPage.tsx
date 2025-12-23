@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Share2, Download, FileText, Map, Copy, Check, Loader2,
-  ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet
+  ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -13,10 +13,11 @@ import { formatCurrency, formatDate } from '../../lib/utils';
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
-// IMU Brand Colors
-const IMU_BLUE = '#0054A6';
-const IMU_GREEN = '#7AB800';
-const IMU_DARK = '#003B71';
+// Purple Brand Colors for Compartir
+const PURPLE_PRIMARY = '#8B5CF6';
+const PURPLE_DARK = '#6D28D9';
+const PURPLE_LIGHT = '#A78BFA';
+const PURPLE_ACCENT = '#C084FC';
 
 // Dark map styles with IMU colors
 const DARK_MAP_STYLES = [
@@ -233,34 +234,56 @@ export function CompartirPropuestaPage() {
   const handleGeneratePDF = async () => {
     // Dynamic import of jspdf
     const { jsPDF } = await import('jspdf');
-    await import('jspdf-autotable');
+    const autoTable = (await import('jspdf-autotable')).default;
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
     const marginX = 15;
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     let y = 15;
 
-    // Header
-    doc.setFillColor(0, 84, 166); // IMU Blue
-    doc.rect(0, 0, pageWidth, 20, 'F');
-    doc.setFontSize(16);
+    // IMU Brand Colors
+    const IMU_BLUE_R = 0, IMU_BLUE_G = 84, IMU_BLUE_B = 166; // #0054A6
+    const IMU_GREEN_R = 122, IMU_GREEN_G = 184, IMU_GREEN_B = 0; // #7AB800
+
+    // Header with IMU blue
+    doc.setFillColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+    doc.rect(0, 0, pageWidth, 25, 'F');
+
+    // Add green accent line
+    doc.setFillColor(IMU_GREEN_R, IMU_GREEN_G, IMU_GREEN_B);
+    doc.rect(0, 23, pageWidth, 2, 'F');
+
+    doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 255, 255);
-    doc.text('IMU - PROPUESTA DE CAMPAÑA PUBLICITARIA', pageWidth / 2, 12, { align: 'center' });
+    doc.text('PROPUESTA DE CAMPAÑA PUBLICITARIA', pageWidth / 2, 12, { align: 'center' });
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Vista Interna - Grupo IMU', pageWidth / 2, 18, { align: 'center' });
 
     const fechaActual = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
-    doc.setFontSize(9);
+    doc.setFontSize(8);
     doc.text(fechaActual, pageWidth - marginX, 8, { align: 'right' });
+    doc.text(`Propuesta #${propuestaId}`, marginX, 8);
 
-    y = 30;
+    // Link to client view
+    const clientViewUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}`;
+    doc.setTextColor(200, 230, 255);
+    const linkText = 'Ver propuesta cliente';
+    const linkWidth = doc.getTextWidth(linkText);
+    doc.textWithLink(linkText, pageWidth - marginX - linkWidth, 15, { url: clientViewUrl });
+
+    y = 35;
 
     // Client info section
-    doc.setFillColor(0, 84, 166);
-    doc.rect(marginX, y, pageWidth - marginX * 2, 6, 'F');
-    doc.setFontSize(9);
+    doc.setFillColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+    doc.rect(marginX, y, pageWidth - marginX * 2, 7, 'F');
+    doc.setFontSize(10);
     doc.setTextColor(255, 255, 255);
-    doc.text('INFORMACIÓN DEL CLIENTE', marginX + 3, y + 4);
-    y += 10;
+    doc.text('INFORMACIÓN DEL CLIENTE', marginX + 5, y + 5);
+    y += 12;
 
     const clientFields = [
       ['CUIC', details?.solicitud?.cuic || 'N/A'],
@@ -271,69 +294,88 @@ export function CompartirPropuestaPage() {
       ['Agencia', details?.solicitud?.agencia || 'N/A'],
     ];
 
-    doc.setFontSize(8);
-    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(9);
+    doc.setTextColor(60, 60, 60);
     clientFields.forEach(([label, value], idx) => {
-      const x = marginX + (idx % 3) * 90;
+      const x = marginX + (idx % 3) * 95;
       const row = Math.floor(idx / 3);
       doc.setFont('helvetica', 'bold');
-      doc.text(`${label}:`, x, y + row * 6);
+      doc.setTextColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+      doc.text(`${label}:`, x, y + row * 7);
       doc.setFont('helvetica', 'normal');
-      doc.text(String(value), x + 25, y + row * 6);
+      doc.setTextColor(60, 60, 60);
+      doc.text(String(value), x + 30, y + row * 7);
     });
-    y += 20;
+    y += 22;
 
     // Campaign info
-    doc.setFillColor(0, 84, 166);
-    doc.rect(marginX, y, pageWidth - marginX * 2, 6, 'F');
+    doc.setFillColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+    doc.rect(marginX, y, pageWidth - marginX * 2, 7, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.text('DATOS DE LA PROPUESTA', marginX + 3, y + 4);
-    y += 10;
+    doc.text('DATOS DE LA PROPUESTA', marginX + 5, y + 5);
+    y += 12;
 
-    doc.setTextColor(0, 0, 0);
+    doc.setTextColor(60, 60, 60);
     doc.setFont('helvetica', 'bold');
+    doc.setTextColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
     doc.text('Nombre Campaña:', marginX, y);
     doc.setFont('helvetica', 'normal');
-    doc.text(details?.cotizacion?.nombre_campania || 'N/A', marginX + 35, y);
-    y += 6;
+    doc.setTextColor(60, 60, 60);
+    doc.text(details?.cotizacion?.nombre_campania || 'N/A', marginX + 40, y);
+
+    if (details?.cotizacion?.fecha_inicio && details?.cotizacion?.fecha_fin) {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+      doc.text('Periodo:', marginX + 150, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(60, 60, 60);
+      doc.text(`${formatDate(details.cotizacion.fecha_inicio)} - ${formatDate(details.cotizacion.fecha_fin)}`, marginX + 170, y);
+    }
+    y += 8;
 
     if (details?.propuesta?.descripcion) {
       doc.setFont('helvetica', 'bold');
+      doc.setTextColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
       doc.text('Descripción:', marginX, y);
       doc.setFont('helvetica', 'normal');
-      const desc = doc.splitTextToSize(details.propuesta.descripcion, pageWidth - marginX * 2 - 30);
-      doc.text(desc, marginX + 25, y);
-      y += desc.length * 4 + 4;
+      doc.setTextColor(60, 60, 60);
+      const desc = doc.splitTextToSize(details.propuesta.descripcion, pageWidth - marginX * 2 - 35);
+      doc.text(desc, marginX + 28, y);
+      y += desc.length * 5 + 2;
     }
-    y += 10;
+    y += 8;
 
-    // KPIs
-    doc.setFillColor(0, 84, 166);
-    doc.rect(marginX, y, pageWidth - marginX * 2, 6, 'F');
+    // KPIs with colored boxes
+    doc.setFillColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+    doc.rect(marginX, y, pageWidth - marginX * 2, 7, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.text('MÉTRICAS', marginX + 3, y + 4);
-    y += 10;
+    doc.text('RESUMEN DE MÉTRICAS', marginX + 5, y + 5);
+    y += 12;
 
     const kpiData = [
-      ['Total Caras', String(kpis.total)],
-      ['En Renta', String(kpis.renta)],
-      ['Bonificadas', String(kpis.bonificadas)],
-      ['Inversión', formatCurrency(kpis.inversion)],
+      { label: 'Total Caras', value: String(kpis.total), color: [139, 92, 246] },
+      { label: 'En Renta', value: String(kpis.renta), color: [167, 139, 250] },
+      { label: 'Bonificadas', value: String(kpis.bonificadas), color: [192, 132, 252] },
+      { label: 'Inversión Total', value: formatCurrency(kpis.inversion), color: [109, 40, 217] },
     ];
 
-    doc.setTextColor(0, 0, 0);
-    kpiData.forEach(([label, value], idx) => {
-      const x = marginX + idx * 50;
+    const kpiWidth = (pageWidth - marginX * 2 - 15) / 4;
+    kpiData.forEach((kpi, idx) => {
+      const x = marginX + idx * (kpiWidth + 5);
+      doc.setFillColor(kpi.color[0], kpi.color[1], kpi.color[2]);
+      doc.roundedRect(x, y, kpiWidth, 15, 2, 2, 'F');
+      doc.setFontSize(8);
+      doc.setTextColor(255, 255, 255);
+      doc.text(kpi.label, x + kpiWidth / 2, y + 5, { align: 'center' });
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
-      doc.text(label, x, y);
-      doc.setFont('helvetica', 'normal');
-      doc.text(value, x, y + 5);
+      doc.text(kpi.value, x + kpiWidth / 2, y + 12, { align: 'center' });
     });
-    y += 15;
+    y += 25;
 
     // Table
     if (inventario && inventario.length > 0) {
-      const headers = ['Código', 'Plaza', 'Tipo', 'Formato', 'Caras', 'Tarifa', 'Periodo'];
+      const headers = ['Código', 'Plaza', 'Tipo', 'Formato', 'Caras', 'Tarifa', 'Periodo', 'Estatus'];
       const rows = inventario.map(i => [
         i.codigo_unico || '',
         i.plaza || '',
@@ -342,27 +384,39 @@ export function CompartirPropuestaPage() {
         String(i.caras_totales),
         formatCurrency(i.tarifa_publica || 0),
         formatInicioPeriodo(i),
+        i.estatus_reserva || 'Reservado',
       ]);
 
-      (doc as any).autoTable({
+      autoTable(doc, {
         head: [headers],
         body: rows,
         startY: y,
         margin: { left: marginX, right: marginX },
-        styles: { fontSize: 7 },
-        headStyles: { fillColor: [0, 84, 166] },
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: [IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [230, 240, 250] },
+        columnStyles: {
+          0: { cellWidth: 35 },
+          4: { halign: 'center' },
+          5: { halign: 'right' },
+        },
       });
     }
 
-    // Footer
-    const pageHeight = doc.internal.pageSize.getHeight();
-    doc.setFillColor(0, 84, 166);
-    doc.rect(0, pageHeight - 15, pageWidth, 15, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(10);
-    doc.text('IMU. desarrollado por QEB', pageWidth / 2, pageHeight - 7, { align: 'center' });
+    // Footer on all pages
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFillColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+      doc.rect(0, pageHeight - 12, pageWidth, 12, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text('IMU - Grupo IMU | Documento generado automáticamente', marginX, pageHeight - 5);
+      doc.text(`Página ${i} de ${totalPages}`, pageWidth - marginX, pageHeight - 5, { align: 'right' });
+    }
 
-    doc.save(`Propuesta_${propuestaId}.pdf`);
+    doc.save(`Propuesta_Interna_${propuestaId}.pdf`);
   };
 
   const handlePOIPlaceChanged = () => {
@@ -397,52 +451,61 @@ export function CompartirPropuestaPage() {
   };
 
   const isLoading = loadingDetails || loadingInventario;
-  const COLORS = ['#0054A6', '#0066CC', '#0077E6', '#3399FF', '#66B3FF']; // IMU Blue palette
+  const COLORS = ['#8B5CF6', '#A78BFA', '#C084FC', '#DDD6FE', '#6D28D9', '#7C3AED']; // Purple palette
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-zinc-950">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-zinc-950 via-purple-950/20 to-zinc-950">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-purple-950/20 to-zinc-950">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-zinc-900/95 backdrop-blur border-b border-zinc-800">
+      <header className="sticky top-0 z-50 bg-gradient-to-r from-zinc-900/95 via-purple-900/20 to-zinc-900/95 backdrop-blur border-b border-purple-500/20">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/propuestas')} className="p-2 hover:bg-zinc-800 rounded-lg">
+            <button onClick={() => navigate('/propuestas')} className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors">
               <ArrowLeft className="h-5 w-5 text-zinc-400" />
             </button>
             <div>
               <div className="flex items-center gap-2">
-                <Share2 className="h-5 w-5 text-blue-500" />
-                <h1 className="text-xl font-bold text-white">Vista Compartir</h1>
+                <Share2 className="h-5 w-5 text-purple-500" />
+                <h1 className="text-xl font-bold bg-gradient-to-r from-purple-500 to-pink-400 bg-clip-text text-transparent">Vista Compartir</h1>
               </div>
               <p className="text-sm text-zinc-400">Propuesta #{propuestaId}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            <a
+              href={`/cliente/propuesta/${propuestaId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-400 hover:to-purple-400 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-purple-500/20"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Ver en navegador
+            </a>
             <button
               onClick={handleCopyLink}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-purple-500/20"
             >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? 'Copiado!' : 'Copiar Enlace'}
             </button>
             <button
               onClick={handleDownloadKML}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800/80 hover:bg-purple-500/20 text-white rounded-lg text-sm font-medium transition-colors border border-purple-500/30"
             >
               <Map className="h-4 w-4" />
               KML
             </button>
             <button
               onClick={handleGeneratePDF}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800/80 hover:bg-purple-500/20 text-white rounded-lg text-sm font-medium transition-colors border border-purple-500/30"
             >
               <FileText className="h-4 w-4" />
               PDF
@@ -453,8 +516,8 @@ export function CompartirPropuestaPage() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Campaign Header */}
-        <div className="bg-gradient-to-r from-blue-900/40 to-cyan-900/30 rounded-2xl p-6 border border-blue-500/20">
-          <h2 className="text-2xl font-bold text-white mb-2">
+        <div className="bg-gradient-to-r from-purple-900/40 via-violet-900/30 to-pink-900/20 rounded-2xl p-6 border border-purple-500/30 shadow-xl shadow-purple-500/10">
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent mb-2">
             {details?.cotizacion?.nombre_campania || 'Propuesta sin nombre'}
           </h2>
           <p className="text-zinc-400">{details?.propuesta?.descripcion || 'Sin descripción'}</p>
@@ -462,10 +525,10 @@ export function CompartirPropuestaPage() {
             <p className="text-sm text-zinc-500 mt-2">Notas: {details.propuesta.notas}</p>
           )}
           <div className="flex gap-4 mt-4 text-sm">
-            <span className="text-blue-300">
+            <span className="text-purple-300">
               Inicio: {details?.cotizacion?.fecha_inicio ? formatDate(details.cotizacion.fecha_inicio) : 'N/A'}
             </span>
-            <span className="text-blue-300">
+            <span className="text-purple-300">
               Fin: {details?.cotizacion?.fecha_fin ? formatDate(details.cotizacion.fecha_fin) : 'N/A'}
             </span>
           </div>
@@ -483,8 +546,8 @@ export function CompartirPropuestaPage() {
             { label: 'Agencia', value: details?.solicitud?.agencia },
             { label: 'Producto', value: details?.solicitud?.producto_nombre },
           ].map(({ label, value }) => (
-            <div key={label} className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-              <p className="text-xs text-zinc-500">{label}</p>
+            <div key={label} className="bg-gradient-to-br from-zinc-900 to-zinc-900/80 rounded-xl p-4 border border-purple-500/10 hover:border-purple-500/30 transition-colors">
+              <p className="text-xs text-purple-500/70">{label}</p>
               <p className="text-sm font-medium text-white truncate">{value || 'N/A'}</p>
             </div>
           ))}
@@ -492,8 +555,8 @@ export function CompartirPropuestaPage() {
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800">
-            <h3 className="text-lg font-semibold text-white mb-4">Reservas por Ciudad</h3>
+          <div className="bg-gradient-to-br from-zinc-900 to-purple-900/10 rounded-2xl p-6 border border-purple-500/20">
+            <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-500 to-pink-400 bg-clip-text text-transparent mb-4">Reservas por Ciudad</h3>
             {chartCiudades.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={chartCiudades} layout="vertical">
@@ -518,8 +581,8 @@ export function CompartirPropuestaPage() {
             )}
           </div>
 
-          <div className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800">
-            <h3 className="text-lg font-semibold text-white mb-4">Reservas por Tipo</h3>
+          <div className="bg-gradient-to-br from-zinc-900 to-purple-900/10 rounded-2xl p-6 border border-purple-500/20">
+            <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-500 to-pink-400 bg-clip-text text-transparent mb-4">Reservas por Tipo</h3>
             {chartFormatos.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={chartFormatos}>
@@ -548,42 +611,42 @@ export function CompartirPropuestaPage() {
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Total Caras', value: kpis.total, color: 'text-white' },
-            { label: 'En Renta', value: kpis.renta, color: 'text-blue-400' },
-            { label: 'Bonificadas', value: kpis.bonificadas, color: 'text-emerald-400' },
-            { label: 'Inversión Total', value: formatCurrency(kpis.inversion), color: 'text-amber-400' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 text-center">
+            { label: 'Total Caras', value: kpis.total, color: 'text-purple-500', bg: 'from-purple-500/20 to-purple-600/10' },
+            { label: 'En Renta', value: kpis.renta, color: 'text-violet-400', bg: 'from-pink-400/20 to-violet-400/10' },
+            { label: 'Bonificadas', value: kpis.bonificadas, color: 'text-pink-400', bg: 'from-pink-400/20 to-violet-400/10' },
+            { label: 'Inversión Total', value: formatCurrency(kpis.inversion), color: 'text-amber-400', bg: 'from-amber-500/20 to-amber-600/10' },
+          ].map(({ label, value, color, bg }) => (
+            <div key={label} className={`bg-gradient-to-br ${bg} rounded-xl p-4 border border-purple-500/20 text-center`}>
               <p className={`text-2xl font-bold ${color}`}>{value}</p>
-              <p className="text-xs text-zinc-500 mt-1">{label}</p>
+              <p className="text-xs text-zinc-400 mt-1">{label}</p>
             </div>
           ))}
         </div>
 
         {/* Table Controls */}
-        <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
-          <div className="p-4 border-b border-zinc-800 flex flex-wrap items-center gap-4">
+        <div className="bg-gradient-to-br from-zinc-900 to-purple-900/5 rounded-2xl border border-purple-500/20 overflow-hidden">
+          <div className="p-4 border-b border-purple-500/10 flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-zinc-500" />
+              <Filter className="h-4 w-4 text-purple-500" />
               <input
                 type="text"
                 placeholder="Buscar..."
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
-                className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="px-3 py-1.5 bg-zinc-800/80 border border-purple-500/20 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
               />
             </div>
 
             <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-zinc-500" />
+              <Layers className="h-4 w-4 text-purple-500" />
               <span className="text-xs text-zinc-500">Agrupar:</span>
               {(['numero_catorcena', 'articulo', 'plaza', 'tipo_de_cara'] as GroupByField[]).map(field => (
                 <button
                   key={field}
                   onClick={() => toggleGrouping(field)}
-                  className={`px-2 py-1 rounded text-xs ${activeGroupings.includes(field)
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                  className={`px-2 py-1 rounded text-xs transition-all ${activeGroupings.includes(field)
+                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-lg shadow-purple-500/20'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-purple-500/20'
                     }`}
                 >
                   {field === 'numero_catorcena' ? 'Catorcena' : field.replace('_', ' ')}
@@ -592,11 +655,11 @@ export function CompartirPropuestaPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <ArrowUpDown className="h-4 w-4 text-zinc-500" />
+              <ArrowUpDown className="h-4 w-4 text-purple-500" />
               <select
                 value={sortField}
                 onChange={(e) => setSortField(e.target.value)}
-                className="px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-xs text-white"
+                className="px-2 py-1 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white focus:ring-1 focus:ring-purple-500"
               >
                 <option value="">Sin ordenar</option>
                 <option value="codigo_unico">Código</option>
@@ -605,7 +668,7 @@ export function CompartirPropuestaPage() {
               </select>
               <button
                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs text-zinc-400"
+                className="px-2 py-1 bg-zinc-800 hover:bg-purple-500/20 rounded text-xs text-zinc-400"
               >
                 {sortOrder === 'asc' ? '↑' : '↓'}
               </button>
@@ -613,7 +676,7 @@ export function CompartirPropuestaPage() {
 
             <button
               onClick={handleDownloadCSV}
-              className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm"
+              className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg text-sm shadow-lg shadow-emerald-500/20"
             >
               <FileSpreadsheet className="h-4 w-4" />
               CSV

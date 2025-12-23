@@ -161,6 +161,17 @@ export const propuestasService = {
     }
   },
 
+  async updateAsignados(id: number, asignados: string, id_asignados: string): Promise<Propuesta> {
+    const response = await api.patch<ApiResponse<Propuesta>>(`/propuestas/${id}/asignados`, {
+      asignados,
+      id_asignados,
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar asignados');
+    }
+    return response.data.data;
+  },
+
   async getFullDetails(id: number): Promise<PropuestaFullDetails> {
     const response = await api.get<ApiResponse<PropuestaFullDetails>>(`/propuestas/${id}/full`);
     if (!response.data.success || !response.data.data) {
