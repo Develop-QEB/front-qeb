@@ -976,12 +976,12 @@ export function PropuestasPage() {
         </td>
         <td className="px-4 py-3">
           <span className="text-zinc-400 text-sm">
-            {item.catorcena_inicio ? `C${item.catorcena_inicio} / ${item.anio_inicio}` : '-'}
+            {item.catorcena_inicio ? `Catorcena ${item.catorcena_inicio} / ${item.anio_inicio}` : '-'}
           </span>
         </td>
         <td className="px-4 py-3">
           <span className="text-zinc-400 text-sm">
-            {item.catorcena_fin ? `C${item.catorcena_fin} / ${item.anio_fin}` : '-'}
+            {item.catorcena_fin ? `Catorcena ${item.catorcena_fin} / ${item.anio_fin}` : '-'}
           </span>
         </td>
         <td className="px-4 py-3">
