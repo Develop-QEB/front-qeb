@@ -199,6 +199,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   // POI filter state
   const [poiFilterIds, setPoiFilterIds] = useState<Set<number> | null>(null);
 
+  // CSV upload state
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvData, setCsvData] = useState<{ codigo_unico: string; disponibilidad: 'Disponible' | 'No Disponible' }[]>([]);
+  const [showCsvSection, setShowCsvSection] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
   // Body scroll lock when modal is open
   useEffect(() => {
     if (isOpen) {
@@ -889,6 +895,88 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     setPoiFilterIds(null);
   }, []);
 
+  // CSV handling functions
+  const normalizeColumnName = (text: string) => {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove accents
+      .replace(/[\s_-]/g, ''); // Remove spaces, underscores, hyphens
+  };
+
+  const getValueByColumnName = (row: Record<string, string>, columnName: string): string | null => {
+    const normalizedName = normalizeColumnName(columnName);
+    for (const key in row) {
+      if (normalizeColumnName(key) === normalizedName) {
+        return row[key];
+      }
+    }
+    return null;
+  };
+
+  const handleCsvUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setCsvFile(file);
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const lines = text.split('\n').filter(line => line.trim());
+      if (lines.length < 2) return;
+
+      // Parse headers
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+
+      // Parse data rows
+      const parsedData = lines.slice(1).map(line => {
+        const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+        const row: Record<string, string> = {};
+        headers.forEach((header, idx) => {
+          row[header] = values[idx] || '';
+        });
+        return row;
+      });
+
+      // Match with inventory
+      const matched = parsedData.map(row => {
+        const codigoUnico = getValueByColumnName(row, 'codigo_unico');
+        const exists = inventarioDisponible.some(inv => inv.codigo_unico === codigoUnico);
+        return {
+          codigo_unico: codigoUnico || 'N/A',
+          disponibilidad: exists ? 'Disponible' as const : 'No Disponible' as const,
+        };
+      });
+
+      setCsvData(matched);
+      setShowCsvSection(true);
+    };
+
+    reader.readAsText(file);
+  }, [inventarioDisponible]);
+
+  const handleSelectFromCsv = useCallback(() => {
+    const availableCodes = csvData
+      .filter(row => row.disponibilidad === 'Disponible')
+      .map(row => row.codigo_unico);
+
+    const matchingInventory = inventarioDisponible
+      .filter(inv => availableCodes.includes(inv.codigo_unico));
+
+    setSelectedInventory(new Set(matchingInventory.map(inv => inv.id)));
+    setShowCsvSection(false);
+  }, [csvData, inventarioDisponible]);
+
+  const handleClearCsv = useCallback(() => {
+    setCsvFile(null);
+    setCsvData([]);
+    setShowCsvSection(false);
+    if (csvInputRef.current) {
+      csvInputRef.current.value = '';
+    }
+  }, []);
+
   // Handle sort
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -1498,6 +1586,37 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     </div>
                   )}
 
+                  <div className="w-px h-6 bg-zinc-700" />
+
+                  {/* CSV Upload Button */}
+                  <input
+                    ref={csvInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCsvUpload}
+                    className="hidden"
+                    id="csv-upload"
+                  />
+                  <button
+                    onClick={() => csvInputRef.current?.click()}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${csvFile
+                      ? 'bg-orange-500 text-white shadow'
+                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white hover:bg-zinc-700'
+                      }`}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    {csvFile ? csvFile.name.substring(0, 15) + '...' : 'Subir CSV'}
+                  </button>
+                  {csvFile && (
+                    <button
+                      onClick={handleClearCsv}
+                      className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      title="Quitar archivo"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+
                   <div className="flex-1" />
 
                   {/* Stats & Actions */}
@@ -1529,6 +1648,49 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                   </div>
                 </div>
               </div>
+
+              {/* CSV Results Panel */}
+              {showCsvSection && csvData.length > 0 && (
+                <div className="px-6 py-3 border-b border-zinc-800 bg-orange-500/5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-orange-400" />
+                      <span className="text-sm font-medium text-orange-300">Resultados del CSV</span>
+                      <span className="text-xs text-zinc-500">
+                        ({csvData.filter(d => d.disponibilidad === 'Disponible').length} disponibles de {csvData.length})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleSelectFromCsv}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-medium transition-colors"
+                      >
+                        <Target className="h-3.5 w-3.5" />
+                        Seleccionar Disponibles
+                      </button>
+                      <button
+                        onClick={() => setShowCsvSection(false)}
+                        className="p-1.5 text-zinc-400 hover:text-white"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 max-h-24 overflow-auto">
+                    {csvData.map((item, idx) => (
+                      <span
+                        key={idx}
+                        className={`px-2 py-1 rounded text-xs font-mono ${item.disponibilidad === 'Disponible'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                          }`}
+                      >
+                        {item.codigo_unico}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Content - Map and Table */}
               <div className="flex-1 flex overflow-hidden">
