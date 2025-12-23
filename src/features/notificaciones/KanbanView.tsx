@@ -20,7 +20,7 @@ function KanbanCard({
   tarea: Notificacion;
   onSelect: () => void;
 }) {
-  const statusConfig = STATUS_CONFIG[tarea.estatus || 'Activo'] || STATUS_CONFIG['Activo'];
+  const statusConfig = getStatusConfig(tarea.estatus);
   const tipoConfig = getTipoConfig(tarea.tipo);
 
   return (

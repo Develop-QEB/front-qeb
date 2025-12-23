@@ -433,7 +433,7 @@ function TareasTable({
           </thead>
           <tbody className="divide-y divide-zinc-800/50">
             {tareas.map((tarea) => {
-              const statusConfig = STATUS_CONFIG[tarea.estatus || 'Activo'] || STATUS_CONFIG['Activo'];
+              const statusConfig = getStatusConfig(tarea.estatus);
               return (
                 <tr
                   key={tarea.id}
@@ -511,7 +511,7 @@ function NestedSection({
   onSelectTarea: (tarea: Notificacion) => void;
 }) {
   const [open, setOpen] = useState(true);
-  const statusConfig = STATUS_CONFIG[group.key];
+  const statusConfig = getStatusConfig(group.key);
   const currentGroupType = groupByList[level];
   const groupOption = GROUP_BY_OPTIONS.find(o => o.value === currentGroupType);
 
@@ -616,7 +616,7 @@ function NestedTableSection({
   onSelectTarea: (tarea: Notificacion) => void;
 }) {
   const [open, setOpen] = useState(true);
-  const statusConfig = STATUS_CONFIG[group.key];
+  const statusConfig = getStatusConfig(group.key);
   const currentGroupType = groupByList[level];
   const groupOption = GROUP_BY_OPTIONS.find(o => o.value === currentGroupType);
 
@@ -714,7 +714,7 @@ function TaskDrawer({
   const [comment, setComment] = useState('');
   const user = useAuthStore((state) => state.user);
 
-  const statusConfig = STATUS_CONFIG[tarea.estatus || 'Activo'] || STATUS_CONFIG['Activo'];
+  const statusConfig = getStatusConfig(tarea.estatus);
   const StatusIcon = statusConfig.icon;
 
   const handleCommentSubmit = () => {
