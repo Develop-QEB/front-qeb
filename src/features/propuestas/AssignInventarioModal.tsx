@@ -1259,7 +1259,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       .map(row => row.codigo_unico);
 
     const matchingInventory = inventarioDisponible
-      .filter(inv => availableCodes.includes(inv.codigo_unico));
+      .filter(inv => inv.codigo_unico && availableCodes.includes(inv.codigo_unico));
 
     setSelectedInventory(new Set(matchingInventory.map(inv => inv.id)));
     setShowCsvSection(false);
