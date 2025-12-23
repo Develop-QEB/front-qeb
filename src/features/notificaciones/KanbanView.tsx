@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Calendar, Circle, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { Notificacion } from '../../types';
 import { formatDate } from '../../lib/utils';
-import { STATUS_CONFIG, getTipoConfig } from '../../lib/taskConfig';
+import { getStatusConfig, getTipoConfig } from '../../lib/taskConfig';
 
 
 
