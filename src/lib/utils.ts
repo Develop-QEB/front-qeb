@@ -36,6 +36,21 @@ export function formatDateTime(date: string | Date | null | undefined): string {
   }).format(d);
 }
 
+
+
+// Compact format: "23 Dec 14:30"
+export function formatDateCompact(date: string | Date | null | undefined): string {
+  if (!date) return '—';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}
+
 export function truncate(str: string, length: number): string {
   if (str.length <= length) return str;
   return str.slice(0, length) + '...';
