@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
@@ -213,8 +214,7 @@ function PeriodFilterPopover({
     return catorcenas;
   }, [catorcenasData, tempYearFin, tempYearInicio, tempCatorcenaInicio]);
 
-  const isActive = yearInicio !== undefined && yearFin !== undefined;
-  // Require all 4 fields to apply filter
+  const isActive = yearInicio !== undefined && yearFin !== undefined && catorcenaInicio !== undefined && catorcenaFin !== undefined;
   const canApply = tempYearInicio !== undefined && tempYearFin !== undefined && tempCatorcenaInicio !== undefined && tempCatorcenaFin !== undefined;
 
   const handleApply = () => {
@@ -783,6 +783,7 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
 
 export function PropuestasPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -942,7 +943,7 @@ export function PropuestasPage() {
     link.click();
   };
 
-  const renderPropuestaRow = (item: Propuesta, index: number) => {
+  const renderPropuestaRow = (item: Propuesta & any, index: number) => {
     const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
 
     return (
@@ -951,83 +952,73 @@ export function PropuestasPage() {
           <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">#{item.id}</span>
         </td>
         <td className="px-4 py-3">
-          <span className="font-mono text-xs px-2 py-1 rounded-md bg-blue-500/10 text-blue-300">#{item.solicitud_id}</span>
+          <span className="text-zinc-400 text-sm">{formatDate(item.fecha)}</span>
         </td>
         <td className="px-4 py-3">
-          <span className="text-white text-sm font-medium">{item.articulo || '-'}</span>
+          <span className="text-white text-sm font-medium">{item.marca_nombre || item.articulo || '-'}</span>
         </td>
         <td className="px-4 py-3">
-          <span className="font-medium text-emerald-400">{formatCurrency(item.precio)}</span>
+          <div className="flex items-center gap-1.5 align-middle">
+            <div className="w-5 h-5 rounded-full bg-zinc-700 flex items-center justify-center text-[10px] text-zinc-300">
+              <User className="h-3 w-3" />
+            </div>
+            <span className="text-zinc-300 text-sm">{item.creador_nombre || item.usuario_nombre || '-'}</span>
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          <span className="text-white text-sm">{item.nombre_campania || item.descripcion || '-'}</span>
+        </td>
+        <td className="px-4 py-3">
+          <span className="text-zinc-300 text-xs">{item.asignado || 'Sin asignar'}</span>
         </td>
         <td className="px-4 py-3">
           <span className="font-medium text-amber-400">{formatCurrency(item.inversion)}</span>
         </td>
         <td className="px-4 py-3">
-          <span className="text-zinc-300 text-xs">{item.asignado || '-'}</span>
+          <span className="text-zinc-400 text-sm">{item.catorcena_inicio ? `C${item.catorcena_inicio}` : '-'}</span>
+        </td>
+        <td className="px-4 py-3">
+          <span className="text-zinc-400 text-sm">{item.catorcena_fin ? `C${item.catorcena_fin}` : '-'}</span>
         </td>
         <td className="px-4 py-3">
           <button
             onClick={() => setStatusPropuesta(item)}
-            className={`px-2 py-1 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+            className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
           >
             {item.status}
           </button>
         </td>
         <td className="px-4 py-3">
-          <span className="text-zinc-400 text-sm">{formatDate(item.fecha)}</span>
-        </td>
-        <td className="px-4 py-3">
           <div className="flex items-center gap-1">
-            {/* Estatus/Comentarios - deshabilitado si Activa */}
-            <button
-              onClick={() => setStatusPropuesta(item)}
-              disabled={item.status === 'Activa'}
-              className={`p-2 rounded-lg border transition-all ${
-                item.status === 'Activa'
-                  ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
-                  : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border-amber-500/20 hover:border-amber-500/40'
-              }`}
-              title={item.status === 'Activa' ? 'No disponible para propuestas activas' : 'Ver/Cambiar estatus'}
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-            </button>
-
-            {/* Aprobar - deshabilitado si Activa */}
             <button
               onClick={() => setApprovePropuesta(item)}
               disabled={item.status === 'Activa'}
-              className={`p-2 rounded-lg border transition-all ${
-                item.status === 'Activa'
-                  ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
-                  : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40'
-              }`}
+              className={`p-2 rounded-lg border transition-all ${item.status === 'Activa'
+                ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+                : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40'
+                }`}
               title={item.status === 'Activa' ? 'Propuesta ya está activa' : 'Aprobar propuesta'}
             >
               <CheckCircle className="h-3.5 w-3.5" />
             </button>
-
-            {/* Asignar Inventario - deshabilitado si Activa */}
             <button
               onClick={() => { setSelectedPropuestaForAssign(item); setShowAssignModal(true); }}
               disabled={item.status === 'Activa'}
-              className={`p-2 rounded-lg border transition-all ${
-                item.status === 'Activa'
-                  ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
-                  : 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
-              }`}
+              className={`p-2 rounded-lg border transition-all ${item.status === 'Activa'
+                ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+                : 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
+                }`}
               title={item.status === 'Activa' ? 'No disponible para propuestas activas' : 'Asignar a Inventario'}
             >
               <MapPinned className="h-3.5 w-3.5" />
             </button>
-
-            {/* Compartir - solo habilitado cuando status es 'Compartir' */}
             <button
               disabled={item.status !== 'Compartir'}
-              className={`p-2 rounded-lg border transition-all ${
-                item.status === 'Compartir'
-                  ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40'
-                  : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
-              }`}
+              onClick={() => item.status === 'Compartir' && navigate(`/propuestas/compartir/${item.id}`)}
+              className={`p-2 rounded-lg border transition-all ${item.status === 'Compartir'
+                ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40'
+                : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+                }`}
               title={item.status === 'Compartir' ? 'Compartir propuesta' : 'Solo disponible en status Compartir'}
             >
               <Share2 className="h-3.5 w-3.5" />
@@ -1289,20 +1280,22 @@ export function PropuestasPage() {
               <thead>
                 <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Solicitud</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Artículo</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Precio</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fecha Creación</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Creador</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Asignados</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Inversión</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Asignado</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fecha</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Inicio</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fin</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center">
+                    <td colSpan={11} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
                         <span className="text-zinc-500 text-sm">Cargando propuestas...</span>
@@ -1311,9 +1304,11 @@ export function PropuestasPage() {
                   </tr>
                 ) : !data?.data || data.data.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center">
+                    <td colSpan={11} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
-                        <FileText className="h-12 w-12 text-zinc-700" />
+                        <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center">
+                          <FileText className="h-4 w-4 text-zinc-600" />
+                        </div>
                         <span className="text-zinc-500 text-sm">No se encontraron propuestas</span>
                       </div>
                     </td>

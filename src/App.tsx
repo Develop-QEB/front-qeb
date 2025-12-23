@@ -9,6 +9,8 @@ import { ProveedoresPage } from './features/proveedores/ProveedoresPage';
 import { InventariosPage } from './features/inventarios/InventariosPage';
 import { SolicitudesPage } from './features/solicitudes/SolicitudesPage';
 import { PropuestasPage } from './features/propuestas/PropuestasPage';
+import { CompartirPropuestaPage } from './features/propuestas/CompartirPropuestaPage';
+import { ClientePropuestaPage } from './features/propuestas/ClientePropuestaPage';
 import { CampanasPage } from './features/campanas/CampanasPage';
 import { CampanaDetailPage } from './features/campanas/CampanaDetailPage';
 import { TareaSeguimientoPage } from './features/campanas/TareaSeguimientoPage';
@@ -45,12 +47,16 @@ function App() {
             <Route path="/inventarios" element={<InventariosPage />} />
             <Route path="/solicitudes" element={<SolicitudesPage />} />
             <Route path="/propuestas" element={<PropuestasPage />} />
+            <Route path="/propuestas/compartir/:id" element={<CompartirPropuestaPage />} />
             <Route path="/campanas" element={<CampanasPage />} />
             <Route path="/campanas/detail/:id" element={<CampanaDetailPage />} />
             <Route path="/campanas/:id/tareas" element={<TareaSeguimientoPage />} />
             <Route path="/notificaciones" element={<NotificacionesPage />} />
             <Route path="/correos" element={<CorreosPage />} />
           </Route>
+
+          {/* Public route for clients - no auth required */}
+          <Route path="/cliente/propuesta/:id" element={<ClientePropuestaPage />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

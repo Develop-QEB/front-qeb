@@ -12,6 +12,31 @@ import { formatCurrency, formatDate } from '../../lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// Logo Grupo IMU
+const LOGO_IMU_URL = '/logo-grupo-imu.png';
+
+// Helper to load image as base64
+const loadImageAsBase64 = (url: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } else {
+        reject(new Error('Could not get canvas context'));
+      }
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+};
+
 // Status badge colors
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string; gradient: string }> = {
   'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30', gradient: 'from-amber-600 to-orange-600' },
@@ -157,7 +182,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
     });
   };
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     if (!data) return;
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -186,18 +211,28 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
     doc.setFillColor(...imuGreen);
     doc.rect(0, 32, pageWidth, 2, 'F');
 
-    // Logo Grupo IMU
-    doc.setTextColor(...imuGreen);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Grupo', marginX, 11);
-    doc.setTextColor(...white);
-    doc.setFontSize(18);
-    doc.text('IMU', marginX, 21);
-    doc.setFontSize(5);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(160, 165, 175);
-    doc.text('Imagenes y muebles urbanos', marginX, 27);
+    // Logo Grupo IMU - cargar imagen
+    try {
+      const logoBase64 = await loadImageAsBase64(LOGO_IMU_URL);
+      // El logo original es ~6033x6151, lo escalamos para el header
+      const logoHeight = 22;
+      const logoWidth = logoHeight * (6033 / 6151); // Mantener proporción
+      doc.addImage(logoBase64, 'PNG', marginX, 5, logoWidth, logoHeight);
+    } catch (err) {
+      // Fallback: texto si no carga la imagen
+      console.warn('No se pudo cargar el logo, usando texto:', err);
+      doc.setTextColor(...imuGreen);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Grupo', marginX, 11);
+      doc.setTextColor(...white);
+      doc.setFontSize(18);
+      doc.text('IMU', marginX, 21);
+      doc.setFontSize(5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(160, 165, 175);
+      doc.text('Imagenes y muebles urbanos', marginX, 27);
+    }
 
     // Título "SOLICITUD" centrado
     doc.setTextColor(...white);
@@ -366,48 +401,68 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
           yPos = 18;
         }
 
-        // Header del grupo - solo catorcena, sin precio ni cantidad
-        doc.setFillColor(...imuBlue);
-        doc.roundedRect(marginX, yPos, contentWidth, 6, 1, 1, 'F');
-        doc.setTextColor(...white);
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        doc.text(group.catorcena, marginX + 4, yPos + 4.2);
-        yPos += 8;
+        // Header del grupo - catorcena con subtotales
+        const groupCarasRenta = group.caras.reduce((sum, c) => sum + (Number(c.caras) || 0), 0);
+        const groupCarasBonif = group.caras.reduce((sum, c) => sum + (Number(c.bonificacion) || 0), 0);
+        const groupInversion = group.caras.reduce((sum, c) => sum + ((Number(c.tarifa_publica) || 0) * (Number(c.caras) || 0)), 0);
 
-        // Tabla
-        const tableData = group.caras.map(c => [
-          c.idquote || c.id?.toString() || '-',
-          c.ciudad || '-',
-          c.tipo || '-',
-          c.formato || '-',
-        ]);
+        doc.setFillColor(...imuBlue);
+        doc.roundedRect(marginX, yPos, contentWidth, 8, 1, 1, 'F');
+        doc.setTextColor(...white);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.text(group.catorcena, marginX + 4, yPos + 5.5);
+
+        // Subtotales en el header del grupo
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'normal');
+        const subtotalText = `Caras: ${groupCarasRenta} | Bonif: ${groupCarasBonif} | Inversión: $${groupInversion.toLocaleString('es-MX')}`;
+        doc.text(subtotalText, pageWidth - marginX - 4, yPos + 5.5, { align: 'right' });
+        yPos += 10;
+
+        // Tabla mejorada con más datos
+        let rowNum = 0;
+        const tableData = group.caras.map(c => {
+          rowNum++;
+          const inversionCara = (Number(c.tarifa_publica) || 0) * (Number(c.caras) || 0);
+          return [
+            rowNum.toString(),
+            `${c.ciudad || c.estados || '-'}`,
+            c.formato || '-',
+            (Number(c.caras) || 0).toString(),
+            (Number(c.bonificacion) || 0).toString(),
+            `$${inversionCara.toLocaleString('es-MX')}`,
+          ];
+        });
 
         autoTable(doc, {
           startY: yPos,
-          head: [['ID', 'Ubicación', 'Tipo de Cara', 'Mueble']],
+          head: [['#', 'Plaza', 'Formato', 'Caras', 'Bonif.', 'Inversión']],
           body: tableData,
           theme: 'plain',
           margin: { left: marginX, right: marginX },
           styles: {
             fontSize: 7,
-            cellPadding: 2,
+            cellPadding: 2.5,
             textColor: textDark,
             lineColor: [230, 235, 240],
             lineWidth: 0.1,
           },
           headStyles: {
-            fillColor: [245, 248, 250],
+            fillColor: [240, 245, 250],
             textColor: imuDarkBlue,
             fontStyle: 'bold',
             fontSize: 7,
+            halign: 'center',
           },
           alternateRowStyles: { fillColor: [252, 253, 255] },
           columnStyles: {
-            0: { cellWidth: 25 },
-            1: { cellWidth: 60 },
-            2: { cellWidth: 45 },
-            3: { cellWidth: 45 },
+            0: { cellWidth: 12, halign: 'center' },  // #
+            1: { cellWidth: 50 },                     // Plaza
+            2: { cellWidth: 45 },                     // Formato
+            3: { cellWidth: 20, halign: 'center' },  // Caras
+            4: { cellWidth: 20, halign: 'center' },  // Bonif.
+            5: { cellWidth: 30, halign: 'right' },   // Inversión
           },
         });
 

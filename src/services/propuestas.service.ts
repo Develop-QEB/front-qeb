@@ -33,6 +33,79 @@ export interface ApproveParams {
   id_asignados?: string;
 }
 
+export interface InventarioReservado {
+  rsv_ids: string;
+  id: number;
+  codigo_unico: string;
+  solicitud_caras_id: number | null;
+  mueble: string | null;
+  estado: string | null;
+  municipio: string | null;
+  ubicacion: string | null;
+  tipo_de_cara: string | null;
+  caras_totales: number;
+  latitud: number;
+  longitud: number;
+  plaza: string | null;
+  estatus_reserva: string | null;
+  articulo: string | null;
+  tipo_medio: string | null;
+  inicio_periodo: string | null;
+  fin_periodo: string | null;
+  tradicional_digital: string | null;
+  tipo_de_mueble: string | null;
+  ancho: number | null;
+  alto: number | null;
+  nivel_socioeconomico: string | null;
+  tarifa_publica: number | null;
+  grupo_completo_id: number | null;
+  numero_catorcena?: number | null;
+  anio_catorcena?: number | null;
+}
+
+export interface PropuestaFullDetails {
+  propuesta: Propuesta;
+  solicitud: {
+    id: number;
+    cuic: string;
+    cliente: string;
+    razon_social: string;
+    unidad_negocio: string;
+    marca_nombre: string;
+    asesor: string;
+    agencia: string;
+    producto_nombre: string;
+    categoria_nombre: string;
+  } | null;
+  cotizacion: {
+    id: number;
+    nombre_campania: string;
+    fecha_inicio: string;
+    fecha_fin: string;
+    numero_caras: number;
+    bonificacion: number;
+    precio: number;
+  } | null;
+  campania: {
+    id: number;
+    nombre: string;
+    status: string;
+  } | null;
+  caras: {
+    id: number;
+    ciudad: string;
+    estados: string;
+    tipo: string;
+    formato: string;
+    caras: number;
+    bonificacion: number;
+    tarifa_publica: number;
+    articulo: string;
+    inicio_periodo: string;
+    fin_periodo: string;
+  }[];
+}
+
 export const propuestasService = {
   async getAll(params: PropuestasParams = {}): Promise<PaginatedResponse<Propuesta>> {
     const response = await api.get<PaginatedResponse<Propuesta>>('/propuestas', { params });
@@ -87,4 +160,100 @@ export const propuestasService = {
       throw new Error(response.data.error || 'Error al aprobar propuesta');
     }
   },
+
+  async getFullDetails(id: number): Promise<PropuestaFullDetails> {
+    const response = await api.get<ApiResponse<PropuestaFullDetails>>(`/propuestas/${id}/full`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener detalles');
+    }
+    return response.data.data;
+  },
+
+  async getInventarioReservado(id: number): Promise<InventarioReservado[]> {
+    const response = await api.get<ApiResponse<InventarioReservado[]>>(`/propuestas/${id}/inventario`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener inventario');
+    }
+    return response.data.data;
+  },
+
+  async toggleReserva(
+    propuestaId: number,
+    data: {
+      inventarioId: number;
+      solicitudCaraId: number;
+      clienteId: number;
+      tipo: string;
+      fechaInicio: string;
+      fechaFin: string;
+    }
+  ): Promise<{ action: 'created' | 'deleted'; reserva?: any }> {
+    const response = await api.post<ApiResponse<{ action: 'created' | 'deleted'; reserva?: any }>>(
+      `/propuestas/${propuestaId}/reservas/toggle`,
+      data
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al cambiar reserva');
+    }
+    return response.data.data;
+  },
+
+  async createReservas(
+    propuestaId: number,
+    data: {
+      reservas: Array<{
+        inventario_id: number;
+        tipo: string;
+        latitud: number;
+        longitud: number;
+      }>;
+      solicitudCaraId: number;
+      clienteId: number;
+      fechaInicio: string;
+      fechaFin: string;
+      agruparComoCompleto?: boolean;
+    }
+  ): Promise<{ calendarioId: number; reservasCreadas: number }> {
+    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number }>>(
+      `/propuestas/${propuestaId}/reservas`,
+      data
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear reservas');
+    }
+    return response.data.data;
+  },
+
+  async deleteReservas(propuestaId: number, reservaIds: number[]): Promise<void> {
+    const response = await api.delete<ApiResponse<void>>(`/propuestas/${propuestaId}/reservas`, {
+      data: { reservaIds },
+    });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar reservas');
+    }
+  },
+
+  async getReservasForModal(propuestaId: number): Promise<ReservaModalItem[]> {
+    const response = await api.get<ApiResponse<ReservaModalItem[]>>(`/propuestas/${propuestaId}/reservas-modal`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener reservas');
+    }
+    return response.data.data;
+  },
 };
+
+export interface ReservaModalItem {
+  reserva_id: number;
+  espacio_id: number;
+  inventario_id: number;
+  codigo_unico: string;
+  tipo_de_cara: string;
+  latitud: number;
+  longitud: number;
+  plaza: string;
+  formato: string;
+  ubicacion: string | null;
+  estatus: string;
+  grupo_completo_id: number | null;
+  solicitud_cara_id: number;
+}
