@@ -367,9 +367,12 @@ export interface Notificacion {
   referencia_tipo: 'solicitud' | 'propuesta' | 'campana' | 'sistema' | null;
   referencia_id: number | null;
   fecha_creacion: string;
+  fecha_inicio?: string;
   fecha_fin?: string;
   responsable?: string;
+  id_responsable?: number;
   asignado?: string;
+  id_asignado?: number;
   estatus?: string;
 }
 
