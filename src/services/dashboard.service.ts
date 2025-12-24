@@ -157,6 +157,69 @@ class DashboardService {
     const response = await api.get('/dashboard/top-clientes');
     return response.data.data;
   }
+
+  async getInventoryDetail(filters?: DashboardFilters & { estatus?: string; page?: number; limit?: number }): Promise<InventoryDetailResponse> {
+    const params = new URLSearchParams();
+
+    if (filters?.estado) params.append('estado', filters.estado);
+    if (filters?.ciudad) params.append('ciudad', filters.ciudad);
+    if (filters?.formato) params.append('formato', filters.formato);
+    if (filters?.nse) params.append('nse', filters.nse);
+    if (filters?.catorcena_id) params.append('catorcena_id', filters.catorcena_id.toString());
+    if (filters?.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
+    if (filters?.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
+    if (filters?.estatus) params.append('estatus', filters.estatus);
+    if (filters?.page) params.append('page', filters.page.toString());
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+
+    const queryString = params.toString();
+    const url = `/dashboard/inventory-detail${queryString ? `?${queryString}` : ''}`;
+
+    const response = await api.get(url);
+    return response.data.data;
+  }
+}
+
+export interface InventoryDetailItem {
+  id: number;
+  codigo_unico: string;
+  plaza: string;
+  mueble: string;
+  tipo_de_mueble: string;
+  tradicional_digital: string;
+  municipio: string;
+  estado: string;
+  latitud: number | null;
+  longitud: number | null;
+  estatus: string;
+  cliente_nombre: string | null;
+}
+
+export interface PlazaMapData {
+  plaza: string;
+  count: number;
+  lat: number | null;
+  lng: number | null;
+}
+
+export interface InventoryCoord {
+  id: number;
+  lat: number;
+  lng: number;
+  plaza: string;
+  estatus: string;
+}
+
+export interface InventoryDetailResponse {
+  items: InventoryDetailItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  byPlaza: PlazaMapData[];
+  allCoords: InventoryCoord[];
 }
 
 export const dashboardService = new DashboardService();
