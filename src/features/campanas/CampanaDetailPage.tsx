@@ -1,10 +1,10 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioReservado, InventarioConAPS, buildDeliveryNote, postDeliveryNoteToSAP } from '../../services/campanas.service';
+import { campanasService, InventarioReservado, InventarioConAPS, buildDeliveryNote, postDeliveryNoteToSAP, HistorialItem } from '../../services/campanas.service';
 import { Badge } from '../../components/ui/badge';
 import { formatDate } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
@@ -592,6 +592,11 @@ export function CampanaDetailPage() {
     enabled: !!campana,
   });
 
+  const { data: historial = [], isLoading: isLoadingHistorial } = useQuery({
+    queryKey: ['campana-historial', campanaId],
+    queryFn: () => campanasService.getHistorial(campanaId),
+    enabled: !!campana,
+  });
 
   // Calcular centro del mapa basado en inventario
   const mapCenter = useMemo(() => {
@@ -1346,6 +1351,55 @@ export function CampanaDetailPage() {
               </>
             )}
           </div>
+        </div>
+
+        {/* Historial de Acciones */}
+        <div className="bg-card rounded-xl border border-border p-3 md:p-4">
+          <h3 className="text-xs md:text-sm font-semibold mb-3 text-purple-300 uppercase tracking-wide flex items-center gap-2">
+            <History className="h-4 w-4" />
+            Historial de Acciones
+          </h3>
+          {isLoadingHistorial ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
+            </div>
+          ) : historial.length === 0 ? (
+            <div className="text-center py-6 text-zinc-500 text-sm">
+              No hay acciones registradas
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-purple">
+              {historial.map((item) => {
+                const fechaObj = item.fecha_hora ? new Date(item.fecha_hora) : null;
+                const fecha = fechaObj ? fechaObj.toLocaleDateString('es-MX') : '';
+                const hora = fechaObj ? fechaObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+                // Capitalizar tipo para mejor presentación
+                const tipoCapitalizado = item.tipo ? item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1) : '';
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg bg-purple-900/20 border border-purple-900/30"
+                  >
+                    <div className="flex-shrink-0 w-2 h-2 rounded-full bg-purple-400" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-zinc-200">
+                        {item.accion} {tipoCapitalizado}
+                      </span>
+                      {item.detalles && (
+                        <p className="text-xs text-zinc-500 truncate" title={item.detalles}>
+                          {item.detalles}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <span className="text-xs text-zinc-500 block">{fecha}</span>
+                      <span className="text-xs text-zinc-600">{hora}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Lista de inventario reservado */}

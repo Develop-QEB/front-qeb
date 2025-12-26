@@ -115,6 +115,15 @@ export interface CampanaUpdateData {
   catorcenaFinAnio?: number;
 }
 
+export interface HistorialItem {
+  id: number;
+  tipo: string;
+  ref_id: number;
+  accion: string;
+  fecha_hora: string;
+  detalles: string | null;
+}
+
 // Función para construir el payload de DeliveryNote para SAP
 export function buildDeliveryNote(
   campana: CampanaWithComments,
@@ -318,6 +327,14 @@ export const campanasService = {
     const response = await api.patch<ApiResponse<Campana>>(`/campanas/${id}`, data);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al actualizar campaña');
+    }
+    return response.data.data;
+  },
+
+  async getHistorial(id: number): Promise<HistorialItem[]> {
+    const response = await api.get<ApiResponse<HistorialItem[]>>(`/campanas/${id}/historial`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener historial');
     }
     return response.data.data;
   },

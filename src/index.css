@@ -37,31 +37,47 @@
 @layer base {
   * {
     @apply border-border;
+  }
+
+  /* Scrollbar global - aplica a TODO incluyendo html/body */
+  html, body, * {
     scrollbar-width: thin;
-    scrollbar-color: rgb(107 33 168 / 0.5) transparent;
+    scrollbar-color: rgb(107 33 168 / 0.5) rgb(24 24 27 / 0.3);
   }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
   *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
+
+  html::-webkit-scrollbar-track,
+  body::-webkit-scrollbar-track,
   *::-webkit-scrollbar-track {
-    background: rgb(24 24 27 / 0.5);
-    border-radius: 4px;
+    background: rgb(24 24 27 / 0.8);
   }
+
+  html::-webkit-scrollbar-thumb,
+  body::-webkit-scrollbar-thumb,
   *::-webkit-scrollbar-thumb {
-    background: rgb(107 33 168 / 0.6);
-    border-radius: 4px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
+    background: linear-gradient(180deg, rgb(107 33 168 / 0.7) 0%, rgb(147 51 234 / 0.7) 100%);
+    border-radius: 5px;
+    border: 2px solid rgb(24 24 27 / 0.8);
   }
+
+  html::-webkit-scrollbar-thumb:hover,
+  body::-webkit-scrollbar-thumb:hover,
   *::-webkit-scrollbar-thumb:hover {
-    background: rgb(147 51 234 / 0.8);
-    border: 2px solid transparent;
-    background-clip: padding-box;
+    background: linear-gradient(180deg, rgb(147 51 234 / 0.9) 0%, rgb(168 85 247 / 0.9) 100%);
   }
+
+  html::-webkit-scrollbar-corner,
+  body::-webkit-scrollbar-corner,
   *::-webkit-scrollbar-corner {
-    background: transparent;
+    background: rgb(24 24 27);
   }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Gilroy', system-ui, -apple-system, sans-serif;
