@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
@@ -784,6 +784,7 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
 export function PropuestasPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -804,6 +805,27 @@ export function PropuestasPage() {
   const [approvePropuesta, setApprovePropuesta] = useState<Propuesta | null>(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedPropuestaForAssign, setSelectedPropuestaForAssign] = useState<Propuesta | null>(null);
+
+  // Handle URL params: viewId opens modal, search fills search bar
+  useEffect(() => {
+    const viewIdParam = searchParams.get('viewId');
+    const searchParam = searchParams.get('search');
+
+    if (viewIdParam) {
+      const id = parseInt(viewIdParam, 10);
+      if (!isNaN(id)) {
+        // Fetch propuesta and open modal
+        propuestasService.getById(id).then((propuesta) => {
+          setSelectedPropuestaForAssign(propuesta);
+          setShowAssignModal(true);
+        }).catch(console.error);
+      }
+      setSearchParams({}, { replace: true });
+    } else if (searchParam) {
+      setSearch(searchParam);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Debounce search
   useEffect(() => {

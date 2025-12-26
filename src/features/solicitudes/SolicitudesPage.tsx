@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Trash2,
@@ -406,6 +407,7 @@ const CHART_COLORS = [
 
 export function SolicitudesPage() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -423,7 +425,35 @@ export function SolicitudesPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewSolicitudId, setViewSolicitudId] = useState<number | null>(null);
   const [editSolicitud, setEditSolicitud] = useState<Solicitud | null>(null);
+
   const [statusSolicitud, setStatusSolicitud] = useState<Solicitud | null>(null);
+
+  // Handle URL params: viewId opens view modal, commentsId opens comments modal
+  useEffect(() => {
+    const viewIdParam = searchParams.get('viewId');
+    const commentsIdParam = searchParams.get('commentsId');
+    const searchParam = searchParams.get('search');
+
+    if (viewIdParam) {
+      const id = parseInt(viewIdParam, 10);
+      if (!isNaN(id)) {
+        setViewSolicitudId(id);
+      }
+      setSearchParams({}, { replace: true });
+    } else if (commentsIdParam) {
+      const id = parseInt(commentsIdParam, 10);
+      if (!isNaN(id)) {
+        // Fetch solicitud and open comments modal
+        solicitudesService.getById(id).then((solicitud) => {
+          setStatusSolicitud(solicitud);
+        }).catch(console.error);
+      }
+      setSearchParams({}, { replace: true });
+    } else if (searchParam) {
+      setSearch(searchParam);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [atenderSolicitud, setAtenderSolicitud] = useState<Solicitud | null>(null);
   const limit = 20;
 

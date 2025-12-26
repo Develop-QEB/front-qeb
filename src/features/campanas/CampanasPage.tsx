@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown,
@@ -478,8 +478,18 @@ const STATUS_OPTIONS = ['activa', 'inactiva', 'finalizada', 'por iniciar', 'en c
 
 export function CampanasPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Pre-fill search if search param is present in URL
+  useEffect(() => {
+    const searchParam = searchParams.get('search');
+    if (searchParam) {
+      setSearch(searchParam);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
   const [yearInicio, setYearInicio] = useState<number | undefined>(undefined);
@@ -501,6 +511,7 @@ export function CampanasPage() {
   const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
   const [expandedCampanas, setExpandedCampanas] = useState<Set<number>>(new Set());
   const [expandedAPS, setExpandedAPS] = useState<Set<string>>(new Set()); // key: campanaId-aps
+  const [expandedGrupos, setExpandedGrupos] = useState<Set<string>>(new Set()); // key: campanaId-aps-grupoKey
   const [campanaInventarios, setCampanaInventarios] = useState<Record<number, InventarioConAPS[]>>({});
   const [loadingInventarios, setLoadingInventarios] = useState<Set<number>>(new Set());
 
@@ -697,6 +708,19 @@ export function CampanasPage() {
     });
   };
 
+  const toggleGrupo = (campanaId: number, aps: number | null, grupoKey: string) => {
+    const key = `${campanaId}-${aps ?? 'sin-aps'}-${grupoKey}`;
+    setExpandedGrupos(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
   // Agrupar campañas por catorcena para la vista alternativa
   const campanasPorCatorcena = useMemo(() => {
     const groups: Record<string, { catorcena: { num: number; anio: number }; campanas: Campana[] }> = {};
@@ -767,7 +791,7 @@ export function CampanasPage() {
       .sort((a, b) => b.value - a.value);
   }, [filteredData]);
 
-  // Agrupar inventarios primero por APS, luego por grupo_completo_id
+  // Agrupar inventarios primero por APS, luego por período y artículo (como detalle de campaña)
   const getInventarioAgrupadoPorAPS = (inventarios: InventarioConAPS[]) => {
     // Separar los que tienen APS de los que no
     const conAPS: Record<number, InventarioConAPS[]> = {};
@@ -784,11 +808,13 @@ export function CampanasPage() {
       }
     });
 
-    // Función para agrupar por grupo_completo_id
+    // Función para agrupar por solicitud_caras_id (grupo_id)
     const agruparPorGrupo = (items: InventarioConAPS[]) => {
       const grupos: Record<string, InventarioConAPS[]> = {};
       items.forEach(item => {
-        const grupoKey = item.grupo_completo_id ? `grupo-${item.grupo_completo_id}` : `individual-${item.id}`;
+        // Agrupar por solicitud_caras_id
+        const grupoId = item.solicitud_caras_id || 'sin-grupo';
+        const grupoKey = `grupo-${grupoId}`;
         if (!grupos[grupoKey]) {
           grupos[grupoKey] = [];
         }
@@ -796,13 +822,14 @@ export function CampanasPage() {
       });
       return Object.entries(grupos).map(([key, groupItems]) => ({
         key,
-        grupoId: groupItems[0]?.grupo_completo_id,
+        grupoId: groupItems[0]?.solicitud_caras_id || null,
+        articulo: groupItems[0]?.articulo || null,
         items: groupItems
       }));
     };
 
     // Construir resultado: primero los con APS (ordenados desc), luego los sin APS
-    const resultado: { aps: number | null; totalItems: number; grupos: { key: string; grupoId: number | null; items: InventarioConAPS[] }[] }[] = [];
+    const resultado: { aps: number | null; totalItems: number; grupos: { key: string; grupoId: number | null; articulo: string | null; items: InventarioConAPS[] }[] }[] = [];
 
     // Agregar los que tienen APS (ordenados descendente)
     Object.entries(conAPS)
@@ -905,6 +932,10 @@ export function CampanasPage() {
 
     return (
       <tr key={`campana-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+        {/* ID */}
+        <td className="px-3 py-3">
+          <span className="text-zinc-400 text-xs font-mono">{item.id}</span>
+        </td>
         {/* Periodo */}
         <td className="px-3 py-3">
           <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
@@ -1186,23 +1217,12 @@ export function CampanasPage() {
                   Filtrar:
                 </span>
                 <FilterChip
-                  label="Status"
+                  label="Estatus"
                   options={STATUS_OPTIONS}
                   value={status}
                   onChange={(val) => { setStatus(val); setPage(1); }}
                   onClear={() => { setStatus(''); setPage(1); }}
                 />
-
-                {/* Catorcena Inicio Filter */}
-                <FilterChip
-                  label="Catorcena Inicio"
-                  options={catorcenaInicioOptions}
-                  value={selectedCatorcenaInicio}
-                  onChange={(val) => { setSelectedCatorcenaInicio(val); setPage(1); }}
-                  onClear={() => { setSelectedCatorcenaInicio(''); setPage(1); }}
-                />
-
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
 
                 {/* Current Catorcena Indicator */}
                 {currentCatorcena && (
@@ -1321,6 +1341,7 @@ export function CampanasPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">ID</th>
                       <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Periodo</th>
                       <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Creador</th>
                       <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
@@ -1341,7 +1362,7 @@ export function CampanasPage() {
                             count={items.length}
                             expanded={expandedGroups.has(groupName)}
                             onToggle={() => toggleGroup(groupName)}
-                            colSpan={9}
+                            colSpan={10}
                           />
                           {expandedGroups.has(groupName) && items.map((item, idx) => renderCampanaRow(item, idx))}
                         </React.Fragment>
@@ -1351,7 +1372,7 @@ export function CampanasPage() {
                     )}
                     {filteredData.length === 0 && !groupedData && (
                       <tr>
-                        <td colSpan={9} className="px-4 py-12 text-center">
+                        <td colSpan={10} className="px-4 py-12 text-center">
                           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
                             <Megaphone className="w-8 h-8 text-purple-400" />
                           </div>
@@ -1596,45 +1617,65 @@ export function CampanasPage() {
                                             {/* Grupos dentro de este APS - Colapsable */}
                                             {isAPSExpanded && (
                                               <div className={`p-3 space-y-2 border-t ${tieneAPS ? 'border-emerald-500/20' : 'border-amber-500/20'}`}>
-                                                {apsGroup.grupos.map((grupo) => (
-                                                  <div
-                                                    key={grupo.key}
-                                                    className="rounded-lg border border-zinc-700/50 bg-zinc-800/40 overflow-hidden"
-                                                  >
-                                                    <div className="flex items-center gap-3 px-3 py-2 bg-zinc-800/60">
-                                                      <Building2 className="h-4 w-4 text-cyan-400" />
-                                                      <span className="text-sm font-medium text-zinc-200">
-                                                        {grupo.grupoId ? `Grupo #${grupo.grupoId}` : 'Individual'}
-                                                      </span>
-                                                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                                                        {grupo.items.length} sitios
-                                                      </span>
-                                                    </div>
-                                                    <div className="divide-y divide-zinc-700/30">
-                                                      {grupo.items.map((inv) => (
-                                                        <div
-                                                          key={inv.id}
-                                                          className="flex items-center gap-3 px-4 py-2 text-xs hover:bg-zinc-800/30 transition-colors"
-                                                        >
-                                                          <MapPin className="h-3 w-3 text-zinc-500" />
-                                                          <span className="text-zinc-300 font-mono">{inv.codigo_unico}</span>
-                                                          <span className="text-zinc-500">{inv.mueble || '-'}</span>
-                                                          <span className="text-zinc-500">{inv.plaza || '-'}</span>
-                                                          {inv.estado && (
-                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-zinc-700/50 text-zinc-400">
-                                                              {inv.estado}
-                                                            </span>
-                                                          )}
-                                                          {inv.tipo_medio && (
-                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-500/20 text-violet-300">
-                                                              {inv.tipo_medio}
-                                                            </span>
-                                                          )}
+                                                {apsGroup.grupos.map((grupo) => {
+                                                  const grupoExpandKey = `${campana.id}-${apsGroup.aps ?? 'sin-aps'}-${grupo.key}`;
+                                                  const isGrupoExpanded = expandedGrupos.has(grupoExpandKey);
+
+                                                  return (
+                                                    <div
+                                                      key={grupo.key}
+                                                      className="rounded-lg border border-zinc-700/50 bg-zinc-800/40 overflow-hidden"
+                                                    >
+                                                      <button
+                                                        onClick={() => toggleGrupo(campana.id, apsGroup.aps, grupo.key)}
+                                                        className="w-full flex items-center gap-3 px-3 py-2 bg-zinc-800/60 hover:bg-zinc-800/80 transition-colors"
+                                                      >
+                                                        {isGrupoExpanded ? (
+                                                          <ChevronDown className="h-4 w-4 text-cyan-400" />
+                                                        ) : (
+                                                          <ChevronRight className="h-4 w-4 text-cyan-400" />
+                                                        )}
+                                                        <Building2 className="h-4 w-4 text-cyan-400" />
+                                                        <span className="text-sm font-medium text-zinc-200">
+                                                          Grupo #{grupo.grupoId || '?'}
+                                                        </span>
+                                                        {grupo.articulo && (
+                                                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                                                            {grupo.articulo}
+                                                          </span>
+                                                        )}
+                                                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                                          {grupo.items.length} sitios
+                                                        </span>
+                                                      </button>
+                                                      {isGrupoExpanded && (
+                                                        <div className="divide-y divide-zinc-700/30">
+                                                          {grupo.items.map((inv) => (
+                                                            <div
+                                                              key={inv.id}
+                                                              className="flex items-center gap-3 px-4 py-2 text-xs hover:bg-zinc-800/30 transition-colors"
+                                                            >
+                                                              <MapPin className="h-3 w-3 text-zinc-500" />
+                                                              <span className="text-zinc-300 font-mono">{inv.codigo_unico}</span>
+                                                              <span className="text-zinc-500">{inv.mueble || '-'}</span>
+                                                              <span className="text-zinc-500">{inv.plaza || '-'}</span>
+                                                              {inv.estado && (
+                                                                <span className="px-1.5 py-0.5 rounded text-[9px] bg-zinc-700/50 text-zinc-400">
+                                                                  {inv.estado}
+                                                                </span>
+                                                              )}
+                                                              {inv.tipo_medio && (
+                                                                <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-500/20 text-violet-300">
+                                                                  {inv.tipo_medio}
+                                                                </span>
+                                                              )}
+                                                            </div>
+                                                          ))}
                                                         </div>
-                                                      ))}
+                                                      )}
                                                     </div>
-                                                  </div>
-                                                ))}
+                                                  );
+                                                })}
                                               </div>
                                             )}
                                           </div>

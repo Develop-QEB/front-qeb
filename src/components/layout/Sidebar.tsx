@@ -24,7 +24,7 @@ const navigation = [
   { name: 'Proveedores', href: '/proveedores', icon: Building2 },
   { name: 'Solicitudes', href: '/solicitudes', icon: FileText },
   { name: 'Propuestas', href: '/propuestas', icon: Send },
-  { name: 'Campanas', href: '/campanas', icon: Megaphone },
+  { name: 'Campañas', href: '/campanas', icon: Megaphone },
   { name: 'Inventarios', href: '/inventarios', icon: MapPin },
 ];
 
