@@ -16,6 +16,7 @@ import { formatDate } from '../../lib/utils';
 import { STATUS_CONFIG, getTipoConfig, getStatusConfig } from '../../lib/taskConfig';
 import { useAuthStore } from '../../store/authStore';
 import { TableroView } from './KanbanView';
+import { UserAvatar } from '../../components/ui/user-avatar';
 
 // ============ TIPOS ============
 type ViewType = 'tablero' | 'lista' | 'calendario' | 'notas';
@@ -368,9 +369,7 @@ function TareaRow({
       <div className="flex items-center gap-3 flex-shrink-0">
         {tarea.asignado && (
           <div className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-zinc-800/50" title={`Asignado: ${tarea.asignado}`}>
-            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-[9px] text-white font-medium">
-              {tarea.asignado.charAt(0)}
-            </div>
+            <UserAvatar nombre={tarea.asignado} size="sm" />
             <span className="text-xs text-zinc-400 truncate max-w-16">{tarea.asignado}</span>
           </div>
         )}
@@ -457,9 +456,7 @@ function TareasTable({
                   <td className="px-4 py-3">
                     {tarea.asignado ? (
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-[10px] text-white font-medium">
-                          {tarea.asignado.charAt(0)}
-                        </div>
+                        <UserAvatar nombre={tarea.asignado} size="md" />
                         <span className="text-sm text-zinc-300">{tarea.asignado}</span>
                       </div>
                     ) : (
@@ -825,9 +822,7 @@ function CalendarView({
                         </div>
                         {viewMode === 'week' && tarea.asignado && (
                           <div className="flex items-center gap-1 mt-1 ml-4">
-                            <div className="w-4 h-4 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-[8px] text-white font-medium">
-                              {tarea.asignado.charAt(0)}
-                            </div>
+                            <UserAvatar nombre={tarea.asignado} size="xs" />
                             <span className="text-[10px] text-zinc-500 truncate">{tarea.asignado}</span>
                           </div>
                         )}
@@ -1372,9 +1367,7 @@ function TaskDrawer({
               <span className="text-xs">Asignado a</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-[10px] text-white font-medium">
-                {tarea.asignado?.charAt(0) || '?'}
-              </div>
+              <UserAvatar nombre={tarea.asignado} size="md" />
               <span className="text-sm text-white font-medium">{tarea.asignado || 'Sin asignar'}</span>
             </div>
           </div>
@@ -1436,9 +1429,7 @@ function TaskDrawer({
                 return (
                   <div key={c.id} className="group">
                     <div className="flex gap-3">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-[10px] text-white font-medium flex-shrink-0">
-                        {autorNombre.charAt(0).toUpperCase()}
-                      </div>
+                      <UserAvatar nombre={autorNombre} foto_perfil={c.autor_foto} size="lg" className="w-7 h-7" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-medium text-zinc-300">{autorNombre}</span>
@@ -1455,9 +1446,7 @@ function TaskDrawer({
 
           {/* Input de comentario */}
           <div className="flex items-start gap-3 pt-3 border-t border-zinc-800/30">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-xs text-white font-medium flex-shrink-0">
-              {user?.nombre?.charAt(0) || 'U'}
-            </div>
+            <UserAvatar nombre={user?.nombre} foto_perfil={user?.foto_perfil} size="lg" />
             <div className="flex-1">
               <div className="flex items-center gap-2 p-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50 focus-within:border-purple-500/50 transition-colors">
                 <input
@@ -1841,9 +1830,7 @@ export function NotificacionesPage() {
                             {/* Asignado - siempre visible pero compacto en móvil */}
                             {tarea.asignado && (
                               <div className="flex items-center gap-1.5 text-[11px]">
-                                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-[8px] text-white font-medium">
-                                  {tarea.asignado.charAt(0)}
-                                </div>
+                                <UserAvatar nombre={tarea.asignado} size="xs" />
                                 <span className="text-zinc-500 hidden sm:inline">Asignado:</span>
                                 <span className="text-zinc-300">{tarea.asignado}</span>
                               </div>

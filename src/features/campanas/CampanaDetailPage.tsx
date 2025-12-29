@@ -6,6 +6,7 @@ import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioReservado, InventarioConAPS, buildDeliveryNote, postDeliveryNoteToSAP, HistorialItem } from '../../services/campanas.service';
 import { Badge } from '../../components/ui/badge';
+import { UserAvatar } from '../../components/ui/user-avatar';
 import { formatDate } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 
@@ -2853,9 +2854,7 @@ export function CampanaDetailPage() {
               ) : (
                 [...comentarios].reverse().map((c) => (
                   <div key={c.id} className="flex gap-2 py-2">
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-[9px] text-white font-medium flex-shrink-0">
-                      {c.autor_nombre?.charAt(0) || 'U'}
-                    </div>
+                    <UserAvatar nombre={c.autor_nombre} foto_perfil={c.autor_foto} size="md" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-medium text-white">{c.autor_nombre || 'Usuario'}</span>
@@ -2870,9 +2869,7 @@ export function CampanaDetailPage() {
             </div>
             <div className="p-3 border-t border-purple-900/30">
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-[9px] text-white font-medium flex-shrink-0">
-                  {user?.nombre?.charAt(0) || 'U'}
-                </div>
+                <UserAvatar nombre={user?.nombre} foto_perfil={user?.foto_perfil} size="md" />
                 <div className="flex-1 flex items-center gap-2 px-2 py-1.5 rounded-lg bg-purple-900/20 border border-purple-900/30 focus-within:border-purple-500">
                   <input
                     type="text"

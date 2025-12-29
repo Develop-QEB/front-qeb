@@ -25,6 +25,7 @@ export interface PropuestaComentario {
   comentario: string;
   creado_en: string;
   autor_nombre: string;
+  autor_foto?: string | null;
 }
 
 export interface ApproveParams {

@@ -250,6 +250,7 @@ export interface Comentario {
   id: number;
   autor_id: number;
   autor_nombre: string;
+  autor_foto?: string | null;
   comentario: string;
   creado_en: string;
   campania_id: number;

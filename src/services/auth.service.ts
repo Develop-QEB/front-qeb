@@ -44,4 +44,42 @@ export const authService = {
 
     return response.data.data;
   },
+
+  async updateProfile(data: { nombre?: string; area?: string; puesto?: string }): Promise<User> {
+    const response = await api.patch<ApiResponse<User>>('/auth/profile', data);
+
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar perfil');
+    }
+
+    return response.data.data;
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const response = await api.post<ApiResponse<null>>('/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al cambiar contraseña');
+    }
+  },
+
+  async uploadPhoto(file: File): Promise<User> {
+    const formData = new FormData();
+    formData.append('foto', file);
+
+    const response = await api.post<ApiResponse<User>>('/auth/upload-photo', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al subir foto');
+    }
+
+    return response.data.data;
+  },
 };

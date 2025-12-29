@@ -14,6 +14,7 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { AssignInventarioModal } from './AssignInventarioModal';
+import { UserAvatar } from '../../components/ui/user-avatar';
 
 // Status badge colors
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -542,9 +543,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange }: StatusModal
           {comments && comments.length > 0 ? (
             comments.slice().reverse().map((comment: PropuestaComentario) => (
               <div key={comment.id} className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                  <User className="h-4 w-4 text-purple-400" />
-                </div>
+                <UserAvatar nombre={comment.autor_nombre} foto_perfil={comment.autor_foto} size="lg" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-medium text-white text-sm">{comment.autor_nombre}</span>

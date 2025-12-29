@@ -9,6 +9,7 @@ interface AuthState {
   isAuthenticated: boolean;
   _hasHydrated: boolean;
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
+  setUser: (user: User) => void;
   logout: () => void;
   setHasHydrated: (state: boolean) => void;
 }
@@ -25,6 +26,9 @@ export const useAuthStore = create<AuthState>()(
         localStorage.setItem('accessToken', accessToken);
         localStorage.setItem('refreshToken', refreshToken);
         set({ user, accessToken, refreshToken, isAuthenticated: true });
+      },
+      setUser: (user) => {
+        set({ user });
       },
       logout: () => {
         localStorage.removeItem('accessToken');

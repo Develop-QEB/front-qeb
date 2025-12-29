@@ -3,6 +3,7 @@ import { Calendar, Circle, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 import { Notificacion } from '../../types';
 import { formatDate } from '../../lib/utils';
 import { getStatusConfig, getTipoConfig } from '../../lib/taskConfig';
+import { UserAvatar } from '../../components/ui/user-avatar';
 
 
 
@@ -51,9 +52,7 @@ function KanbanCard({
         ) : <span />}
         {tarea.asignado && (
           <div className="flex items-center gap-1" title={tarea.asignado}>
-            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-[9px] text-white font-medium">
-              {tarea.asignado.charAt(0)}
-            </div>
+            <UserAvatar nombre={tarea.asignado} size="sm" />
           </div>
         )}
       </div>

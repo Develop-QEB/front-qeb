@@ -16,6 +16,7 @@ import { CampanaDetailPage } from './features/campanas/CampanaDetailPage';
 import { TareaSeguimientoPage } from './features/campanas/TareaSeguimientoPage';
 import { NotificacionesPage } from './features/notificaciones/NotificacionesPage';
 import { CorreosPage } from './features/correos/CorreosPage';
+import { PerfilPage } from './features/perfil/PerfilPage';
 
 const queryClient = new QueryClient({
   defaultOptions: { 
@@ -53,6 +54,7 @@ function App() {
             <Route path="/campanas/:id/tareas" element={<TareaSeguimientoPage />} />
             <Route path="/notificaciones" element={<NotificacionesPage />} />
             <Route path="/correos" element={<CorreosPage />} />
+            <Route path="/perfil" element={<PerfilPage />} />
           </Route>
 
           {/* Public route for clients - no auth required */}

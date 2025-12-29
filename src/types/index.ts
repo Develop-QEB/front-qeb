@@ -6,6 +6,7 @@ export interface User {
   rol: string;
   area: string;
   puesto: string;
+  foto_perfil?: string | null;
 }
 
 export interface AuthResponse {
@@ -351,6 +352,7 @@ export interface ComentarioTarea {
   usuario_id?: number;
   autor_id?: number;
   autor_nombre?: string;
+  autor_foto?: string | null;
   contenido: string;
   fecha: string;
   usuario_nombre?: string;
