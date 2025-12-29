@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, Settings, Mail } from 'lucide-react';
+import { Bell, Mail, User } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { notificacionesService } from '../../services/notificaciones.service';
-import { correosService } from '../../services/correos.service';
+import { UserAvatar } from '../ui/user-avatar';
 
 interface HeaderProps {
   title: string;
@@ -39,9 +39,13 @@ export function Header({ title }: HeaderProps) {
       <div className="ml-auto flex items-center gap-4">
         {/* Iconos */}
         <div className="flex items-center gap-2">
-          <button className="p-2 rounded-full hover:bg-purple-900/30 transition-colors">
-            <Settings className="h-5 w-5 text-purple-400/70 hover:text-purple-300" />
-          </button>
+          <Link
+            to="/perfil"
+            className="p-2 rounded-full hover:bg-purple-900/30 transition-colors"
+            title="Mi Perfil"
+          >
+            <User className="h-5 w-5 text-purple-400/70 hover:text-purple-300" />
+          </Link>
           <Link
             to="/correos"
             className="relative p-2 rounded-full hover:bg-purple-900/30 transition-colors"
@@ -67,11 +71,14 @@ export function Header({ title }: HeaderProps) {
         </div>
 
         {/* Avatar */}
-        <div className="flex items-center gap-3 ml-2">
-          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-white text-sm font-medium">
-            {user?.nombre?.charAt(0) || 'U'}
-          </div>
-        </div>
+        <Link to="/perfil" className="flex items-center gap-3 ml-2 group">
+          <UserAvatar
+            nombre={user?.nombre}
+            foto_perfil={user?.foto_perfil}
+            size="xl"
+            className="group-hover:ring-2 group-hover:ring-purple-400/50 transition-all"
+          />
+        </Link>
       </div>
     </header>
   );
