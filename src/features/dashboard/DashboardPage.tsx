@@ -797,7 +797,7 @@ export function DashboardPage() {
   const handleEstatusChange = (estatus: EstatusType) => { setActiveEstatus(estatus); setInventoryPage(1); };
 
   return (
-    <div className="min-h-screen bg-[#0f0a18]">
+    <div className="min-h-screen">
       <Header title="DASHBOARD / HOME" />
 
       <div className="p-6 space-y-6">

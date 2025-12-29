@@ -436,7 +436,16 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange }: StatusModal
     queryKey: ['propuesta-comments', propuesta?.id],
     queryFn: () => propuestasService.getComments(propuesta!.id),
     enabled: isOpen && !!propuesta,
+    staleTime: 0,
+    gcTime: 0,
   });
+
+  // Reset comments when propuesta changes
+  useEffect(() => {
+    if (isOpen && propuesta?.id) {
+      queryClient.invalidateQueries({ queryKey: ['propuesta-comments', propuesta.id] });
+    }
+  }, [propuesta?.id, isOpen, queryClient]);
 
   const addCommentMutation = useMutation({
     mutationFn: ({ id, comentario }: { id: number; comentario: string }) =>
