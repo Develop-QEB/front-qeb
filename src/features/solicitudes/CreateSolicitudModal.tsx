@@ -1130,6 +1130,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         caras_flujo: Math.ceil(c.renta / 2),
         caras_contraflujo: Math.floor(c.renta / 2),
         descuento: c.descuento,
+        articulo: c.articulo.ItemCode,
       })),
     };
 

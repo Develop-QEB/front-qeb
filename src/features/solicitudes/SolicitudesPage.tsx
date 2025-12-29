@@ -15,7 +15,6 @@ import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { CreateSolicitudModal } from './CreateSolicitudModal';
 import { ViewSolicitudModal, StatusModal, AtenderModal } from './SolicitudModals';
-import { EditSolicitudModal } from './EditSolicitudModal';
 
 // Filter Chip Component with Search - same as ClientesPage
 function FilterChip({
@@ -1150,11 +1149,11 @@ export function SolicitudesPage() {
         onClose={() => setShowCreateModal(false)}
       />
 
-      {/* Edit Solicitud Modal */}
-      <EditSolicitudModal
+      {/* Edit Solicitud Modal - using CreateSolicitudModal in edit mode */}
+      <CreateSolicitudModal
         isOpen={!!editSolicitud}
         onClose={() => setEditSolicitud(null)}
-        solicitudId={editSolicitud?.id || null}
+        editSolicitudId={editSolicitud?.id}
       />
 
       {/* View Solicitud Modal */}

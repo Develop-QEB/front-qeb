@@ -428,6 +428,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     formato: '',
   });
   const [selectedInventory, setSelectedInventory] = useState<Set<number>>(new Set());
+  const [selectedReservados, setSelectedReservados] = useState<Set<string>>(new Set());
+  const [reservadosSearchTerm, setReservadosSearchTerm] = useState('');
+  const [disponiblesSearchTerm, setDisponiblesSearchTerm] = useState('');
 
   // Advanced inventory filters
   const [showOnlyUnicos, setShowOnlyUnicos] = useState(false);
@@ -1107,6 +1110,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     const reservedIds = new Set(reservas.map(r => r.inventario_id));
     data = data.filter(inv => !reservedIds.has(inv.id));
 
+    // Apply text search filter
+    if (disponiblesSearchTerm.trim()) {
+      const term = disponiblesSearchTerm.toLowerCase();
+      data = data.filter(inv =>
+        inv.codigo_unico?.toLowerCase().includes(term) ||
+        inv.plaza?.toLowerCase().includes(term) ||
+        inv.ubicacion?.toLowerCase().includes(term) ||
+        inv.tipo_de_cara?.toLowerCase().includes(term) ||
+        inv.nivel_socioeconomico?.toLowerCase().includes(term)
+      );
+    }
+
     // Apply POI filter (conservar con/sin POIs)
     if (poiFilterIds !== null) {
       data = data.filter(inv => poiFilterIds.has(inv.id));
@@ -1171,7 +1186,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
 
     return data;
-  }, [inventarioDisponible, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, groupByDistance, filterUnicos, filterCompletos, groupByDistanceFunc, sortColumn, sortDirection]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, groupByDistance, filterUnicos, filterCompletos, groupByDistanceFunc, sortColumn, sortDirection]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -1190,6 +1205,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     setShowOnlyCompletos(false);
     setGroupByDistance(false);
     setPoiFilterIds(null);
+    setDisponiblesSearchTerm('');
   }, []);
 
   // CSV handling functions
@@ -1577,6 +1593,38 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     );
   }, [reservas, selectedCaraForSearch]);
 
+  // Filter reservados by search term
+  const filteredReservados = useMemo(() => {
+    if (!reservadosSearchTerm.trim()) return currentCaraReservas;
+    const term = reservadosSearchTerm.toLowerCase();
+    return currentCaraReservas.filter(r =>
+      r.codigo_unico?.toLowerCase().includes(term) ||
+      r.plaza?.toLowerCase().includes(term) ||
+      r.ubicacion?.toLowerCase().includes(term) ||
+      r.tipo?.toLowerCase().includes(term)
+    );
+  }, [currentCaraReservas, reservadosSearchTerm]);
+
+  // Toggle select all reservados
+  const handleToggleSelectAllReservados = () => {
+    if (selectedReservados.size === filteredReservados.length) {
+      setSelectedReservados(new Set());
+    } else {
+      setSelectedReservados(new Set(filteredReservados.map(r => r.id)));
+    }
+  };
+
+  // Toggle single reservado selection
+  const handleToggleReservadoSelection = (id: string) => {
+    const newSet = new Set(selectedReservados);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedReservados(newSet);
+  };
+
   // Remove a reserva - IMMEDIATE DELETE
   const handleRemoveReserva = (reservaId: string) => {
     const reserva = reservas.find(r => r.id === reservaId);
@@ -1914,6 +1962,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     </button>
                   )}
 
+                  <div className="w-px h-6 bg-zinc-700" />
+
+                  {/* Text search */}
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                    <input
+                      type="text"
+                      value={disponiblesSearchTerm}
+                      onChange={(e) => setDisponiblesSearchTerm(e.target.value)}
+                      placeholder="Buscar código, plaza, ubicación..."
+                      className="w-56 pl-8 pr-8 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                    />
+                    {disponiblesSearchTerm && (
+                      <button
+                        onClick={() => setDisponiblesSearchTerm('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+
                   <div className="flex-1" />
 
                   {/* Stats & Actions */}
@@ -1923,7 +1993,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     </span>
 
                     {/* Clear all filters */}
-                    {(flujoFilter !== 'Todos' || showOnlyUnicos || showOnlyCompletos || groupByDistance || poiFilterIds !== null) && (
+                    {(flujoFilter !== 'Todos' || showOnlyUnicos || showOnlyCompletos || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
                       <button
                         onClick={clearAllFilters}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -2251,6 +2321,39 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
             <div className="flex-1 flex overflow-hidden">
               {/* Reservados Table */}
               <div className="w-1/2 flex flex-col border-r border-zinc-800">
+                {/* Search Bar for Reservados */}
+                <div className="p-3 border-b border-zinc-800 bg-zinc-900/50">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                      <input
+                        type="text"
+                        value={reservadosSearchTerm}
+                        onChange={(e) => setReservadosSearchTerm(e.target.value)}
+                        placeholder="Buscar por código, plaza, ubicación..."
+                        className="w-full pl-9 pr-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      />
+                    </div>
+                    {selectedReservados.size > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-purple-400 px-2 py-1 bg-purple-500/20 rounded-full">
+                          {selectedReservados.size} seleccionados
+                        </span>
+                        <button
+                          onClick={() => {
+                            setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
+                            setSelectedReservados(new Set());
+                          }}
+                          className="flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30 transition-colors"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Eliminar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {currentCaraReservas.length === 0 ? (
                   <div className="flex-1 flex flex-col items-center justify-center text-zinc-500">
                     <Layers className="h-16 w-16 mb-4 opacity-30" />
@@ -2262,6 +2365,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     <table className="w-full">
                       <thead className="sticky top-0 bg-zinc-900/95 backdrop-blur-sm z-10">
                         <tr className="border-b border-zinc-800">
+                          <th className="px-3 py-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={filteredReservados.length > 0 && selectedReservados.size === filteredReservados.length}
+                              onChange={handleToggleSelectAllReservados}
+                              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                            />
+                          </th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Código</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Tipo</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Plaza</th>
@@ -2270,11 +2381,20 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         </tr>
                       </thead>
                       <tbody>
-                        {currentCaraReservas.map((reserva) => (
+                        {filteredReservados.map((reserva) => (
                           <tr
                             key={reserva.id}
-                            className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors"
+                            onClick={() => handleToggleReservadoSelection(reserva.id)}
+                            className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'}`}
                           >
+                            <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={selectedReservados.has(reserva.id)}
+                                onChange={() => handleToggleReservadoSelection(reserva.id)}
+                                className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                              />
+                            </td>
                             <td className="px-4 py-3 text-zinc-300 font-mono text-sm">{reserva.codigo_unico}</td>
                             <td className="px-4 py-3">
                               <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
@@ -2290,7 +2410,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                             <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
                               {reserva.ubicacion || '-'}
                             </td>
-                            <td className="px-4 py-3 text-center">
+                            <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                               <button
                                 onClick={() => handleRemoveReserva(reserva.id)}
                                 className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -2939,7 +3059,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                   <button className="text-zinc-400">
                                     {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                                   </button>
-                                  <div className="flex-1 grid grid-cols-5 gap-3 text-sm">
+                                  <div className="flex-1 grid grid-cols-4 gap-3 text-sm">
                                     <div>
                                       <span className="text-zinc-500 text-xs">Formato</span>
                                       <p className="text-white font-medium">{cara.formato || '-'}</p>
@@ -2955,12 +3075,6 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                     <div>
                                       <span className="text-zinc-500 text-xs">Caras</span>
                                       <p className="text-white font-medium">{totalCaras}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-zinc-500 text-xs">Estado</span>
-                                      <p className={`text-xs font-medium ${status.isComplete ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                        {status.isComplete ? 'Completo' : `${carasFaltantes} cara${carasFaltantes !== 1 ? 's' : ''} faltante${carasFaltantes !== 1 ? 's' : ''}`}
-                                      </p>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
