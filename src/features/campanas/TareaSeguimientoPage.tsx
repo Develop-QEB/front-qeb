@@ -2005,7 +2005,7 @@ export function TareaSeguimientoPage() {
         // Extraer nombre del link y verificar si existe
         const nombreArchivo = data.value.split('/').pop()?.split('?')[0] || '';
         if (nombreArchivo) {
-          const verificacion = await campanasService.verificarArteExistente(parseInt(campanaId!), { nombre: nombreArchivo });
+          const verificacion = await campanasService.verificarArteExistente(campanaId, { nombre: nombreArchivo });
           if (verificacion.existe) {
             setUploadArtError(`Ya existe un archivo con el nombre "${verificacion.nombre}" (usado ${verificacion.usos} veces). Cambia el nombre del archivo o usa "Escoger existente" para reutilizarlo.`);
             return;
@@ -2017,7 +2017,7 @@ export function TareaSeguimientoPage() {
         archivo = data.value;
       } else if (data.option === 'file' && data.value instanceof File) {
         // Verificar si ya existe un archivo con el mismo nombre ANTES de subir
-        const verificacion = await campanasService.verificarArteExistente(parseInt(campanaId!), { nombre: data.value.name });
+        const verificacion = await campanasService.verificarArteExistente(campanaId, { nombre: data.value.name });
         if (verificacion.existe) {
           setUploadArtError(`Ya existe un archivo con el nombre "${verificacion.nombre}" (usado ${verificacion.usos} veces). Cambia el nombre del archivo o usa "Escoger existente" para reutilizarlo.`);
           return;
@@ -3077,21 +3077,6 @@ export function TareaSeguimientoPage() {
                         )}
                       </button>
                     </th>
-                    {/* Versionario Headers */}
-                    {activeMainTab === 'versionario' && (
-                      <>
-                        <th className="p-2 font-medium text-purple-300">ID</th>
-                        <th className="p-2 font-medium text-purple-300">Tipo Formato</th>
-                        <th className="p-2 font-medium text-purple-300">Código Único</th>
-                        <th className="p-2 font-medium text-purple-300">Ubicación</th>
-                        <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
-                        <th className="p-2 font-medium text-purple-300">Formato</th>
-                        <th className="p-2 font-medium text-purple-300">Plaza</th>
-                        <th className="p-2 font-medium text-purple-300">Municipio</th>
-                        <th className="p-2 font-medium text-purple-300">NSE</th>
-                        <th className="p-2 font-medium text-purple-300">Rsv ID</th>
-                      </>
-                    )}
                     {/* Atender Headers */}
                     {activeMainTab === 'atender' && (
                       <>
@@ -3379,7 +3364,7 @@ export function TareaSeguimientoPage() {
         isLoadingArtes={isLoadingArtes}
         isSubmitting={assignArteMutation.isPending}
         error={uploadArtError}
-        campanaId={parseInt(campanaId!)}
+        campanaId={campanaId}
       />
     </div>
   );
