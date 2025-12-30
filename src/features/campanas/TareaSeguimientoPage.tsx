@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { useState, useMemo, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   ArrowLeft,
   Search,
@@ -26,9 +26,17 @@ import {
   Loader2,
   Upload,
   Check,
+  Image,
+  Eye,
+  Camera,
+  ClipboardList,
+  Info,
+  Palette,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioReservado } from '../../services/campanas.service';
+import { campanasService, InventarioConArte, TareaCampana, ArteExistente } from '../../services/campanas.service';
+import { proveedoresService } from '../../services/proveedores.service';
+import { Proveedor } from '../../types';
 import { Badge } from '../../components/ui/badge';
 
 // ============================================================================
@@ -40,6 +48,40 @@ type FormatTab = 'tradicional' | 'digital';
 type TasksTab = 'tradicionales' | 'completadas' | 'calendario';
 type CalendarView = 'month' | 'week' | 'day' | 'list';
 
+// Opciones de agrupación
+type GroupByField = 'none' | 'catorcena' | 'ciudad' | 'plaza' | 'mueble' | 'tipo_medio' | 'aps';
+type SortField = 'codigo_unico' | 'catorcena' | 'ciudad' | 'plaza' | 'mueble' | 'tipo_medio' | 'aps';
+type SortDirection = 'asc' | 'desc';
+
+interface InventoryFilters {
+  ciudad: string;
+  plaza: string;
+  mueble: string;
+  tipo_medio: string;
+  catorcena: number | null;
+}
+
+// Opciones para los selectores
+const GROUP_BY_OPTIONS: { value: GroupByField; label: string }[] = [
+  { value: 'none', label: 'Sin agrupar' },
+  { value: 'catorcena', label: 'Por Catorcena' },
+  { value: 'ciudad', label: 'Por Ciudad' },
+  { value: 'plaza', label: 'Por Plaza' },
+  { value: 'mueble', label: 'Por Mueble' },
+  { value: 'tipo_medio', label: 'Por Tipo de Medio' },
+  { value: 'aps', label: 'Por APS' },
+];
+
+const SORT_OPTIONS: { value: SortField; label: string }[] = [
+  { value: 'codigo_unico', label: 'Código' },
+  { value: 'catorcena', label: 'Catorcena' },
+  { value: 'ciudad', label: 'Ciudad' },
+  { value: 'plaza', label: 'Plaza' },
+  { value: 'mueble', label: 'Mueble' },
+  { value: 'tipo_medio', label: 'Tipo de Medio' },
+  { value: 'aps', label: 'APS' },
+];
+
 interface InventoryRow {
   id: string;
   rsv_id: string; // IDs de reserva concatenados
@@ -48,6 +90,7 @@ interface InventoryRow {
   catorcena: number;
   anio: number;
   aps: number | null;
+  grupo_id: string | null; // grupo_completo_id para agrupar
   estatus: string; // Estado de reserva (Vendido, etc.)
   espacio: string; // Números de espacio
   inicio_periodo: string;
@@ -55,9 +98,11 @@ interface InventoryRow {
   caras_totales: number;
   // Campos de inventario
   tipo_medio: string; // Flujo, Estático, etc.
-  mueble: string; // Parabus, Mupie, etc.
+  mueble: string; // Parabus, Mupie, etc. (Formato)
   ciudad: string;
   plaza: string;
+  municipio: string;
+  nse: string; // Nivel socioeconómico
   ubicacion: string; // Dirección completa
   tradicional_digital: 'Tradicional' | 'Digital';
   // Para Atender arte
@@ -91,142 +136,6 @@ interface CalendarEvent {
   type: 'tarea' | 'entrega';
 }
 
-// ============================================================================
-// MOCK DATA
-// ============================================================================
-
-const MOCK_INVENTORY: InventoryRow[] = [
-  {
-    id: '1',
-    rsv_id: '16431',
-    codigo_unico: 'ZP1099_Flujo_Zapopan',
-    tipo_de_cara: 'A',
-    catorcena: 10,
-    anio: 2024,
-    aps: 13,
-    estatus: 'Vendido',
-    espacio: '1',
-    inicio_periodo: '2024-05-06',
-    fin_periodo: '2024-05-19',
-    caras_totales: 1,
-    tipo_medio: 'Flujo',
-    mueble: 'Parabus',
-    ciudad: 'Guadalajara',
-    plaza: 'Zapopan',
-    ubicacion: 'GUADALUPE - PINTORES',
-    tradicional_digital: 'Digital',
-    estado_arte: 'sin_revisar',
-    estado_tarea: 'sin_atender',
-    testigo_status: 'pendiente',
-  },
-  {
-    id: '2',
-    rsv_id: '16429',
-    codigo_unico: '61802_Flujo_Zapopan',
-    tipo_de_cara: 'A',
-    catorcena: 10,
-    anio: 2024,
-    aps: 13,
-    estatus: 'Vendido',
-    espacio: '1',
-    inicio_periodo: '2024-05-06',
-    fin_periodo: '2024-05-19',
-    caras_totales: 1,
-    tipo_medio: 'Flujo',
-    mueble: 'Parabus',
-    ciudad: 'Guadalajara',
-    plaza: 'Zapopan',
-    ubicacion: 'AV. LÁZARO CÁRDENAS - AV. SAN FRANCISCO',
-    tradicional_digital: 'Digital',
-    estado_arte: 'en_revision',
-    estado_tarea: 'en_progreso',
-    testigo_status: 'pendiente',
-  },
-  {
-    id: '3',
-    rsv_id: '16500,16501',
-    codigo_unico: 'MTY2045_Estatico_Monterrey',
-    tipo_de_cara: 'Completo',
-    catorcena: 10,
-    anio: 2024,
-    aps: 14,
-    estatus: 'Vendido',
-    espacio: '1,2',
-    inicio_periodo: '2024-05-06',
-    fin_periodo: '2024-05-19',
-    caras_totales: 2,
-    tipo_medio: 'Estático',
-    mueble: 'Mupie',
-    ciudad: 'Monterrey',
-    plaza: 'San Pedro',
-    ubicacion: 'AV. VASCONCELOS - RICARDO MARGAIN',
-    tradicional_digital: 'Tradicional',
-    estado_arte: 'aprobado',
-    estado_tarea: 'atendido',
-    testigo_status: 'validado',
-  },
-  {
-    id: '4',
-    rsv_id: '16510',
-    codigo_unico: 'CDMX3021_Flujo_Polanco',
-    tipo_de_cara: 'B',
-    catorcena: 11,
-    anio: 2024,
-    aps: 15,
-    estatus: 'Vendido',
-    espacio: '1',
-    inicio_periodo: '2024-05-20',
-    fin_periodo: '2024-06-02',
-    caras_totales: 1,
-    tipo_medio: 'Flujo',
-    mueble: 'Parabus',
-    ciudad: 'CDMX',
-    plaza: 'Polanco',
-    ubicacion: 'PRESIDENTE MASARYK - EDGAR ALLAN POE',
-    tradicional_digital: 'Digital',
-    estado_arte: 'sin_revisar',
-    estado_tarea: 'sin_atender',
-    testigo_status: 'pendiente',
-  },
-  {
-    id: '5',
-    rsv_id: '16520',
-    codigo_unico: 'GDL5055_Estatico_Providencia',
-    tipo_de_cara: 'A',
-    catorcena: 11,
-    anio: 2024,
-    aps: 15,
-    estatus: 'Vendido',
-    espacio: '1',
-    inicio_periodo: '2024-05-20',
-    fin_periodo: '2024-06-02',
-    caras_totales: 1,
-    tipo_medio: 'Estático',
-    mueble: 'Totem',
-    ciudad: 'Guadalajara',
-    plaza: 'Providencia',
-    ubicacion: 'AV. PROVIDENCIA - PABLO NERUDA',
-    tradicional_digital: 'Tradicional',
-    estado_arte: 'rechazado',
-    estado_tarea: 'en_progreso',
-    testigo_status: 'rechazado',
-  },
-];
-
-const MOCK_TASKS: TaskRow[] = [
-  { id: 't1', tipo: 'Arte', estatus: 'pendiente', identificador: 'TASK-001', fecha_inicio: '2025-01-15', fecha_fin: '2025-01-20', creador: 'Juan Perez', asignado: 'Maria Garcia', descripcion: 'Revisar arte de banner', titulo: 'Revision Banner Principal', inventario_ids: ['1', '2'], campana_id: 1 },
-  { id: 't2', tipo: 'Produccion', estatus: 'en_progreso', identificador: 'TASK-002', fecha_inicio: '2025-01-10', fecha_fin: '2025-01-25', creador: 'Ana Lopez', asignado: 'Carlos Ruiz', descripcion: 'Producir material POP', titulo: 'Produccion POP', inventario_ids: ['3'], campana_id: 1 },
-];
-
-const MOCK_COMPLETED_TASKS: TaskRow[] = [
-  { id: 't3', tipo: 'Arte', estatus: 'completada', identificador: 'TASK-000', fecha_inicio: '2025-01-01', fecha_fin: '2025-01-05', creador: 'Pedro Sanchez', asignado: 'Laura Martinez', descripcion: 'Arte inicial aprobado', titulo: 'Arte Inicial', contenido: 'Arte aprobado sin cambios', inventario_ids: ['3'], campana_id: 1 },
-];
-
-const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
-  { id: 'e1', title: 'Revision Banner Principal', date: new Date(2025, 0, 20), type: 'tarea' },
-  { id: 'e2', title: 'Produccion POP', date: new Date(2025, 0, 25), type: 'tarea' },
-  { id: 'e3', title: 'Entrega Final', date: new Date(2025, 0, 30), type: 'entrega' },
-];
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -359,11 +268,32 @@ function Toolbar({
 }
 
 // Empty State Component
-function EmptyState({ message }: { message: string }) {
+function EmptyState({
+  message,
+  description,
+  icon: Icon = FileText,
+  action,
+  onAction,
+}: {
+  message: string;
+  description?: string;
+  icon?: typeof FileText;
+  action?: string;
+  onAction?: () => void;
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-      <FileText className="h-10 w-10 mb-3 opacity-50" />
-      <p className="text-sm">{message}</p>
+      <Icon className="h-10 w-10 mb-3 opacity-50" />
+      <p className="text-sm font-medium">{message}</p>
+      {description && <p className="text-xs mt-1 text-center max-w-xs">{description}</p>}
+      {action && onAction && (
+        <button
+          onClick={onAction}
+          className="mt-4 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+        >
+          {action}
+        </button>
+      )}
     </div>
   );
 }
@@ -418,20 +348,7 @@ function TreeNode({
 }
 
 // Upload Art Modal Types
-type UploadOption = 'existing' | 'file' | 'link';
-
-interface ExistingArt {
-  id: string;
-  nombre: string;
-  url: string;
-}
-
-// Mock existing arts
-const MOCK_EXISTING_ARTS: ExistingArt[] = [
-  { id: 'art1', nombre: 'Banner Principal 2025', url: 'https://example.com/art1.jpg' },
-  { id: 'art2', nombre: 'Arte Campaña Verano', url: 'https://example.com/art2.jpg' },
-  { id: 'art3', nombre: 'Diseño Promocional Q1', url: 'https://example.com/art3.jpg' },
-];
+type UploadOption = 'file' | 'existing' | 'link';
 
 // Upload Art Modal Component
 function UploadArtModal({
@@ -439,33 +356,147 @@ function UploadArtModal({
   onClose,
   selectedInventory,
   onSubmit,
+  artesExistentes,
+  isLoadingArtes,
+  isSubmitting,
+  error,
+  campanaId,
 }: {
   isOpen: boolean;
   onClose: () => void;
   selectedInventory: InventoryRow[];
   onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => void;
+  artesExistentes: ArteExistente[];
+  isLoadingArtes: boolean;
+  isSubmitting: boolean;
+  error: string | null;
+  campanaId: number;
 }) {
-  const [selectedOption, setSelectedOption] = useState<UploadOption>('existing');
-  const [existingArtId, setExistingArtId] = useState('');
+  const [selectedOption, setSelectedOption] = useState<UploadOption>('file');
+  const [existingArtUrl, setExistingArtUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
   const [link, setLink] = useState('');
-  const [tableSearch, setTableSearch] = useState('');
+  const [duplicateWarning, setDuplicateWarning] = useState<{ nombre: string; usos: number; url: string } | null>(null);
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
 
-  const filteredInventory = useMemo(() => {
-    if (!tableSearch) return selectedInventory;
-    const search = tableSearch.toLowerCase();
-    return selectedInventory.filter(
-      (item) =>
+  // Filtros y ordenamiento para la lista de items
+  const [modalSearch, setModalSearch] = useState('');
+  const [modalGroupBy, setModalGroupBy] = useState<'none' | 'aps' | 'catorcena' | 'grupo'>('none');
+  const [modalSortBy, setModalSortBy] = useState<'codigo' | 'aps' | 'catorcena'>('codigo');
+
+  // Preview URL basado en la opción seleccionada
+  const previewUrl = useMemo(() => {
+    if (selectedOption === 'existing' && existingArtUrl) {
+      return existingArtUrl;
+    }
+    if (selectedOption === 'file' && filePreview) {
+      return filePreview;
+    }
+    if (selectedOption === 'link' && link) {
+      // Validar que sea una URL válida de imagen
+      try {
+        new URL(link);
+        return link;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }, [selectedOption, existingArtUrl, filePreview, link]);
+
+  // Filtrar y ordenar inventario
+  const filteredModalInventory = useMemo(() => {
+    let data = [...selectedInventory];
+
+    // Buscar
+    if (modalSearch) {
+      const search = modalSearch.toLowerCase();
+      data = data.filter(item =>
         item.codigo_unico.toLowerCase().includes(search) ||
-        item.plaza.toLowerCase().includes(search) ||
+        item.ubicacion.toLowerCase().includes(search) ||
         item.mueble.toLowerCase().includes(search)
-    );
-  }, [selectedInventory, tableSearch]);
+      );
+    }
+
+    // Ordenar
+    data.sort((a, b) => {
+      switch (modalSortBy) {
+        case 'aps':
+          return (a.aps || 0) - (b.aps || 0);
+        case 'catorcena':
+          return a.catorcena - b.catorcena;
+        default:
+          return a.codigo_unico.localeCompare(b.codigo_unico);
+      }
+    });
+
+    return data;
+  }, [selectedInventory, modalSearch, modalSortBy]);
+
+  // Agrupar inventario
+  const groupedModalInventory = useMemo(() => {
+    if (modalGroupBy === 'none') return null;
+
+    const groups: Record<string, InventoryRow[]> = {};
+    filteredModalInventory.forEach(item => {
+      let key = '';
+      switch (modalGroupBy) {
+        case 'aps':
+          key = `APS ${item.aps}`;
+          break;
+        case 'catorcena':
+          key = `Catorcena ${item.catorcena}`;
+          break;
+        case 'grupo':
+          key = `Grupo ${item.grupo_id || item.id}`;
+          break;
+      }
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+    return groups;
+  }, [filteredModalInventory, modalGroupBy]);
+
+  // Manejar cambio de archivo
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0] || null;
+    setFile(selectedFile);
+    setDuplicateWarning(null);
+
+    // Crear preview si es imagen
+    if (selectedFile && selectedFile.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFilePreview(event.target?.result as string);
+      };
+      reader.readAsDataURL(selectedFile);
+
+      // Verificar si existe un archivo con el mismo nombre
+      try {
+        setIsCheckingDuplicate(true);
+        const verificacion = await campanasService.verificarArteExistente(campanaId, { nombre: selectedFile.name });
+        if (verificacion.existe && verificacion.url) {
+          setDuplicateWarning({
+            nombre: verificacion.nombre,
+            usos: verificacion.usos,
+            url: verificacion.url,
+          });
+        }
+      } catch (err) {
+        console.error('Error verificando duplicado:', err);
+      } finally {
+        setIsCheckingDuplicate(false);
+      }
+    } else {
+      setFilePreview(null);
+    }
+  };
 
   const handleSubmit = () => {
     let value: string | File = '';
     if (selectedOption === 'existing') {
-      value = existingArtId;
+      value = existingArtUrl;
     } else if (selectedOption === 'file' && file) {
       value = file;
     } else if (selectedOption === 'link') {
@@ -477,19 +508,38 @@ function UploadArtModal({
       value,
       inventoryIds: selectedInventory.map((i) => i.id),
     };
-    console.log('Uploading art:', payload);
     onSubmit(payload);
+  };
 
-    // Reset form
-    setSelectedOption('existing');
-    setExistingArtId('');
+  const handleClose = () => {
+    setSelectedOption('file');
+    setExistingArtUrl('');
     setFile(null);
+    setFilePreview(null);
     setLink('');
+    setModalSearch('');
+    setModalGroupBy('none');
+    setModalSortBy('codigo');
+    setDuplicateWarning(null);
     onClose();
   };
 
+  // Usar el arte existente que coincide
+  const handleUseExisting = () => {
+    if (duplicateWarning) {
+      setSelectedOption('existing');
+      setExistingArtUrl(duplicateWarning.url);
+      setFile(null);
+      setFilePreview(null);
+      setDuplicateWarning(null);
+    }
+  };
+
   const isSubmitDisabled = () => {
-    if (selectedOption === 'existing' && !existingArtId) return true;
+    if (isSubmitting) return true;
+    if (isCheckingDuplicate) return true;
+    if (duplicateWarning) return true; // No permitir subir si hay duplicado
+    if (selectedOption === 'existing' && !existingArtUrl) return true;
     if (selectedOption === 'file' && !file) return true;
     if (selectedOption === 'link' && !link.trim()) return true;
     return false;
@@ -499,167 +549,346 @@ function UploadArtModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-xl w-full max-w-4xl mx-4 p-6">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
+      <div className="relative bg-card border border-border rounded-xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Upload className="h-5 w-5 text-purple-400" />
-            Agregar Arte
+            Asignar Arte
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-purple-900/30 rounded-lg transition-colors">
+          <button onClick={handleClose} className="p-1 hover:bg-purple-900/30 rounded-lg transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Content - Two columns */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column - Options */}
-          <div className="space-y-4">
-            {/* Option Selector */}
-            <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                Escoge una opción
-              </label>
-              <select
-                value={selectedOption}
-                onChange={(e) => setSelectedOption(e.target.value as UploadOption)}
-                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-              >
-                <option value="existing">Escoger existente</option>
-                <option value="file">Seleccionar un archivo</option>
-                <option value="link">Subir link</option>
-              </select>
-            </div>
+        {/* Error Message */}
+        {error && (
+          <div className="mx-4 mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg flex items-center gap-2 flex-shrink-0">
+            <AlertCircle className="h-4 w-4 text-red-400" />
+            <span className="text-sm text-red-300">{error}</span>
+          </div>
+        )}
 
-            {/* Dynamic Content based on option */}
-            {selectedOption === 'existing' && (
+        {/* Content - Two columns */}
+        <div className="flex-1 overflow-hidden p-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+            {/* Left Column - Upload Options & Preview */}
+            <div className="flex flex-col space-y-4">
+              {/* Option Selector */}
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                  Seleccionar arte existente
+                  Tipo de subida
                 </label>
                 <select
-                  value={existingArtId}
-                  onChange={(e) => setExistingArtId(e.target.value)}
+                  value={selectedOption}
+                  onChange={(e) => setSelectedOption(e.target.value as UploadOption)}
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  disabled={isSubmitting}
                 >
-                  <option value="">-- Selecciona un arte --</option>
-                  {MOCK_EXISTING_ARTS.map((art) => (
-                    <option key={art.id} value={art.id}>
-                      {art.nombre}
-                    </option>
-                  ))}
+                  <option value="file">Subir archivo</option>
+                  <option value="existing">Escoger existente</option>
+                  <option value="link">Subir link</option>
                 </select>
               </div>
-            )}
 
-            {selectedOption === 'file' && (
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                  Seleccionar archivo
-                </label>
-                <div className="relative">
-                  <input
-                    type="file"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    accept="image/*,.pdf,.ai,.psd"
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-purple-600 file:text-white hover:file:bg-purple-700"
-                  />
-                </div>
-                {file && (
-                  <p className="mt-2 text-xs text-purple-300 flex items-center gap-1.5">
-                    <FileText className="h-3.5 w-3.5" />
-                    {file.name}
-                  </p>
+              {/* Dynamic Input based on option */}
+              <div className="space-y-3">
+                {selectedOption === 'file' && (
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                      Seleccionar archivo
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        onChange={handleFileChange}
+                        accept="image/*,.pdf"
+                        disabled={isSubmitting}
+                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-purple-600 file:text-white hover:file:bg-purple-700 disabled:opacity-50"
+                      />
+                    </div>
+                    {file && (
+                      <p className="mt-2 text-xs text-purple-300 flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5" />
+                        {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                      </p>
+                    )}
+                    {isCheckingDuplicate && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Verificando si el archivo ya existe...
+                      </div>
+                    )}
+                    {duplicateWarning && (
+                      <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-xs text-amber-300 font-medium">
+                              Ya existe un archivo con el nombre "{duplicateWarning.nombre}"
+                            </p>
+                            <p className="text-[10px] text-amber-400/70 mt-1">
+                              Usado {duplicateWarning.usos} {duplicateWarning.usos === 1 ? 'vez' : 'veces'} en esta campaña
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={handleUseExisting}
+                                className="px-2 py-1 text-[10px] bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                              >
+                                Usar el existente
+                              </button>
+                              <span className="text-[10px] text-amber-400/50 self-center">
+                                o cambia el nombre del archivo
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <p className="mt-2 text-[10px] text-zinc-500">
+                      Formatos permitidos: JPG, PNG, GIF, WEBP, PDF (max 10MB)
+                    </p>
+                  </div>
+                )}
+
+                {selectedOption === 'existing' && (
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                      Seleccionar arte existente
+                    </label>
+                    {isLoadingArtes ? (
+                      <div className="flex items-center gap-2 py-2 text-zinc-400">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm">Cargando artes...</span>
+                      </div>
+                    ) : artesExistentes.length === 0 ? (
+                      <div className="p-3 bg-zinc-800/50 rounded-lg text-center">
+                        <p className="text-xs text-zinc-500">No hay artes existentes en esta campaña</p>
+                      </div>
+                    ) : (
+                      <select
+                        value={existingArtUrl}
+                        onChange={(e) => setExistingArtUrl(e.target.value)}
+                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                        disabled={isSubmitting}
+                      >
+                        <option value="">-- Selecciona un arte --</option>
+                        {artesExistentes.map((art) => (
+                          <option key={art.id} value={art.url}>
+                            {art.nombre} ({art.usos} uso{art.usos !== 1 ? 's' : ''})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                {selectedOption === 'link' && (
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                      URL del arte
+                    </label>
+                    <input
+                      type="url"
+                      value={link}
+                      onChange={(e) => setLink(e.target.value)}
+                      placeholder="https://ejemplo.com/arte.jpg"
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    />
+                  </div>
                 )}
               </div>
-            )}
 
-            {selectedOption === 'link' && (
-              <div>
+              {/* Preview Section */}
+              <div className="flex-1 min-h-0">
                 <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                  Link
+                  Previsualizacion
                 </label>
-                <input
-                  type="url"
-                  value={link}
-                  onChange={(e) => setLink(e.target.value)}
-                  placeholder="https://ejemplo.com/arte.jpg"
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Right Column - Context Table */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-400">
-                Contexto ({selectedInventory.length} {selectedInventory.length === 1 ? 'resultado' : 'resultados'})
-              </span>
-              <div className="flex items-center gap-1">
-                <button className="p-1.5 hover:bg-purple-900/30 rounded transition-colors" title="Filtrar">
-                  <Filter className="h-3.5 w-3.5 text-zinc-400" />
-                </button>
-                <button className="p-1.5 hover:bg-purple-900/30 rounded transition-colors" title="Ordenar">
-                  <ArrowUpDown className="h-3.5 w-3.5 text-zinc-400" />
-                </button>
+                <div className="h-48 border border-border rounded-lg bg-zinc-900/50 flex items-center justify-center overflow-hidden">
+                  {previewUrl ? (
+                    <img
+                      src={previewUrl}
+                      alt="Preview"
+                      className="max-w-full max-h-full object-contain"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : (
+                    <div className="text-center text-zinc-500">
+                      <Image className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                      <p className="text-xs">
+                        {selectedOption === 'file' && 'Selecciona un archivo para ver la previsualizacion'}
+                        {selectedOption === 'existing' && 'Selecciona un arte existente'}
+                        {selectedOption === 'link' && 'Ingresa una URL para ver la previsualizacion'}
+                      </p>
+                    </div>
+                  )}
+                  {previewUrl && (
+                    <div className="hidden text-center text-zinc-500">
+                      <AlertCircle className="h-8 w-8 mx-auto mb-2 text-amber-400" />
+                      <p className="text-xs">No se pudo cargar la imagen</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="border border-border rounded-lg overflow-hidden">
-              <div className="max-h-[200px] overflow-auto">
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-purple-900/20 border-b border-border">
-                    <tr className="text-left">
-                      <th className="p-2 font-medium text-purple-300">Reserva</th>
-                      <th className="p-2 font-medium text-purple-300">Ubicación</th>
-                      <th className="p-2 font-medium text-purple-300">Mueble</th>
-                      <th className="p-2 font-medium text-purple-300">Espacios</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredInventory.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="p-4 text-center text-zinc-500">
-                          Sin resultados
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredInventory.map((item) => (
-                        <tr key={item.id} className="border-b border-border/50 hover:bg-purple-900/10">
-                          <td className="p-2 font-medium text-white">{item.rsv_id}</td>
-                          <td className="p-2 text-zinc-400 max-w-[120px] truncate" title={item.ubicacion}>
-                            {item.ubicacion}
-                          </td>
-                          <td className="p-2 text-zinc-400 max-w-[80px] truncate" title={item.mueble}>
-                            {item.mueble}
-                          </td>
-                          <td className="p-2 text-zinc-400">{item.espacio}</td>
+            {/* Right Column - Selected Items Table */}
+            <div className="flex flex-col h-full">
+              {/* Header with count and toolbar */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-white">
+                  Espacios a asignar
+                </span>
+                <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/30">
+                  {selectedInventory.length} elemento{selectedInventory.length !== 1 ? 's' : ''}
+                </Badge>
+              </div>
+
+              {/* Toolbar */}
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <div className="relative flex-1 min-w-[100px]">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Buscar..."
+                    value={modalSearch}
+                    onChange={(e) => setModalSearch(e.target.value)}
+                    className="w-full pl-6 pr-2 py-1 text-[10px] bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+                <select
+                  value={modalGroupBy}
+                  onChange={(e) => setModalGroupBy(e.target.value as typeof modalGroupBy)}
+                  className="px-2 py-1 text-[10px] bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
+                >
+                  <option value="none">Sin agrupar</option>
+                  <option value="aps">Por APS</option>
+                  <option value="catorcena">Por Catorcena</option>
+                  <option value="grupo">Por Grupo</option>
+                </select>
+                <select
+                  value={modalSortBy}
+                  onChange={(e) => setModalSortBy(e.target.value as typeof modalSortBy)}
+                  className="px-2 py-1 text-[10px] bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
+                >
+                  <option value="codigo">Codigo</option>
+                  <option value="aps">APS</option>
+                  <option value="catorcena">Catorcena</option>
+                </select>
+              </div>
+
+              {/* Table */}
+              <div className="flex-1 min-h-0 border border-border rounded-lg overflow-hidden">
+                <div className="h-full overflow-auto">
+                  {groupedModalInventory ? (
+                    // Grouped Table View
+                    <div>
+                      {Object.entries(groupedModalInventory).map(([groupKey, items]) => (
+                        <div key={groupKey}>
+                          <div className="px-3 py-1.5 bg-purple-900/30 sticky top-0 z-10 flex items-center justify-between border-b border-border">
+                            <span className="text-[11px] font-semibold text-purple-300">{groupKey}</span>
+                            <span className="text-[10px] text-zinc-500">{items.length} items</span>
+                          </div>
+                          <table className="w-full text-[10px]">
+                            <thead className="bg-purple-900/10 sticky top-7 z-[5]">
+                              <tr className="text-left border-b border-border/50">
+                                <th className="px-2 py-1 font-medium text-purple-300">APS</th>
+                                <th className="px-2 py-1 font-medium text-purple-300">Código</th>
+                                <th className="px-2 py-1 font-medium text-purple-300">Ubicación</th>
+                                <th className="px-2 py-1 font-medium text-purple-300">Mueble</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {items.map((item) => (
+                                <tr key={item.id} className="border-b border-border/30 hover:bg-purple-900/10">
+                                  <td className="px-2 py-1.5 text-purple-400 font-medium">{item.aps}</td>
+                                  <td className="px-2 py-1.5 text-white font-medium">{item.codigo_unico}</td>
+                                  <td className="px-2 py-1.5 text-zinc-400 max-w-[100px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
+                                  <td className="px-2 py-1.5 text-zinc-400">{item.mueble}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    // Flat Table View
+                    <table className="w-full text-[10px]">
+                      <thead className="bg-purple-900/20 sticky top-0 z-10">
+                        <tr className="text-left border-b border-border">
+                          <th className="px-2 py-1.5 font-medium text-purple-300">APS</th>
+                          <th className="px-2 py-1.5 font-medium text-purple-300">Código</th>
+                          <th className="px-2 py-1.5 font-medium text-purple-300">Ubicación</th>
+                          <th className="px-2 py-1.5 font-medium text-purple-300">Mueble</th>
+                          <th className="px-2 py-1.5 font-medium text-purple-300">Ciudad</th>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {filteredModalInventory.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-6 text-center text-zinc-500">
+                              Sin resultados
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredModalInventory.map((item) => (
+                            <tr key={item.id} className="border-b border-border/30 hover:bg-purple-900/10">
+                              <td className="px-2 py-1.5 text-purple-400 font-medium">{item.aps}</td>
+                              <td className="px-2 py-1.5 text-white font-medium">{item.codigo_unico}</td>
+                              <td className="px-2 py-1.5 text-zinc-400 max-w-[100px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
+                              <td className="px-2 py-1.5 text-zinc-400">{item.mueble}</td>
+                              <td className="px-2 py-1.5 text-zinc-400">{item.ciudad}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 mt-6 pt-4 border-t border-border">
+        <div className="flex items-center justify-end gap-2 p-4 border-t border-border flex-shrink-0">
+          <button
+            onClick={handleClose}
+            disabled={isSubmitting}
+            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
           <button
             onClick={handleSubmit}
             disabled={isSubmitDisabled()}
-            className="px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Agregar
+            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Guardando...' : 'Asignar Arte'}
           </button>
         </div>
       </div>
     </div>
   );
 }
+
+// Tipos de tarea disponibles
+const TIPOS_TAREA = [
+  { value: 'Produccion', label: 'Produccion', description: 'Impresion y fabricacion de materiales' },
+  { value: 'Instalacion', label: 'Instalacion', description: 'Instalacion fisica del arte en sitio' },
+  { value: 'Arte', label: 'Arte/Diseño', description: 'Creacion o modificacion de artes' },
+  { value: 'Revision', label: 'Revision', description: 'Revision y aprobacion de materiales' },
+  { value: 'Testigo', label: 'Testigo', description: 'Captura de fotos testigo' },
+  { value: 'Otro', label: 'Otro', description: 'Otras tareas' },
+];
 
 // Create Task Modal Component
 function CreateTaskModal({
@@ -669,42 +898,59 @@ function CreateTaskModal({
   selectedIds,
   campanaId,
   onSubmit,
+  proveedores,
+  isLoadingProveedores,
+  isSubmitting,
+  error,
 }: {
   isOpen: boolean;
   onClose: () => void;
   selectedCount: number;
   selectedIds: string[];
   campanaId: number;
-  onSubmit: (task: Partial<TaskRow>) => void;
+  onSubmit: (task: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string }) => void;
+  proveedores: Proveedor[];
+  isLoadingProveedores: boolean;
+  isSubmitting: boolean;
+  error: string | null;
 }) {
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
-  const [asignado, setAsignado] = useState('');
-  const [fechaInicio, setFechaInicio] = useState('');
+  const [tipo, setTipo] = useState('Produccion');
+  const [proveedorId, setProveedorId] = useState<number | null>(null);
   const [fechaFin, setFechaFin] = useState('');
   const [estatus, setEstatus] = useState<TaskRow['estatus']>('pendiente');
 
+  const selectedProveedor = proveedores.find(p => p.id === proveedorId);
+
   const handleSubmit = () => {
-    const payload: Partial<TaskRow> = {
+    const payload: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string } = {
       titulo,
       descripcion,
-      asignado,
-      fecha_inicio: fechaInicio,
+      tipo,
       fecha_fin: fechaFin,
       estatus,
       inventario_ids: selectedIds,
       campana_id: campanaId,
-      tipo: 'Arte',
       creador: 'Usuario Actual',
       identificador: `TASK-${Date.now()}`,
     };
-    console.log('Creating task:', payload);
+
+    if (proveedorId && selectedProveedor) {
+      payload.proveedores_id = proveedorId;
+      payload.nombre_proveedores = selectedProveedor.nombre;
+      payload.asignado = selectedProveedor.nombre;
+    }
+
     onSubmit(payload);
+  };
+
+  const handleClose = () => {
     // Reset form
     setTitulo('');
     setDescripcion('');
-    setAsignado('');
-    setFechaInicio('');
+    setTipo('Produccion');
+    setProveedorId(null);
     setFechaFin('');
     setEstatus('pendiente');
     onClose();
@@ -714,105 +960,151 @@ function CreateTaskModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-xl w-full max-w-lg mx-4 p-6">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
+      <div className="relative bg-card border border-border rounded-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Plus className="h-5 w-5 text-purple-400" />
             Crear Tarea
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-purple-900/30 rounded-lg transition-colors">
+          <button onClick={handleClose} className="p-1 hover:bg-purple-900/30 rounded-lg transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
 
+        {/* Error Message */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-red-400" />
+            <span className="text-sm text-red-300">{error}</span>
+          </div>
+        )}
+
         <div className="mb-4 p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
           <p className="text-xs text-purple-300">
-            <span className="font-medium">{selectedCount}</span> inventario(s) seleccionado(s)
+            <span className="font-medium">{selectedCount}</span> espacio(s) seleccionado(s)
           </p>
         </div>
 
         <div className="space-y-4">
+          {/* Titulo */}
           <div>
             <label className="block text-xs font-medium text-zinc-400 mb-1">Titulo *</label>
             <input
               type="text"
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+              disabled={isSubmitting}
+              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
               placeholder="Titulo de la tarea"
             />
           </div>
 
+          {/* Tipo de Tarea */}
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Tipo de tarea *</label>
+            <select
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value)}
+              disabled={isSubmitting}
+              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+            >
+              {TIPOS_TAREA.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-zinc-500">
+              {TIPOS_TAREA.find(t => t.value === tipo)?.description}
+            </p>
+          </div>
+
+          {/* Descripcion */}
           <div>
             <label className="block text-xs font-medium text-zinc-400 mb-1">Descripcion</label>
             <textarea
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+              disabled={isSubmitting}
+              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
               placeholder="Descripcion de la tarea"
             />
           </div>
 
+          {/* Proveedor */}
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Asignado</label>
-            <input
-              type="text"
-              value={asignado}
-              onChange={(e) => setAsignado(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-              placeholder="Nombre del asignado"
-            />
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Asignar a proveedor</label>
+            {isLoadingProveedores ? (
+              <div className="flex items-center gap-2 py-2 text-zinc-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Cargando proveedores...</span>
+              </div>
+            ) : (
+              <select
+                value={proveedorId || ''}
+                onChange={(e) => setProveedorId(e.target.value ? parseInt(e.target.value) : null)}
+                disabled={isSubmitting}
+                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+              >
+                <option value="">-- Sin asignar --</option>
+                {proveedores.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} {p.ciudad ? `(${p.ciudad})` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+            {proveedores.length === 0 && !isLoadingProveedores && (
+              <p className="mt-1 text-xs text-zinc-500">
+                No hay proveedores registrados. Puedes crear la tarea sin asignar.
+              </p>
+            )}
           </div>
 
+          {/* Fecha fin y Estatus */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha inicio</label>
-              <input
-                type="date"
-                value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha fin</label>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha limite</label>
               <input
                 type="date"
                 value={fechaFin}
                 onChange={(e) => setFechaFin(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                disabled={isSubmitting}
+                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Estatus inicial</label>
-            <select
-              value={estatus}
-              onChange={(e) => setEstatus(e.target.value as TaskRow['estatus'])}
-              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-            >
-              <option value="pendiente">Pendiente</option>
-              <option value="en_progreso">En progreso</option>
-            </select>
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Estatus inicial</label>
+              <select
+                value={estatus}
+                onChange={(e) => setEstatus(e.target.value as TaskRow['estatus'])}
+                disabled={isSubmitting}
+                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+              >
+                <option value="pendiente">Pendiente</option>
+                <option value="en_progreso">En progreso</option>
+              </select>
+            </div>
           </div>
         </div>
 
         <div className="flex justify-end gap-2 mt-6">
           <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors"
+            onClick={handleClose}
+            disabled={isSubmitting}
+            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!titulo.trim()}
-            className="px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!titulo.trim() || isSubmitting}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Crear tarea
+            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Creando...' : 'Crear tarea'}
           </button>
         </div>
       </div>
@@ -983,7 +1275,7 @@ function SimpleCalendar({
       {view === 'list' && (
         <div className="space-y-2">
           {events.length === 0 ? (
-            <EmptyState message="Sin eventos" />
+            <EmptyState message="Sin eventos" icon={CalendarIcon} />
           ) : (
             events.map((event) => (
               <div
@@ -1018,6 +1310,94 @@ function SimpleCalendar({
 }
 
 // ============================================================================
+// SUMMARY STATS COMPONENT
+// ============================================================================
+
+interface SummaryStats {
+  totalInventario: number;
+  sinArte: number;
+  enRevision: number;
+  aprobados: number;
+  rechazados: number;
+  tareasActivas: number;
+  tareasCompletadas: number;
+}
+
+function SummaryCards({ stats, activeTab }: { stats: SummaryStats; activeTab: MainTab }) {
+  const cards = useMemo(() => {
+    if (activeTab === 'versionario') {
+      return [
+        { label: 'Total Inventario', value: stats.totalInventario, icon: ClipboardList, color: 'purple' },
+        { label: 'Sin Arte', value: stats.sinArte, icon: Image, color: 'amber' },
+        { label: 'Con Arte', value: stats.totalInventario - stats.sinArte, icon: Palette, color: 'green' },
+      ];
+    }
+    if (activeTab === 'atender') {
+      return [
+        { label: 'Por Revisar', value: stats.sinArte + stats.enRevision, icon: Eye, color: 'amber' },
+        { label: 'Aprobados', value: stats.aprobados, icon: CheckCircle2, color: 'green' },
+        { label: 'Rechazados', value: stats.rechazados, icon: AlertCircle, color: 'red' },
+        { label: 'Tareas Activas', value: stats.tareasActivas, icon: ClipboardList, color: 'blue' },
+      ];
+    }
+    // testigo
+    return [
+      { label: 'Pendientes', value: stats.totalInventario - stats.aprobados, icon: Camera, color: 'amber' },
+      { label: 'Validados', value: stats.aprobados, icon: CheckCircle2, color: 'green' },
+    ];
+  }, [stats, activeTab]);
+
+  const colorMap: Record<string, string> = {
+    purple: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    amber: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    green: 'bg-green-500/20 text-green-400 border-green-500/30',
+    red: 'bg-red-500/20 text-red-400 border-red-500/30',
+    blue: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  };
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {cards.map((card) => {
+        const Icon = card.icon;
+        return (
+          <div
+            key={card.label}
+            className={`flex items-center gap-3 p-3 rounded-lg border ${colorMap[card.color]}`}
+          >
+            <div className={`p-2 rounded-lg ${colorMap[card.color]}`}>
+              <Icon className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{card.value}</p>
+              <p className="text-[10px] opacity-80">{card.label}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Tab descriptions for better UX
+const TAB_DESCRIPTIONS: Record<MainTab, { title: string; description: string; icon: typeof Image }> = {
+  versionario: {
+    title: 'Subir Artes',
+    description: 'Selecciona espacios y asigna los artes/creativos que se mostraran en cada ubicacion',
+    icon: Upload,
+  },
+  atender: {
+    title: 'Revisar y Aprobar',
+    description: 'Revisa los artes subidos, aprueba o rechaza, y gestiona tareas de produccion',
+    icon: Eye,
+  },
+  testigo: {
+    title: 'Validar Instalacion',
+    description: 'Revisa las fotos de instalacion (testigos) para confirmar que el arte se instalo correctamente',
+    icon: Camera,
+  },
+};
+
+// ============================================================================
 // MAIN PAGE COMPONENT
 // ============================================================================
 
@@ -1028,21 +1408,39 @@ export function TareaSeguimientoPage() {
 
   // ---- State ----
   // Main tabs
-  const [activeMainTab, setActiveMainTab] = useState<MainTab>('atender');
+  const [activeMainTab, setActiveMainTab] = useState<MainTab>('versionario');
   const [activeFormat, setActiveFormat] = useState<FormatTab>('tradicional');
+  const [initialTabDetermined, setInitialTabDetermined] = useState(false);
   const [activeTasksTab, setActiveTasksTab] = useState<TasksTab>('tradicionales');
 
   // Inventory state
   const [selectedInventoryIds, setSelectedInventoryIds] = useState<Set<string>>(new Set());
   const [inventorySearch, setInventorySearch] = useState('');
-  const [isGrouped, setIsGrouped] = useState(true);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['all']));
+
+  // Grouping, Filtering, Sorting state
+  const [groupByField, setGroupByField] = useState<GroupByField>('none');
+  const [sortField, setSortField] = useState<SortField>('codigo_unico');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [filters, setFilters] = useState<InventoryFilters>({
+    ciudad: '',
+    plaza: '',
+    mueble: '',
+    tipo_medio: '',
+    catorcena: null,
+  });
+
+  // Dropdown visibility state
+  const [showGroupDropdown, setShowGroupDropdown] = useState(false);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+
+  // Helper: check if grouped
+  const isGrouped = groupByField !== 'none';
 
   // Tasks state
   const [tasksSearch, setTasksSearch] = useState('');
   const [tasksStatusFilter, setTasksStatusFilter] = useState<string>('');
-  const [tasks, setTasks] = useState<TaskRow[]>(MOCK_TASKS);
-  const [completedTasks] = useState<TaskRow[]>(MOCK_COMPLETED_TASKS);
 
   // Calendar state
   const [calendarView, setCalendarView] = useState<CalendarView>('month');
@@ -1052,31 +1450,174 @@ export function TareaSeguimientoPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploadArtModalOpen, setIsUploadArtModalOpen] = useState(false);
 
-  // ---- Query ----
+  // ---- Query Client for mutations ----
+  const queryClient = useQueryClient();
+
+  // ---- Queries ----
   const { data: campana, isLoading, error } = useQuery({
     queryKey: ['campana', campanaId],
     queryFn: () => campanasService.getById(campanaId),
     enabled: campanaId > 0,
   });
 
-  const { data: inventarioAPI = [], isLoading: isLoadingInventario } = useQuery({
-    queryKey: ['campana-inventario', campanaId],
-    queryFn: () => campanasService.getInventarioReservado(campanaId),
+  // Inventario SIN arte (para tab "Subir Artes")
+  // Se carga siempre inicialmente para determinar el tab por defecto
+  const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte } = useQuery({
+    queryKey: ['campana-inventario-sin-arte', campanaId, activeFormat],
+    queryFn: () => campanasService.getInventarioSinArte(campanaId, activeFormat === 'tradicional' ? 'Tradicional' : 'Digital'),
+    enabled: campanaId > 0 && (activeMainTab === 'versionario' || !initialTabDetermined),
+  });
+
+  // Inventario CON arte (para tab "Revisar y Aprobar")
+  // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
+  const { data: inventarioArteAPI = [], isLoading: isLoadingInventarioArte } = useQuery({
+    queryKey: ['campana-inventario-arte', campanaId],
+    queryFn: () => campanasService.getInventarioConArte(campanaId),
+    enabled: campanaId > 0 && (activeMainTab === 'atender' || !initialTabDetermined),
+  });
+
+  // Inventario para TESTIGOS (para tab "Validar Instalación")
+  // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
+  const { data: inventarioTestigosAPI = [], isLoading: isLoadingInventarioTestigos } = useQuery({
+    queryKey: ['campana-inventario-testigos', campanaId, activeFormat],
+    queryFn: () => campanasService.getInventarioTestigos(campanaId, activeFormat === 'tradicional' ? 'Tradicional' : 'Digital'),
+    enabled: campanaId > 0 && (activeMainTab === 'testigo' || !initialTabDetermined),
+  });
+
+  // Tareas de la campaña
+  const { data: tareasAPI = [], isLoading: isLoadingTareas } = useQuery({
+    queryKey: ['campana-tareas', campanaId],
+    queryFn: () => campanasService.getTareas(campanaId),
     enabled: campanaId > 0,
   });
 
-  // Transform API data to InventoryRow format
-  const inventoryData = useMemo((): InventoryRow[] => {
-    return inventarioAPI.map((item: InventarioReservado) => ({
+  // Artes existentes de la campaña
+  const { data: artesExistentes = [], isLoading: isLoadingArtes } = useQuery({
+    queryKey: ['campana-artes-existentes', campanaId],
+    queryFn: () => campanasService.getArtesExistentes(campanaId),
+    enabled: campanaId > 0 && isUploadArtModalOpen,
+  });
+
+  // Proveedores para asignar tareas
+  const { data: proveedoresData, isLoading: isLoadingProveedores } = useQuery({
+    queryKey: ['proveedores-lista'],
+    queryFn: () => proveedoresService.getAll({ limit: 100, estado: 'activo' }),
+    enabled: isCreateModalOpen,
+  });
+  const proveedores = proveedoresData?.data || [];
+
+  // ---- Determinar tab inicial basado en contenido ----
+  useEffect(() => {
+    // Solo ejecutar una vez cuando los datos estén disponibles
+    if (initialTabDetermined) return;
+
+    // Esperar a que las queries terminen de cargar
+    const allQueriesLoaded = !isLoadingInventarioSinArte && !isLoadingInventarioArte && !isLoadingInventarioTestigos;
+    if (!allQueriesLoaded) return;
+
+    // Determinar el tab con contenido (prioridad: versionario > atender > testigo)
+    if (inventarioSinArteAPI.length > 0) {
+      setActiveMainTab('versionario');
+    } else if (inventarioArteAPI.length > 0) {
+      setActiveMainTab('atender');
+    } else if (inventarioTestigosAPI.length > 0) {
+      setActiveMainTab('testigo');
+    }
+    // Si ninguno tiene contenido, se queda en versionario por defecto
+
+    setInitialTabDetermined(true);
+  }, [
+    initialTabDetermined,
+    isLoadingInventarioSinArte,
+    isLoadingInventarioArte,
+    isLoadingInventarioTestigos,
+    inventarioSinArteAPI.length,
+    inventarioArteAPI.length,
+    inventarioTestigosAPI.length,
+  ]);
+
+  // ---- Error State ----
+  const [uploadArtError, setUploadArtError] = useState<string | null>(null);
+  const [createTaskError, setCreateTaskError] = useState<string | null>(null);
+
+  // ---- Mutations ----
+  const assignArteMutation = useMutation({
+    mutationFn: ({ reservaIds, archivo }: { reservaIds: number[]; archivo: string }) =>
+      campanasService.assignArte(campanaId, reservaIds, archivo),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes', campanaId] });
+      setIsUploadArtModalOpen(false);
+      setSelectedInventoryIds(new Set());
+      setUploadArtError(null);
+    },
+    onError: (error) => {
+      setUploadArtError(error instanceof Error ? error.message : 'Error al asignar arte');
+    },
+  });
+
+  const updateArteStatusMutation = useMutation({
+    mutationFn: ({ reservaIds, status, comentario }: { reservaIds: number[]; status: 'Aprobado' | 'Rechazado'; comentario?: string }) =>
+      campanasService.updateArteStatus(campanaId, reservaIds, status, comentario),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', campanaId] });
+      setSelectedInventoryIds(new Set());
+    },
+  });
+
+  const updateInstaladoMutation = useMutation({
+    mutationFn: ({ reservaIds, instalado }: { reservaIds: number[]; instalado: boolean }) =>
+      campanasService.updateInstalado(campanaId, reservaIds, instalado),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', campanaId] });
+      setSelectedInventoryIds(new Set());
+    },
+  });
+
+  const createTareaMutation = useMutation({
+    mutationFn: (data: { titulo: string; descripcion?: string; tipo?: string; ids_reservas?: string; proveedores_id?: number; nombre_proveedores?: string }) =>
+      campanasService.createTarea(campanaId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      setIsCreateModalOpen(false);
+      setSelectedInventoryIds(new Set());
+      setCreateTaskError(null);
+    },
+    onError: (error) => {
+      setCreateTaskError(error instanceof Error ? error.message : 'Error al crear tarea');
+    },
+  });
+
+  // Helper function to transform InventarioConArte to InventoryRow
+  const transformInventarioToRow = useCallback((item: InventarioConArte, defaultArteStatus: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = 'sin_revisar'): InventoryRow => {
+    // Mapear arte_aprobado a estado_arte
+    let estadoArte: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = defaultArteStatus;
+    if (item.arte_aprobado === 'Aprobado') estadoArte = 'aprobado';
+    else if (item.arte_aprobado === 'Rechazado') estadoArte = 'rechazado';
+    else if (item.arte_aprobado === 'Pendiente' || item.archivo) estadoArte = 'en_revision';
+
+    // Mapear tarea/estatus a estado_tarea
+    let estadoTarea: 'sin_atender' | 'en_progreso' | 'atendido' = 'sin_atender';
+    const statusMostrar = item.status_mostrar?.toLowerCase() || '';
+    if (statusMostrar.includes('atendido') || statusMostrar.includes('completado') || item.instalado) {
+      estadoTarea = 'atendido';
+    } else if (statusMostrar.includes('progreso') || item.tarea) {
+      estadoTarea = 'en_progreso';
+    }
+
+    return {
       id: item.id.toString(),
-      rsv_id: item.rsv_ids,
-      codigo_unico: item.codigo_unico || '',
-      tipo_de_cara: item.tipo_de_cara || '',
+      rsv_id: item.rsv_id || item.rsv_ids || item.rsvId || '',
+      codigo_unico: item.codigo_unico_display || item.codigo_unico || '',
+      tipo_de_cara: item.tipo_de_cara_display || item.tipo_de_cara || '',
       catorcena: item.numero_catorcena || 0,
       anio: item.anio_catorcena || 0,
-      aps: null, // APS se obtiene de otro endpoint si es necesario
-      estatus: item.estatus_reserva || '',
-      espacio: '',
+      aps: item.APS || item.rsvAPS || null,
+      grupo_id: item.grupo?.toString() || item.grupo_completo_id?.toString() || null,
+      estatus: item.estatus || '',
+      espacio: item.epInId || '',
       inicio_periodo: item.inicio_periodo?.split('T')[0] || '',
       fin_periodo: item.fin_periodo?.split('T')[0] || '',
       caras_totales: item.caras_totales || 0,
@@ -1084,21 +1625,115 @@ export function TareaSeguimientoPage() {
       mueble: item.mueble || '',
       ciudad: item.estado || '',
       plaza: item.plaza || '',
-      ubicacion: item.articulo || '',
+      municipio: item.municipio || '',
+      nse: item.nivel_socioeconomico || '',
+      ubicacion: item.ubicacion || '',
       tradicional_digital: (item.tradicional_digital === 'Tradicional' ? 'Tradicional' : 'Digital') as 'Tradicional' | 'Digital',
-      estado_arte: 'sin_revisar',
-      estado_tarea: 'sin_atender',
-      testigo_status: 'pendiente',
-    }));
-  }, [inventarioAPI]);
+      estado_arte: estadoArte,
+      estado_tarea: estadoTarea,
+      testigo_status: item.instalado ? 'validado' : 'pendiente',
+      archivo_arte: item.archivo || undefined,
+    };
+  }, []);
+
+  // Transform inventario SIN arte para tab "Subir Artes"
+  const inventorySinArteData = useMemo((): InventoryRow[] => {
+    return inventarioSinArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar'));
+  }, [inventarioSinArteAPI, transformInventarioToRow]);
+
+  // Transform inventario con arte para tab "Atender arte"
+  const inventoryArteData = useMemo((): InventoryRow[] => {
+    return inventarioArteAPI.map((item) => transformInventarioToRow(item, 'en_revision'));
+  }, [inventarioArteAPI, transformInventarioToRow]);
+
+  // Transform inventario para testigos (tab "Validar Instalación")
+  const inventoryTestigosData = useMemo((): InventoryRow[] => {
+    return inventarioTestigosAPI.map((item) => transformInventarioToRow(item, 'aprobado'));
+  }, [inventarioTestigosAPI, transformInventarioToRow]);
+
+  // Transform tareas from API to TaskRow format
+  const tasks = useMemo((): TaskRow[] => {
+    return tareasAPI
+      .filter((t) => t.estatus !== 'Atendido' && t.estatus !== 'Completado')
+      .map((t) => ({
+        id: t.id.toString(),
+        tipo: t.tipo || 'Tarea',
+        estatus: (t.estatus === 'Pendiente' ? 'pendiente' : t.estatus === 'En Progreso' ? 'en_progreso' : 'pendiente') as 'pendiente' | 'en_progreso' | 'completada' | 'cancelada',
+        identificador: `TASK-${t.id.toString().padStart(3, '0')}`,
+        fecha_inicio: t.fecha_inicio?.split('T')[0] || '',
+        fecha_fin: t.fecha_fin?.split('T')[0] || '',
+        creador: t.responsable_nombre || t.responsable || '',
+        asignado: t.asignado || '',
+        descripcion: t.descripcion || '',
+        titulo: t.titulo || '',
+        inventario_ids: t.ids_reservas ? t.ids_reservas.split(',') : [],
+        campana_id: campanaId,
+      }));
+  }, [tareasAPI, campanaId]);
+
+  const completedTasks = useMemo((): TaskRow[] => {
+    return tareasAPI
+      .filter((t) => t.estatus === 'Atendido' || t.estatus === 'Completado')
+      .map((t) => ({
+        id: t.id.toString(),
+        tipo: t.tipo || 'Tarea',
+        estatus: 'completada' as 'pendiente' | 'en_progreso' | 'completada' | 'cancelada',
+        identificador: `TASK-${t.id.toString().padStart(3, '0')}`,
+        fecha_inicio: t.fecha_inicio?.split('T')[0] || '',
+        fecha_fin: t.fecha_fin?.split('T')[0] || '',
+        creador: t.responsable_nombre || t.responsable || '',
+        asignado: t.asignado || '',
+        descripcion: t.descripcion || '',
+        titulo: t.titulo || '',
+        inventario_ids: t.ids_reservas ? t.ids_reservas.split(',') : [],
+        campana_id: campanaId,
+      }));
+  }, [tareasAPI, campanaId]);
 
   // ---- Computed ----
-  const filteredInventory = useMemo(() => {
-    let data = inventoryData;
+  // Get unique values for filter dropdowns
+  const filterOptions = useMemo(() => {
+    let data: InventoryRow[];
+    if (activeMainTab === 'versionario') {
+      data = inventorySinArteData;
+    } else if (activeMainTab === 'atender') {
+      data = inventoryArteData;
+    } else {
+      data = inventoryTestigosData;
+    }
 
-    // Filter by format (tradicional/digital)
-    const formatFilter = activeFormat === 'tradicional' ? 'Tradicional' : 'Digital';
-    data = data.filter((item) => item.tradicional_digital === formatFilter);
+    return {
+      ciudades: [...new Set(data.map(i => i.ciudad).filter(Boolean))].sort(),
+      plazas: [...new Set(data.map(i => i.plaza).filter(Boolean))].sort(),
+      muebles: [...new Set(data.map(i => i.mueble).filter(Boolean))].sort(),
+      tiposMedio: [...new Set(data.map(i => i.tipo_medio).filter(Boolean))].sort(),
+      catorcenas: [...new Set(data.map(i => i.catorcena).filter(c => c > 0))].sort((a, b) => a - b),
+    };
+  }, [inventorySinArteData, inventoryArteData, inventoryTestigosData, activeMainTab]);
+
+  // Check if any filter is active
+  const hasActiveFilters = filters.ciudad || filters.plaza || filters.mueble || filters.tipo_medio || filters.catorcena !== null;
+
+  const filteredInventory = useMemo(() => {
+    let data: InventoryRow[];
+
+    // Seleccionar fuente de datos según tab activo
+    if (activeMainTab === 'versionario') {
+      // Tab "Subir Artes": inventario SIN arte
+      data = inventorySinArteData;
+    } else if (activeMainTab === 'atender') {
+      // Tab "Revisar y Aprobar": inventario CON arte
+      data = inventoryArteData;
+    } else {
+      // Tab "Validar Instalación": inventario para testigos
+      data = inventoryTestigosData;
+    }
+
+    // Filter by format for non-atender tabs (atender already has format in query)
+    if (activeMainTab !== 'atender') {
+      const formatFilter = activeFormat === 'tradicional' ? 'Tradicional' : 'Digital';
+      data = data.filter((item) => item.tradicional_digital === formatFilter);
+    }
 
     // Filter by search
     if (inventorySearch) {
@@ -1112,8 +1747,68 @@ export function TareaSeguimientoPage() {
           item.ciudad.toLowerCase().includes(search)
       );
     }
+
+    // Apply dropdown filters
+    if (filters.ciudad) {
+      data = data.filter(item => item.ciudad === filters.ciudad);
+    }
+    if (filters.plaza) {
+      data = data.filter(item => item.plaza === filters.plaza);
+    }
+    if (filters.mueble) {
+      data = data.filter(item => item.mueble === filters.mueble);
+    }
+    if (filters.tipo_medio) {
+      data = data.filter(item => item.tipo_medio === filters.tipo_medio);
+    }
+    if (filters.catorcena !== null) {
+      data = data.filter(item => item.catorcena === filters.catorcena);
+    }
+
+    // Apply sorting
+    data = [...data].sort((a, b) => {
+      let aVal: string | number = '';
+      let bVal: string | number = '';
+
+      switch (sortField) {
+        case 'codigo_unico':
+          aVal = a.codigo_unico || '';
+          bVal = b.codigo_unico || '';
+          break;
+        case 'catorcena':
+          aVal = a.catorcena || 0;
+          bVal = b.catorcena || 0;
+          break;
+        case 'ciudad':
+          aVal = a.ciudad || '';
+          bVal = b.ciudad || '';
+          break;
+        case 'plaza':
+          aVal = a.plaza || '';
+          bVal = b.plaza || '';
+          break;
+        case 'mueble':
+          aVal = a.mueble || '';
+          bVal = b.mueble || '';
+          break;
+        case 'tipo_medio':
+          aVal = a.tipo_medio || '';
+          bVal = b.tipo_medio || '';
+          break;
+        case 'aps':
+          aVal = a.aps || 0;
+          bVal = b.aps || 0;
+          break;
+      }
+
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+      return sortDirection === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+    });
+
     return data;
-  }, [inventoryData, inventorySearch, activeFormat]);
+  }, [inventorySinArteData, inventoryArteData, inventoryTestigosData, inventorySearch, activeFormat, activeMainTab, filters, sortField, sortDirection]);
 
   const filteredTasks = useMemo(() => {
     let data = tasks;
@@ -1142,7 +1837,64 @@ export function TareaSeguimientoPage() {
     );
   }, [completedTasks, tasksSearch]);
 
-  // Group inventory by Catorcena -> APS -> Estado Arte -> Estado Tarea
+  // Group inventory by selected field (simple single-level grouping)
+  const simpleGroupedInventory = useMemo(() => {
+    if (groupByField === 'none') return {};
+
+    const groups: Record<string, InventoryRow[]> = {};
+
+    filteredInventory.forEach((item) => {
+      let key = '';
+      switch (groupByField) {
+        case 'catorcena':
+          key = `Catorcena ${item.catorcena} - ${item.anio}`;
+          break;
+        case 'ciudad':
+          key = item.ciudad || 'Sin ciudad';
+          break;
+        case 'plaza':
+          key = item.plaza || 'Sin plaza';
+          break;
+        case 'mueble':
+          key = item.mueble || 'Sin mueble';
+          break;
+        case 'tipo_medio':
+          key = item.tipo_medio || 'Sin tipo';
+          break;
+        case 'aps':
+          key = item.aps ? `APS ${item.aps}` : 'Sin APS';
+          break;
+        default:
+          key = 'Otros';
+      }
+
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    return groups;
+  }, [filteredInventory, groupByField]);
+
+  // Agrupación jerárquica de 3 niveles para tab "Subir Artes": Catorcena -> APS -> Grupo
+  const versionarioGroupedInventory = useMemo(() => {
+    const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
+
+    filteredInventory.forEach((item) => {
+      const catorcenaKey = `Catorcena ${item.catorcena} - ${item.anio}`;
+      const apsKey = `APS ${item.aps}`;
+      const grupoKey = item.grupo_id ? `Grupo ${item.grupo_id}` : `Item ${item.id}`;
+
+      if (!groups[catorcenaKey]) groups[catorcenaKey] = {};
+      if (!groups[catorcenaKey][apsKey]) groups[catorcenaKey][apsKey] = {};
+      if (!groups[catorcenaKey][apsKey][grupoKey]) groups[catorcenaKey][apsKey][grupoKey] = [];
+
+      groups[catorcenaKey][apsKey][grupoKey].push(item);
+    });
+
+    return groups;
+  }, [filteredInventory]);
+
+  // Legacy grouped inventory for "atender" tab complex grouping
   const groupedInventory = useMemo(() => {
     const groups: Record<string, Record<string, Record<string, Record<string, InventoryRow[]>>>> = {};
 
@@ -1165,8 +1917,31 @@ export function TareaSeguimientoPage() {
 
   // Get selected inventory items for modals
   const selectedInventoryItems = useMemo(() => {
-    return inventoryData.filter((item) => selectedInventoryIds.has(item.id));
-  }, [inventoryData, selectedInventoryIds]);
+    return filteredInventory.filter((item) => selectedInventoryIds.has(item.id));
+  }, [filteredInventory, selectedInventoryIds]);
+
+  // Compute summary stats
+  const summaryStats = useMemo((): SummaryStats => {
+    // Seleccionar fuente de datos según tab activo
+    let allItems: InventoryRow[];
+    if (activeMainTab === 'versionario') {
+      allItems = inventorySinArteData;
+    } else if (activeMainTab === 'atender') {
+      allItems = inventoryArteData;
+    } else {
+      allItems = inventoryTestigosData;
+    }
+
+    return {
+      totalInventario: allItems.length,
+      sinArte: allItems.filter(i => i.estado_arte === 'sin_revisar' || !i.archivo_arte).length,
+      enRevision: allItems.filter(i => i.estado_arte === 'en_revision').length,
+      aprobados: allItems.filter(i => i.estado_arte === 'aprobado').length,
+      rechazados: allItems.filter(i => i.estado_arte === 'rechazado').length,
+      tareasActivas: tasks.filter(t => t.estatus === 'pendiente' || t.estatus === 'en_progreso').length,
+      tareasCompletadas: completedTasks.length,
+    };
+  }, [inventorySinArteData, inventoryArteData, inventoryTestigosData, activeMainTab, tasks, completedTasks]);
 
   // ---- Handlers ----
   const toggleInventorySelection = useCallback((id: string) => {
@@ -1195,31 +1970,74 @@ export function TareaSeguimientoPage() {
     });
   }, []);
 
-  const handleCreateTask = useCallback((task: Partial<TaskRow>) => {
-    const newTask: TaskRow = {
-      id: `t${Date.now()}`,
-      tipo: task.tipo || 'Arte',
-      estatus: task.estatus || 'pendiente',
-      identificador: task.identificador || `TASK-${Date.now()}`,
-      fecha_inicio: task.fecha_inicio || '',
-      fecha_fin: task.fecha_fin || '',
-      creador: task.creador || 'Usuario',
-      asignado: task.asignado || '',
-      descripcion: task.descripcion || '',
-      titulo: task.titulo || '',
-      inventario_ids: task.inventario_ids || [],
-      campana_id: campanaId,
-    };
-    setTasks((prev) => [...prev, newTask]);
-    setSelectedInventoryIds(new Set());
-  }, [campanaId]);
+  const handleCreateTask = useCallback((task: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string }) => {
+    // Get reserva IDs from selected inventory items
+    const reservaIds = selectedInventoryItems.flatMap(item =>
+      item.rsv_id.split(',').map(id => id.trim()).filter(id => id)
+    );
 
-  const handleUploadArt = useCallback((data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => {
-    console.log('Art uploaded:', data);
-    // Here you would call the API to upload/associate the art
-    // For now, just clear selection
-    setSelectedInventoryIds(new Set());
-  }, []);
+    createTareaMutation.mutate({
+      titulo: task.titulo || 'Nueva tarea',
+      descripcion: task.descripcion,
+      tipo: task.tipo || 'Produccion',
+      ids_reservas: reservaIds.join(','),
+      proveedores_id: task.proveedores_id,
+      nombre_proveedores: task.nombre_proveedores,
+    });
+  }, [selectedInventoryItems, createTareaMutation]);
+
+  const handleUploadArt = useCallback(async (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => {
+    // Get reserva IDs from selected inventory items
+    const reservaIds = selectedInventoryItems.flatMap(item =>
+      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+    );
+
+    if (reservaIds.length === 0) {
+      setUploadArtError('No se encontraron reservas para actualizar');
+      return;
+    }
+
+    // Determine the file URL
+    let archivo = '';
+
+    try {
+      if (data.option === 'link' && typeof data.value === 'string') {
+        // Extraer nombre del link y verificar si existe
+        const nombreArchivo = data.value.split('/').pop()?.split('?')[0] || '';
+        if (nombreArchivo) {
+          const verificacion = await campanasService.verificarArteExistente(parseInt(campanaId!), { nombre: nombreArchivo });
+          if (verificacion.existe) {
+            setUploadArtError(`Ya existe un archivo con el nombre "${verificacion.nombre}" (usado ${verificacion.usos} veces). Cambia el nombre del archivo o usa "Escoger existente" para reutilizarlo.`);
+            return;
+          }
+        }
+        archivo = data.value;
+      } else if (data.option === 'existing' && typeof data.value === 'string') {
+        // For existing art, the value is already the URL - no need to verify
+        archivo = data.value;
+      } else if (data.option === 'file' && data.value instanceof File) {
+        // Verificar si ya existe un archivo con el mismo nombre ANTES de subir
+        const verificacion = await campanasService.verificarArteExistente(parseInt(campanaId!), { nombre: data.value.name });
+        if (verificacion.existe) {
+          setUploadArtError(`Ya existe un archivo con el nombre "${verificacion.nombre}" (usado ${verificacion.usos} veces). Cambia el nombre del archivo o usa "Escoger existente" para reutilizarlo.`);
+          return;
+        }
+
+        // Upload file to server
+        setUploadArtError(null);
+        const uploadResult = await campanasService.uploadArteFile(data.value);
+        archivo = uploadResult.url;
+      }
+
+      if (archivo) {
+        assignArteMutation.mutate({ reservaIds, archivo });
+      } else {
+        setUploadArtError('No se especifico un archivo de arte');
+      }
+    } catch (error) {
+      setUploadArtError(error instanceof Error ? error.message : 'Error al subir el archivo');
+    }
+  }, [selectedInventoryItems, assignArteMutation, campanaId]);
 
   // ---- Render helpers ----
   // Render row for Versionario tab (shows inventory pending art upload)
@@ -1246,7 +2064,7 @@ export function TareaSeguimientoPage() {
           </button>
         </td>
       )}
-      <td className="p-2 text-xs text-purple-300">{item.aps}</td>
+      <td className="p-2 text-xs text-zinc-300">{item.id}</td>
       <td className="p-2">
         <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${
           item.tradicional_digital === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
@@ -1256,16 +2074,12 @@ export function TareaSeguimientoPage() {
       </td>
       <td className="p-2 text-xs font-medium text-white">{item.codigo_unico}</td>
       <td className="p-2 text-xs text-zinc-300 max-w-[180px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
-      <td className="p-2 text-xs text-zinc-300">{item.tipo_medio}</td>
+      <td className="p-2 text-xs text-zinc-300">{item.tipo_de_cara}</td>
       <td className="p-2 text-xs text-zinc-300">{item.mueble}</td>
-      <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
       <td className="p-2 text-xs text-zinc-300">{item.plaza}</td>
-      <td className="p-2">
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-500/20 text-green-300">
-          {item.estatus}
-        </span>
-      </td>
-      <td className="p-2 text-xs text-zinc-300 text-center">{item.caras_totales}</td>
+      <td className="p-2 text-xs text-zinc-300">{item.municipio}</td>
+      <td className="p-2 text-xs text-zinc-300">{item.nse}</td>
+      <td className="p-2 text-xs text-purple-300">{item.rsv_id}</td>
     </tr>
   );
 
@@ -1353,9 +2167,10 @@ export function TareaSeguimientoPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen">
-        <Header title="Revision de Artes" />
-        <div className="p-4 md:p-6 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+        <Header title="Gestion de Artes" />
+        <div className="p-4 md:p-6 flex flex-col items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-purple-400 mb-3" />
+          <p className="text-sm text-muted-foreground">Cargando campaña...</p>
         </div>
       </div>
     );
@@ -1364,7 +2179,7 @@ export function TareaSeguimientoPage() {
   if (error || !campana) {
     return (
       <div className="min-h-screen">
-        <Header title="Revision de Artes" />
+        <Header title="Gestion de Artes" />
         <div className="p-4 md:p-6">
           <button
             onClick={() => navigate('/campanas')}
@@ -1384,7 +2199,7 @@ export function TareaSeguimientoPage() {
 
   return (
     <div className="min-h-screen">
-      <Header title="Revision de Artes / Seguimiento" />
+      <Header title="Gestion de Artes" />
 
       <div className="p-3 sm:p-4 md:p-6 space-y-4">
         {/* Navigation Header */}
@@ -1399,134 +2214,594 @@ export function TareaSeguimientoPage() {
             </button>
             <span className="text-muted-foreground">|</span>
             <span className="text-sm font-medium">{campana.nombre}</span>
-            <span className="text-xs text-muted-foreground">#{campana.id}</span>
+            <Badge variant="outline" className="text-[10px]">#{campana.id}</Badge>
           </div>
         </div>
+
+        {/* Workflow Step Indicator */}
+        <div className="bg-gradient-to-r from-purple-900/30 to-purple-900/10 rounded-xl border border-purple-500/20 p-4">
+          <div className="flex items-start gap-4">
+            {/* Step indicator */}
+            <div className="hidden sm:flex items-center gap-2">
+              {(['versionario', 'atender', 'testigo'] as MainTab[]).map((step, idx) => {
+                const isActive = activeMainTab === step;
+                const isPast = ['versionario', 'atender', 'testigo'].indexOf(activeMainTab) > idx;
+                return (
+                  <div key={step} className="flex items-center">
+                    <button
+                      onClick={() => setActiveMainTab(step)}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                        isActive
+                          ? 'bg-purple-600 text-white ring-2 ring-purple-400/50'
+                          : isPast
+                          ? 'bg-green-600 text-white'
+                          : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+                      }`}
+                    >
+                      {isPast && !isActive ? <Check className="h-4 w-4" /> : idx + 1}
+                    </button>
+                    {idx < 2 && (
+                      <div className={`w-8 h-0.5 ${isPast ? 'bg-green-600' : 'bg-zinc-700'}`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Current step info */}
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                {(() => {
+                  const Icon = TAB_DESCRIPTIONS[activeMainTab].icon;
+                  return <Icon className="h-5 w-5 text-purple-400" />;
+                })()}
+                <h2 className="text-lg font-semibold text-white">
+                  {TAB_DESCRIPTIONS[activeMainTab].title}
+                </h2>
+              </div>
+              <p className="text-sm text-zinc-400">
+                {TAB_DESCRIPTIONS[activeMainTab].description}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Summary Stats Cards */}
+        <SummaryCards stats={summaryStats} activeTab={activeMainTab} />
 
         {/* ================================================================ */}
         {/* BLOQUE A: INVENTARIO (PRINCIPAL) */}
         {/* ================================================================ */}
         <div className="bg-card rounded-xl border border-border">
-          {/* Main Tabs: Versionario / Atender / Testigo */}
+          {/* Main Tabs: Subir / Revisar / Testigo - con iconos */}
           <div className="border-b border-border">
             <div className="flex">
               {([
-                { key: 'versionario', label: 'Versionario de artes' },
-                { key: 'atender', label: 'Atender arte' },
-                { key: 'testigo', label: 'Testigo' },
-              ] as { key: MainTab; label: string }[]).map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveMainTab(tab.key)}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeMainTab === tab.key
-                      ? 'border-purple-500 text-purple-300'
-                      : 'border-transparent text-muted-foreground hover:text-zinc-300'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+                { key: 'versionario', label: 'Subir Artes', icon: Upload },
+                { key: 'atender', label: 'Revisar y Aprobar', icon: Eye },
+                { key: 'testigo', label: 'Validar Instalacion', icon: Camera },
+              ] as { key: MainTab; label: string; icon: typeof Upload }[]).map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveMainTab(tab.key)}
+                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeMainTab === tab.key
+                        ? 'border-purple-500 text-purple-300'
+                        : 'border-transparent text-muted-foreground hover:text-zinc-300'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* Sub-tabs: Formato */}
           <div className="px-4 py-2 border-b border-border bg-purple-900/5">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Formato:</span>
-              <div className="flex gap-1">
-                {(['tradicional', 'digital'] as FormatTab[]).map((format) => (
-                  <button
-                    key={format}
-                    onClick={() => setActiveFormat(format)}
-                    className={`px-3 py-1 text-xs font-medium rounded-full transition-colors capitalize ${
-                      activeFormat === format
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-purple-900/30 text-zinc-400 hover:bg-purple-900/50'
-                    }`}
-                  >
-                    {format}
-                  </button>
-                ))}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Tipo de medio:</span>
+                <div className="flex gap-1">
+                  {([
+                    { key: 'tradicional', label: 'Tradicional', desc: 'Impresion fisica' },
+                    { key: 'digital', label: 'Digital', desc: 'Pantallas LED' },
+                  ] as { key: FormatTab; label: string; desc: string }[]).map((format) => (
+                    <button
+                      key={format.key}
+                      onClick={() => setActiveFormat(format.key)}
+                      title={format.desc}
+                      className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                        activeFormat === format.key
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-purple-900/30 text-zinc-400 hover:bg-purple-900/50'
+                      }`}
+                    >
+                      {format.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+              <span className="text-xs text-muted-foreground">
+                {filteredInventory.length} elementos
+              </span>
             </div>
           </div>
 
           {/* Inventory Toolbar */}
           <div className="p-4 border-b border-border">
-            <Toolbar
-              searchValue={inventorySearch}
-              onSearchChange={setInventorySearch}
-              onFilter={() => console.log('Filter inventory')}
-              onDownload={() => console.log('Download inventory')}
-              onGroup={() => setIsGrouped(!isGrouped)}
-              onSort={() => console.log('Sort inventory')}
-              showGrouping={true}
-              isGrouped={isGrouped}
-              groupCount={isGrouped ? 2 : 0}
-            />
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+              {/* Search */}
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Buscar por codigo, ciudad, plaza..."
+                  value={inventorySearch}
+                  onChange={(e) => setInventorySearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Filter Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setShowFilterDropdown(!showFilterDropdown);
+                      setShowGroupDropdown(false);
+                      setShowSortDropdown(false);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      hasActiveFilters
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+                    }`}
+                  >
+                    <Filter className="h-3.5 w-3.5" />
+                    <span>Filtrar</span>
+                    {hasActiveFilters && (
+                      <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-[10px]">
+                        {Object.values(filters).filter(v => v !== '' && v !== null).length}
+                      </span>
+                    )}
+                  </button>
+                  {showFilterDropdown && (
+                    <div className="absolute top-full right-0 mt-1 w-64 bg-card border border-border rounded-lg shadow-xl z-50 p-3 space-y-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-zinc-300">Filtros</span>
+                        {hasActiveFilters && (
+                          <button
+                            onClick={() => setFilters({ ciudad: '', plaza: '', mueble: '', tipo_medio: '', catorcena: null })}
+                            className="text-[10px] text-purple-400 hover:text-purple-300"
+                          >
+                            Limpiar todo
+                          </button>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-zinc-500 mb-1">Ciudad</label>
+                        <select
+                          value={filters.ciudad}
+                          onChange={(e) => setFilters(f => ({ ...f, ciudad: e.target.value }))}
+                          className="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
+                        >
+                          <option value="">Todas</option>
+                          {filterOptions.ciudades.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-zinc-500 mb-1">Plaza</label>
+                        <select
+                          value={filters.plaza}
+                          onChange={(e) => setFilters(f => ({ ...f, plaza: e.target.value }))}
+                          className="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
+                        >
+                          <option value="">Todas</option>
+                          {filterOptions.plazas.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-zinc-500 mb-1">Mueble</label>
+                        <select
+                          value={filters.mueble}
+                          onChange={(e) => setFilters(f => ({ ...f, mueble: e.target.value }))}
+                          className="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
+                        >
+                          <option value="">Todos</option>
+                          {filterOptions.muebles.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-zinc-500 mb-1">Tipo de Medio</label>
+                        <select
+                          value={filters.tipo_medio}
+                          onChange={(e) => setFilters(f => ({ ...f, tipo_medio: e.target.value }))}
+                          className="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
+                        >
+                          <option value="">Todos</option>
+                          {filterOptions.tiposMedio.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-zinc-500 mb-1">Catorcena</label>
+                        <select
+                          value={filters.catorcena ?? ''}
+                          onChange={(e) => setFilters(f => ({ ...f, catorcena: e.target.value ? parseInt(e.target.value) : null }))}
+                          className="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
+                        >
+                          <option value="">Todas</option>
+                          {filterOptions.catorcenas.map(c => <option key={c} value={c}>Catorcena {c}</option>)}
+                        </select>
+                      </div>
+                      <button
+                        onClick={() => setShowFilterDropdown(false)}
+                        className="w-full mt-2 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                      >
+                        Aplicar
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Group Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setShowGroupDropdown(!showGroupDropdown);
+                      setShowFilterDropdown(false);
+                      setShowSortDropdown(false);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      isGrouped
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+                    }`}
+                  >
+                    <Layers className="h-3.5 w-3.5" />
+                    <span>Agrupar</span>
+                  </button>
+                  {showGroupDropdown && (
+                    <div className="absolute top-full right-0 mt-1 w-48 bg-card border border-border rounded-lg shadow-xl z-50 py-1">
+                      {GROUP_BY_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => {
+                            setGroupByField(opt.value);
+                            setShowGroupDropdown(false);
+                            if (opt.value !== 'none') {
+                              setExpandedNodes(new Set(['all']));
+                            }
+                          }}
+                          className={`w-full px-3 py-2 text-left text-xs transition-colors ${
+                            groupByField === opt.value
+                              ? 'bg-purple-600/30 text-purple-300'
+                              : 'hover:bg-purple-900/30 text-zinc-300'
+                          }`}
+                        >
+                          {opt.label}
+                          {groupByField === opt.value && (
+                            <Check className="h-3 w-3 inline ml-2" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Sort Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setShowSortDropdown(!showSortDropdown);
+                      setShowFilterDropdown(false);
+                      setShowGroupDropdown(false);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30"
+                  >
+                    <ArrowUpDown className="h-3.5 w-3.5" />
+                    <span>Ordenar</span>
+                  </button>
+                  {showSortDropdown && (
+                    <div className="absolute top-full right-0 mt-1 w-48 bg-card border border-border rounded-lg shadow-xl z-50 py-1">
+                      <div className="px-3 py-1.5 border-b border-border">
+                        <span className="text-[10px] text-zinc-500 uppercase">Ordenar por</span>
+                      </div>
+                      {SORT_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => {
+                            if (sortField === opt.value) {
+                              setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                            } else {
+                              setSortField(opt.value);
+                              setSortDirection('asc');
+                            }
+                          }}
+                          className={`w-full px-3 py-2 text-left text-xs transition-colors flex items-center justify-between ${
+                            sortField === opt.value
+                              ? 'bg-purple-600/30 text-purple-300'
+                              : 'hover:bg-purple-900/30 text-zinc-300'
+                          }`}
+                        >
+                          <span>{opt.label}</span>
+                          {sortField === opt.value && (
+                            <span className="text-[10px] text-purple-400">
+                              {sortDirection === 'asc' ? 'A-Z' : 'Z-A'}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                      <div className="px-3 py-2 border-t border-border">
+                        <button
+                          onClick={() => setShowSortDropdown(false)}
+                          className="w-full px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                        >
+                          Aplicar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Download */}
+                <button
+                  onClick={() => console.log('Download inventory')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Active filters display */}
+            {hasActiveFilters && (
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
+                <span className="text-[10px] text-zinc-500">Filtros activos:</span>
+                {filters.ciudad && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-[10px]">
+                    Ciudad: {filters.ciudad}
+                    <button onClick={() => setFilters(f => ({ ...f, ciudad: '' }))} className="hover:text-white">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {filters.plaza && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-[10px]">
+                    Plaza: {filters.plaza}
+                    <button onClick={() => setFilters(f => ({ ...f, plaza: '' }))} className="hover:text-white">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {filters.mueble && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-[10px]">
+                    Mueble: {filters.mueble}
+                    <button onClick={() => setFilters(f => ({ ...f, mueble: '' }))} className="hover:text-white">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {filters.tipo_medio && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-[10px]">
+                    Tipo: {filters.tipo_medio}
+                    <button onClick={() => setFilters(f => ({ ...f, tipo_medio: '' }))} className="hover:text-white">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {filters.catorcena !== null && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-[10px]">
+                    Catorcena: {filters.catorcena}
+                    <button onClick={() => setFilters(f => ({ ...f, catorcena: null }))} className="hover:text-white">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Action Buttons (Versionario tab) */}
           {activeMainTab === 'versionario' && (
-            <div className="px-4 py-2 border-b border-border bg-purple-900/5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {selectedInventoryIds.size > 0 && (
-                  <span className="text-xs text-purple-300">
-                    {selectedInventoryIds.size} seleccionado(s)
-                  </span>
+            <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-purple-900/10 to-transparent flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {selectedInventoryIds.size > 0 ? (
+                  <>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 rounded-lg border border-purple-500/30">
+                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
+                      <span className="text-sm font-medium text-purple-300">
+                        {selectedInventoryIds.size} espacio(s) seleccionado(s)
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setSelectedInventoryIds(new Set())}
+                      className="text-xs text-zinc-400 hover:text-zinc-300"
+                    >
+                      Limpiar seleccion
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2 text-zinc-400">
+                    <Info className="h-4 w-4" />
+                    <span className="text-xs">Selecciona los espacios donde quieres subir arte</span>
+                  </div>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsUploadArtModalOpen(true)}
-                  disabled={selectedInventoryIds.size === 0}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all shadow-lg ${
-                    selectedInventoryIds.size > 0
-                      ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-purple-500/25'
-                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none'
-                  }`}
-                >
-                  <Upload className="h-4 w-4" />
-                  Cargar artes
-                </button>
-              </div>
+              <button
+                onClick={() => setIsUploadArtModalOpen(true)}
+                disabled={selectedInventoryIds.size === 0}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                  selectedInventoryIds.size > 0
+                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
+                    : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                }`}
+              >
+                <Upload className="h-4 w-4" />
+                Asignar Arte
+              </button>
             </div>
           )}
 
           {/* Action Buttons (Atender tab) */}
           {activeMainTab === 'atender' && (
-            <div className="px-4 py-2 border-b border-border bg-purple-900/5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {selectedInventoryIds.size > 0 && (
-                  <span className="text-xs text-purple-300">
-                    {selectedInventoryIds.size} seleccionado(s)
-                  </span>
+            <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-purple-900/10 to-transparent flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {selectedInventoryIds.size > 0 ? (
+                  <>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 rounded-lg border border-purple-500/30">
+                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
+                      <span className="text-sm font-medium text-purple-300">
+                        {selectedInventoryIds.size} arte(s) seleccionado(s)
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setSelectedInventoryIds(new Set())}
+                      className="text-xs text-zinc-400 hover:text-zinc-300"
+                    >
+                      Limpiar seleccion
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2 text-zinc-400">
+                    <Info className="h-4 w-4" />
+                    <span className="text-xs">Selecciona artes para aprobar, rechazar o crear tareas</span>
+                  </div>
                 )}
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const reservaIds = selectedInventoryItems.flatMap(item =>
+                      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+                    );
+                    if (reservaIds.length > 0) {
+                      updateArteStatusMutation.mutate({ reservaIds, status: 'Aprobado' });
+                    }
+                  }}
+                  disabled={selectedInventoryIds.size === 0 || updateArteStatusMutation.isPending}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                    selectedInventoryIds.size > 0
+                      ? 'bg-green-600 hover:bg-green-700 text-white'
+                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                  }`}
+                >
+                  {updateArteStatusMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  )}
+                  Aprobar
+                </button>
+                <button
+                  onClick={() => {
+                    const comentario = prompt('Ingresa el motivo del rechazo:');
+                    if (comentario) {
+                      const reservaIds = selectedInventoryItems.flatMap(item =>
+                        item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+                      );
+                      if (reservaIds.length > 0) {
+                        updateArteStatusMutation.mutate({ reservaIds, status: 'Rechazado', comentario });
+                      }
+                    }
+                  }}
+                  disabled={selectedInventoryIds.size === 0 || updateArteStatusMutation.isPending}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                    selectedInventoryIds.size > 0
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                  }`}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Rechazar
+                </button>
                 <button
                   onClick={() => setIsCreateModalOpen(true)}
                   disabled={selectedInventoryIds.size === 0}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                     selectedInventoryIds.size > 0
                       ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                      : 'bg-purple-900/30 text-purple-400/50 cursor-not-allowed'
+                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                   }`}
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  Crear tarea
+                  Crear Tarea
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons (Testigo tab) */}
+          {activeMainTab === 'testigo' && (
+            <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-purple-900/10 to-transparent flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {selectedInventoryIds.size > 0 ? (
+                  <>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 rounded-lg border border-purple-500/30">
+                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
+                      <span className="text-sm font-medium text-purple-300">
+                        {selectedInventoryIds.size} testigo(s) seleccionado(s)
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setSelectedInventoryIds(new Set())}
+                      className="text-xs text-zinc-400 hover:text-zinc-300"
+                    >
+                      Limpiar seleccion
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2 text-zinc-400">
+                    <Info className="h-4 w-4" />
+                    <span className="text-xs">Selecciona instalaciones para validar sus fotos testigo</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
                 <button
-                  disabled={selectedInventoryIds.size === 0}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${
+                  onClick={() => {
+                    const reservaIds = selectedInventoryItems.flatMap(item =>
+                      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+                    );
+                    if (reservaIds.length > 0) {
+                      updateInstaladoMutation.mutate({ reservaIds, instalado: true });
+                    }
+                  }}
+                  disabled={selectedInventoryIds.size === 0 || updateInstaladoMutation.isPending}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                     selectedInventoryIds.size > 0
-                      ? 'bg-purple-900/30 hover:bg-purple-900/50 border-purple-500/30'
-                      : 'bg-purple-900/20 text-purple-400/50 border-purple-500/20 cursor-not-allowed'
+                      ? 'bg-green-600 hover:bg-green-700 text-white'
+                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                   }`}
                 >
-                  <Edit className="h-3.5 w-3.5" />
-                  Editar/Atender
+                  {updateInstaladoMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  )}
+                  Validar Instalacion
+                </button>
+                <button
+                  onClick={() => {
+                    const reservaIds = selectedInventoryItems.flatMap(item =>
+                      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+                    );
+                    if (reservaIds.length > 0) {
+                      updateInstaladoMutation.mutate({ reservaIds, instalado: false });
+                    }
+                  }}
+                  disabled={selectedInventoryIds.size === 0 || updateInstaladoMutation.isPending}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                    selectedInventoryIds.size > 0
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                  }`}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Rechazar
                 </button>
               </div>
             </div>
@@ -1534,83 +2809,252 @@ export function TareaSeguimientoPage() {
 
           {/* Inventory Table */}
           <div className="max-h-[400px] overflow-auto">
-            {isLoadingInventario ? (
+            {(isLoadingInventarioSinArte || isLoadingInventarioArte || isLoadingInventarioTestigos) ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
                 <span className="ml-2 text-sm text-muted-foreground">Cargando inventario...</span>
               </div>
             ) : filteredInventory.length === 0 ? (
-              <EmptyState message="Sin inventario para este formato" />
-            ) : activeMainTab === 'atender' && isGrouped ? (
-              // Grouped Tree View
+              <EmptyState
+                message={
+                  activeMainTab === 'versionario'
+                    ? 'Sin espacios disponibles'
+                    : activeMainTab === 'atender'
+                    ? 'Sin artes para revisar'
+                    : 'Sin testigos pendientes'
+                }
+                description={
+                  activeMainTab === 'versionario'
+                    ? 'No hay espacios de tipo ' + activeFormat + ' en esta campaña'
+                    : activeMainTab === 'atender'
+                    ? 'Primero debes subir artes en el paso "Subir Artes"'
+                    : 'Los testigos se generan despues de aprobar e instalar los artes'
+                }
+                icon={activeMainTab === 'versionario' ? Image : activeMainTab === 'atender' ? Eye : Camera}
+              />
+            ) : activeMainTab === 'versionario' ? (
+              // Vista jerárquica de 3 niveles para Subir Artes: Catorcena -> APS -> Grupo
               <div className="divide-y divide-border">
-                {Object.entries(groupedInventory).map(([catorcenaKey, apsGroups]) => {
-                  const catorcenaCount = Object.values(apsGroups).reduce(
-                    (sum, aps) =>
-                      sum +
-                      Object.values(aps).reduce(
-                        (s, arte) => s + Object.values(arte).reduce((a, items) => a + items.length, 0),
-                        0
-                      ),
-                    0
+                {Object.entries(versionarioGroupedInventory).map(([catorcenaKey, apsGroups]) => {
+                  const catorcenaExpanded = expandedNodes.has(catorcenaKey);
+                  const catorcenaItemCount = Object.values(apsGroups).reduce(
+                    (sum, grupoItems) => sum + Object.values(grupoItems).reduce((s, items) => s + items.length, 0), 0
                   );
                   return (
-                    <TreeNode
-                      key={catorcenaKey}
-                      label={catorcenaKey}
-                      count={catorcenaCount}
-                      level={0}
-                      isExpanded={expandedNodes.has(catorcenaKey)}
-                      onToggle={() => toggleNode(catorcenaKey)}
-                    >
-                      {Object.entries(apsGroups).map(([apsKey, arteGroups]) => {
-                        const apsCount = Object.values(arteGroups).reduce(
-                          (sum, arte) => sum + Object.values(arte).reduce((a, items) => a + items.length, 0),
-                          0
-                        );
-                        return (
-                          <TreeNode
-                            key={`${catorcenaKey}-${apsKey}`}
-                            label={apsKey}
-                            count={apsCount}
-                            level={1}
-                            isExpanded={expandedNodes.has(`${catorcenaKey}-${apsKey}`)}
-                            onToggle={() => toggleNode(`${catorcenaKey}-${apsKey}`)}
-                          >
-                            {Object.entries(arteGroups).map(([arteKey, tareaGroups]) => {
-                              const arteCount = Object.values(tareaGroups).reduce((a, items) => a + items.length, 0);
-                              return (
-                                <TreeNode
-                                  key={`${catorcenaKey}-${apsKey}-${arteKey}`}
-                                  label={arteKey}
-                                  count={arteCount}
-                                  level={2}
-                                  isExpanded={expandedNodes.has(`${catorcenaKey}-${apsKey}-${arteKey}`)}
-                                  onToggle={() => toggleNode(`${catorcenaKey}-${apsKey}-${arteKey}`)}
+                    <div key={catorcenaKey}>
+                      {/* Nivel 1: Catorcena */}
+                      <button
+                        onClick={() => toggleNode(catorcenaKey)}
+                        className="w-full px-4 py-3 flex items-center justify-between bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          {catorcenaExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-purple-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-purple-400" />
+                          )}
+                          <span className="text-sm font-bold text-white">{catorcenaKey}</span>
+                        </div>
+                        <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                          {catorcenaItemCount} elemento{catorcenaItemCount !== 1 ? 's' : ''}
+                        </Badge>
+                      </button>
+                      {catorcenaExpanded && (
+                        <div className="pl-4">
+                          {Object.entries(apsGroups).map(([apsKey, grupoItems]) => {
+                            const apsNodeKey = `${catorcenaKey}|${apsKey}`;
+                            const apsExpanded = expandedNodes.has(apsNodeKey);
+                            const apsItemCount = Object.values(grupoItems).reduce((s, items) => s + items.length, 0);
+                            return (
+                              <div key={apsNodeKey} className="border-l-2 border-purple-600/30">
+                                {/* Nivel 2: APS */}
+                                <button
+                                  onClick={() => toggleNode(apsNodeKey)}
+                                  className="w-full px-4 py-2 flex items-center justify-between bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
                                 >
-                                  {Object.entries(tareaGroups).map(([tareaKey, items]) => (
-                                    <TreeNode
-                                      key={`${catorcenaKey}-${apsKey}-${arteKey}-${tareaKey}`}
-                                      label={tareaKey}
-                                      count={items.length}
-                                      level={3}
-                                      isExpanded={expandedNodes.has(`${catorcenaKey}-${apsKey}-${arteKey}-${tareaKey}`)}
-                                      onToggle={() => toggleNode(`${catorcenaKey}-${apsKey}-${arteKey}-${tareaKey}`)}
-                                    >
-                                      <table className="w-full text-xs">
-                                        <tbody>
-                                          {items.map((item) => renderInventoryRow(item))}
-                                        </tbody>
-                                      </table>
-                                    </TreeNode>
-                                  ))}
-                                </TreeNode>
-                              );
-                            })}
-                          </TreeNode>
-                        );
-                      })}
-                    </TreeNode>
+                                  <div className="flex items-center gap-2">
+                                    {apsExpanded ? (
+                                      <ChevronDown className="h-3.5 w-3.5 text-purple-400" />
+                                    ) : (
+                                      <ChevronRight className="h-3.5 w-3.5 text-purple-400" />
+                                    )}
+                                    <span className="text-xs font-semibold text-purple-300">{apsKey}</span>
+                                  </div>
+                                  <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
+                                    {apsItemCount}
+                                  </Badge>
+                                </button>
+                                {apsExpanded && (
+                                  <div className="pl-4">
+                                    {Object.entries(grupoItems).map(([grupoKey, items]) => {
+                                      const grupoNodeKey = `${catorcenaKey}|${apsKey}|${grupoKey}`;
+                                      const grupoExpanded = expandedNodes.has(grupoNodeKey);
+                                      return (
+                                        <div key={grupoNodeKey} className="border-l-2 border-purple-500/20">
+                                          {/* Nivel 3: Grupo */}
+                                          <button
+                                            onClick={() => toggleNode(grupoNodeKey)}
+                                            className="w-full px-4 py-1.5 flex items-center justify-between hover:bg-purple-900/10 transition-colors"
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              {grupoExpanded ? (
+                                                <ChevronDown className="h-3 w-3 text-zinc-400" />
+                                              ) : (
+                                                <ChevronRight className="h-3 w-3 text-zinc-400" />
+                                              )}
+                                              <span className="text-[11px] font-medium text-zinc-400">{grupoKey}</span>
+                                              {/* Checkbox para seleccionar todo el grupo */}
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const allSelected = items.every(item => selectedInventoryIds.has(item.id));
+                                                  setSelectedInventoryIds(prev => {
+                                                    const next = new Set(prev);
+                                                    items.forEach(item => {
+                                                      if (allSelected) {
+                                                        next.delete(item.id);
+                                                      } else {
+                                                        next.add(item.id);
+                                                      }
+                                                    });
+                                                    return next;
+                                                  });
+                                                }}
+                                                className={`ml-2 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                  items.every(item => selectedInventoryIds.has(item.id))
+                                                    ? 'bg-purple-600 border-purple-600'
+                                                    : 'border-purple-500/50 hover:border-purple-400'
+                                                }`}
+                                              >
+                                                {items.every(item => selectedInventoryIds.has(item.id)) && (
+                                                  <Check className="h-2.5 w-2.5 text-white" />
+                                                )}
+                                              </button>
+                                            </div>
+                                            <span className="text-[10px] text-zinc-500">
+                                              {items.length} cara{items.length !== 1 ? 's' : ''}
+                                            </span>
+                                          </button>
+                                          {grupoExpanded && (
+                                            <div className="bg-card/50 ml-4">
+                                              <table className="w-full text-xs">
+                                                <thead className="bg-purple-900/20">
+                                                  <tr className="border-b border-border text-left">
+                                                    <th className="p-1.5 w-6"></th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">ID</th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">Tipo Formato</th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">Código Único</th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">Ubicación</th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">Tipo Cara</th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">Formato</th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">Plaza</th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">Municipio</th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">NSE</th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">Rsv ID</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {items.map((item) => renderInventoryRow(item))}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : isGrouped && Object.keys(simpleGroupedInventory).length > 0 ? (
+              // Simple Grouped View (for testigo or atender with simple grouping)
+              <div className="divide-y divide-border">
+                {Object.entries(simpleGroupedInventory).map(([groupKey, items]) => {
+                  const isExpanded = expandedNodes.has(groupKey);
+                  return (
+                    <div key={groupKey}>
+                      <button
+                        onClick={() => toggleNode(groupKey)}
+                        className="w-full px-4 py-3 flex items-center justify-between bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-purple-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-purple-400" />
+                          )}
+                          <span className="text-sm font-medium text-white">{groupKey}</span>
+                        </div>
+                        <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/30">
+                          {items.length} elemento{items.length !== 1 ? 's' : ''}
+                        </Badge>
+                      </button>
+                      {isExpanded && (
+                        <div className="bg-card/50">
+                          <table className="w-full text-xs">
+                            <thead className="bg-purple-900/20">
+                              <tr className="border-b border-border text-left">
+                                <th className="p-2 w-8">
+                                  <button
+                                    onClick={() => {
+                                      const allSelected = items.every(item => selectedInventoryIds.has(item.id));
+                                      setSelectedInventoryIds(prev => {
+                                        const next = new Set(prev);
+                                        items.forEach(item => {
+                                          if (allSelected) {
+                                            next.delete(item.id);
+                                          } else {
+                                            next.add(item.id);
+                                          }
+                                        });
+                                        return next;
+                                      });
+                                    }}
+                                    className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                      items.every(item => selectedInventoryIds.has(item.id))
+                                        ? 'bg-purple-600 border-purple-600'
+                                        : 'border-purple-500/50 hover:border-purple-400'
+                                    }`}
+                                  >
+                                    {items.every(item => selectedInventoryIds.has(item.id)) && (
+                                      <Check className="h-3 w-3 text-white" />
+                                    )}
+                                  </button>
+                                </th>
+                                {activeMainTab === 'atender' && (
+                                  <>
+                                    <th className="p-2 font-medium text-purple-300">Código</th>
+                                    <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                    <th className="p-2 font-medium text-purple-300">Mueble</th>
+                                    <th className="p-2 font-medium text-purple-300">Plaza</th>
+                                    <th className="p-2 font-medium text-purple-300">Estado Arte</th>
+                                  </>
+                                )}
+                                {activeMainTab === 'testigo' && (
+                                  <>
+                                    <th className="p-2 font-medium text-purple-300">Código</th>
+                                    <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                    <th className="p-2 font-medium text-purple-300">Mueble</th>
+                                    <th className="p-2 font-medium text-purple-300">Plaza</th>
+                                    <th className="p-2 font-medium text-purple-300">Testigo</th>
+                                  </>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {items.map((item) => renderInventoryRow(item))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -1636,16 +3080,16 @@ export function TareaSeguimientoPage() {
                     {/* Versionario Headers */}
                     {activeMainTab === 'versionario' && (
                       <>
-                        <th className="p-2 font-medium text-purple-300">APS</th>
-                        <th className="p-2 font-medium text-purple-300">Tipo</th>
-                        <th className="p-2 font-medium text-purple-300">Código</th>
+                        <th className="p-2 font-medium text-purple-300">ID</th>
+                        <th className="p-2 font-medium text-purple-300">Tipo Formato</th>
+                        <th className="p-2 font-medium text-purple-300">Código Único</th>
                         <th className="p-2 font-medium text-purple-300">Ubicación</th>
-                        <th className="p-2 font-medium text-purple-300">Medio</th>
-                        <th className="p-2 font-medium text-purple-300">Mueble</th>
-                        <th className="p-2 font-medium text-purple-300">Ciudad</th>
+                        <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
+                        <th className="p-2 font-medium text-purple-300">Formato</th>
                         <th className="p-2 font-medium text-purple-300">Plaza</th>
-                        <th className="p-2 font-medium text-purple-300">Estatus</th>
-                        <th className="p-2 font-medium text-purple-300 text-center">Caras</th>
+                        <th className="p-2 font-medium text-purple-300">Municipio</th>
+                        <th className="p-2 font-medium text-purple-300">NSE</th>
+                        <th className="p-2 font-medium text-purple-300">Rsv ID</th>
                       </>
                     )}
                     {/* Atender Headers */}
@@ -1683,26 +3127,51 @@ export function TareaSeguimientoPage() {
         {/* BLOQUE B: GESTION DE TAREAS (SECUNDARIO) */}
         {/* ================================================================ */}
         <div className="bg-card rounded-xl border border-border">
+          {/* Tasks Header */}
+          <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-blue-900/20 to-transparent">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
+                <ClipboardList className="h-4 w-4 text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-white">Tareas de Produccion</h3>
+                <p className="text-xs text-zinc-400">Gestiona las tareas de instalacion y produccion de esta campaña</p>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
+                  {tasks.filter(t => t.estatus === 'pendiente' || t.estatus === 'en_progreso').length} activas
+                </Badge>
+                <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                  {completedTasks.length} completadas
+                </Badge>
+              </div>
+            </div>
+          </div>
+
           {/* Tasks Tabs */}
           <div className="border-b border-border">
             <div className="flex">
               {([
-                { key: 'tradicionales', label: 'Tareas Tradicionales' },
-                { key: 'completadas', label: 'Tareas Completadas' },
-                { key: 'calendario', label: 'Calendario' },
-              ] as { key: TasksTab; label: string }[]).map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTasksTab(tab.key)}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeTasksTab === tab.key
-                      ? 'border-purple-500 text-purple-300'
-                      : 'border-transparent text-muted-foreground hover:text-zinc-300'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+                { key: 'tradicionales', label: 'Activas', icon: Clock },
+                { key: 'completadas', label: 'Completadas', icon: CheckCircle2 },
+                { key: 'calendario', label: 'Calendario', icon: CalendarIcon },
+              ] as { key: TasksTab; label: string; icon: typeof Clock }[]).map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTasksTab(tab.key)}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                      activeTasksTab === tab.key
+                        ? 'border-blue-500 text-blue-300'
+                        : 'border-transparent text-muted-foreground hover:text-zinc-300'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -1757,7 +3226,11 @@ export function TareaSeguimientoPage() {
                 {/* Tasks Table */}
                 <div className="max-h-[300px] overflow-auto border border-border rounded-lg">
                   {filteredTasks.length === 0 ? (
-                    <EmptyState message="Sin tareas" />
+                    <EmptyState
+                      message="Sin tareas activas"
+                      description="Las tareas se crean desde la seccion 'Revisar y Aprobar' cuando seleccionas artes"
+                      icon={ClipboardList}
+                    />
                   ) : (
                     <table className="w-full text-xs">
                       <thead className="sticky top-0 bg-card z-10">
@@ -1815,7 +3288,11 @@ export function TareaSeguimientoPage() {
 
                 <div className="max-h-[300px] overflow-auto border border-border rounded-lg">
                   {filteredCompletedTasks.length === 0 ? (
-                    <EmptyState message="Sin tareas completadas" />
+                    <EmptyState
+                      message="Sin tareas completadas"
+                      description="Las tareas completadas apareceran aqui cuando se finalicen"
+                      icon={CheckCircle2}
+                    />
                   ) : (
                     <table className="w-full text-xs">
                       <thead className="sticky top-0 bg-card z-10">
@@ -1857,7 +3334,12 @@ export function TareaSeguimientoPage() {
             {activeTasksTab === 'calendario' && (
               <SimpleCalendar
                 view={calendarView}
-                events={MOCK_CALENDAR_EVENTS}
+                events={[...tasks, ...completedTasks].map(t => ({
+                  id: t.id,
+                  title: t.titulo,
+                  date: new Date(t.fecha_fin),
+                  type: 'tarea' as const,
+                }))}
                 currentDate={calendarDate}
                 onViewChange={setCalendarView}
                 onDateChange={setCalendarDate}
@@ -1870,19 +3352,34 @@ export function TareaSeguimientoPage() {
       {/* Create Task Modal */}
       <CreateTaskModal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setCreateTaskError(null);
+        }}
         selectedCount={selectedInventoryIds.size}
         selectedIds={Array.from(selectedInventoryIds)}
         campanaId={campanaId}
         onSubmit={handleCreateTask}
+        proveedores={proveedores}
+        isLoadingProveedores={isLoadingProveedores}
+        isSubmitting={createTareaMutation.isPending}
+        error={createTaskError}
       />
 
       {/* Upload Art Modal */}
       <UploadArtModal
         isOpen={isUploadArtModalOpen}
-        onClose={() => setIsUploadArtModalOpen(false)}
+        onClose={() => {
+          setIsUploadArtModalOpen(false);
+          setUploadArtError(null);
+        }}
         selectedInventory={selectedInventoryItems}
         onSubmit={handleUploadArt}
+        artesExistentes={artesExistentes}
+        isLoadingArtes={isLoadingArtes}
+        isSubmitting={assignArteMutation.isPending}
+        error={uploadArtError}
+        campanaId={parseInt(campanaId!)}
       />
     </div>
   );

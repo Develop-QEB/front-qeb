@@ -83,6 +83,51 @@ export interface InventarioConAPS extends InventarioReservado {
   aps: number;
 }
 
+export interface InventarioConArte {
+  rsv_id: string;
+  rsv_ids: string;
+  id: number;
+  codigo_unico: string;
+  codigo_unico_display: string;
+  ubicacion: string | null;
+  tipo_de_cara: string | null;
+  tipo_de_cara_display: string | null;
+  cara: string | null;
+  mueble: string | null;
+  latitud: number;
+  longitud: number;
+  plaza: string | null;
+  estado: string | null;
+  municipio: string | null;
+  tipo_de_mueble: string | null;
+  ancho: number;
+  alto: number;
+  nivel_socioeconomico: string | null;
+  tarifa_publica: number | null;
+  tradicional_digital: string | null;
+  archivo: string | null;
+  epInId: string | null;
+  estatus: string | null;
+  rsvId: string | null;
+  arte_aprobado: string | null;
+  APS: number | null;
+  inicio_periodo: string | null;
+  fin_periodo: string | null;
+  comentario_rechazo: string | null;
+  instalado: boolean | null;
+  rsvAPS: number | null;
+  tarea: string | null;
+  status_mostrar: string | null;
+  caras_totales: number;
+  IMU: number | null;
+  articulo: string | null;
+  tipo_medio: string | null;
+  numero_catorcena: number | null;
+  anio_catorcena: number | null;
+  grupo_completo_id: number | null;
+  grupo: number | null;
+}
+
 export interface SolicitudCara {
   id: number;
   idquote: number;
@@ -122,6 +167,49 @@ export interface HistorialItem {
   accion: string;
   fecha_hora: string;
   detalles: string | null;
+}
+
+// Interface para tareas de campaña
+export interface TareaCampana {
+  id: number;
+  titulo: string | null;
+  descripcion: string | null;
+  tipo: string | null;
+  estatus: string | null;
+  fecha_inicio: string;
+  fecha_fin: string;
+  responsable: string | null;
+  id_responsable: number;
+  responsable_nombre: string | null;
+  responsable_foto: string | null;
+  asignado: string | null;
+  id_asignado: string | null;
+  archivo: string | null;
+  evidencia: string | null;
+  ids_reservas: string | null;
+  proveedores_id: number | null;
+  nombre_proveedores: string | null;
+}
+
+export interface CreateTareaData {
+  titulo: string;
+  descripcion?: string;
+  tipo?: string;
+  fecha_fin?: string;
+  id_responsable?: number;
+  responsable?: string;
+  asignado?: string;
+  id_asignado?: string;
+  ids_reservas?: string;
+  proveedores_id?: number;
+  nombre_proveedores?: string;
+}
+
+export interface ArteExistente {
+  id: string;
+  nombre: string;
+  url: string;
+  usos: number;
 }
 
 // Función para construir el payload de DeliveryNote para SAP
@@ -335,6 +423,149 @@ export const campanasService = {
     const response = await api.get<ApiResponse<HistorialItem[]>>(`/campanas/${id}/historial`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener historial');
+    }
+    return response.data.data;
+  },
+
+  async getInventarioConArte(id: number): Promise<InventarioConArte[]> {
+    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-arte`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener inventario con arte');
+    }
+    return response.data.data;
+  },
+
+  // ============================================================================
+  // NUEVOS ENDPOINTS PARA GESTION DE ARTES
+  // ============================================================================
+
+  async getInventarioSinArte(id: number, formato: string = 'Tradicional'): Promise<InventarioConArte[]> {
+    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`, {
+      params: { formato },
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener inventario sin arte');
+    }
+    return response.data.data;
+  },
+
+  async getInventarioTestigos(id: number, formato: string = 'Tradicional'): Promise<InventarioConArte[]> {
+    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-testigos`, {
+      params: { formato },
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener inventario para testigos');
+    }
+    return response.data.data;
+  },
+
+  async assignArte(id: number, reservaIds: number[], archivo: string): Promise<{ message: string; affected: number }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/assign-arte`, {
+      reservaIds,
+      archivo,
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al asignar arte');
+    }
+    return response.data.data;
+  },
+
+  async uploadArteFile(file: File): Promise<{ url: string; filename: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post<ApiResponse<{ url: string; filename: string; originalName: string; size: number; mimetype: string }>>('/uploads/arte', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al subir archivo');
+    }
+    return response.data.data;
+  },
+
+  async updateArteStatus(
+    id: number,
+    reservaIds: number[],
+    status: 'Aprobado' | 'Rechazado',
+    comentarioRechazo?: string
+  ): Promise<{ message: string; affected: number }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/arte-status`, {
+      reservaIds,
+      status,
+      comentarioRechazo,
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar estado de arte');
+    }
+    return response.data.data;
+  },
+
+  async updateInstalado(
+    id: number,
+    reservaIds: number[],
+    instalado: boolean,
+    imagenTestigo?: string,
+    fechaTestigo?: string
+  ): Promise<{ message: string; affected: number }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/instalado`, {
+      reservaIds,
+      instalado,
+      imagenTestigo,
+      fechaTestigo,
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar estado de instalación');
+    }
+    return response.data.data;
+  },
+
+  // ============================================================================
+  // TAREAS
+  // ============================================================================
+
+  async getTareas(id: number, estatus?: string): Promise<TareaCampana[]> {
+    const response = await api.get<ApiResponse<TareaCampana[]>>(`/campanas/${id}/tareas`, {
+      params: estatus ? { estatus } : undefined,
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener tareas');
+    }
+    return response.data.data;
+  },
+
+  async createTarea(id: number, data: CreateTareaData): Promise<TareaCampana> {
+    const response = await api.post<ApiResponse<TareaCampana>>(`/campanas/${id}/tareas`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear tarea');
+    }
+    return response.data.data;
+  },
+
+  async updateTarea(id: number, tareaId: number, data: Partial<TareaCampana>): Promise<TareaCampana> {
+    const response = await api.patch<ApiResponse<TareaCampana>>(`/campanas/${id}/tareas/${tareaId}`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar tarea');
+    }
+    return response.data.data;
+  },
+
+  async getArtesExistentes(id: number): Promise<ArteExistente[]> {
+    const response = await api.get<ApiResponse<ArteExistente[]>>(`/campanas/${id}/artes-existentes`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener artes existentes');
+    }
+    return response.data.data;
+  },
+
+  async verificarArteExistente(id: number, params: { nombre?: string; url?: string }): Promise<{ existe: boolean; nombre: string; usos: number; url: string | null }> {
+    const response = await api.post<ApiResponse<{ existe: boolean; nombre: string; usos: number; url: string | null }>>(
+      `/campanas/${id}/verificar-arte`,
+      params
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al verificar arte');
     }
     return response.data.data;
   },
