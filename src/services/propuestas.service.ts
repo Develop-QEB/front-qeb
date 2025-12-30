@@ -252,6 +252,37 @@ export const propuestasService = {
     }
     return response.data.data;
   },
+
+  async updatePropuesta(
+    id: number,
+    data: {
+      nombre_campania?: string;
+      notas?: string;
+      descripcion?: string;
+      year_inicio?: number;
+      catorcena_inicio?: number;
+      year_fin?: number;
+      catorcena_fin?: number;
+    }
+  ): Promise<Propuesta> {
+    const response = await api.patch<ApiResponse<Propuesta>>(`/propuestas/${id}`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar propuesta');
+    }
+    return response.data.data;
+  },
+
+  async uploadArchivo(propuestaId: number, file: File): Promise<{ url: string }> {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    const response = await api.post<ApiResponse<{ url: string }>>(`/propuestas/${propuestaId}/archivo`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al subir archivo');
+    }
+    return response.data.data;
+  },
 };
 
 export interface ReservaModalItem {

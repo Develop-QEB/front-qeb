@@ -134,12 +134,19 @@ const getTarifaFromItemCode = (itemCode: string): number => {
   return TARIFA_PUBLICA_MAP[code] || 850;
 };
 
-// Extract city/state from article name
+// Extract city/state from article name (sorted by length to avoid false positives)
 const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
-  for (const [ciudad, estado] of Object.entries(CIUDAD_ESTADO_MAP)) {
-    if (name.includes(ciudad)) {
+
+  // Sort cities by length (longest first) to match more specific names before generic ones
+  // This prevents "MEXICO" from matching before "CIUDAD DE MEXICO"
+  const sortedCities = Object.entries(CIUDAD_ESTADO_MAP).sort((a, b) => b[0].length - a[0].length);
+
+  for (const [ciudad, estado] of sortedCities) {
+    // Use word boundary check - city must be preceded and followed by non-letter chars
+    const regex = new RegExp(`(^|[^A-Z])${ciudad.replace(/\s+/g, '\\s+')}([^A-Z]|$)`, 'i');
+    if (regex.test(name)) {
       return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
     }
   }
@@ -218,7 +225,7 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Selec
                 type="checkbox"
                 checked={selected.includes(option)}
                 onChange={() => toggleOption(option)}
-                className="rounded bg-zinc-700 border-zinc-600 text-purple-500 focus:ring-purple-500/50"
+                className="checkbox-purple"
               />
               {option}
             </label>
@@ -406,6 +413,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const [yearFin, setYearFin] = useState<number | undefined>();
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>();
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
+  const [archivoPropuesta, setArchivoPropuesta] = useState<string | null>(null);
+
+  // Initial values for change detection
+  const [initialValues, setInitialValues] = useState({
+    nombreCampania: '',
+    notas: '',
+    descripcion: '',
+    yearInicio: undefined as number | undefined,
+    yearFin: undefined as number | undefined,
+    catorcenaInicio: undefined as number | undefined,
+    catorcenaFin: undefined as number | undefined,
+  });
+  const [isUpdatingPropuesta, setIsUpdatingPropuesta] = useState(false);
 
   // Caras state
   const [caras, setCaras] = useState<CaraItem[]>([]);
@@ -429,7 +449,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   });
   const [selectedInventory, setSelectedInventory] = useState<Set<number>>(new Set());
   const [selectedReservados, setSelectedReservados] = useState<Set<string>>(new Set());
+  const [selectedMapReservas, setSelectedMapReservas] = useState<Set<string>>(new Set()); // For map highlighting
   const [reservadosSearchTerm, setReservadosSearchTerm] = useState('');
+  const [editingReserva, setEditingReserva] = useState<ReservaItem | null>(null);
+  const [editingFormato, setEditingFormato] = useState('');
+  const [reservadosTipoFilter, setReservadosTipoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo' | 'Bonificacion'>('Todos');
+  const [reservadosSortColumn, setReservadosSortColumn] = useState<'codigo' | 'tipo' | 'formato' | 'ciudad'>('ciudad');
+  const [reservadosSortDirection, setReservadosSortDirection] = useState<'asc' | 'desc'>('asc');
   const [disponiblesSearchTerm, setDisponiblesSearchTerm] = useState('');
 
   // Advanced inventory filters
@@ -621,26 +647,52 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       }
 
       // Set campaign name
-      setNombreCampania(solicitudDetails.cotizacion?.nombre_campania || '');
+      const campaniaNombre = solicitudDetails.cotizacion?.nombre_campania || '';
+      setNombreCampania(campaniaNombre);
 
       // Set notes and description
-      setNotas(solicitudDetails.propuesta?.notas || '');
-      setDescripcion(solicitudDetails.propuesta?.descripcion || '');
+      const notasVal = solicitudDetails.propuesta?.notas || '';
+      const descripcionVal = solicitudDetails.propuesta?.descripcion || '';
+      setNotas(notasVal);
+      setDescripcion(descripcionVal);
+
+      // Set archivo if exists
+      setArchivoPropuesta((solicitudDetails.propuesta as any)?.archivo || null);
 
       // Set period from cotizacion dates
       const cot = solicitudDetails.cotizacion;
+      let yInicio: number | undefined;
+      let cInicio: number | undefined;
+      let yFin: number | undefined;
+      let cFin: number | undefined;
+
       if (cot?.fecha_inicio) {
         const fechaInicio = new Date(cot.fecha_inicio);
-        setYearInicio(fechaInicio.getFullYear());
+        yInicio = fechaInicio.getFullYear();
+        setYearInicio(yInicio);
         const dayOfYear = Math.floor((fechaInicio.getTime() - new Date(fechaInicio.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-        setCatorcenaInicio(Math.ceil(dayOfYear / 14));
+        cInicio = Math.ceil(dayOfYear / 14);
+        setCatorcenaInicio(cInicio);
       }
       if (cot?.fecha_fin) {
         const fechaFin = new Date(cot.fecha_fin);
-        setYearFin(fechaFin.getFullYear());
+        yFin = fechaFin.getFullYear();
+        setYearFin(yFin);
         const dayOfYear = Math.floor((fechaFin.getTime() - new Date(fechaFin.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-        setCatorcenaFin(Math.ceil(dayOfYear / 14));
+        cFin = Math.ceil(dayOfYear / 14);
+        setCatorcenaFin(cFin);
       }
+
+      // Store initial values for change detection
+      setInitialValues({
+        nombreCampania: campaniaNombre,
+        notas: notasVal,
+        descripcion: descripcionVal,
+        yearInicio: yInicio,
+        yearFin: yFin,
+        catorcenaInicio: cInicio,
+        catorcenaFin: cFin,
+      });
 
       // Set caras from solicitud
       if (solicitudDetails.caras) {
@@ -689,6 +741,71 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       setExpandedCatorcenas(periodos);
     }
   }, [caras]);
+
+  // Detect if there are unsaved changes
+  const hasChanges = useMemo(() => {
+    return (
+      nombreCampania !== initialValues.nombreCampania ||
+      notas !== initialValues.notas ||
+      descripcion !== initialValues.descripcion ||
+      yearInicio !== initialValues.yearInicio ||
+      yearFin !== initialValues.yearFin ||
+      catorcenaInicio !== initialValues.catorcenaInicio ||
+      catorcenaFin !== initialValues.catorcenaFin
+    );
+  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, initialValues]);
+
+  // Handle update propuesta
+  const handleUpdatePropuesta = async () => {
+    setIsUpdatingPropuesta(true);
+    try {
+      await propuestasService.updatePropuesta(propuesta.id, {
+        nombre_campania: nombreCampania,
+        notas,
+        descripcion,
+        year_inicio: yearInicio,
+        catorcena_inicio: catorcenaInicio,
+        year_fin: yearFin,
+        catorcena_fin: catorcenaFin,
+      });
+
+      // Update initial values to current values
+      setInitialValues({
+        nombreCampania,
+        notas,
+        descripcion,
+        yearInicio,
+        yearFin,
+        catorcenaInicio,
+        catorcenaFin,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
+      alert('Propuesta actualizada correctamente');
+    } catch (error) {
+      console.error('Error updating propuesta:', error);
+      alert('Error al actualizar propuesta');
+    } finally {
+      setIsUpdatingPropuesta(false);
+    }
+  };
+
+  // Handle archivo upload
+  const archivoInputRef = useRef<HTMLInputElement>(null);
+  const handleArchivoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const result = await propuestasService.uploadArchivo(propuesta.id, file);
+      setArchivoPropuesta(result.url);
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
+      alert('Archivo subido correctamente');
+    } catch (error) {
+      console.error('Error uploading archivo:', error);
+      alert('Error al subir archivo');
+    }
+  };
 
   // Calculate KPIs for caras
   const carasKPIs = useMemo(() => {
@@ -759,23 +876,44 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     const contraflujoReservado = caraReservas.filter(r => r.tipo === 'Contraflujo').length;
     const bonificacionReservado = caraReservas.filter(r => r.tipo === 'Bonificacion').length;
 
-    const flujoCompleto = flujoReservado >= (cara.caras_flujo || 0);
-    const contraflujoCompleto = contraflujoReservado >= (cara.caras_contraflujo || 0);
-    const bonificacionCompleto = bonificacionReservado >= (cara.bonificacion || 0);
+    const flujoRequerido = cara.caras_flujo || 0;
+    const contraflujoRequerido = cara.caras_contraflujo || 0;
+    const bonificacionRequerido = cara.bonificacion || 0;
 
-    const totalRequerido = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
+    const flujoCompleto = flujoReservado >= flujoRequerido;
+    const contraflujoCompleto = contraflujoReservado >= contraflujoRequerido;
+    const bonificacionCompleto = bonificacionReservado >= bonificacionRequerido;
+
+    const totalRequerido = flujoRequerido + contraflujoRequerido + bonificacionRequerido;
     const totalReservado = flujoReservado + contraflujoReservado + bonificacionReservado;
+
+    // Calculate differences (positive = over, negative = under)
+    const flujoDiff = flujoReservado - flujoRequerido;
+    const contraflujoDiff = contraflujoReservado - contraflujoRequerido;
+    const bonificacionDiff = bonificacionReservado - bonificacionRequerido;
+    const totalDiff = totalReservado - totalRequerido;
+
+    // Check if needs attention (has differences)
+    const needsAttention = flujoDiff !== 0 || contraflujoDiff !== 0 || bonificacionDiff !== 0;
 
     return {
       flujoReservado,
       contraflujoReservado,
       bonificacionReservado,
+      flujoRequerido,
+      contraflujoRequerido,
+      bonificacionRequerido,
       flujoCompleto,
       contraflujoCompleto,
       bonificacionCompleto,
       isComplete: flujoCompleto && contraflujoCompleto && bonificacionCompleto,
       totalReservado,
       totalRequerido,
+      flujoDiff,
+      contraflujoDiff,
+      bonificacionDiff,
+      totalDiff,
+      needsAttention,
     };
   };
 
@@ -991,8 +1129,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const groupByDistanceFunc = useCallback((inventarios: ProcessedInventoryItem[]): ProcessedInventoryItem[] => {
     if (inventarios.length === 0) return [];
 
+    // Separate items with valid coordinates from those without
+    const withCoords = inventarios.filter(inv =>
+      inv.latitud && inv.longitud &&
+      typeof inv.latitud === 'number' && typeof inv.longitud === 'number' &&
+      !isNaN(inv.latitud) && !isNaN(inv.longitud)
+    );
+    const withoutCoords = inventarios.filter(inv =>
+      !inv.latitud || !inv.longitud ||
+      typeof inv.latitud !== 'number' || typeof inv.longitud !== 'number' ||
+      isNaN(inv.latitud) || isNaN(inv.longitud)
+    );
+
+    if (withCoords.length === 0) {
+      // No valid coordinates, just return all in one group
+      return inventarios.map(inv => ({ ...inv, grupo: 'Grupo 1' }));
+    }
+
     const grupos: ProcessedInventoryItem[][] = [];
-    const remaining = [...inventarios];
+    const remaining = [...withCoords];
 
     while (remaining.length > 0) {
       const grupo: ProcessedInventoryItem[] = [remaining.shift()!];
@@ -1036,10 +1191,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       grupos.push(grupo);
     }
 
+    // Add items without coords to "Sin ubicación" group
+    if (withoutCoords.length > 0) {
+      grupos.push(withoutCoords);
+    }
+
     // Add group number to each item
-    return grupos.flatMap((grupo, idx) =>
-      grupo.map(inv => ({ ...inv, grupo: `Grupo ${idx + 1}` }))
-    );
+    return grupos.flatMap((grupo, idx) => {
+      const isLastGroup = idx === grupos.length - 1 && withoutCoords.length > 0;
+      const groupName = isLastGroup ? 'Sin ubicación' : `Grupo ${idx + 1}`;
+      return grupo.map(inv => ({ ...inv, grupo: groupName }));
+    });
   }, [tamanoGrupo, distanciaGrupos, haversineDistance]);
 
   // Handle search inventory - open search view and fetch disponibles
@@ -1186,7 +1348,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, groupByDistance, filterUnicos, filterCompletos, groupByDistanceFunc, sortColumn, sortDirection]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, groupByDistance, filterUnicos, filterCompletos, groupByDistanceFunc, sortColumn, sortDirection, reservas]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -1593,17 +1755,85 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     );
   }, [reservas, selectedCaraForSearch]);
 
-  // Filter reservados by search term
+  // Filter reservados by search term and type
   const filteredReservados = useMemo(() => {
-    if (!reservadosSearchTerm.trim()) return currentCaraReservas;
-    const term = reservadosSearchTerm.toLowerCase();
-    return currentCaraReservas.filter(r =>
-      r.codigo_unico?.toLowerCase().includes(term) ||
-      r.plaza?.toLowerCase().includes(term) ||
-      r.ubicacion?.toLowerCase().includes(term) ||
-      r.tipo?.toLowerCase().includes(term)
-    );
-  }, [currentCaraReservas, reservadosSearchTerm]);
+    let data = [...currentCaraReservas];
+
+    // Filter by type
+    if (reservadosTipoFilter !== 'Todos') {
+      data = data.filter(r => r.tipo === reservadosTipoFilter);
+    }
+
+    // Filter by search term
+    if (reservadosSearchTerm.trim()) {
+      const term = reservadosSearchTerm.toLowerCase();
+      data = data.filter(r =>
+        r.codigo_unico?.toLowerCase().includes(term) ||
+        r.plaza?.toLowerCase().includes(term) ||
+        r.ubicacion?.toLowerCase().includes(term) ||
+        r.tipo?.toLowerCase().includes(term) ||
+        r.formato?.toLowerCase().includes(term)
+      );
+    }
+
+    // Sort
+    data.sort((a, b) => {
+      let aVal = '', bVal = '';
+      switch (reservadosSortColumn) {
+        case 'codigo': aVal = a.codigo_unico || ''; bVal = b.codigo_unico || ''; break;
+        case 'tipo': aVal = a.tipo || ''; bVal = b.tipo || ''; break;
+        case 'formato': aVal = a.formato || ''; bVal = b.formato || ''; break;
+        case 'ciudad': aVal = a.plaza || ''; bVal = b.plaza || ''; break;
+      }
+      const cmp = aVal.localeCompare(bVal);
+      return reservadosSortDirection === 'asc' ? cmp : -cmp;
+    });
+
+    return data;
+  }, [currentCaraReservas, reservadosSearchTerm, reservadosTipoFilter, reservadosSortColumn, reservadosSortDirection]);
+
+  // Group reservados by ciudad (plaza)
+  const groupedReservados = useMemo(() => {
+    const groups: Record<string, ReservaItem[]> = {};
+    filteredReservados.forEach(r => {
+      const ciudad = r.plaza || 'Sin ciudad';
+      if (!groups[ciudad]) groups[ciudad] = [];
+      groups[ciudad].push(r);
+    });
+    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filteredReservados]);
+
+  // Toggle all ciudad groups expansion
+  const toggleAllCiudadGroups = () => {
+    if (expandedCiudadGroups.size === groupedReservados.length) {
+      setExpandedCiudadGroups(new Set());
+    } else {
+      setExpandedCiudadGroups(new Set(groupedReservados.map(([ciudad]) => ciudad)));
+    }
+  };
+
+  // Toggle reservados sort
+  const toggleReservadosSort = (column: 'codigo' | 'tipo' | 'formato' | 'ciudad') => {
+    if (reservadosSortColumn === column) {
+      setReservadosSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setReservadosSortColumn(column);
+      setReservadosSortDirection('asc');
+    }
+  };
+
+  // State for expanded ciudad groups in reservados
+  const [expandedCiudadGroups, setExpandedCiudadGroups] = useState<Set<string>>(new Set());
+
+  // Toggle ciudad group expansion
+  const toggleCiudadGroupExpansion = (ciudad: string) => {
+    setExpandedCiudadGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(ciudad)) next.delete(ciudad);
+      else next.add(ciudad);
+      return next;
+    });
+  };
 
   // Toggle select all reservados
   const handleToggleSelectAllReservados = () => {
@@ -1655,6 +1885,30 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         }
       }
     });
+  };
+
+  // Open edit panel for reserva
+  const handleEditReserva = (reserva: ReservaItem) => {
+    setEditingReserva(reserva);
+    setEditingFormato(reserva.formato || '');
+  };
+
+  // Save edited formato
+  const handleSaveFormato = () => {
+    if (!editingReserva) return;
+    setReservas(prev => prev.map(r =>
+      r.id === editingReserva.id
+        ? { ...r, formato: editingFormato }
+        : r
+    ));
+    setEditingReserva(null);
+    setEditingFormato('');
+  };
+
+  // Cancel edit
+  const handleCancelEdit = () => {
+    setEditingReserva(null);
+    setEditingFormato('');
   };
 
   if (!isOpen) return null;
@@ -2089,7 +2343,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                     setSelectedInventory(new Set(processedInventory.map(i => i.id)));
                                   }
                                 }}
-                                className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                                className="checkbox-purple"
                               />
                             </th>
                             <th
@@ -2205,7 +2459,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                         checked={selectedInventory.has(inv.id)}
                                         onChange={() => toggleInventorySelection(inv.id)}
                                         onClick={(e) => e.stopPropagation()}
-                                        className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                                        className="checkbox-purple"
                                       />
                                     </td>
                                     <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
@@ -2247,7 +2501,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                     checked={selectedInventory.has(inv.id)}
                                     onChange={() => toggleInventorySelection(inv.id)}
                                     onClick={(e) => e.stopPropagation()}
-                                    className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                                    className="checkbox-purple"
                                   />
                                 </td>
                                 <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
@@ -2279,19 +2533,37 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     <div className="flex items-center gap-3">
                       <button
                         onClick={handleReservar}
-                        disabled={selectedInventory.size === 0 || (remainingToAssign.flujo <= 0 && remainingToAssign.contraflujo <= 0)}
+                        disabled={isSaving || selectedInventory.size === 0 || (remainingToAssign.flujo <= 0 && remainingToAssign.contraflujo <= 0)}
                         className="flex-1 px-4 py-2.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-xl text-sm font-medium hover:bg-purple-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        <Target className="h-4 w-4" />
-                        Reservar
+                        {isSaving ? (
+                          <>
+                            <div className="h-4 w-4 border-2 border-purple-300 border-t-transparent rounded-full animate-spin" />
+                            Guardando...
+                          </>
+                        ) : (
+                          <>
+                            <Target className="h-4 w-4" />
+                            Reservar
+                          </>
+                        )}
                       </button>
                       <button
                         onClick={handleReserveAsBonificacion}
-                        disabled={selectedInventory.size === 0 || remainingToAssign.bonificacion <= 0}
+                        disabled={isSaving || selectedInventory.size === 0 || remainingToAssign.bonificacion <= 0}
                         className="flex-1 px-4 py-2.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-sm font-medium hover:bg-emerald-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        <Gift className="h-4 w-4" />
-                        Bonificación
+                        {isSaving ? (
+                          <>
+                            <div className="h-4 w-4 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin" />
+                            Guardando...
+                          </>
+                        ) : (
+                          <>
+                            <Gift className="h-4 w-4" />
+                            Bonificación
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -2321,8 +2593,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
             <div className="flex-1 flex overflow-hidden">
               {/* Reservados Table */}
               <div className="w-1/2 flex flex-col border-r border-zinc-800">
-                {/* Search Bar for Reservados */}
-                <div className="p-3 border-b border-zinc-800 bg-zinc-900/50">
+                {/* Search Bar and Tools for Reservados */}
+                <div className="p-3 border-b border-zinc-800 bg-zinc-900/50 space-y-2">
+                  {/* Row 1: Search and Delete */}
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
@@ -2352,6 +2625,67 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       </div>
                     )}
                   </div>
+
+                  {/* Row 2: Filters and Tools */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Type Filter */}
+                    <select
+                      value={reservadosTipoFilter}
+                      onChange={(e) => setReservadosTipoFilter(e.target.value as any)}
+                      className="px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                    >
+                      <option value="Todos">Todos los tipos</option>
+                      <option value="Flujo">Flujo</option>
+                      <option value="Contraflujo">Contraflujo</option>
+                      <option value="Bonificacion">Bonificación</option>
+                    </select>
+
+                    {/* Sort */}
+                    <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1">
+                      <span className="text-xs text-zinc-500">Ordenar:</span>
+                      <button
+                        onClick={() => toggleReservadosSort('ciudad')}
+                        className={`px-1.5 py-0.5 text-xs rounded ${reservadosSortColumn === 'ciudad' ? 'bg-purple-500/30 text-purple-300' : 'text-zinc-400 hover:text-white'}`}
+                      >
+                        Ciudad {reservadosSortColumn === 'ciudad' && (reservadosSortDirection === 'asc' ? '↑' : '↓')}
+                      </button>
+                      <button
+                        onClick={() => toggleReservadosSort('codigo')}
+                        className={`px-1.5 py-0.5 text-xs rounded ${reservadosSortColumn === 'codigo' ? 'bg-purple-500/30 text-purple-300' : 'text-zinc-400 hover:text-white'}`}
+                      >
+                        Código {reservadosSortColumn === 'codigo' && (reservadosSortDirection === 'asc' ? '↑' : '↓')}
+                      </button>
+                      <button
+                        onClick={() => toggleReservadosSort('tipo')}
+                        className={`px-1.5 py-0.5 text-xs rounded ${reservadosSortColumn === 'tipo' ? 'bg-purple-500/30 text-purple-300' : 'text-zinc-400 hover:text-white'}`}
+                      >
+                        Tipo {reservadosSortColumn === 'tipo' && (reservadosSortDirection === 'asc' ? '↑' : '↓')}
+                      </button>
+                    </div>
+
+                    {/* Expand/Collapse All */}
+                    <button
+                      onClick={toggleAllCiudadGroups}
+                      className="flex items-center gap-1 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-400 hover:text-white transition-colors"
+                    >
+                      {expandedCiudadGroups.size === groupedReservados.length ? (
+                        <>
+                          <ChevronUp className="h-3 w-3" />
+                          Colapsar
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-3 w-3" />
+                          Expandir
+                        </>
+                      )}
+                    </button>
+
+                    {/* Results count */}
+                    <span className="text-xs text-zinc-500 ml-auto">
+                      {filteredReservados.length} de {currentCaraReservas.length}
+                    </span>
+                  </div>
                 </div>
 
                 {currentCaraReservas.length === 0 ? (
@@ -2370,59 +2704,168 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                               type="checkbox"
                               checked={filteredReservados.length > 0 && selectedReservados.size === filteredReservados.length}
                               onChange={handleToggleSelectAllReservados}
-                              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                              className="checkbox-purple"
                             />
                           </th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Código</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Tipo</th>
-                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Plaza</th>
+                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Formato</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Ubicación</th>
                           <th className="px-4 py-3 text-center text-xs text-zinc-400 font-medium">Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredReservados.map((reserva) => (
-                          <tr
-                            key={reserva.id}
-                            onClick={() => handleToggleReservadoSelection(reserva.id)}
-                            className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'}`}
-                          >
-                            <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={selectedReservados.has(reserva.id)}
-                                onChange={() => handleToggleReservadoSelection(reserva.id)}
-                                className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
-                              />
-                            </td>
-                            <td className="px-4 py-3 text-zinc-300 font-mono text-sm">{reserva.codigo_unico}</td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
-                                ? 'bg-blue-500/20 text-blue-300'
-                                : reserva.tipo === 'Bonificacion'
-                                  ? 'bg-emerald-500/20 text-emerald-300'
-                                  : 'bg-amber-500/20 text-amber-300'
-                                }`}>
-                                {reserva.tipo}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-zinc-300">{reserva.plaza}</td>
-                            <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
-                              {reserva.ubicacion || '-'}
-                            </td>
-                            <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={() => handleRemoveReserva(reserva.id)}
-                                className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                title="Quitar reserva"
+                        {/* Grouped by Ciudad */}
+                        {groupedReservados.map(([ciudad, items]) => (
+                          <React.Fragment key={ciudad}>
+                            {/* Ciudad Group Header */}
+                            <tr
+                              className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
+                              onClick={() => toggleCiudadGroupExpansion(ciudad)}
+                            >
+                              <td colSpan={6} className="px-3 py-2">
+                                <div className="flex items-center gap-3">
+                                  {expandedCiudadGroups.has(ciudad) ? (
+                                    <ChevronDown className="h-4 w-4 text-purple-400" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 text-purple-400" />
+                                  )}
+                                  <MapPin className="h-4 w-4 text-zinc-500" />
+                                  <span className="text-sm font-medium text-white">{ciudad}</span>
+                                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                                    {items.length} reservas
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                            {/* Ciudad Items */}
+                            {expandedCiudadGroups.has(ciudad) && items.map((reserva) => (
+                              <tr
+                                key={reserva.id}
+                                onClick={() => handleToggleReservadoSelection(reserva.id)}
+                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'}`}
                               >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </td>
-                          </tr>
+                                <td className="px-3 py-3 pl-8 text-center" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedReservados.has(reserva.id)}
+                                    onChange={() => handleToggleReservadoSelection(reserva.id)}
+                                    className="checkbox-purple"
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-zinc-300 font-mono text-sm">{reserva.codigo_unico}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
+                                    ? 'bg-blue-500/20 text-blue-300'
+                                    : reserva.tipo === 'Bonificacion'
+                                      ? 'bg-emerald-500/20 text-emerald-300'
+                                      : 'bg-amber-500/20 text-amber-300'
+                                    }`}>
+                                    {reserva.tipo}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-zinc-300">{reserva.formato || '-'}</td>
+                                <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
+                                  {reserva.ubicacion || '-'}
+                                </td>
+                                <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      onClick={() => handleEditReserva(reserva)}
+                                      className="p-1.5 text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
+                                      title="Editar formato"
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleRemoveReserva(reserva.id)}
+                                      className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                      title="Quitar reserva"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+
+                {/* Lateral Edit Panel */}
+                {editingReserva && (
+                  <div className="absolute right-0 top-0 bottom-0 w-80 bg-zinc-900 border-l border-zinc-700 shadow-2xl z-20 flex flex-col animate-in slide-in-from-right duration-200">
+                    <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-white">Editar Reserva</h3>
+                      <button
+                        onClick={handleCancelEdit}
+                        className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="flex-1 p-4 space-y-4 overflow-auto">
+                      <div>
+                        <label className="block text-xs text-zinc-500 mb-1">Código</label>
+                        <p className="text-sm text-zinc-300 font-mono">{editingReserva.codigo_unico}</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-500 mb-1">Tipo</label>
+                        <span className={`px-2 py-1 rounded-full text-xs ${editingReserva.tipo === 'Flujo'
+                          ? 'bg-blue-500/20 text-blue-300'
+                          : editingReserva.tipo === 'Bonificacion'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : 'bg-amber-500/20 text-amber-300'
+                          }`}>
+                          {editingReserva.tipo}
+                        </span>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-500 mb-1">Plaza</label>
+                        <p className="text-sm text-zinc-300">{editingReserva.plaza || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-500 mb-1">Ubicación</label>
+                        <p className="text-sm text-zinc-300">{editingReserva.ubicacion || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-500 mb-1.5">Formato</label>
+                        <select
+                          value={editingFormato}
+                          onChange={(e) => setEditingFormato(e.target.value)}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        >
+                          <option value="">-- Seleccionar --</option>
+                          <option value="PARABUS">PARABUS</option>
+                          <option value="MUPI">MUPI</option>
+                          <option value="COLUMNA">COLUMNA</option>
+                          <option value="METROPOLITANO PARALELO">METROPOLITANO PARALELO</option>
+                          <option value="METROPOLITANO PERPENDICULAR">METROPOLITANO PERPENDICULAR</option>
+                          <option value="CASETA DE TAXIS">CASETA DE TAXIS</option>
+                          <option value="BOLERO">BOLERO</option>
+                          <option value="MUPI DE PIEDRA">MUPI DE PIEDRA</option>
+                          <option value="COLUMNA RECARGA">COLUMNA RECARGA</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="p-4 border-t border-zinc-800 flex gap-3">
+                      <button
+                        onClick={handleCancelEdit}
+                        className="flex-1 px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-700 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleSaveFormato}
+                        className="flex-1 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Save className="h-4 w-4" />
+                        Guardar
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -2730,6 +3173,69 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         placeholder="Descripción de la propuesta..."
                       />
                     </div>
+                  </div>
+
+                  {/* Archivo and Update Button */}
+                  <div className="flex items-center justify-between pt-2 border-t border-zinc-700/30">
+                    {/* Archivo section */}
+                    <div className="flex items-center gap-3">
+                      <input
+                        ref={archivoInputRef}
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                        onChange={handleArchivoUpload}
+                      />
+                      {archivoPropuesta ? (
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={archivoPropuesta}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs hover:bg-emerald-500/30 transition-colors"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            Ver Archivo
+                          </a>
+                          <button
+                            onClick={() => archivoInputRef.current?.click()}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700/50 text-zinc-300 border border-zinc-600 rounded-lg text-xs hover:bg-zinc-700 transition-colors"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            Cambiar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => archivoInputRef.current?.click()}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700/50 text-zinc-300 border border-zinc-600 rounded-lg text-xs hover:bg-zinc-700 transition-colors"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Subir Archivo
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Update button - shows when there are changes */}
+                    {hasChanges && (
+                      <button
+                        onClick={handleUpdatePropuesta}
+                        disabled={isUpdatingPropuesta}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isUpdatingPropuesta ? (
+                          <>
+                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Guardando...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4" />
+                            Actualizar Propuesta
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3046,17 +3552,37 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                             const totalCaras = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
                             const carasFaltantes = status.totalRequerido - status.totalReservado;
 
+                            // Determine status color and indicator
+                            const statusColor = status.totalDiff === 0
+                              ? 'emerald' // Exact match
+                              : status.totalDiff > 0
+                                ? 'amber' // Over-reserved (needs attention)
+                                : 'red'; // Under-reserved (deficit)
+
                             return (
-                              <div key={cara.localId} className={`${status.isComplete ? 'bg-emerald-500/5' : 'bg-zinc-800/20'}`}>
+                              <div key={cara.localId} className={`${statusColor === 'emerald' ? 'bg-emerald-500/5' : statusColor === 'amber' ? 'bg-amber-500/5' : 'bg-red-500/5'}`}>
                                 {/* Cara header */}
                                 <div
                                   className="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-zinc-800/30 transition-colors"
                                   onClick={() => toggleCara(cara.localId)}
                                 >
-                                  {/* Completion indicator */}
-                                  <div className={`w-2 h-2 rounded-full ${status.isComplete ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                                  {/* Completion indicator with difference badge */}
+                                  <div className="relative">
+                                    <div className={`w-2 h-2 rounded-full ${
+                                      statusColor === 'emerald' ? 'bg-emerald-500' :
+                                      statusColor === 'amber' ? 'bg-amber-500 animate-pulse' :
+                                      'bg-red-500 animate-pulse'
+                                    }`} />
+                                    {status.totalDiff !== 0 && (
+                                      <div className={`absolute -top-2 -right-3 px-1.5 py-0.5 text-[9px] font-bold rounded ${
+                                        status.totalDiff > 0 ? 'bg-amber-500 text-amber-950' : 'bg-red-500 text-white'
+                                      }`}>
+                                        {status.totalDiff > 0 ? `+${status.totalDiff}` : status.totalDiff}
+                                      </div>
+                                    )}
+                                  </div>
 
-                                  <button className="text-zinc-400">
+                                  <button className="text-zinc-400 ml-2">
                                     {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                                   </button>
                                   <div className="flex-1 grid grid-cols-4 gap-3 text-sm">
@@ -3074,29 +3600,31 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Caras</span>
-                                      <p className="text-white font-medium">{totalCaras}</p>
+                                      <div className="flex items-center gap-1">
+                                        <p className="text-white font-medium">{status.totalReservado}/{totalCaras}</p>
+                                        {status.totalDiff !== 0 && (
+                                          <span className={`text-xs font-medium ${status.totalDiff > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                                            ({status.totalDiff > 0 ? '+' : ''}{status.totalDiff})
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleSearchInventory(cara); }}
-                                      disabled={status.isComplete}
                                       className={`p-2 rounded-lg border transition-colors ${status.isComplete
-                                        ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
                                         : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
                                         }`}
-                                      title={status.isComplete ? 'Ya está completo' : 'Buscar inventario'}
+                                      title={status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
                                     >
                                       <Search className="h-4 w-4" />
                                     </button>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
-                                      disabled={hasReservas}
-                                      className={`p-2 rounded-lg border transition-colors ${hasReservas
-                                        ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
-                                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
-                                        }`}
-                                      title={hasReservas ? 'No se puede editar (tiene reservas)' : 'Editar'}
+                                      className="p-2 rounded-lg border transition-colors bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
+                                      title="Editar"
                                     >
                                       <Pencil className="h-4 w-4" />
                                     </button>
@@ -3184,110 +3712,208 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                 </div>
               </div>
 
-              {/* Section 3: Reservas Summary with Map and KPIs */}
-              {reservas.length > 0 && (
-                <div className="bg-zinc-800/30 rounded-2xl border border-zinc-700/50 overflow-hidden">
-                  <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50">
-                    <h3 className="text-sm font-medium text-white flex items-center gap-2">
-                      <MapIcon className="h-4 w-4 text-purple-400" />
-                      Resumen de Reservas
-                    </h3>
-                  </div>
-                  <div className="flex min-h-[420px]">
-                    {/* KPIs Panel */}
-                    <div className="w-64 p-4 border-r border-zinc-700/50 bg-zinc-900/30 space-y-4 flex-shrink-0">
-                      {/* Total Reservadas */}
-                      <div className="p-3 bg-purple-500/10 rounded-xl border border-purple-500/20">
-                        <p className="text-xs text-zinc-400 mb-1">Total Reservadas</p>
-                        <p className="text-2xl font-bold text-purple-400">{reservasKPIs.total}</p>
-                      </div>
+              {/* Section 3: Reservas Summary with Map and Selection */}
+              {reservas.length > 0 && (() => {
+                // Group reservas by plaza for selection
+                const reservasByPlaza = reservas.reduce((acc, r) => {
+                  const plaza = r.plaza || 'Sin Plaza';
+                  if (!acc[plaza]) acc[plaza] = [];
+                  acc[plaza].push(r);
+                  return acc;
+                }, {} as Record<string, typeof reservas>);
+                const plazas = Object.keys(reservasByPlaza).sort();
 
-                      {/* Renta vs Bonificadas */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20">
-                          <p className="text-xs text-zinc-400 mb-1">Renta</p>
-                          <p className="text-xl font-bold text-blue-400">{reservasKPIs.renta}</p>
-                        </div>
-                        <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-                          <p className="text-xs text-zinc-400 mb-1">Bonificadas</p>
-                          <p className="text-xl font-bold text-emerald-400">{reservasKPIs.bonificadas}</p>
-                        </div>
-                      </div>
+                // Toggle functions
+                const toggleAllMapReservas = () => {
+                  if (selectedMapReservas.size === reservas.length) {
+                    setSelectedMapReservas(new Set());
+                  } else {
+                    setSelectedMapReservas(new Set(reservas.map(r => r.id)));
+                  }
+                };
+                const togglePlazaMapReservas = (plaza: string) => {
+                  const plazaIds = reservasByPlaza[plaza].map(r => r.id);
+                  const allSelected = plazaIds.every(id => selectedMapReservas.has(id));
+                  setSelectedMapReservas(prev => {
+                    const next = new Set(prev);
+                    if (allSelected) {
+                      plazaIds.forEach(id => next.delete(id));
+                    } else {
+                      plazaIds.forEach(id => next.add(id));
+                    }
+                    return next;
+                  });
+                };
+                const toggleSingleMapReserva = (id: string) => {
+                  setSelectedMapReservas(prev => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  });
+                };
 
-                      {/* Digitales */}
-                      <div className="p-3 bg-cyan-500/10 rounded-xl border border-cyan-500/20">
-                        <p className="text-xs text-zinc-400 mb-1">Digitales</p>
-                        <p className="text-xl font-bold text-cyan-400">{reservasKPIs.digitales}</p>
-                      </div>
-
-                      {/* Dinero Acumulado */}
-                      <div className="p-3 bg-gradient-to-br from-amber-500/10 to-orange-500/10 rounded-xl border border-amber-500/20">
-                        <p className="text-xs text-zinc-400 mb-1">Inversión Acumulada</p>
-                        <p className="text-xl font-bold text-amber-400">
-                          ${reservasKPIs.dineroTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </p>
-                      </div>
-
-                      {/* Breakdown */}
-                      <div className="pt-3 border-t border-zinc-700/50">
-                        <p className="text-xs text-zinc-500 mb-2">Desglose por tipo:</p>
-                        <div className="space-y-1 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-zinc-400">Flujo:</span>
-                            <span className="text-blue-300 font-medium">{reservasKPIs.flujo}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-zinc-400">Contraflujo:</span>
-                            <span className="text-amber-300 font-medium">{reservasKPIs.contraflujo}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-zinc-400">Bonificación:</span>
-                            <span className="text-emerald-300 font-medium">{reservasKPIs.bonificadas}</span>
-                          </div>
-                        </div>
+                return (
+                  <div className="bg-zinc-800/30 rounded-2xl border border-zinc-700/50 overflow-hidden">
+                    <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50 flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-white flex items-center gap-2">
+                        <MapIcon className="h-4 w-4 text-purple-400" />
+                        Resumen de Reservas
+                      </h3>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="text-zinc-400">
+                          {selectedMapReservas.size > 0
+                            ? `${selectedMapReservas.size} seleccionadas`
+                            : 'Selecciona para resaltar en mapa'}
+                        </span>
+                        {selectedMapReservas.size > 0 && (
+                          <button
+                            onClick={() => setSelectedMapReservas(new Set())}
+                            className="text-purple-400 hover:text-purple-300"
+                          >
+                            Limpiar
+                          </button>
+                        )}
                       </div>
                     </div>
-
-                    {/* Map */}
-                    <div className="flex-1">
-                      {mapsLoaded ? (
-                        <GoogleMap
-                          mapContainerStyle={{ width: '100%', height: '100%' }}
-                          center={{ lat: 20.6597, lng: -103.3496 }}
-                          zoom={11}
-                          options={{
-                            styles: DARK_MAP_STYLES,
-                            disableDefaultUI: true,
-                            zoomControl: true,
-                          }}
-                        >
-                          {reservas.map(reserva => (
-                            reserva.latitud && reserva.longitud && (
-                              <Marker
-                                key={reserva.id}
-                                position={{ lat: reserva.latitud, lng: reserva.longitud }}
-                                icon={{
-                                  path: google.maps.SymbolPath.CIRCLE,
-                                  scale: 8,
-                                  fillColor: reserva.tipo === 'Flujo' ? '#3b82f6' :
-                                    reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
-                                  fillOpacity: 0.9,
-                                  strokeColor: '#fff',
-                                  strokeWeight: 2,
-                                }}
-                              />
-                            )
-                          ))}
-                        </GoogleMap>
-                      ) : (
-                        <div className="flex items-center justify-center h-full bg-zinc-800">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+                    <div className="flex min-h-[420px]">
+                      {/* Selection Panel */}
+                      <div className="w-72 border-r border-zinc-700/50 bg-zinc-900/30 flex flex-col flex-shrink-0">
+                        {/* Select All Header */}
+                        <div className="px-4 py-3 border-b border-zinc-700/50 bg-zinc-800/50">
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedMapReservas.size === reservas.length && reservas.length > 0}
+                              onChange={toggleAllMapReservas}
+                              className="checkbox-purple"
+                            />
+                            <span className="text-sm font-medium text-white">Seleccionar Todas</span>
+                            <span className="ml-auto px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                              {reservas.length}
+                            </span>
+                          </label>
                         </div>
-                      )}
+                        {/* Plaza Groups */}
+                        <div className="flex-1 overflow-y-auto scrollbar-thin">
+                          {plazas.map(plaza => {
+                            const plazaReservas = reservasByPlaza[plaza];
+                            const plazaIds = plazaReservas.map(r => r.id);
+                            const allPlazaSelected = plazaIds.every(id => selectedMapReservas.has(id));
+                            const somePlazaSelected = plazaIds.some(id => selectedMapReservas.has(id));
+
+                            return (
+                              <div key={plaza} className="border-b border-zinc-800/50">
+                                {/* Plaza Header */}
+                                <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/30 hover:bg-zinc-800/50">
+                                  <input
+                                    type="checkbox"
+                                    checked={allPlazaSelected}
+                                    ref={(el) => { if (el) el.indeterminate = somePlazaSelected && !allPlazaSelected; }}
+                                    onChange={() => togglePlazaMapReservas(plaza)}
+                                    className="checkbox-purple"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                  <MapPin className="h-3.5 w-3.5 text-zinc-500" />
+                                  <span className="text-sm text-white flex-1">{plaza}</span>
+                                  <span className="text-xs text-zinc-500">{plazaReservas.length}</span>
+                                </div>
+                                {/* Individual Reservas */}
+                                <div className="bg-zinc-900/50">
+                                  {plazaReservas.map(reserva => (
+                                    <label
+                                      key={reserva.id}
+                                      className={`flex items-center gap-2 px-4 py-1.5 pl-8 cursor-pointer text-xs transition-colors ${
+                                        selectedMapReservas.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedMapReservas.has(reserva.id)}
+                                        onChange={() => toggleSingleMapReserva(reserva.id)}
+                                        className="checkbox-purple"
+                                      />
+                                      <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
+                                      <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
+                                        reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
+                                        reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' :
+                                        'bg-emerald-500/20 text-emerald-300'
+                                      }`}>
+                                        {reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* KPIs Mini Summary */}
+                        <div className="p-3 border-t border-zinc-700/50 bg-zinc-800/50">
+                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                            <div>
+                              <p className="text-zinc-500">Flujo</p>
+                              <p className="text-blue-400 font-bold">{reservasKPIs.flujo}</p>
+                            </div>
+                            <div>
+                              <p className="text-zinc-500">Contra</p>
+                              <p className="text-amber-400 font-bold">{reservasKPIs.contraflujo}</p>
+                            </div>
+                            <div>
+                              <p className="text-zinc-500">Bonif</p>
+                              <p className="text-emerald-400 font-bold">{reservasKPIs.bonificadas}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Map */}
+                      <div className="flex-1">
+                        {mapsLoaded ? (
+                          <GoogleMap
+                            mapContainerStyle={{ width: '100%', height: '100%' }}
+                            center={{ lat: 20.6597, lng: -103.3496 }}
+                            zoom={11}
+                            options={{
+                              styles: DARK_MAP_STYLES,
+                              disableDefaultUI: true,
+                              zoomControl: true,
+                            }}
+                          >
+                            {reservas.map(reserva => {
+                              if (!reserva.latitud || !reserva.longitud) return null;
+                              const isSelected = selectedMapReservas.has(reserva.id);
+                              const hasSelection = selectedMapReservas.size > 0;
+
+                              return (
+                                <Marker
+                                  key={reserva.id}
+                                  position={{ lat: reserva.latitud, lng: reserva.longitud }}
+                                  onClick={() => toggleSingleMapReserva(reserva.id)}
+                                  icon={{
+                                    path: google.maps.SymbolPath.CIRCLE,
+                                    scale: isSelected ? 12 : (hasSelection ? 6 : 8),
+                                    fillColor: reserva.tipo === 'Flujo' ? '#3b82f6' :
+                                      reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
+                                    fillOpacity: isSelected ? 1 : (hasSelection ? 0.3 : 0.9),
+                                    strokeColor: isSelected ? '#fff' : (hasSelection ? 'transparent' : '#fff'),
+                                    strokeWeight: isSelected ? 3 : 2,
+                                  }}
+                                  zIndex={isSelected ? 1000 : 1}
+                                />
+                              );
+                            })}
+                          </GoogleMap>
+                        ) : (
+                          <div className="flex items-center justify-center h-full bg-zinc-800">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </>
           )}
         </div>

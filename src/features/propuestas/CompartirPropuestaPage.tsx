@@ -196,12 +196,50 @@ export function CompartirPropuestaPage() {
     a.click();
   };
 
-  const handleDownloadKML = () => {
+  // Download ALL items as KML
+  const handleDownloadKMLAll = () => {
     if (!inventario) return;
-    // If items are selected, only export those; otherwise export all
-    const itemsToExport = selectedItems.size > 0
-      ? inventario.filter(i => selectedItems.has(i.id))
-      : inventario;
+
+    const placemarks = inventario
+      .filter(i => i.latitud && i.longitud)
+      .map(i => `
+        <Placemark>
+          <name>${i.codigo_unico}</name>
+          <description>
+            <![CDATA[
+              Plaza: ${i.plaza || 'N/A'}<br/>
+              Tipo: ${i.tipo_de_cara || 'N/A'}<br/>
+              Formato: ${i.tipo_de_mueble || 'N/A'}<br/>
+              Caras: ${i.caras_totales}
+            ]]>
+          </description>
+          <Point>
+            <coordinates>${i.longitud},${i.latitud},0</coordinates>
+          </Point>
+        </Placemark>
+      `).join('');
+
+    const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Reservas Propuesta ${propuestaId} - Todos</name>
+    ${placemarks}
+  </Document>
+</kml>`;
+
+    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reservas_propuesta_${propuestaId}_todos.kml`;
+    a.click();
+  };
+
+  // Download only SELECTED items as KML
+  const handleDownloadKMLSelected = () => {
+    if (!inventario || selectedItems.size === 0) return;
+
+    const itemsToExport = inventario.filter(i => selectedItems.has(i.id));
 
     const placemarks = itemsToExport
       .filter(i => i.latitud && i.longitud)
@@ -225,7 +263,7 @@ export function CompartirPropuestaPage() {
     const kml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
-    <name>Reservas Propuesta ${propuestaId}${selectedItems.size > 0 ? ` (${selectedItems.size} seleccionados)` : ''}</name>
+    <name>Reservas Propuesta ${propuestaId} - ${selectedItems.size} seleccionados</name>
     ${placemarks}
   </Document>
 </kml>`;
@@ -234,7 +272,7 @@ export function CompartirPropuestaPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `reservas_propuesta_${propuestaId}.kml`;
+    a.download = `reservas_propuesta_${propuestaId}_seleccionados.kml`;
     a.click();
   };
 
@@ -285,54 +323,83 @@ export function CompartirPropuestaPage() {
     let y = 15;
 
     // IMU Brand Colors
-    const IMU_BLUE_R = 0, IMU_BLUE_G = 84, IMU_BLUE_B = 166; // #0054A6
-    const IMU_GREEN_R = 122, IMU_GREEN_G = 184, IMU_GREEN_B = 0; // #7AB800
+    const IMU_BLUE: [number, number, number] = [0, 84, 166]; // #0054A6
+    const IMU_GREEN: [number, number, number] = [122, 184, 0]; // #7AB800
+    const IMU_DARK: [number, number, number] = [0, 61, 122]; // Darker blue
+    const WHITE: [number, number, number] = [255, 255, 255];
 
-    // Header with IMU blue
-    doc.setFillColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
-    doc.rect(0, 0, pageWidth, 25, 'F');
+    // Header - Clean white background with colored accents
+    doc.setFillColor(...WHITE);
+    doc.rect(0, 0, pageWidth, 30, 'F');
 
-    // Add green accent line
-    doc.setFillColor(IMU_GREEN_R, IMU_GREEN_G, IMU_GREEN_B);
-    doc.rect(0, 23, pageWidth, 2, 'F');
+    // Top accent bar - green
+    doc.setFillColor(...IMU_GREEN);
+    doc.rect(0, 0, pageWidth, 3, 'F');
 
-    // IMU Logo (text placeholder - can be replaced with actual image)
-    doc.setFontSize(20);
+    // Bottom accent bar - blue
+    doc.setFillColor(...IMU_BLUE);
+    doc.rect(0, 27, pageWidth, 3, 'F');
+
+    // IMU Logo - Load and add image with correct proportions
+    try {
+      const logoImg = new Image();
+      logoImg.src = '/logo-grupo-imu.png';
+      await new Promise((resolve, reject) => {
+        logoImg.onload = resolve;
+        logoImg.onerror = reject;
+        setTimeout(resolve, 1000);
+      });
+      if (logoImg.complete && logoImg.naturalWidth > 0) {
+        // Calculate aspect ratio to avoid squishing
+        const aspectRatio = logoImg.naturalWidth / logoImg.naturalHeight;
+        const logoHeight = 18;
+        const logoWidth = logoHeight * aspectRatio;
+        doc.addImage(logoImg, 'PNG', marginX, 6, logoWidth, logoHeight);
+      }
+    } catch {
+      // Fallback to styled text
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...IMU_BLUE);
+      doc.text('GRUPO IMU', marginX, 18);
+    }
+
+    // Title - centered
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(IMU_GREEN_R, IMU_GREEN_G, IMU_GREEN_B);
-    doc.text('IMU', marginX, 15);
-    doc.setFontSize(8);
-    doc.setTextColor(255, 255, 255);
-    doc.text('GRUPO', marginX, 20);
-
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
-    doc.text('PROPUESTA DE CAMPAÑA PUBLICITARIA', pageWidth / 2, 12, { align: 'center' });
+    doc.setTextColor(...IMU_DARK);
+    doc.text('PROPUESTA DE CAMPAÑA PUBLICITARIA', pageWidth / 2, 14, { align: 'center' });
 
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text('Vista Interna', pageWidth / 2, 18, { align: 'center' });
+    doc.setTextColor(100, 100, 100);
+    doc.text('Documento Interno', pageWidth / 2, 20, { align: 'center' });
 
+    // Right side info
     const fechaActual = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
     doc.setFontSize(8);
-    doc.text(fechaActual, pageWidth - marginX, 8, { align: 'right' });
-    doc.text(`Propuesta #${propuestaId}`, pageWidth - marginX, 14, { align: 'right' });
+    doc.setTextColor(80, 80, 80);
+    doc.text(fechaActual, pageWidth - marginX, 10, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...IMU_BLUE);
+    doc.text(`Propuesta #${propuestaId}`, pageWidth - marginX, 16, { align: 'right' });
 
-    // Link to client view
+    // Link styled as button
     const clientViewUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}`;
-    doc.setTextColor(200, 230, 255);
-    const linkText = 'Ver propuesta cliente';
-    const linkWidth = doc.getTextWidth(linkText);
-    doc.textWithLink(linkText, pageWidth - marginX - linkWidth, 15, { url: clientViewUrl });
+    doc.setFillColor(...IMU_GREEN);
+    doc.roundedRect(pageWidth - marginX - 45, 19, 45, 6, 1, 1, 'F');
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...WHITE);
+    doc.textWithLink('Ver propuesta cliente >', pageWidth - marginX - 43, 23, { url: clientViewUrl });
 
-    y = 35;
+    y = 38;
 
     // Client info section
-    doc.setFillColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+    doc.setFillColor(...IMU_BLUE);
     doc.rect(marginX, y, pageWidth - marginX * 2, 7, 'F');
     doc.setFontSize(10);
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(...WHITE);
     doc.text('INFORMACIÓN DEL CLIENTE', marginX + 5, y + 5);
     y += 12;
 
@@ -351,7 +418,7 @@ export function CompartirPropuestaPage() {
       const x = marginX + (idx % 3) * 95;
       const row = Math.floor(idx / 3);
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+      doc.setTextColor(...IMU_BLUE);
       doc.text(`${label}:`, x, y + row * 7);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(60, 60, 60);
@@ -360,33 +427,49 @@ export function CompartirPropuestaPage() {
     y += 22;
 
     // Campaign info
-    doc.setFillColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+    doc.setFillColor(...IMU_BLUE);
     doc.rect(marginX, y, pageWidth - marginX * 2, 7, 'F');
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(...WHITE);
     doc.text('DATOS DE LA PROPUESTA', marginX + 5, y + 5);
     y += 12;
 
     doc.setTextColor(60, 60, 60);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+    doc.setTextColor(...IMU_BLUE);
     doc.text('Nombre Campaña:', marginX, y);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(60, 60, 60);
     doc.text(details?.cotizacion?.nombre_campania || 'N/A', marginX + 40, y);
 
-    if (details?.cotizacion?.fecha_inicio && details?.cotizacion?.fecha_fin) {
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
-      doc.text('Periodo:', marginX + 150, y);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(60, 60, 60);
-      doc.text(`${formatDate(details.cotizacion.fecha_inicio)} - ${formatDate(details.cotizacion.fecha_fin)}`, marginX + 170, y);
+    // Calculate catorcena range from inventory
+    if (inventario && inventario.length > 0) {
+      const catorcenas = inventario
+        .filter(i => i.numero_catorcena && i.anio_catorcena)
+        .map(i => ({ num: i.numero_catorcena!, year: i.anio_catorcena! }));
+
+      if (catorcenas.length > 0) {
+        const sorted = catorcenas.sort((a, b) =>
+          a.year !== b.year ? a.year - b.year : a.num - b.num
+        );
+        const first = sorted[0];
+        const last = sorted[sorted.length - 1];
+
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...IMU_BLUE);
+        doc.text('Periodo:', marginX + 150, y);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(60, 60, 60);
+        const periodoText = first.year === last.year && first.num === last.num
+          ? `Catorcena ${first.num}, ${first.year}`
+          : `Catorcena ${first.num}/${first.year} - Catorcena ${last.num}/${last.year}`;
+        doc.text(periodoText, marginX + 170, y);
+      }
     }
     y += 8;
 
     if (details?.propuesta?.descripcion) {
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+      doc.setTextColor(...IMU_BLUE);
       doc.text('Descripción:', marginX, y);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(60, 60, 60);
@@ -396,27 +479,27 @@ export function CompartirPropuestaPage() {
     }
     y += 8;
 
-    // KPIs with colored boxes
-    doc.setFillColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
+    // KPIs with IMU colored boxes
+    doc.setFillColor(...IMU_BLUE);
     doc.rect(marginX, y, pageWidth - marginX * 2, 7, 'F');
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(...WHITE);
     doc.text('RESUMEN DE MÉTRICAS', marginX + 5, y + 5);
     y += 12;
 
     const kpiData = [
-      { label: 'Total Caras', value: String(kpis.total), color: [139, 92, 246] },
-      { label: 'En Renta', value: String(kpis.renta), color: [167, 139, 250] },
-      { label: 'Bonificadas', value: String(kpis.bonificadas), color: [192, 132, 252] },
-      { label: 'Inversión Total', value: formatCurrency(kpis.inversion), color: [109, 40, 217] },
+      { label: 'Total Caras', value: String(kpis.total), color: IMU_BLUE },
+      { label: 'En Renta', value: String(kpis.renta), color: IMU_GREEN },
+      { label: 'Bonificadas', value: String(kpis.bonificadas), color: [0, 150, 180] as [number, number, number] }, // Cyan
+      { label: 'Inversión Total', value: formatCurrency(kpis.inversion), color: [220, 160, 0] as [number, number, number] }, // Amber
     ];
 
     const kpiWidth = (pageWidth - marginX * 2 - 15) / 4;
     kpiData.forEach((kpi, idx) => {
       const x = marginX + idx * (kpiWidth + 5);
-      doc.setFillColor(kpi.color[0], kpi.color[1], kpi.color[2]);
+      doc.setFillColor(...kpi.color);
       doc.roundedRect(x, y, kpiWidth, 15, 2, 2, 'F');
       doc.setFontSize(8);
-      doc.setTextColor(255, 255, 255);
+      doc.setTextColor(...WHITE);
       doc.text(kpi.label, x + kpiWidth / 2, y + 5, { align: 'center' });
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
@@ -424,7 +507,7 @@ export function CompartirPropuestaPage() {
     });
     y += 25;
 
-    // Table grouped by Catorcena > Artículo
+    // Table grouped by Catorcena > Artículo (separate rows)
     if (inventario && inventario.length > 0) {
       // Group by catorcena first, then by articulo
       const grouped: Record<string, Record<string, typeof inventario>> = {};
@@ -436,47 +519,66 @@ export function CompartirPropuestaPage() {
         grouped[catKey][artKey].push(item);
       });
 
-      const headers = ['Código', 'Plaza', 'Tipo', 'Formato', 'Caras', 'Ubicación'];
-      const tableBody: any[] = [];
-
       Object.entries(grouped).forEach(([catorcena, articulos]) => {
-        // Catorcena header row
-        tableBody.push([{ content: `📅 ${catorcena}`, colSpan: 6, styles: { fillColor: [IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 } }]);
+        // === CATORCENA HEADER (separate section) ===
+        doc.setFillColor(...IMU_BLUE);
+        doc.roundedRect(marginX, y, pageWidth - marginX * 2, 8, 1, 1, 'F');
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...WHITE);
+        doc.text(catorcena, marginX + 5, y + 5.5);
+        y += 10;
 
         Object.entries(articulos).forEach(([articulo, items]) => {
           // Calculate group totals
           const groupCaras = items.reduce((sum, i) => sum + i.caras_totales, 0);
           const groupTarifa = items.reduce((sum, i) => sum + (i.tarifa_publica || 0) * i.caras_totales, 0);
 
-          // Articulo sub-header with tarifa
-          tableBody.push([{ content: `📦 ${articulo} | Caras: ${groupCaras} | Inversión: ${formatCurrency(groupTarifa)}`, colSpan: 6, styles: { fillColor: [IMU_GREEN_R, IMU_GREEN_G, IMU_GREEN_B], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 } }]);
+          // === ARTICULO SUB-HEADER ===
+          doc.setFillColor(...IMU_GREEN);
+          doc.roundedRect(marginX + 5, y, pageWidth - marginX * 2 - 10, 6, 1, 1, 'F');
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...WHITE);
+          doc.text(`${articulo}`, marginX + 10, y + 4);
+          doc.setFont('helvetica', 'normal');
+          doc.text(`Caras: ${groupCaras}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
+          y += 8;
 
-          // Items in this group
-          items.forEach(i => {
-            tableBody.push([
-              i.codigo_unico || '',
-              i.plaza || '',
-              i.tipo_de_cara || '',
-              i.tipo_de_mueble || '',
-              String(i.caras_totales),
-              (i.ubicacion || '').substring(0, 40),
-            ]);
+          // === TABLE FOR THIS ARTICULO ===
+          const tableData = items.map(i => [
+            i.codigo_unico || '',
+            i.plaza || '',
+            i.tipo_de_cara || '',
+            i.tipo_de_mueble || '',
+            String(i.caras_totales),
+            (i.ubicacion || '').substring(0, 40),
+          ]);
+
+          autoTable(doc, {
+            head: [['Código', 'Plaza', 'Tipo', 'Formato', 'Caras', 'Ubicación']],
+            body: tableData,
+            startY: y,
+            margin: { left: marginX + 5, right: marginX + 5 },
+            styles: { fontSize: 7, cellPadding: 2 },
+            headStyles: { fillColor: [230, 240, 250], textColor: IMU_BLUE, fontStyle: 'bold', fontSize: 7 },
+            alternateRowStyles: { fillColor: [250, 252, 255] },
+            columnStyles: {
+              0: { cellWidth: 32 },
+              4: { halign: 'center', cellWidth: 14 },
+            },
           });
-        });
-      });
 
-      autoTable(doc, {
-        head: [headers],
-        body: tableBody,
-        startY: y,
-        margin: { left: marginX, right: marginX },
-        styles: { fontSize: 7, cellPadding: 2 },
-        headStyles: { fillColor: [IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [245, 250, 255] },
-        columnStyles: {
-          0: { cellWidth: 35 },
-          4: { halign: 'center', cellWidth: 15 },
-        },
+          y = (doc as any).lastAutoTable.finalY + 5;
+
+          // Check page break
+          if (y > pageHeight - 40) {
+            doc.addPage();
+            y = 20;
+          }
+        });
+
+        y += 5; // Extra space after catorcena group
       });
     }
 
@@ -484,13 +586,15 @@ export function CompartirPropuestaPage() {
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
-      doc.setFillColor(IMU_BLUE_R, IMU_BLUE_G, IMU_BLUE_B);
-      doc.rect(0, pageHeight - 12, pageWidth, 12, 'F');
-      doc.setTextColor(255, 255, 255);
+      doc.setFillColor(...IMU_GREEN);
+      doc.rect(0, pageHeight - 12, pageWidth, 1, 'F');
+      doc.setFillColor(...IMU_BLUE);
+      doc.rect(0, pageHeight - 11, pageWidth, 11, 'F');
+      doc.setTextColor(...WHITE);
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      doc.text('IMU - Grupo IMU | Documento generado automáticamente', marginX, pageHeight - 5);
-      doc.text(`Página ${i} de ${totalPages}`, pageWidth - marginX, pageHeight - 5, { align: 'right' });
+      doc.text('Grupo IMU | Documento generado automaticamente', marginX, pageHeight - 4);
+      doc.text(`Pagina ${i} de ${totalPages}`, pageWidth - marginX, pageHeight - 4, { align: 'right' });
     }
 
     doc.save(`Propuesta_Interna_${propuestaId}.pdf`);
@@ -574,11 +678,12 @@ export function CompartirPropuestaPage() {
               {copied ? 'Copiado!' : 'Copiar Enlace'}
             </button>
             <button
-              onClick={handleDownloadKML}
+              onClick={handleDownloadKMLAll}
               className="flex items-center gap-2 px-4 py-2 bg-zinc-800/80 hover:bg-purple-500/20 text-white rounded-lg text-sm font-medium transition-colors border border-purple-500/30"
+              title="Descargar KML de todos los inventarios"
             >
               <Map className="h-4 w-4" />
-              KML
+              KML Todo
             </button>
             <button
               onClick={handleGeneratePDF}
@@ -751,13 +856,25 @@ export function CompartirPropuestaPage() {
               </button>
             </div>
 
-            <button
-              onClick={handleDownloadCSV}
-              className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg text-sm shadow-lg shadow-emerald-500/20"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              CSV
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={handleDownloadCSV}
+                className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg text-sm shadow-lg shadow-emerald-500/20"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                CSV
+              </button>
+              {selectedItems.size > 0 && (
+                <button
+                  onClick={handleDownloadKMLSelected}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-lg text-sm shadow-lg shadow-blue-500/20"
+                  title={`Descargar KML de ${selectedItems.size} seleccionados`}
+                >
+                  <Map className="h-4 w-4" />
+                  KML ({selectedItems.size})
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Selection info and actions */}
@@ -788,7 +905,7 @@ export function CompartirPropuestaPage() {
                       checked={allGroupSelected}
                       ref={(el) => { if (el) el.indeterminate = someGroupSelected && !allGroupSelected; }}
                       onChange={() => toggleGroupSelection(items)}
-                      className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                      className="checkbox-purple"
                       onClick={(e) => e.stopPropagation()}
                     />
                     <button
@@ -818,7 +935,6 @@ export function CompartirPropuestaPage() {
                           <th className="px-4 py-2 text-left">Tipo</th>
                           <th className="px-4 py-2 text-left">Formato</th>
                           <th className="px-4 py-2 text-center">Caras</th>
-                          <th className="px-4 py-2 text-right">Tarifa</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -833,7 +949,7 @@ export function CompartirPropuestaPage() {
                                 type="checkbox"
                                 checked={selectedItems.has(item.id)}
                                 onChange={() => toggleItemSelection(item.id)}
-                                className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500/50"
+                                className="checkbox-purple"
                               />
                             </td>
                             <td className="px-4 py-2 text-blue-300 font-mono text-xs">{item.codigo_unico}</td>
@@ -842,7 +958,6 @@ export function CompartirPropuestaPage() {
                             <td className="px-4 py-2 text-zinc-300">{item.tipo_de_cara}</td>
                             <td className="px-4 py-2 text-zinc-400">{item.tipo_de_mueble}</td>
                             <td className="px-4 py-2 text-center text-white">{item.caras_totales}</td>
-                            <td className="px-4 py-2 text-right text-amber-400">{formatCurrency(item.tarifa_publica || 0)}</td>
                           </tr>
                         ))}
                       </tbody>

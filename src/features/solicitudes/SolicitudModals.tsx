@@ -88,46 +88,78 @@ function getCatorcenaRange(fechaInicio: string, fechaFin: string, catorcenas: Ca
   return `${formatDate(fechaInicio)} al ${formatDate(fechaFin)}`;
 }
 
-// Group caras by catorcena and articulo
-interface GroupedCaras {
-  key: string;
-  catorcena: string;
+// Group caras by catorcena (parent) and articulo (nested)
+interface ArticuloGroup {
   articulo: string;
   caras: SolicitudCara[];
   totalCaras: number;
   totalBonificacion: number;
-  totalCosto: number;
+  totalInversion: number;
 }
 
-function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Catorcena[]): GroupedCaras[] {
-  const groups: Map<string, GroupedCaras> = new Map();
+interface CatorcenaGroup {
+  catorcena: string;
+  articulos: ArticuloGroup[];
+  totalCaras: number;
+  totalBonificacion: number;
+  totalInversion: number;
+}
+
+function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Catorcena[]): CatorcenaGroup[] {
+  const catorcenaMap: Map<string, Map<string, SolicitudCara[]>> = new Map();
 
   caras.forEach(cara => {
     const catorcenaResult = dateToCatorcena(cara.inicio_periodo, catorcenas);
     const catorcenaStr = catorcenaResult ? `${catorcenaResult.catorcena} - ${catorcenaResult.year}` : formatDate(cara.inicio_periodo);
     const articulo = cara.articulo || 'Sin artículo';
-    const key = `${catorcenaStr}|${articulo}`;
 
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key,
-        catorcena: catorcenaStr,
-        articulo,
-        caras: [],
-        totalCaras: 0,
-        totalBonificacion: 0,
-        totalCosto: 0,
-      });
+    if (!catorcenaMap.has(catorcenaStr)) {
+      catorcenaMap.set(catorcenaStr, new Map());
     }
+    const articuloMap = catorcenaMap.get(catorcenaStr)!;
 
-    const group = groups.get(key)!;
-    group.caras.push(cara);
-    group.totalCaras += Number(cara.caras) || 0;
-    group.totalBonificacion += Number(cara.bonificacion) || 0;
-    group.totalCosto += Number(cara.costo) || 0;
+    if (!articuloMap.has(articulo)) {
+      articuloMap.set(articulo, []);
+    }
+    articuloMap.get(articulo)!.push(cara);
   });
 
-  return Array.from(groups.values()).sort((a, b) => a.key.localeCompare(b.key));
+  const result: CatorcenaGroup[] = [];
+
+  catorcenaMap.forEach((articuloMap, catorcena) => {
+    const articulos: ArticuloGroup[] = [];
+    let totalCaras = 0;
+    let totalBonificacion = 0;
+    let totalInversion = 0;
+
+    articuloMap.forEach((carasList, articulo) => {
+      const artCaras = carasList.reduce((sum, c) => sum + (Number(c.caras) || 0), 0);
+      const artBonif = carasList.reduce((sum, c) => sum + (Number(c.bonificacion) || 0), 0);
+      const artInversion = carasList.reduce((sum, c) => sum + ((c.tarifa_publica || 0) * (Number(c.caras) || 0)), 0);
+
+      articulos.push({
+        articulo,
+        caras: carasList,
+        totalCaras: artCaras,
+        totalBonificacion: artBonif,
+        totalInversion: artInversion,
+      });
+
+      totalCaras += artCaras;
+      totalBonificacion += artBonif;
+      totalInversion += artInversion;
+    });
+
+    result.push({
+      catorcena,
+      articulos: articulos.sort((a, b) => a.articulo.localeCompare(b.articulo)),
+      totalCaras,
+      totalBonificacion,
+      totalInversion,
+    });
+  });
+
+  return result.sort((a, b) => a.catorcena.localeCompare(b.catorcena));
 }
 
 // ============ VIEW SOLICITUD MODAL ============
@@ -385,7 +417,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
 
       yPos += 8;
 
-      groupedCaras.forEach((group) => {
+      groupedCaras.forEach((catorcenaGroup) => {
         if (yPos > pageHeight - 40) {
           doc.addPage();
           doc.setFillColor(...white);
@@ -402,73 +434,100 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
           yPos = 18;
         }
 
-        // Header del grupo - catorcena con subtotales
-        const groupCarasRenta = group.caras.reduce((sum, c) => sum + (Number(c.caras) || 0), 0);
-        const groupCarasBonif = group.caras.reduce((sum, c) => sum + (Number(c.bonificacion) || 0), 0);
-        const groupInversion = group.caras.reduce((sum, c) => sum + ((Number(c.tarifa_publica) || 0) * (Number(c.caras) || 0)), 0);
-
+        // Header de catorcena
         doc.setFillColor(...imuBlue);
         doc.roundedRect(marginX, yPos, contentWidth, 8, 1, 1, 'F');
         doc.setTextColor(...white);
         doc.setFontSize(8);
         doc.setFont('helvetica', 'bold');
-        doc.text(group.catorcena, marginX + 4, yPos + 5.5);
+        doc.text(catorcenaGroup.catorcena, marginX + 4, yPos + 5.5);
 
-        // Subtotales en el header del grupo
+        // Subtotales en el header de catorcena
         doc.setFontSize(6);
         doc.setFont('helvetica', 'normal');
-        const subtotalText = `Caras: ${groupCarasRenta} | Bonif: ${groupCarasBonif} | Inversión: $${groupInversion.toLocaleString('es-MX')}`;
-        doc.text(subtotalText, pageWidth - marginX - 4, yPos + 5.5, { align: 'right' });
+        const catorcenaSubtotal = `Caras: ${catorcenaGroup.totalCaras} | Bonif: ${catorcenaGroup.totalBonificacion} | Inversión: $${catorcenaGroup.totalInversion.toLocaleString('es-MX')}`;
+        doc.text(catorcenaSubtotal, pageWidth - marginX - 4, yPos + 5.5, { align: 'right' });
         yPos += 10;
 
-        // Tabla mejorada con más datos
-        let rowNum = 0;
-        const tableData = group.caras.map(c => {
-          rowNum++;
-          const inversionCara = (Number(c.tarifa_publica) || 0) * (Number(c.caras) || 0);
-          return [
-            rowNum.toString(),
-            `${c.ciudad || c.estados || '-'}`,
-            c.formato || '-',
-            (Number(c.caras) || 0).toString(),
-            (Number(c.bonificacion) || 0).toString(),
-            `$${inversionCara.toLocaleString('es-MX')}`,
-          ];
-        });
+        // Por cada artículo dentro de la catorcena
+        catorcenaGroup.articulos.forEach((articuloGroup) => {
+          if (yPos > pageHeight - 35) {
+            doc.addPage();
+            doc.setFillColor(...white);
+            doc.rect(0, 0, pageWidth, pageHeight, 'F');
+            doc.setFillColor(...imuDarkBlue);
+            doc.rect(0, 0, pageWidth, 10, 'F');
+            doc.setFillColor(...imuGreen);
+            doc.rect(0, 10, pageWidth, 1, 'F');
+            doc.setTextColor(...white);
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Solicitud ${data.solicitud.id}`, marginX, 7);
+            yPos = 18;
+          }
 
-        autoTable(doc, {
-          startY: yPos,
-          head: [['#', 'Plaza', 'Formato', 'Caras', 'Bonif.', 'Inversión']],
-          body: tableData,
-          theme: 'plain',
-          margin: { left: marginX, right: marginX },
-          styles: {
-            fontSize: 7,
-            cellPadding: 2.5,
-            textColor: textDark,
-            lineColor: [230, 235, 240],
-            lineWidth: 0.1,
-          },
-          headStyles: {
-            fillColor: [240, 245, 250],
-            textColor: imuDarkBlue,
-            fontStyle: 'bold',
-            fontSize: 7,
-            halign: 'center',
-          },
-          alternateRowStyles: { fillColor: [252, 253, 255] },
-          columnStyles: {
-            0: { cellWidth: 12, halign: 'center' },  // #
-            1: { cellWidth: 50 },                     // Plaza
-            2: { cellWidth: 45 },                     // Formato
-            3: { cellWidth: 20, halign: 'center' },  // Caras
-            4: { cellWidth: 20, halign: 'center' },  // Bonif.
-            5: { cellWidth: 30, halign: 'right' },   // Inversión
-          },
-        });
+          // Header del artículo
+          doc.setFillColor(...imuGreen);
+          doc.roundedRect(marginX + 5, yPos, contentWidth - 10, 6, 1, 1, 'F');
+          doc.setTextColor(...white);
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'bold');
+          doc.text(articuloGroup.articulo, marginX + 9, yPos + 4);
+          doc.setFont('helvetica', 'normal');
+          doc.text(`Caras: ${articuloGroup.totalCaras} | $${articuloGroup.totalInversion.toLocaleString('es-MX')}`, pageWidth - marginX - 9, yPos + 4, { align: 'right' });
+          yPos += 8;
 
-        yPos = (doc as any).lastAutoTable.finalY + 6;
-      });
+          // Tabla de caras para este artículo
+          let rowNum = 0;
+          const tableData = articuloGroup.caras.map(c => {
+            rowNum++;
+            const inversionCara = (Number(c.tarifa_publica) || 0) * (Number(c.caras) || 0);
+            return [
+              rowNum.toString(),
+              `${c.ciudad || c.estados || '-'}`,
+              c.formato || '-',
+              (Number(c.caras) || 0).toString(),
+              (Number(c.bonificacion) || 0).toString(),
+              `$${inversionCara.toLocaleString('es-MX')}`,
+            ];
+          });
+
+          autoTable(doc, {
+            startY: yPos,
+            head: [['#', 'Plaza', 'Formato', 'Caras', 'Bonif.', 'Inversión']],
+            body: tableData,
+            theme: 'plain',
+            margin: { left: marginX + 5, right: marginX + 5 },
+            styles: {
+              fontSize: 7,
+              cellPadding: 2,
+              textColor: textDark,
+              lineColor: [230, 235, 240],
+              lineWidth: 0.1,
+            },
+            headStyles: {
+              fillColor: [240, 245, 250],
+              textColor: imuDarkBlue,
+              fontStyle: 'bold',
+              fontSize: 7,
+              halign: 'center',
+            },
+            alternateRowStyles: { fillColor: [252, 253, 255] },
+            columnStyles: {
+              0: { cellWidth: 10, halign: 'center' },  // #
+              1: { cellWidth: 45 },                     // Plaza
+              2: { cellWidth: 40 },                     // Formato
+              3: { cellWidth: 18, halign: 'center' },  // Caras
+              4: { cellWidth: 18, halign: 'center' },  // Bonif.
+              5: { cellWidth: 28, halign: 'right' },   // Inversión
+            },
+          });
+
+          yPos = (doc as any).lastAutoTable.finalY + 4;
+        }); // End articulos forEach
+
+        yPos += 4; // Extra space after catorcena group
+      }); // End catorcenas forEach
     }
 
     // === FOOTER ===
@@ -687,88 +746,123 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                     </h3>
                   </div>
                   <div className="divide-y divide-violet-500/10">
-                    {groupedCaras.map((group) => {
-                      const inversionTotal = group.caras.reduce((sum, c) => sum + ((c.tarifa_publica || 0) * (Number(c.caras) || 0)), 0);
-                      return (
-                        <div key={group.key}>
-                          <button
-                            onClick={() => toggleGroup(group.key)}
-                            className="w-full px-5 py-3 flex items-center justify-between hover:bg-violet-600/10 transition-colors"
-                          >
-                            <div className="flex items-center gap-3">
-                              {expandedGroups.has(group.key) ? (
-                                <ChevronDown className="h-4 w-4 text-violet-400" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4 text-violet-500/50" />
-                              )}
-                              <span className="px-3 py-1 rounded-lg bg-violet-500/30 text-violet-200 text-xs font-medium border border-violet-400/30">
-                                {group.catorcena}
-                              </span>
-                              <span className="px-3 py-1 rounded-lg bg-purple-500/20 text-purple-200 text-xs font-medium border border-purple-400/20">
-                                {group.articulo}
-                              </span>
+                    {groupedCaras.map((catorcenaGroup) => (
+                      <div key={catorcenaGroup.catorcena}>
+                        {/* Catorcena Header (Parent Level) */}
+                        <button
+                          onClick={() => toggleGroup(catorcenaGroup.catorcena)}
+                          className="w-full px-5 py-3 flex items-center justify-between hover:bg-violet-600/10 transition-colors bg-violet-600/5"
+                        >
+                          <div className="flex items-center gap-3">
+                            {expandedGroups.has(catorcenaGroup.catorcena) ? (
+                              <ChevronDown className="h-4 w-4 text-violet-400" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-violet-500/50" />
+                            )}
+                            <span className="px-3 py-1 rounded-lg bg-violet-500/30 text-violet-200 text-xs font-medium border border-violet-400/30">
+                              {catorcenaGroup.catorcena}
+                            </span>
+                            <span className="text-zinc-500 text-xs">
+                              ({catorcenaGroup.articulos.length} artículo{catorcenaGroup.articulos.length > 1 ? 's' : ''})
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-zinc-400 text-xs">Renta:</span>
+                              <span className="text-white text-sm font-semibold">{catorcenaGroup.totalCaras}</span>
                             </div>
-                            <div className="flex items-center gap-4">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-zinc-400 text-xs">Renta:</span>
-                                <span className="text-white text-sm font-semibold">{group.totalCaras}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-zinc-400 text-xs">Bonif:</span>
-                                <span className="text-white text-sm font-semibold">{group.totalBonificacion}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-zinc-400 text-xs">Total:</span>
-                                <span className="text-white text-sm font-bold">{group.totalCaras + group.totalBonificacion}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 pl-2 border-l border-violet-500/30">
-                                <span className="text-emerald-400 text-xs">Inversión:</span>
-                                <span className="text-emerald-300 text-sm font-semibold">{formatCurrency(inversionTotal)}</span>
-                              </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-zinc-400 text-xs">Bonif:</span>
+                              <span className="text-white text-sm font-semibold">{catorcenaGroup.totalBonificacion}</span>
                             </div>
-                          </button>
-                          {expandedGroups.has(group.key) && (
-                            <div className="px-5 pb-4">
-                              <div className="overflow-x-auto rounded-xl border border-violet-500/20 bg-zinc-900/50">
-                                <table className="w-full text-sm">
-                                  <thead>
-                                    <tr className="bg-violet-600/20">
-                                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Ciudad</th>
-                                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Estado</th>
-                                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Formato</th>
-                                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-violet-200">Tipo</th>
-                                      <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200">Renta</th>
-                                      <th className="px-3 py-2.5 text-center text-xs font-semibold text-violet-200">Bonif</th>
-                                      <th className="px-3 py-2.5 text-center text-xs font-semibold text-white">Total</th>
-                                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-amber-300">Tarifa Pública</th>
-                                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-emerald-300">Inversión</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-violet-500/10">
-                                    {group.caras.map((cara, idx) => {
-                                      const inversion = (cara.tarifa_publica || 0) * (Number(cara.caras) || 0);
-                                      return (
-                                        <tr key={idx} className="hover:bg-violet-600/10 transition-colors">
-                                          <td className="px-3 py-2.5 text-zinc-200">{cara.ciudad || '-'}</td>
-                                          <td className="px-3 py-2.5 text-zinc-300">{cara.estados || '-'}</td>
-                                          <td className="px-3 py-2.5 text-zinc-300">{cara.formato || '-'}</td>
-                                          <td className="px-3 py-2.5 text-zinc-300">{cara.tipo || '-'}</td>
-                                          <td className="px-3 py-2.5 text-center text-white font-medium">{Number(cara.caras) || 0}</td>
-                                          <td className="px-3 py-2.5 text-center text-white font-medium">{Number(cara.bonificacion) || 0}</td>
-                                          <td className="px-3 py-2.5 text-center text-white font-bold">{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
-                                          <td className="px-3 py-2.5 text-right text-amber-300 font-medium">{formatCurrency(cara.tarifa_publica || 0)}</td>
-                                          <td className="px-3 py-2.5 text-right text-emerald-300 font-medium">{formatCurrency(inversion)}</td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-zinc-400 text-xs">Total:</span>
+                              <span className="text-white text-sm font-bold">{catorcenaGroup.totalCaras + catorcenaGroup.totalBonificacion}</span>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            <div className="flex items-center gap-1.5 pl-2 border-l border-violet-500/30">
+                              <span className="text-emerald-400 text-xs">Inversión:</span>
+                              <span className="text-emerald-300 text-sm font-semibold">{formatCurrency(catorcenaGroup.totalInversion)}</span>
+                            </div>
+                          </div>
+                        </button>
+
+                        {/* Articulo Groups (Nested Level) */}
+                        {expandedGroups.has(catorcenaGroup.catorcena) && (
+                          <div className="pl-6 border-l-2 border-violet-500/20 ml-5">
+                            {catorcenaGroup.articulos.map((articuloGroup) => {
+                              const articuloKey = `${catorcenaGroup.catorcena}|${articuloGroup.articulo}`;
+                              return (
+                                <div key={articuloKey} className="border-b border-violet-500/10 last:border-b-0">
+                                  <button
+                                    onClick={() => toggleGroup(articuloKey)}
+                                    className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-purple-600/10 transition-colors"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      {expandedGroups.has(articuloKey) ? (
+                                        <ChevronDown className="h-3.5 w-3.5 text-purple-400" />
+                                      ) : (
+                                        <ChevronRight className="h-3.5 w-3.5 text-purple-500/50" />
+                                      )}
+                                      <span className="px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-200 text-xs font-medium border border-purple-400/20">
+                                        {articuloGroup.articulo}
+                                      </span>
+                                      <span className="text-zinc-500 text-xs">
+                                        ({articuloGroup.caras.length} cara{articuloGroup.caras.length > 1 ? 's' : ''})
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs">
+                                      <span className="text-zinc-400">R: <span className="text-white font-medium">{articuloGroup.totalCaras}</span></span>
+                                      <span className="text-zinc-400">B: <span className="text-white font-medium">{articuloGroup.totalBonificacion}</span></span>
+                                      <span className="text-emerald-400">{formatCurrency(articuloGroup.totalInversion)}</span>
+                                    </div>
+                                  </button>
+
+                                  {expandedGroups.has(articuloKey) && (
+                                    <div className="px-4 pb-3">
+                                      <div className="overflow-x-auto rounded-xl border border-violet-500/20 bg-zinc-900/50">
+                                        <table className="w-full text-sm">
+                                          <thead>
+                                            <tr className="bg-violet-600/20">
+                                              <th className="px-3 py-2 text-left text-xs font-semibold text-violet-200">Ciudad</th>
+                                              <th className="px-3 py-2 text-left text-xs font-semibold text-violet-200">Estado</th>
+                                              <th className="px-3 py-2 text-left text-xs font-semibold text-violet-200">Formato</th>
+                                              <th className="px-3 py-2 text-left text-xs font-semibold text-violet-200">Tipo</th>
+                                              <th className="px-3 py-2 text-center text-xs font-semibold text-violet-200">Renta</th>
+                                              <th className="px-3 py-2 text-center text-xs font-semibold text-violet-200">Bonif</th>
+                                              <th className="px-3 py-2 text-center text-xs font-semibold text-white">Total</th>
+                                              <th className="px-3 py-2 text-right text-xs font-semibold text-amber-300">Tarifa</th>
+                                              <th className="px-3 py-2 text-right text-xs font-semibold text-emerald-300">Inversión</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-violet-500/10">
+                                            {articuloGroup.caras.map((cara, idx) => {
+                                              const inversion = (cara.tarifa_publica || 0) * (Number(cara.caras) || 0);
+                                              return (
+                                                <tr key={idx} className="hover:bg-violet-600/10 transition-colors">
+                                                  <td className="px-3 py-2 text-zinc-200">{cara.ciudad || '-'}</td>
+                                                  <td className="px-3 py-2 text-zinc-300">{cara.estados || '-'}</td>
+                                                  <td className="px-3 py-2 text-zinc-300">{cara.formato || '-'}</td>
+                                                  <td className="px-3 py-2 text-zinc-300">{cara.tipo || '-'}</td>
+                                                  <td className="px-3 py-2 text-center text-white font-medium">{Number(cara.caras) || 0}</td>
+                                                  <td className="px-3 py-2 text-center text-white font-medium">{Number(cara.bonificacion) || 0}</td>
+                                                  <td className="px-3 py-2 text-center text-white font-bold">{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
+                                                  <td className="px-3 py-2 text-right text-amber-300 font-medium">{formatCurrency(cara.tarifa_publica || 0)}</td>
+                                                  <td className="px-3 py-2 text-right text-emerald-300 font-medium">{formatCurrency(inversion)}</td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
