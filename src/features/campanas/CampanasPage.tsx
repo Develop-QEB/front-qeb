@@ -1030,141 +1030,112 @@ export function CampanasPage() {
       <Header title="Campañas" />
 
       <div className="p-6 space-y-5">
-        {/* Gráficas */}
-        {!isLoading && filteredData.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Gráfica de Estatus */}
-            <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4">
-              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-purple-400" />
-                Estatus de Campaña
+        {/* Dashboard KPIs Grid - Same style as Solicitudes/Propuestas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Main KPI: Total Campañas */}
+          <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none group-hover:bg-purple-500/20 transition-all duration-500" />
+            <div>
+              <p className="text-zinc-400 text-sm font-medium mb-1">Total Campañas</p>
+              <h3 className="text-4xl font-bold text-white tracking-tight">
+                {isLoading ? '...' : filteredData.length.toLocaleString()}
               </h3>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={statusChartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={70}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      {statusChartData.map((entry, index) => (
-                        <Cell key={`cell-status-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#18181b',
-                        border: '1px solid rgba(139, 92, 246, 0.3)',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        color: '#fff'
-                      }}
-                      itemStyle={{ color: '#fff' }}
-                      labelStyle={{ color: '#a1a1aa', fontWeight: 500 }}
-                      formatter={(value: number, _name: string, props: { payload?: { name?: string } }) => [
-                        `${value} campañas`,
-                        props.payload?.name || ''
-                      ]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2">
-                {statusChartData.map((item, index) => (
-                  <div key={index} className="flex items-center gap-1.5 text-xs min-w-0">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-                    <span className="text-zinc-400 truncate" title={item.name}>{item.name}</span>
-                    <span className="text-zinc-500 flex-shrink-0">({item.value})</span>
-                  </div>
-                ))}
-              </div>
             </div>
-
-            {/* Gráfica de Categoría de Mercado */}
-            <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4">
-              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-cyan-400" />
-                Categoría de Mercado
-              </h3>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={categoryChartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={70}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      {categoryChartData.map((entry, index) => (
-                        <Cell key={`cell-cat-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#18181b',
-                        border: '1px solid rgba(6, 182, 212, 0.3)',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        color: '#fff'
-                      }}
-                      itemStyle={{ color: '#fff' }}
-                      labelStyle={{ color: '#a1a1aa', fontWeight: 500 }}
-                      formatter={(value: number, _name: string, props: { payload?: { percentage?: string; name?: string } }) => [
-                        `${value} (${props.payload?.percentage || 0}%)`,
-                        props.payload?.name || ''
-                      ]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 max-h-20 overflow-y-auto">
-                {categoryChartData.slice(0, 8).map((item, index) => (
-                  <div key={index} className="flex items-center gap-1.5 text-xs min-w-0">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-                    <span className="text-zinc-400 truncate" title={item.name}>{item.name}</span>
-                    <span className="text-zinc-500 flex-shrink-0">{item.percentage}%</span>
-                  </div>
-                ))}
-                {categoryChartData.length > 8 && (
-                  <div className="col-span-2 text-xs text-zinc-500 text-center">+{categoryChartData.length - 8} más</div>
-                )}
-              </div>
-            </div>
-
-            {/* Tercera gráfica - Placeholder */}
-            <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4">
-              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                Resumen
-              </h3>
-              <div className="h-48 flex flex-col justify-center space-y-3">
-                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-800/50">
-                  <span className="text-zinc-400 text-sm">Total Campañas</span>
-                  <span className="text-white font-bold text-lg">{filteredData.length}</span>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-800/50">
-                  <span className="text-zinc-400 text-sm">Con APS</span>
-                  <span className="text-emerald-400 font-bold text-lg">
-                    {filteredData.filter(c => c.has_aps).length}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-800/50">
-                  <span className="text-zinc-400 text-sm">Sin APS</span>
-                  <span className="text-amber-400 font-bold text-lg">
-                    {filteredData.filter(c => !c.has_aps).length}
-                  </span>
-                </div>
-              </div>
+            <div className="mt-4 flex items-center gap-2">
+              <span className="text-xs px-2 py-1 rounded-full bg-zinc-800/80 text-zinc-300 border border-zinc-700/50">
+                {hasActiveFilters ? 'Filtrado' : 'Todas'}
+              </span>
             </div>
           </div>
-        )}
+
+          {/* Chart Card: Status Distribution */}
+          <div className="col-span-1 md:col-span-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-4 flex items-center relative overflow-hidden">
+            {!isLoading && statusChartData.length > 0 ? (
+              <div className="w-full h-[140px] flex items-center">
+                <div className="h-full min-w-[140px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={statusChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={55}
+                        paddingAngle={4}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {statusChartData.map((entry, index) => (
+                          <Cell key={`cell-status-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#18181b',
+                          border: '1px solid rgba(139, 92, 246, 0.3)',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          color: '#fff',
+                          boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
+                        }}
+                        formatter={(value: number, _name: string, props: { payload?: { name?: string } }) => [
+                          `${value} campañas`,
+                          props.payload?.name || ''
+                        ]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Legend / List */}
+                <div className="flex-1 flex flex-wrap gap-2 content-center pl-4 h-full overflow-y-auto scrollbar-thin">
+                  {statusChartData.slice(0, 6).map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-zinc-800/30 border border-zinc-800/50 min-w-[100px]">
+                      <div className="w-2 h-8 rounded-full" style={{ backgroundColor: item.color }} />
+                      <div>
+                        <div className="text-sm font-bold text-white">{item.value}</div>
+                        <div className="text-[10px] text-zinc-400 uppercase tracking-wide truncate max-w-[70px]" title={item.name}>{item.name}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {statusChartData.length > 6 && (
+                    <div className="flex items-center justify-center p-2 rounded-lg bg-zinc-800/30 border border-zinc-800/50 text-xs text-zinc-500">
+                      +{statusChartData.length - 6} más
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="w-full h-[140px] flex items-center justify-center text-zinc-500 text-sm">
+                {isLoading ? 'Cargando...' : 'Sin datos'}
+              </div>
+            )}
+          </div>
+
+          {/* KPI: APS Status */}
+          <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute bottom-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl -mr-5 -mb-5 pointer-events-none group-hover:bg-emerald-500/20 transition-all duration-500" />
+            <div>
+              <p className="text-zinc-400 text-sm font-medium mb-1">Con APS</p>
+              <div className="flex items-baseline gap-2">
+                <h3 className="text-3xl font-bold text-emerald-400">
+                  {isLoading ? '...' : filteredData.filter(c => c.has_aps).length.toLocaleString()}
+                </h3>
+                <span className="text-xs text-emerald-500/80 font-medium">asignados</span>
+              </div>
+            </div>
+            {/* Progress bar visual */}
+            <div className="mt-4 w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500"
+                style={{ width: `${filteredData.length ? (filteredData.filter(c => c.has_aps).length / filteredData.length) * 100 : 0}%` }}
+              />
+            </div>
+            <div className="mt-2 flex justify-between text-[10px] text-zinc-500">
+              <span>Sin APS: {filteredData.filter(c => !c.has_aps).length}</span>
+              <span>{filteredData.length ? Math.round((filteredData.filter(c => c.has_aps).length / filteredData.length) * 100) : 0}%</span>
+            </div>
+          </div>
+        </div>
 
         {/* Control Bar */}
         <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4 relative z-30">
@@ -1427,7 +1398,33 @@ export function CampanasPage() {
 
         {/* Vista por Catorcena */}
         {activeView === 'catorcena' && (
-          <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5">
+          <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm overflow-hidden">
+            {/* Header de la vista */}
+            <div className="px-5 py-4 border-b border-zinc-800/50 bg-gradient-to-r from-purple-900/20 via-fuchsia-900/10 to-purple-900/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                    <Calendar className="h-5 w-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Vista por Catorcena</h3>
+                    <p className="text-xs text-zinc-500">Campañas agrupadas por periodo de inicio</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-white">{campanasPorCatorcena.length}</p>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Catorcenas</p>
+                  </div>
+                  <div className="w-px h-10 bg-zinc-800" />
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-purple-400">{filteredData.length}</p>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Campañas</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {isLoading ? (
               <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -1440,13 +1437,22 @@ export function CampanasPage() {
                 <p className="text-zinc-500">No hay campañas agrupadas por catorcena</p>
               </div>
             ) : (
-              <div className="divide-y divide-zinc-800/50">
-                {campanasPorCatorcena.map(({ key, catorcena, campanas }) => (
+              <div className="divide-y divide-zinc-800/30">
+                {campanasPorCatorcena.map(({ key, catorcena, campanas }) => {
+                  const isCurrentCatorcena = currentCatorcena &&
+                    currentCatorcena.numero_catorcena === catorcena.num &&
+                    currentCatorcena.a_o === catorcena.anio;
+
+                  return (
                   <div key={key} className="group">
                     {/* Header de Catorcena */}
                     <button
                       onClick={() => toggleCatorcena(key)}
-                      className="w-full flex items-center gap-3 px-4 py-4 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30 hover:from-purple-900/40 hover:via-fuchsia-900/30 hover:to-purple-900/40 transition-all"
+                      className={`w-full flex items-center gap-3 px-5 py-4 transition-all ${
+                        isCurrentCatorcena
+                          ? 'bg-gradient-to-r from-emerald-900/30 via-teal-900/20 to-emerald-900/30 hover:from-emerald-900/40 hover:via-teal-900/30 hover:to-emerald-900/40'
+                          : 'bg-zinc-800/30 hover:bg-zinc-800/50'
+                      }`}
                     >
                       {expandedCatorcenas.has(key) ? (
                         <ChevronDown className="h-5 w-5 text-purple-400" />
@@ -1691,15 +1697,22 @@ export function CampanasPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
             {/* Footer info */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20">
+            <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-800/50 bg-zinc-800/30">
               <span className="text-xs text-zinc-500">
                 {campanasPorCatorcena.length} catorcenas · {filteredData.length} campañas
               </span>
+              {currentCatorcena && (
+                <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+                  <Clock className="h-3 w-3" />
+                  Catorcena actual: {currentCatorcena.numero_catorcena}/{currentCatorcena.a_o}
+                </span>
+              )}
             </div>
           </div>
         )}

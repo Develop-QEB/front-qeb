@@ -805,7 +805,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     enabled: isOpen,
   });
 
-  // Reset form when opening modal in create mode (not edit mode)
+  // Reset form when opening modal in create mode (not edit mode) or when editSolicitudId changes
   useEffect(() => {
     if (isOpen && !isEditMode) {
       // Reset all form state for a fresh start
@@ -838,6 +838,22 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       });
     }
   }, [isOpen, isEditMode]);
+
+  // Reset form state when switching between different solicitudes in edit mode
+  useEffect(() => {
+    if (isOpen && isEditMode && editSolicitudId) {
+      // Reset state before loading new solicitud data
+      setSelectedCuic(null);
+      setSelectedAsignados([]);
+      setNombreCampania('');
+      setDescripcion('');
+      setNotas('');
+      setCaras([]);
+      setArchivo(null);
+      setTipoArchivo(null);
+      setImu(false);
+    }
+  }, [editSolicitudId]);
 
   // Set default asignados when trafico users load (only if asignados is empty)
   useEffect(() => {
@@ -1086,7 +1102,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Handle submit
   const handleSubmit = () => {
-    if (!selectedCuic || caras.length === 0 || !fechaInicio || !fechaFin) {
+    if (!selectedCuic || caras.length === 0 || !fechaInicio || !fechaFin || selectedAsignados.length === 0) {
       return;
     }
 
@@ -1171,6 +1187,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           puesto: ''
         }));
         setSelectedAsignados(asignadosData);
+      } else {
+        // No asignados in this solicitud - clear the state
+        setSelectedAsignados([]);
       }
 
       // Set caras from the fetched data
@@ -2055,7 +2074,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   type="checkbox"
                   checked={imu}
                   onChange={(e) => setImu(e.target.checked)}
-                  className="w-5 h-5 rounded bg-zinc-800 border-zinc-700 text-purple-500 focus:ring-purple-500/50"
+                  className="checkbox-purple w-5 h-5"
                 />
                 <span className="text-sm text-zinc-300">IMU (Impresión  IMU)</span>
               </label>
@@ -2085,8 +2104,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0}
+              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0}
               className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:bg-zinc-700 disabled:text-zinc-500 transition-colors flex items-center gap-2"
+              title={selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
             >
               {(isEditMode ? updateMutation.isPending : createMutation.isPending) ? (
                 <>

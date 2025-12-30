@@ -199,4 +199,92 @@
   .map-dark-controls .gmnoprint > div {
     background-color: #1a1025 !important;
   }
+
+  /* Custom Checkbox Styles */
+  .checkbox-purple {
+    @apply appearance-none w-4 h-4 rounded border-2 border-zinc-600 bg-zinc-800/50 cursor-pointer transition-all duration-200;
+    @apply hover:border-purple-500/50 hover:bg-purple-500/10;
+    @apply focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:ring-offset-0;
+    position: relative;
+  }
+  .checkbox-purple:checked {
+    @apply bg-gradient-to-br from-purple-500 to-fuchsia-500 border-purple-400;
+  }
+  .checkbox-purple:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 5px;
+    height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .checkbox-purple:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .checkbox-emerald {
+    @apply appearance-none w-4 h-4 rounded border-2 border-zinc-600 bg-zinc-800/50 cursor-pointer transition-all duration-200;
+    @apply hover:border-emerald-500/50 hover:bg-emerald-500/10;
+    @apply focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:ring-offset-0;
+    position: relative;
+  }
+  .checkbox-emerald:checked {
+    @apply bg-gradient-to-br from-emerald-500 to-teal-500 border-emerald-400;
+  }
+  .checkbox-emerald:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 5px;
+    height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  .checkbox-blue {
+    @apply appearance-none w-4 h-4 rounded border-2 border-zinc-600 bg-zinc-800/50 cursor-pointer transition-all duration-200;
+    @apply hover:border-blue-500/50 hover:bg-blue-500/10;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:ring-offset-0;
+    position: relative;
+  }
+  .checkbox-blue:checked {
+    @apply bg-gradient-to-br from-blue-500 to-cyan-500 border-blue-400;
+  }
+  .checkbox-blue:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 5px;
+    height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  .checkbox-amber {
+    @apply appearance-none w-4 h-4 rounded border-2 border-zinc-600 bg-zinc-800/50 cursor-pointer transition-all duration-200;
+    @apply hover:border-amber-500/50 hover:bg-amber-500/10;
+    @apply focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:ring-offset-0;
+    position: relative;
+  }
+  .checkbox-amber:checked {
+    @apply bg-gradient-to-br from-amber-500 to-orange-500 border-amber-400;
+  }
+  .checkbox-amber:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 5px;
+    height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
 }
