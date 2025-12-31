@@ -109,6 +109,8 @@ interface InventoryRow {
   estado_arte?: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado';
   estado_tarea?: 'sin_atender' | 'en_progreso' | 'atendido';
   archivo_arte?: string;
+  arte_aprobado?: string; // Texto original de arte_aprobado
+  imu?: number | string;
   // Para Testigo
   testigo_status?: 'pendiente' | 'validado' | 'rechazado';
 }
@@ -142,16 +144,16 @@ interface CalendarEvent {
 // ============================================================================
 
 const estadoArteLabels: Record<string, string> = {
-  sin_revisar: 'Sin revisar',
-  en_revision: 'En revision',
+  sin_revisar: 'Arte Sin revisar',
+  en_revision: 'Pendiente',
   aprobado: 'Aprobado',
   rechazado: 'Rechazado',
 };
 
 const estadoTareaLabels: Record<string, string> = {
-  sin_atender: 'Sin atender',
+  sin_atender: 'Sin Atender',
   en_progreso: 'En progreso',
-  atendido: 'Atendido',
+  atendido: 'Instalado',
 };
 
 const statusColors: Record<string, string> = {
@@ -882,12 +884,9 @@ function UploadArtModal({
 
 // Tipos de tarea disponibles
 const TIPOS_TAREA = [
-  { value: 'Produccion', label: 'Produccion', description: 'Impresion y fabricacion de materiales' },
-  { value: 'Instalacion', label: 'Instalacion', description: 'Instalacion fisica del arte en sitio' },
-  { value: 'Arte', label: 'Arte/Diseño', description: 'Creacion o modificacion de artes' },
-  { value: 'Revision', label: 'Revision', description: 'Revision y aprobacion de materiales' },
-  { value: 'Testigo', label: 'Testigo', description: 'Captura de fotos testigo' },
-  { value: 'Otro', label: 'Otro', description: 'Otras tareas' },
+  { value: 'Instalacion', label: 'Instalación', description: 'Instalación física del arte en sitio' },
+  { value: 'Revision', label: 'Revisión de artes', description: 'Revisión y aprobación de artes' },
+  { value: 'Impresion', label: 'Impresión', description: 'Impresión de materiales publicitarios' },
 ];
 
 // Create Task Modal Component
@@ -916,10 +915,24 @@ function CreateTaskModal({
 }) {
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
-  const [tipo, setTipo] = useState('Produccion');
+  const [tipo, setTipo] = useState('');
   const [proveedorId, setProveedorId] = useState<number | null>(null);
   const [fechaFin, setFechaFin] = useState('');
   const [estatus, setEstatus] = useState<TaskRow['estatus']>('pendiente');
+  // Campos específicos para Instalación
+  const [fechaInstalacion, setFechaInstalacion] = useState('');
+  const [horaInstalacion, setHoraInstalacion] = useState('');
+  const [contactoSitio, setContactoSitio] = useState('');
+  const [telefonoContacto, setTelefonoContacto] = useState('');
+  // Campos específicos para Revisión de artes
+  const [tipoRevision, setTipoRevision] = useState('inicial');
+  const [prioridad, setPrioridad] = useState('normal');
+  const [comentariosRevision, setComentariosRevision] = useState('');
+  // Campos específicos para Impresión
+  const [tipoMaterial, setTipoMaterial] = useState('');
+  const [cantidad, setCantidad] = useState(1);
+  const [medidas, setMedidas] = useState('');
+  const [acabado, setAcabado] = useState('');
 
   const selectedProveedor = proveedores.find(p => p.id === proveedorId);
 
@@ -949,10 +962,24 @@ function CreateTaskModal({
     // Reset form
     setTitulo('');
     setDescripcion('');
-    setTipo('Produccion');
+    setTipo('');
     setProveedorId(null);
     setFechaFin('');
     setEstatus('pendiente');
+    // Reset campos de Instalación
+    setFechaInstalacion('');
+    setHoraInstalacion('');
+    setContactoSitio('');
+    setTelefonoContacto('');
+    // Reset campos de Revisión
+    setTipoRevision('inicial');
+    setPrioridad('normal');
+    setComentariosRevision('');
+    // Reset campos de Impresión
+    setTipoMaterial('');
+    setCantidad(1);
+    setMedidas('');
+    setAcabado('');
     onClose();
   };
 
@@ -986,109 +1013,298 @@ function CreateTaskModal({
           </p>
         </div>
 
-        <div className="space-y-4">
-          {/* Titulo */}
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Titulo *</label>
-            <input
-              type="text"
-              value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
-              disabled={isSubmitting}
-              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-              placeholder="Titulo de la tarea"
-            />
+        {/* Selector de tipo de tarea */}
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-zinc-400 mb-2">Selecciona el tipo de tarea *</label>
+          <div className="grid grid-cols-3 gap-2">
+            {TIPOS_TAREA.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setTipo(t.value)}
+                disabled={isSubmitting}
+                className={`p-3 rounded-lg border text-center transition-all ${
+                  tipo === t.value
+                    ? 'border-purple-500 bg-purple-500/20 text-purple-300'
+                    : 'border-border bg-background text-zinc-400 hover:border-purple-500/50 hover:bg-purple-900/10'
+                } disabled:opacity-50`}
+              >
+                <span className="text-sm font-medium">{t.label}</span>
+              </button>
+            ))}
           </div>
-
-          {/* Tipo de Tarea */}
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Tipo de tarea *</label>
-            <select
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value)}
-              disabled={isSubmitting}
-              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-            >
-              {TIPOS_TAREA.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-zinc-500">
+          {tipo && (
+            <p className="mt-2 text-xs text-zinc-500">
               {TIPOS_TAREA.find(t => t.value === tipo)?.description}
             </p>
-          </div>
+          )}
+        </div>
 
-          {/* Descripcion */}
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Descripcion</label>
-            <textarea
-              value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
-              rows={3}
-              disabled={isSubmitting}
-              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
-              placeholder="Descripcion de la tarea"
-            />
-          </div>
-
-          {/* Proveedor */}
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Asignar a proveedor</label>
-            {isLoadingProveedores ? (
-              <div className="flex items-center gap-2 py-2 text-zinc-400">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">Cargando proveedores...</span>
-              </div>
-            ) : (
-              <select
-                value={proveedorId || ''}
-                onChange={(e) => setProveedorId(e.target.value ? parseInt(e.target.value) : null)}
-                disabled={isSubmitting}
-                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-              >
-                <option value="">-- Sin asignar --</option>
-                {proveedores.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre} {p.ciudad ? `(${p.ciudad})` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
-            {proveedores.length === 0 && !isLoadingProveedores && (
-              <p className="mt-1 text-xs text-zinc-500">
-                No hay proveedores registrados. Puedes crear la tarea sin asignar.
-              </p>
-            )}
-          </div>
-
-          {/* Fecha fin y Estatus */}
-          <div className="grid grid-cols-2 gap-3">
+        {/* Formulario condicional según tipo */}
+        {tipo && (
+          <div className="space-y-4 border-t border-border pt-4">
+            {/* Campos comunes */}
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha limite</label>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
               <input
-                type="date"
-                value={fechaFin}
-                onChange={(e) => setFechaFin(e.target.value)}
+                type="text"
+                value={titulo}
+                onChange={(e) => setTitulo(e.target.value)}
                 disabled={isSubmitting}
                 className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                placeholder={tipo === 'Instalacion' ? 'Ej: Instalación en Reforma' : tipo === 'Revision' ? 'Ej: Revisión arte campaña X' : 'Ej: Impresión lona 3x2'}
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Estatus inicial</label>
-              <select
-                value={estatus}
-                onChange={(e) => setEstatus(e.target.value as TaskRow['estatus'])}
-                disabled={isSubmitting}
-                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-              >
-                <option value="pendiente">Pendiente</option>
-                <option value="en_progreso">En progreso</option>
-              </select>
-            </div>
+
+            {/* === FORMULARIO INSTALACIÓN === */}
+            {tipo === 'Instalacion' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de instalación *</label>
+                    <input
+                      type="date"
+                      value={fechaInstalacion}
+                      onChange={(e) => setFechaInstalacion(e.target.value)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Hora estimada</label>
+                    <input
+                      type="time"
+                      value={horaInstalacion}
+                      onChange={(e) => setHoraInstalacion(e.target.value)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Contacto en sitio</label>
+                    <input
+                      type="text"
+                      value={contactoSitio}
+                      onChange={(e) => setContactoSitio(e.target.value)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                      placeholder="Nombre del contacto"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Teléfono contacto</label>
+                    <input
+                      type="tel"
+                      value={telefonoContacto}
+                      onChange={(e) => setTelefonoContacto(e.target.value)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                      placeholder="55 1234 5678"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Proveedor/Instalador</label>
+                  {isLoadingProveedores ? (
+                    <div className="flex items-center gap-2 py-2 text-zinc-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Cargando proveedores...</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={proveedorId || ''}
+                      onChange={(e) => setProveedorId(e.target.value ? parseInt(e.target.value) : null)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    >
+                      <option value="">-- Seleccionar instalador --</option>
+                      {proveedores.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nombre} {p.ciudad ? `(${p.ciudad})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Instrucciones especiales</label>
+                  <textarea
+                    value={descripcion}
+                    onChange={(e) => setDescripcion(e.target.value)}
+                    rows={2}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
+                    placeholder="Instrucciones para el instalador..."
+                  />
+                </div>
+              </>
+            )}
+
+            {/* === FORMULARIO REVISIÓN DE ARTES === */}
+            {tipo === 'Revision' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Tipo de revisión</label>
+                    <select
+                      value={tipoRevision}
+                      onChange={(e) => setTipoRevision(e.target.value)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    >
+                      <option value="inicial">Revisión inicial</option>
+                      <option value="correccion">Corrección</option>
+                      <option value="final">Aprobación final</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Prioridad</label>
+                    <select
+                      value={prioridad}
+                      onChange={(e) => setPrioridad(e.target.value)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    >
+                      <option value="baja">Baja</option>
+                      <option value="normal">Normal</option>
+                      <option value="alta">Alta</option>
+                      <option value="urgente">Urgente</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha límite de revisión</label>
+                  <input
+                    type="date"
+                    value={fechaFin}
+                    onChange={(e) => setFechaFin(e.target.value)}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Comentarios para revisión</label>
+                  <textarea
+                    value={comentariosRevision}
+                    onChange={(e) => setComentariosRevision(e.target.value)}
+                    rows={3}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
+                    placeholder="Puntos a revisar, observaciones..."
+                  />
+                </div>
+              </>
+            )}
+
+            {/* === FORMULARIO IMPRESIÓN === */}
+            {tipo === 'Impresion' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Tipo de material *</label>
+                    <select
+                      value={tipoMaterial}
+                      onChange={(e) => setTipoMaterial(e.target.value)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    >
+                      <option value="">-- Seleccionar --</option>
+                      <option value="lona">Lona</option>
+                      <option value="vinil">Vinil</option>
+                      <option value="backlight">Backlight</option>
+                      <option value="papel">Papel</option>
+                      <option value="otro">Otro</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Cantidad</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={cantidad}
+                      onChange={(e) => setCantidad(parseInt(e.target.value) || 1)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Medidas</label>
+                    <input
+                      type="text"
+                      value={medidas}
+                      onChange={(e) => setMedidas(e.target.value)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                      placeholder="Ej: 3m x 2m"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Acabado</label>
+                    <select
+                      value={acabado}
+                      onChange={(e) => setAcabado(e.target.value)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    >
+                      <option value="">-- Seleccionar --</option>
+                      <option value="mate">Mate</option>
+                      <option value="brillante">Brillante</option>
+                      <option value="satinado">Satinado</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Proveedor de impresión</label>
+                  {isLoadingProveedores ? (
+                    <div className="flex items-center gap-2 py-2 text-zinc-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Cargando proveedores...</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={proveedorId || ''}
+                      onChange={(e) => setProveedorId(e.target.value ? parseInt(e.target.value) : null)}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    >
+                      <option value="">-- Seleccionar impresor --</option>
+                      {proveedores.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nombre} {p.ciudad ? `(${p.ciudad})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega</label>
+                  <input
+                    type="date"
+                    value={fechaFin}
+                    onChange={(e) => setFechaFin(e.target.value)}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Notas adicionales</label>
+                  <textarea
+                    value={descripcion}
+                    onChange={(e) => setDescripcion(e.target.value)}
+                    rows={2}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
+                    placeholder="Especificaciones adicionales..."
+                  />
+                </div>
+              </>
+            )}
           </div>
-        </div>
+        )}
 
         <div className="flex justify-end gap-2 mt-6">
           <button
@@ -1100,7 +1316,7 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!titulo.trim() || isSubmitting}
+            disabled={!tipo || !titulo.trim() || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -1329,7 +1545,6 @@ function SummaryCards({ stats, activeTab }: { stats: SummaryStats; activeTab: Ma
       return [
         { label: 'Total Inventario', value: stats.totalInventario, icon: ClipboardList, color: 'purple' },
         { label: 'Sin Arte', value: stats.sinArte, icon: Image, color: 'amber' },
-        { label: 'Con Arte', value: stats.totalInventario - stats.sinArte, icon: Palette, color: 'green' },
       ];
     }
     if (activeTab === 'atender') {
@@ -1462,7 +1677,7 @@ export function TareaSeguimientoPage() {
 
   // Inventario SIN arte (para tab "Subir Artes")
   // Se carga siempre inicialmente para determinar el tab por defecto
-  const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte } = useQuery({
+  const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte, isFetched: isFetchedSinArte } = useQuery({
     queryKey: ['campana-inventario-sin-arte', campanaId, activeFormat],
     queryFn: () => campanasService.getInventarioSinArte(campanaId, activeFormat === 'tradicional' ? 'Tradicional' : 'Digital'),
     enabled: campanaId > 0 && (activeMainTab === 'versionario' || !initialTabDetermined),
@@ -1470,7 +1685,7 @@ export function TareaSeguimientoPage() {
 
   // Inventario CON arte (para tab "Revisar y Aprobar")
   // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
-  const { data: inventarioArteAPI = [], isLoading: isLoadingInventarioArte } = useQuery({
+  const { data: inventarioArteAPI = [], isLoading: isLoadingInventarioArte, isFetched: isFetchedConArte } = useQuery({
     queryKey: ['campana-inventario-arte', campanaId],
     queryFn: () => campanasService.getInventarioConArte(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'atender' || !initialTabDetermined),
@@ -1478,7 +1693,7 @@ export function TareaSeguimientoPage() {
 
   // Inventario para TESTIGOS (para tab "Validar Instalación")
   // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
-  const { data: inventarioTestigosAPI = [], isLoading: isLoadingInventarioTestigos } = useQuery({
+  const { data: inventarioTestigosAPI = [], isLoading: isLoadingInventarioTestigos, isFetched: isFetchedTestigos } = useQuery({
     queryKey: ['campana-inventario-testigos', campanaId, activeFormat],
     queryFn: () => campanasService.getInventarioTestigos(campanaId, activeFormat === 'tradicional' ? 'Tradicional' : 'Digital'),
     enabled: campanaId > 0 && (activeMainTab === 'testigo' || !initialTabDetermined),
@@ -1511,9 +1726,9 @@ export function TareaSeguimientoPage() {
     // Solo ejecutar una vez cuando los datos estén disponibles
     if (initialTabDetermined) return;
 
-    // Esperar a que las queries terminen de cargar
-    const allQueriesLoaded = !isLoadingInventarioSinArte && !isLoadingInventarioArte && !isLoadingInventarioTestigos;
-    if (!allQueriesLoaded) return;
+    // Esperar a que las queries hayan terminado de hacer fetch (no solo que no estén cargando)
+    const allQueriesFetched = isFetchedSinArte && isFetchedConArte && isFetchedTestigos;
+    if (!allQueriesFetched) return;
 
     // Determinar el tab con contenido (prioridad: versionario > atender > testigo)
     if (inventarioSinArteAPI.length > 0) {
@@ -1528,9 +1743,9 @@ export function TareaSeguimientoPage() {
     setInitialTabDetermined(true);
   }, [
     initialTabDetermined,
-    isLoadingInventarioSinArte,
-    isLoadingInventarioArte,
-    isLoadingInventarioTestigos,
+    isFetchedSinArte,
+    isFetchedConArte,
+    isFetchedTestigos,
     inventarioSinArteAPI.length,
     inventarioArteAPI.length,
     inventarioTestigosAPI.length,
@@ -1594,9 +1809,11 @@ export function TareaSeguimientoPage() {
   const transformInventarioToRow = useCallback((item: InventarioConArte, defaultArteStatus: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = 'sin_revisar'): InventoryRow => {
     // Mapear arte_aprobado a estado_arte
     let estadoArte: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = defaultArteStatus;
-    if (item.arte_aprobado === 'Aprobado') estadoArte = 'aprobado';
-    else if (item.arte_aprobado === 'Rechazado') estadoArte = 'rechazado';
-    else if (item.arte_aprobado === 'Pendiente' || item.archivo) estadoArte = 'en_revision';
+    const arteAprobadoLower = (item.arte_aprobado || '').toLowerCase();
+    if (arteAprobadoLower === 'aprobado') estadoArte = 'aprobado';
+    else if (arteAprobadoLower === 'rechazado') estadoArte = 'rechazado';
+    else if (arteAprobadoLower === 'pendiente' || arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisión') estadoArte = 'en_revision';
+    // Si no tiene ninguno de los estados anteriores, se queda con defaultArteStatus (sin_revisar)
 
     // Mapear tarea/estatus a estado_tarea
     let estadoTarea: 'sin_atender' | 'en_progreso' | 'atendido' = 'sin_atender';
@@ -1614,7 +1831,7 @@ export function TareaSeguimientoPage() {
       tipo_de_cara: item.tipo_de_cara_display || item.tipo_de_cara || '',
       catorcena: item.numero_catorcena || 0,
       anio: item.anio_catorcena || 0,
-      aps: item.APS || item.rsvAPS || null,
+      aps: item.APS || null,
       grupo_id: item.grupo?.toString() || item.grupo_completo_id?.toString() || null,
       estatus: item.estatus || '',
       espacio: item.epInId || '',
@@ -1633,6 +1850,8 @@ export function TareaSeguimientoPage() {
       estado_tarea: estadoTarea,
       testigo_status: item.instalado ? 'validado' : 'pendiente',
       archivo_arte: item.archivo || undefined,
+      arte_aprobado: item.arte_aprobado || '',
+      imu: item.IMU || '',
     };
   }, []);
 
@@ -1643,7 +1862,7 @@ export function TareaSeguimientoPage() {
 
   // Transform inventario con arte para tab "Atender arte"
   const inventoryArteData = useMemo((): InventoryRow[] => {
-    return inventarioArteAPI.map((item) => transformInventarioToRow(item, 'en_revision'));
+    return inventarioArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar'));
   }, [inventarioArteAPI, transformInventarioToRow]);
 
   // Transform inventario para testigos (tab "Validar Instalación")
@@ -1894,15 +2113,15 @@ export function TareaSeguimientoPage() {
     return groups;
   }, [filteredInventory]);
 
-  // Legacy grouped inventory for "atender" tab complex grouping
-  const groupedInventory = useMemo(() => {
+  // Agrupación jerárquica de 4 niveles para tab "Atender Arte": Catorcena -> APS -> Estado Arte -> Estado Tarea
+  const atenderGroupedInventory = useMemo(() => {
     const groups: Record<string, Record<string, Record<string, Record<string, InventoryRow[]>>>> = {};
 
     filteredInventory.forEach((item) => {
       const catorcenaKey = `Catorcena: ${item.catorcena}, Año: ${item.anio}`;
-      const apsKey = `APS: ${item.aps ?? 'Sin asignar'}`;
-      const arteKey = `Arte: ${estadoArteLabels[item.estado_arte || 'sin_revisar']}`;
-      const tareaKey = `Tarea: ${estadoTareaLabels[item.estado_tarea || 'sin_atender']}`;
+      const apsKey = `APS ${item.aps ?? 'Sin asignar'}`;
+      const arteKey = estadoArteLabels[item.estado_arte || 'sin_revisar'];
+      const tareaKey = estadoTareaLabels[item.estado_tarea || 'sin_atender'];
 
       if (!groups[catorcenaKey]) groups[catorcenaKey] = {};
       if (!groups[catorcenaKey][apsKey]) groups[catorcenaKey][apsKey] = {};
@@ -2107,16 +2326,39 @@ export function TareaSeguimientoPage() {
           </button>
         </td>
       )}
-      <td className="p-2 text-xs font-medium text-white">{item.codigo_unico}</td>
+      <td className="p-2 text-xs font-medium text-white">{item.id}</td>
+      <td className="p-2 text-xs text-zinc-300">{item.arte_aprobado || 'Sin revisar'}</td>
+      <td className="p-2">
+        {item.archivo_arte ? (
+          <img
+            src={item.archivo_arte}
+            alt="Arte"
+            className="w-10 h-10 object-cover rounded cursor-pointer hover:opacity-80"
+            onClick={() => window.open(item.archivo_arte, '_blank')}
+          />
+        ) : (
+          <span className="text-zinc-500 text-xs">Sin archivo</span>
+        )}
+      </td>
       <td className="p-2 text-xs text-zinc-300 max-w-[150px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
+      <td className="p-2 text-xs text-zinc-300">{item.tipo_de_cara}</td>
       <td className="p-2 text-xs text-zinc-300">{item.mueble}</td>
       <td className="p-2 text-xs text-zinc-300">{item.plaza}</td>
-      <td className="p-2 text-xs text-purple-300">{item.aps}</td>
-      <td className="p-2">
-        <StatusBadge status={item.estado_arte || 'sin_revisar'} labels={estadoArteLabels} />
+      <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
+      <td className="p-2 text-xs text-blue-400 max-w-[150px] truncate" title={item.archivo_arte}>
+        {item.archivo_arte ? (
+          <a href={item.archivo_arte} target="_blank" rel="noopener noreferrer" className="hover:underline">
+            {item.archivo_arte.split('/').pop()}
+          </a>
+        ) : '-'}
       </td>
-      <td className="p-2">
-        <StatusBadge status={item.estado_tarea || 'sin_atender'} labels={estadoTareaLabels} />
+      <td className="p-2 text-xs text-zinc-300">{item.imu || '-'}</td>
+      <td className="p-2 text-center">
+        {item.estado_tarea === 'atendido' ? (
+          <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" />
+        ) : (
+          <span className="text-zinc-500">-</span>
+        )}
       </td>
     </tr>
   );
@@ -2832,6 +3074,178 @@ export function TareaSeguimientoPage() {
                 }
                 icon={activeMainTab === 'versionario' ? Image : activeMainTab === 'atender' ? Eye : Camera}
               />
+            ) : activeMainTab === 'atender' ? (
+              // Vista jerárquica de 4 niveles para Atender Arte: Catorcena -> APS -> Estado Arte -> Estado Tarea
+              <div className="divide-y divide-border">
+                {Object.entries(atenderGroupedInventory).map(([catorcenaKey, apsGroups]) => {
+                  const catorcenaExpanded = expandedNodes.has(`atender-${catorcenaKey}`);
+                  const catorcenaItemCount = Object.values(apsGroups).reduce(
+                    (sum, arteGroups) => sum + Object.values(arteGroups).reduce(
+                      (s, tareaGroups) => s + Object.values(tareaGroups).reduce((t, items) => t + items.length, 0), 0
+                    ), 0
+                  );
+                  return (
+                    <div key={catorcenaKey}>
+                      {/* Nivel 1: Catorcena */}
+                      <button
+                        onClick={() => toggleNode(`atender-${catorcenaKey}`)}
+                        className="w-full px-4 py-3 flex items-center justify-between bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          {catorcenaExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-purple-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-purple-400" />
+                          )}
+                          <span className="text-sm font-bold text-white">{catorcenaKey}</span>
+                        </div>
+                        <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                          {catorcenaItemCount}
+                        </Badge>
+                      </button>
+                      {catorcenaExpanded && (
+                        <div className="pl-4">
+                          {Object.entries(apsGroups).map(([apsKey, arteGroups]) => {
+                            const apsNodeKey = `atender-${catorcenaKey}|${apsKey}`;
+                            const apsExpanded = expandedNodes.has(apsNodeKey);
+                            const apsItemCount = Object.values(arteGroups).reduce(
+                              (s, tareaGroups) => s + Object.values(tareaGroups).reduce((t, items) => t + items.length, 0), 0
+                            );
+                            return (
+                              <div key={apsNodeKey} className="border-l-2 border-purple-600/30">
+                                {/* Nivel 2: APS */}
+                                <button
+                                  onClick={() => toggleNode(apsNodeKey)}
+                                  className="w-full px-4 py-2 flex items-center justify-between bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {apsExpanded ? (
+                                      <ChevronDown className="h-3.5 w-3.5 text-purple-400" />
+                                    ) : (
+                                      <ChevronRight className="h-3.5 w-3.5 text-purple-400" />
+                                    )}
+                                    <span className="text-xs font-semibold text-purple-300">{apsKey}</span>
+                                  </div>
+                                  <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
+                                    {apsItemCount}
+                                  </Badge>
+                                </button>
+                                {apsExpanded && (
+                                  <div className="pl-4">
+                                    {Object.entries(arteGroups).map(([arteKey, tareaGroups]) => {
+                                      const arteNodeKey = `${apsNodeKey}|${arteKey}`;
+                                      const arteExpanded = expandedNodes.has(arteNodeKey);
+                                      const arteItemCount = Object.values(tareaGroups).reduce((t, items) => t + items.length, 0);
+                                      return (
+                                        <div key={arteNodeKey} className="border-l-2 border-amber-500/20">
+                                          {/* Nivel 3: Estado Arte */}
+                                          <button
+                                            onClick={() => toggleNode(arteNodeKey)}
+                                            className="w-full px-4 py-1.5 flex items-center justify-between hover:bg-amber-900/10 transition-colors"
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              {arteExpanded ? (
+                                                <ChevronDown className="h-3 w-3 text-amber-400" />
+                                              ) : (
+                                                <ChevronRight className="h-3 w-3 text-amber-400" />
+                                              )}
+                                              <span className="text-[11px] font-medium text-amber-300">{arteKey}</span>
+                                            </div>
+                                            <Badge className="bg-amber-600/20 text-amber-300 border-amber-500/20 text-[10px]">
+                                              {arteItemCount}
+                                            </Badge>
+                                          </button>
+                                          {arteExpanded && (
+                                            <div className="pl-4">
+                                              {Object.entries(tareaGroups).map(([tareaKey, items]) => {
+                                                const tareaNodeKey = `${arteNodeKey}|${tareaKey}`;
+                                                const tareaExpanded = expandedNodes.has(tareaNodeKey);
+                                                return (
+                                                  <div key={tareaNodeKey} className="border-l-2 border-blue-500/20">
+                                                    {/* Nivel 4: Estado Tarea */}
+                                                    <button
+                                                      onClick={() => toggleNode(tareaNodeKey)}
+                                                      className="w-full px-4 py-1 flex items-center justify-between hover:bg-blue-900/10 transition-colors"
+                                                    >
+                                                      <div className="flex items-center gap-2">
+                                                        {tareaExpanded ? (
+                                                          <ChevronDown className="h-3 w-3 text-blue-400" />
+                                                        ) : (
+                                                          <ChevronRight className="h-3 w-3 text-blue-400" />
+                                                        )}
+                                                        <span className="text-[10px] font-medium text-blue-300">{tareaKey}</span>
+                                                      </div>
+                                                      <Badge className="bg-blue-600/20 text-blue-300 border-blue-500/20 text-[9px]">
+                                                        {items.length}
+                                                      </Badge>
+                                                    </button>
+                                                    {tareaExpanded && (
+                                                      <div className="bg-card/50">
+                                                        <table className="w-full text-xs">
+                                                          <thead className="bg-purple-900/20">
+                                                            <tr className="border-b border-border text-left">
+                                                              <th className="p-2 w-8">
+                                                                <button
+                                                                  onClick={() => {
+                                                                    const allSelected = items.every(item => selectedInventoryIds.has(item.id));
+                                                                    setSelectedInventoryIds(prev => {
+                                                                      const next = new Set(prev);
+                                                                      items.forEach(item => {
+                                                                        if (allSelected) next.delete(item.id);
+                                                                        else next.add(item.id);
+                                                                      });
+                                                                      return next;
+                                                                    });
+                                                                  }}
+                                                                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                                                    items.every(item => selectedInventoryIds.has(item.id))
+                                                                      ? 'bg-purple-600 border-purple-600'
+                                                                      : 'border-purple-500/50 hover:border-purple-400'
+                                                                  }`}
+                                                                >
+                                                                  {items.every(item => selectedInventoryIds.has(item.id)) && (
+                                                                    <Check className="h-3 w-3 text-white" />
+                                                                  )}
+                                                                </button>
+                                                              </th>
+                                                              <th className="p-2 font-medium text-purple-300">ID</th>
+                                                              <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
+                                                              <th className="p-2 font-medium text-purple-300">Archivo</th>
+                                                              <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                                              <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
+                                                              <th className="p-2 font-medium text-purple-300">Formato</th>
+                                                              <th className="p-2 font-medium text-purple-300">Plaza</th>
+                                                              <th className="p-2 font-medium text-purple-300">Ciudad</th>
+                                                              <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
+                                                              <th className="p-2 font-medium text-purple-300">IMU</th>
+                                                              <th className="p-2 font-medium text-purple-300">Instalado</th>
+                                                            </tr>
+                                                          </thead>
+                                                          <tbody>
+                                                            {items.map((item) => renderInventoryRow(item))}
+                                                          </tbody>
+                                                        </table>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             ) : activeMainTab === 'versionario' ? (
               // Vista jerárquica de 3 niveles para Subir Artes: Catorcena -> APS -> Grupo
               <div className="divide-y divide-border">
