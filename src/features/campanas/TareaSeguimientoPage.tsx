@@ -3442,24 +3442,12 @@ export function TareaSeguimientoPage() {
                                     )}
                                   </button>
                                 </th>
-                                {activeMainTab === 'atender' && (
-                                  <>
-                                    <th className="p-2 font-medium text-purple-300">Código</th>
-                                    <th className="p-2 font-medium text-purple-300">Ubicación</th>
-                                    <th className="p-2 font-medium text-purple-300">Mueble</th>
-                                    <th className="p-2 font-medium text-purple-300">Plaza</th>
-                                    <th className="p-2 font-medium text-purple-300">Estado Arte</th>
-                                  </>
-                                )}
-                                {activeMainTab === 'testigo' && (
-                                  <>
-                                    <th className="p-2 font-medium text-purple-300">Código</th>
-                                    <th className="p-2 font-medium text-purple-300">Ubicación</th>
-                                    <th className="p-2 font-medium text-purple-300">Mueble</th>
-                                    <th className="p-2 font-medium text-purple-300">Plaza</th>
-                                    <th className="p-2 font-medium text-purple-300">Testigo</th>
-                                  </>
-                                )}
+                                {/* Simple Grouped View solo se usa para testigo */}
+                                <th className="p-2 font-medium text-purple-300">Código</th>
+                                <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                <th className="p-2 font-medium text-purple-300">Mueble</th>
+                                <th className="p-2 font-medium text-purple-300">Plaza</th>
+                                <th className="p-2 font-medium text-purple-300">Testigo</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -3491,29 +3479,13 @@ export function TareaSeguimientoPage() {
                         )}
                       </button>
                     </th>
-                    {/* Atender Headers */}
-                    {activeMainTab === 'atender' && (
-                      <>
-                        <th className="p-2 font-medium text-purple-300">Código</th>
-                        <th className="p-2 font-medium text-purple-300">Ubicación</th>
-                        <th className="p-2 font-medium text-purple-300">Mueble</th>
-                        <th className="p-2 font-medium text-purple-300">Plaza</th>
-                        <th className="p-2 font-medium text-purple-300">APS</th>
-                        <th className="p-2 font-medium text-purple-300">Estado Arte</th>
-                        <th className="p-2 font-medium text-purple-300">Estado Tarea</th>
-                      </>
-                    )}
-                    {/* Testigo Headers */}
-                    {activeMainTab === 'testigo' && (
-                      <>
-                        <th className="p-2 font-medium text-purple-300">Código</th>
-                        <th className="p-2 font-medium text-purple-300">Ubicación</th>
-                        <th className="p-2 font-medium text-purple-300">Mueble</th>
-                        <th className="p-2 font-medium text-purple-300">Plaza</th>
-                        <th className="p-2 font-medium text-purple-300">APS</th>
-                        <th className="p-2 font-medium text-purple-300">Testigo</th>
-                      </>
-                    )}
+                    {/* Flat Table View solo se usa para testigo */}
+                    <th className="p-2 font-medium text-purple-300">Código</th>
+                    <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                    <th className="p-2 font-medium text-purple-300">Mueble</th>
+                    <th className="p-2 font-medium text-purple-300">Plaza</th>
+                    <th className="p-2 font-medium text-purple-300">APS</th>
+                    <th className="p-2 font-medium text-purple-300">Testigo</th>
                   </tr>
                 </thead>
                 <tbody>{filteredInventory.map((item) => renderInventoryRow(item))}</tbody>
