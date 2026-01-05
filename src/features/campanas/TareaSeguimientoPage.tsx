@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   Search,
@@ -32,12 +32,44 @@ import {
   ClipboardList,
   Info,
   Palette,
+  Edit3,
+  Trash2,
+  MessageSquare,
+  MapPin,
+  Send,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioConArte, TareaCampana, ArteExistente } from '../../services/campanas.service';
 import { proveedoresService } from '../../services/proveedores.service';
-import { Proveedor } from '../../types';
+import { Proveedor, Catorcena } from '../../types';
+import { solicitudesService } from '../../services/solicitudes.service';
 import { Badge } from '../../components/ui/badge';
+import { useAuthStore } from '../../store/authStore';
+
+// URL base para archivos estáticos
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const STATIC_URL = API_URL.replace(/\/api$/, '');
+
+// Helper para normalizar URLs de imágenes
+const getImageUrl = (url: string | undefined | null): string | null => {
+  if (!url) return null;
+  
+  // Si es un data URL (base64), usarlo directamente
+  if (url.startsWith('data:')) {
+    
+    return url;
+  }
+  // Si ya es una URL completa, usarla tal cual
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  // Si es una ruta relativa, agregar la URL base
+  if (url.startsWith('/')) {
+    return `${STATIC_URL}${url}`;
+  }
+  // Si no tiene slash al inicio, agregarlo
+  return `${STATIC_URL}/${url}`;
+};
 
 // ============================================================================
 // TYPES
@@ -105,6 +137,10 @@ interface InventoryRow {
   nse: string; // Nivel socioeconómico
   ubicacion: string; // Dirección completa
   tradicional_digital: 'Tradicional' | 'Digital';
+  ancho?: number | string; // Ancho del inventario
+  alto?: number | string; // Alto del inventario
+  latitud?: number; // Para mapa
+  longitud?: number; // Para mapa
   // Para Atender arte
   estado_arte?: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado';
   estado_tarea?: 'sin_atender' | 'en_progreso' | 'atendido';
@@ -118,7 +154,7 @@ interface InventoryRow {
 interface TaskRow {
   id: string;
   tipo: string;
-  estatus: 'pendiente' | 'en_progreso' | 'completada' | 'cancelada';
+  estatus: string; // Valores de BD: 'Activo', 'Pendiente', 'Atendido', etc.
   identificador: string;
   fecha_inicio: string;
   fecha_fin: string;
@@ -127,6 +163,8 @@ interface TaskRow {
   descripcion: string;
   titulo: string;
   contenido?: string;
+  responsable?: string;
+  ids_reservas?: string; // IDs de reservas como string separado por comas
   inventario_ids: string[];
   campana_id: number;
 }
@@ -138,10 +176,110 @@ interface CalendarEvent {
   type: 'tarea' | 'entrega';
 }
 
+// Tipos para el sistema de decisiones de revisión de artes
+type DecisionArte = 'aprobar' | 'rechazar' | 'corregir' | null;
+
+interface ArteDecision {
+  decision: DecisionArte;
+  motivoRechazo?: string;
+}
+
+type DecisionesState = Record<string, ArteDecision>;
+
+// Tipos para filtros avanzados (como en CampanaDetailPage)
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
+
+interface FilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: string;
+  label: string;
+  type: 'string' | 'number';
+}
+
+// Operadores disponibles para filtros
+const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
+  { value: '=', label: 'Igual a', forTypes: ['string', 'number'] },
+  { value: '!=', label: 'Diferente de', forTypes: ['string', 'number'] },
+  { value: 'contains', label: 'Contiene', forTypes: ['string'] },
+  { value: 'not_contains', label: 'No contiene', forTypes: ['string'] },
+  { value: '>', label: 'Mayor que', forTypes: ['number'] },
+  { value: '<', label: 'Menor que', forTypes: ['number'] },
+  { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
+  { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
+];
+
+// Campos disponibles para filtros en cada tabla
+const FILTER_FIELDS_INVENTARIO: FilterFieldConfig[] = [
+  { field: 'codigo_unico', label: 'Código Único', type: 'string' },
+  { field: 'mueble', label: 'Formato', type: 'string' },
+  { field: 'ciudad', label: 'Ciudad', type: 'string' },
+  { field: 'plaza', label: 'Plaza', type: 'string' },
+  { field: 'municipio', label: 'Municipio', type: 'string' },
+  { field: 'ubicacion', label: 'Ubicación', type: 'string' },
+  { field: 'nse', label: 'NSE', type: 'string' },
+  { field: 'tipo_de_cara', label: 'Tipo Cara', type: 'string' },
+  { field: 'catorcena', label: 'Catorcena', type: 'number' },
+  { field: 'aps', label: 'APS', type: 'number' },
+];
+
+// Opciones de agrupación para las tablas
+const GROUPING_OPTIONS_INVENTARIO: { field: GroupByField; label: string }[] = [
+  { field: 'catorcena', label: 'Catorcena' },
+  { field: 'ciudad', label: 'Ciudad' },
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'mueble', label: 'Formato' },
+  { field: 'tipo_medio', label: 'Tipo Medio' },
+];
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+// Función para aplicar filtros a los datos
+function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
+  if (filters.length === 0) return data;
+
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = (item as Record<string, unknown>)[filter.field];
+      const filterValue = filter.value;
+
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+
+      switch (filter.operator) {
+        case '=':
+          return strValue === strFilterValue;
+        case '!=':
+          return strValue !== strFilterValue;
+        case 'contains':
+          return strValue.includes(strFilterValue);
+        case 'not_contains':
+          return !strValue.includes(strFilterValue);
+        case '>':
+          return Number(fieldValue) > Number(filterValue);
+        case '<':
+          return Number(fieldValue) < Number(filterValue);
+        case '>=':
+          return Number(fieldValue) >= Number(filterValue);
+        case '<=':
+          return Number(fieldValue) <= Number(filterValue);
+        default:
+          return true;
+      }
+    });
+  });
+}
 
 const estadoArteLabels: Record<string, string> = {
   sin_revisar: 'Arte Sin revisar',
@@ -167,6 +305,14 @@ const statusColors: Record<string, string> = {
   pendiente: 'bg-amber-500/20 text-amber-400',
   completada: 'bg-green-500/20 text-green-400',
   cancelada: 'bg-red-500/20 text-red-400',
+  // Valores de la BD (con mayúscula)
+  'Activo': 'bg-green-500/20 text-green-400',
+  'Pendiente': 'bg-amber-500/20 text-amber-400',
+  'Atendido': 'bg-blue-500/20 text-blue-400',
+  'En Progreso': 'bg-blue-500/20 text-blue-400',
+  'Completado': 'bg-green-500/20 text-green-400',
+  'Cancelado': 'bg-red-500/20 text-red-400',
+  'Notificación': 'bg-purple-500/20 text-purple-400',
   validado: 'bg-green-500/20 text-green-400',
 };
 
@@ -351,6 +497,8 @@ function TreeNode({
 
 // Upload Art Modal Types
 type UploadOption = 'file' | 'existing' | 'link';
+type TaskDetailTab = 'resumen' | 'editar' | 'atender';
+type GroupByArte = 'inventario' | 'ciudad' | 'grupo';
 
 // Upload Art Modal Component
 function UploadArtModal({
@@ -884,10 +1032,1156 @@ function UploadArtModal({
 
 // Tipos de tarea disponibles
 const TIPOS_TAREA = [
-  { value: 'Instalacion', label: 'Instalación', description: 'Instalación física del arte en sitio' },
-  { value: 'Revision', label: 'Revisión de artes', description: 'Revisión y aprobación de artes' },
-  { value: 'Impresion', label: 'Impresión', description: 'Impresión de materiales publicitarios' },
+  { value: 'Instalación', label: 'Instalación', description: 'Instalación física del arte en sitio' },
+  { value: 'Revisión de artes', label: 'Revisión de artes', description: 'Revisión y aprobación de artes' },
+  { value: 'Impresión', label: 'Impresión', description: 'Impresión de materiales publicitarios' },
 ];
+
+
+// ============================================================================
+// FILTER TOOLBAR COMPONENT (Reutilizable para las 3 tablas)
+// ============================================================================
+interface FilterToolbarProps {
+  filters: FilterCondition[];
+  showFilters: boolean;
+  setShowFilters: (show: boolean) => void;
+  addFilter: () => void;
+  updateFilter: (id: string, updates: Partial<FilterCondition>) => void;
+  removeFilter: (id: string) => void;
+  clearFilters: () => void;
+  uniqueValues: Record<string, string[]>;
+  activeGroupings: GroupByField[];
+  showGrouping: boolean;
+  setShowGrouping: (show: boolean) => void;
+  toggleGrouping: (field: GroupByField) => void;
+  sortField: string | null;
+  sortDirection: 'asc' | 'desc';
+  showSort: boolean;
+  setShowSort: (show: boolean) => void;
+  setSortField: (field: string | null) => void;
+  setSortDirection: (dir: 'asc' | 'desc') => void;
+  filteredCount: number;
+  totalCount: number;
+}
+
+function FilterToolbar({
+  filters, showFilters, setShowFilters, addFilter, updateFilter, removeFilter, clearFilters, uniqueValues,
+  activeGroupings, showGrouping, setShowGrouping, toggleGrouping,
+  sortField, sortDirection, showSort, setShowSort, setSortField, setSortDirection,
+  filteredCount, totalCount,
+}: FilterToolbarProps) {
+  return (
+    <div className="flex items-center gap-2">
+      {/* Botón Filtrar */}
+      <div className="relative">
+        <button
+          onClick={() => { setShowFilters(!showFilters); setShowGrouping(false); setShowSort(false); }}
+          className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
+            filters.length > 0 ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+          }`}
+          title="Filtrar"
+        >
+          <Filter className="h-3.5 w-3.5" />
+          {filters.length > 0 && <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">{filters.length}</span>}
+        </button>
+        {showFilters && (
+          <div className="absolute right-0 top-full mt-1 z-50 w-[480px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+              <button onClick={() => setShowFilters(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+              {filters.map((filter, index) => (
+                <div key={filter.id} className="flex items-center gap-2">
+                  {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
+                  {index === 0 && <span className="w-8"></span>}
+                  <select value={filter.field} onChange={(e) => updateFilter(filter.id, { field: e.target.value })} className="w-[110px] text-xs bg-background border border-border rounded px-2 py-1.5">
+                    {FILTER_FIELDS_INVENTARIO.map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}
+                  </select>
+                  <select value={filter.operator} onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })} className="w-[85px] text-xs bg-background border border-border rounded px-2 py-1.5">
+                    {FILTER_OPERATORS.filter(op => { const fc = FILTER_FIELDS_INVENTARIO.find(f => f.field === filter.field); return fc && op.forTypes.includes(fc.type); }).map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
+                  </select>
+                  <select value={filter.value} onChange={(e) => updateFilter(filter.id, { value: e.target.value })} className="flex-1 text-xs bg-background border border-border rounded px-2 py-1.5">
+                    <option value="">Seleccionar...</option>
+                    {uniqueValues[filter.field]?.map((val) => <option key={val} value={val}>{val}</option>)}
+                  </select>
+                  <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5"><Trash2 className="h-3 w-3" /></button>
+                </div>
+              ))}
+              {filters.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-3">Sin filtros. Haz clic en "Añadir".</p>}
+            </div>
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-purple-900/30">
+              <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded"><Plus className="h-3 w-3" /> Añadir</button>
+              <button onClick={clearFilters} disabled={filters.length === 0} className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Limpiar</button>
+            </div>
+            {filters.length > 0 && <div className="mt-2 pt-2 border-t border-purple-900/30"><span className="text-[10px] text-muted-foreground">{filteredCount} de {totalCount} registros</span></div>}
+          </div>
+        )}
+      </div>
+
+      {/* Botón Agrupar */}
+      <div className="relative">
+        <button
+          onClick={() => { setShowGrouping(!showGrouping); setShowFilters(false); setShowSort(false); }}
+          className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
+          title="Agrupar"
+        >
+          <Layers className="h-3.5 w-3.5" />
+          {activeGroupings.length > 0 && <span className="px-1 py-0.5 rounded bg-purple-600 text-[10px]">{activeGroupings.length}</span>}
+        </button>
+        {showGrouping && (
+          <div className="absolute right-0 top-full mt-1 z-10 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide px-2 py-1">Agrupar por (max 2)</p>
+            {GROUPING_OPTIONS_INVENTARIO.map(({ field, label }) => (
+              <button key={field} onClick={() => toggleGrouping(field)} className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'}`}>
+                <div className={`w-4 h-4 rounded border flex items-center justify-center ${activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'}`}>
+                  {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
+                </div>
+                {label}
+                {activeGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
+                {activeGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Botón Ordenar */}
+      <div className="relative">
+        <button
+          onClick={() => { setShowSort(!showSort); setShowFilters(false); setShowGrouping(false); }}
+          className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${sortField ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'}`}
+          title="Ordenar"
+        >
+          <ArrowUpDown className="h-3.5 w-3.5" />
+        </button>
+        {showSort && (
+          <div className="absolute right-0 top-full mt-1 z-50 w-[240px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-purple-300">Ordenar por</span>
+              <button onClick={() => setShowSort(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="space-y-1">
+              {FILTER_FIELDS_INVENTARIO.map((field) => (
+                <button key={field.field} onClick={() => { if (sortField === field.field) { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortField(field.field); setSortDirection('asc'); } }}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${sortField === field.field ? 'bg-purple-600 text-white' : 'text-zinc-300 hover:bg-purple-900/30'}`}>
+                  <span>{field.label}</span>
+                  {sortField === field.field && (sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />)}
+                </button>
+              ))}
+            </div>
+            {sortField && (
+              <div className="mt-3 pt-3 border-t border-purple-900/30">
+                <button onClick={() => { setSortField(null); setSortDirection('asc'); }} className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors">Quitar ordenamiento</button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Comments Section Component
+function CommentsSection({ campanaId }: { campanaId: number }) {
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const [comment, setComment] = useState('');
+  const commentsEndRef = useRef<HTMLDivElement>(null);
+
+  // Obtener comentarios de la campaña
+  const { data: campana } = useQuery({
+    queryKey: ['campana', campanaId],
+    queryFn: () => campanasService.getById(campanaId),
+    enabled: campanaId > 0,
+  });
+
+  const comentarios = campana?.comentarios || [];
+
+  // Mutación para agregar comentario
+  const addCommentMutation = useMutation({
+    mutationFn: (contenido: string) => campanasService.addComment(campanaId, contenido),
+    onSuccess: () => {
+      setComment('');
+      queryClient.invalidateQueries({ queryKey: ['campana', campanaId] });
+    },
+  });
+
+  // Scroll al final cuando se agregan nuevos comentarios
+  useEffect(() => {
+    if (commentsEndRef.current) {
+      commentsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [comentarios.length]);
+
+  const handleSubmit = () => {
+    if (comment.trim()) {
+      addCommentMutation.mutate(comment.trim());
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('es-MX', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Lista de comentarios */}
+      <div className="flex-1 overflow-y-auto divide-y divide-purple-900/20 max-h-[300px] mb-3 scrollbar-purple">
+        {comentarios.length === 0 ? (
+          <div className="text-center py-6 text-zinc-400">
+            <MessageSquare className="h-6 w-6 mx-auto mb-2 opacity-50" />
+            <p className="text-xs">No hay comentarios aún</p>
+          </div>
+        ) : (
+          [...comentarios].reverse().map((c: { id: number; autor_nombre?: string; fecha: string; contenido: string }) => (
+            <div key={c.id} className="flex gap-2 py-2">
+              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-[10px] font-medium text-white">
+                {(c.autor_nombre || 'U')[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-medium text-white">{c.autor_nombre || 'Usuario'}</span>
+                  <span className="text-[9px] text-zinc-500">{formatDate(c.fecha)}</span>
+                </div>
+                <p className="text-[11px] text-zinc-300 mt-0.5 break-words">{c.contenido}</p>
+              </div>
+            </div>
+          ))
+        )}
+        <div ref={commentsEndRef} />
+      </div>
+
+      {/* Input para nuevo comentario */}
+      <div className="flex items-center gap-2 pt-2 border-t border-border">
+        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-[10px] font-medium text-white">
+          {(user?.nombre || 'U')[0].toUpperCase()}
+        </div>
+        <div className="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 focus-within:border-purple-500">
+          <input
+            type="text"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+            placeholder="Escribe un comentario..."
+            className="flex-1 bg-transparent text-[11px] focus:outline-none placeholder:text-zinc-500"
+          />
+          <button
+            onClick={handleSubmit}
+            disabled={!comment.trim() || addCommentMutation.isPending}
+            className="p-1 rounded bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {addCommentMutation.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Send className="h-3 w-3" />
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Task Detail Modal Component - Modal con 3 tabs: Resumen, Editar, Atender
+
+function TaskDetailModal({
+  isOpen,
+  onClose,
+  task,
+  inventoryData,
+  artesExistentes,
+  isLoadingArtes,
+  onApprove,
+  onReject,
+  onUpdateArte,
+  isUpdating,
+  campanaId,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  task: TaskRow | null;
+  inventoryData: InventoryRow[];
+  artesExistentes: ArteExistente[];
+  isLoadingArtes: boolean;
+  onApprove: (reservaIds: number[]) => void;
+  onReject: (reservaIds: number[], comentario: string) => void;
+  onUpdateArte: (reservaIds: number[], archivo: string) => void;
+  isUpdating: boolean;
+  campanaId: number;
+}) {
+  const [activeTab, setActiveTab] = useState<TaskDetailTab>('resumen');
+  const [selectedArteIds, setSelectedArteIds] = useState<Set<string>>(new Set());
+  const [groupBy, setGroupBy] = useState<GroupByArte>('inventario');
+
+  // Estados para el sistema de decisiones de revisión
+  const [decisiones, setDecisiones] = useState<DecisionesState>({});
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [isFinalizando, setIsFinalizando] = useState(false);
+
+  // Estados para editar arte
+  const [uploadOption, setUploadOption] = useState<UploadOption>('file');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [existingArtUrl, setExistingArtUrl] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+
+  // Filtrar inventario que pertenece a esta tarea
+  const taskInventory = useMemo(() => {
+    if (!task) return [];
+
+    // Los inventario_ids de la tarea son IDs de reserva
+    const taskReservaIds = new Set(
+      task.inventario_ids?.map(id => id.trim()) || []
+    );
+
+    if (taskReservaIds.size === 0) return [];
+
+    return inventoryData.filter(item => {
+      const itemReservaIds = item.rsv_id.split(',').map(id => id.trim());
+      return itemReservaIds.some(id => taskReservaIds.has(id));
+    });
+  }, [task, inventoryData]);
+
+  // Items seleccionados
+  const selectedArteItems = useMemo(() => {
+    return taskInventory.filter(item => selectedArteIds.has(item.id));
+  }, [taskInventory, selectedArteIds]);
+
+  // Agrupar inventario para tab Atender
+  const groupedInventory = useMemo(() => {
+    const groups: Record<string, InventoryRow[]> = {};
+    taskInventory.forEach(item => {
+      let key = '';
+      switch (groupBy) {
+        case 'ciudad':
+          key = item.ciudad || 'Sin ciudad';
+          break;
+        case 'grupo':
+          key = item.grupo_id || item.id;
+          break;
+        default:
+          key = item.id;
+      }
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+    return groups;
+  }, [taskInventory, groupBy]);
+
+  const toggleArteSelection = (id: string) => {
+    setSelectedArteIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllArtes = () => {
+    if (selectedArteIds.size === taskInventory.length) {
+      setSelectedArteIds(new Set());
+    } else {
+      setSelectedArteIds(new Set(taskInventory.map(item => item.id)));
+    }
+  };
+
+  const handleApprove = (items?: InventoryRow[]) => {
+    const itemsToApprove = items || selectedArteItems;
+    const reservaIds = itemsToApprove.flatMap(item =>
+      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+    );
+    if (reservaIds.length > 0) {
+      onApprove(reservaIds);
+      setSelectedArteIds(new Set());
+    }
+  };
+
+  const handleReject = (items?: InventoryRow[]) => {
+    const comentario = prompt('Ingresa el motivo del rechazo:');
+    if (comentario) {
+      const itemsToReject = items || selectedArteItems;
+      const reservaIds = itemsToReject.flatMap(item =>
+        item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+      );
+      if (reservaIds.length > 0) {
+        onReject(reservaIds, comentario);
+        setSelectedArteIds(new Set());
+      }
+    }
+  };
+
+  // === Funciones para el sistema de decisiones ===
+  const handleDecisionChange = (key: string, decision: string) => {
+    setDecisiones(prev => ({
+      ...prev,
+      [key]: {
+        decision: (decision || null) as DecisionArte,
+        motivoRechazo: decision !== 'rechazar' ? undefined : prev[key]?.motivoRechazo
+      }
+    }));
+    setValidationErrors([]);
+  };
+
+  const handleMotivoChange = (key: string, motivo: string) => {
+    setDecisiones(prev => ({
+      ...prev,
+      [key]: { ...prev[key], motivoRechazo: motivo }
+    }));
+  };
+
+  const validarDecisiones = (): boolean => {
+    const errors: string[] = [];
+    Object.keys(groupedInventory).forEach(key => {
+      const decision = decisiones[key];
+      if (!decision?.decision) {
+        errors.push(`Falta seleccionar acción para: ${key}`);
+      } else if (decision.decision === 'rechazar' && !decision.motivoRechazo?.trim()) {
+        errors.push(`Falta motivo de rechazo para: ${key}`);
+      }
+    });
+    setValidationErrors(errors);
+    return errors.length === 0;
+  };
+
+  const handleFinalizar = async () => {
+    if (!validarDecisiones()) return;
+    setIsFinalizando(true);
+
+    try {
+      const aprobados: number[] = [];
+      const rechazados: { ids: number[]; motivo: string; items: InventoryRow[] }[] = [];
+
+      Object.entries(groupedInventory).forEach(([key, items]) => {
+        const d = decisiones[key];
+        const ids = items.flatMap(item =>
+          item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+        );
+
+        if (d?.decision === 'aprobar') {
+          aprobados.push(...ids);
+        }
+        if (d?.decision === 'rechazar') {
+          rechazados.push({ ids, motivo: d.motivoRechazo || '', items });
+        }
+        // 'corregir' no hace nada por ahora, solo marca para corrección
+      });
+
+      // Aprobar todos los marcados como aprobados
+      if (aprobados.length > 0) {
+        onApprove(aprobados);
+      }
+
+      // Rechazar y crear tarea de corrección con todos los rechazados
+      if (rechazados.length > 0) {
+        const todosIds = rechazados.flatMap(r => r.ids);
+        const descripcion = rechazados.map(r =>
+          `**${r.items.map(i => i.codigo_unico).join(', ')}:**\n${r.motivo}`
+        ).join('\n\n---\n\n');
+
+        onReject(todosIds, descripcion);
+      }
+
+      // Limpiar estado y cerrar modal
+      setDecisiones({});
+      setValidationErrors([]);
+      onClose();
+    } catch (error) {
+      console.error('Error al finalizar:', error);
+    } finally {
+      setIsFinalizando(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => setFilePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleClearImage = () => {
+    const reservaIds = selectedArteItems.flatMap(item =>
+      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+    );
+    if (reservaIds.length > 0) {
+      onUpdateArte(reservaIds, '');
+      setSelectedArteIds(new Set());
+    }
+  };
+
+  const handleUpdateImage = async () => {
+    try {
+      let archivo = '';
+      if (uploadOption === 'file' && selectedFile) {
+        // Subir el archivo al servidor primero
+        const uploadResult = await campanasService.uploadArteFile(selectedFile);
+        archivo = uploadResult.url;
+      } else if (uploadOption === 'existing') {
+        archivo = existingArtUrl;
+      } else if (uploadOption === 'link') {
+        archivo = linkUrl;
+      }
+
+      if (archivo) {
+        const reservaIds = selectedArteItems.flatMap(item =>
+          item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+        );
+        if (reservaIds.length > 0) {
+          onUpdateArte(reservaIds, archivo);
+          setSelectedArteIds(new Set());
+          setSelectedFile(null);
+          setFilePreview(null);
+          setExistingArtUrl('');
+          setLinkUrl('');
+        }
+      }
+    } catch (error) {
+      console.error('Error al actualizar imagen:', error);
+    }
+  };
+
+  const handleUpdateMasivo = async () => {
+    try {
+      let archivo = '';
+      if (uploadOption === 'file' && selectedFile) {
+        // Subir el archivo al servidor primero
+        const uploadResult = await campanasService.uploadArteFile(selectedFile);
+        archivo = uploadResult.url;
+      } else if (uploadOption === 'existing') {
+        archivo = existingArtUrl;
+      } else if (uploadOption === 'link') {
+        archivo = linkUrl;
+      }
+
+      if (archivo) {
+        const reservaIds = taskInventory.flatMap(item =>
+          item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+        );
+        if (reservaIds.length > 0) {
+          onUpdateArte(reservaIds, archivo);
+          setSelectedFile(null);
+          setFilePreview(null);
+          setExistingArtUrl('');
+          setLinkUrl('');
+        }
+      }
+    } catch (error) {
+      console.error('Error al actualizar masivamente:', error);
+    }
+  };
+
+  const downloadImage = (url: string, filename: string) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setActiveTab('resumen');
+      setSelectedArteIds(new Set());
+      setSelectedFile(null);
+      setFilePreview(null);
+      setExistingArtUrl('');
+      setLinkUrl('');
+    }
+  }, [isOpen]);
+
+  if (!isOpen || !task) return null;
+
+  const tabs = [
+    { key: 'resumen' as const, label: 'Paso 1: Resumen', icon: FileText },
+    { key: 'editar' as const, label: 'Paso 2: Editar Arte', icon: Edit3 },
+    { key: 'atender' as const, label: 'Paso 3: Atender Arte', icon: CheckCircle2 },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+      <div className="bg-card border border-border rounded-xl w-full max-w-6xl max-h-[95vh] overflow-hidden shadow-2xl flex flex-col">
+        {/* Header */}
+        <div className="px-4 sm:px-6 py-4 border-b border-border bg-gradient-to-r from-purple-900/30 to-transparent flex-shrink-0">
+          <div className="flex items-start sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-purple-400" />
+                Tarea: {task.identificador}
+              </h3>
+              <p className="text-sm text-zinc-400 mt-1">
+                {task.tipo} - {task.titulo}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex flex-wrap gap-2 mt-4">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+                  activeTab === tab.key
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+                }`}
+              >
+                <tab.icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.label.split(': ')[1]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-4 sm:p-6">
+          {/* Tab Resumen */}
+          {activeTab === 'resumen' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Columna Izquierda - Info de la tarea */}
+              <div className="space-y-4">
+                <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                  <h4 className="text-sm font-medium text-purple-300 mb-3">Informacion de la Tarea</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-zinc-500">Tipo:</span>
+                      <p className="text-white font-medium">{task.tipo}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">ID:</span>
+                      <p className="text-white font-medium">{task.id}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Titulo:</span>
+                      <p className="text-white font-medium">{task.titulo || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Estatus:</span>
+                      <p className="text-white font-medium">{task.estatus}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Fecha Inicio:</span>
+                      <p className="text-white font-medium">{task.fecha_inicio || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Fecha Fin:</span>
+                      <p className="text-white font-medium">{task.fecha_fin || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Asignado:</span>
+                      <p className="text-white font-medium">{task.asignado || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Responsable:</span>
+                      <p className="text-white font-medium">{task.responsable || task.creador || '-'}</p>
+                    </div>
+                  </div>
+                  {task.descripcion && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <span className="text-zinc-500 text-sm">Descripcion:</span>
+                      <p className="text-white text-sm mt-1">{task.descripcion}</p>
+                    </div>
+                  )}
+                  {task.contenido && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <span className="text-zinc-500 text-sm">Contenido:</span>
+                      <p className="text-white text-sm mt-1">{task.contenido}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Mapa placeholder */}
+                <div className="bg-zinc-900/50 rounded-lg p-4 border border-border h-64 flex items-center justify-center">
+                  <div className="text-center text-zinc-500">
+                    <MapPin className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Mapa de ubicaciones</p>
+                    <p className="text-xs mt-1">{taskInventory.length} ubicaciones</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Columna Derecha - Lista de artes */}
+              <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
+                <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
+                  <h4 className="text-sm font-medium text-purple-300">Artes Asociadas ({taskInventory.length})</h4>
+                </div>
+                <div className="max-h-[500px] overflow-auto">
+                  {taskInventory.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-zinc-400">
+                      <Image className="h-12 w-12 mb-3 opacity-50" />
+                      <p className="text-sm">Sin artes asociadas</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-zinc-800 z-10">
+                        <tr className="text-left">
+                          <th className="p-3 font-medium text-purple-300">Archivo</th>
+                          <th className="p-3 font-medium text-purple-300">Tipo Mueble</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {taskInventory.map((item) => (
+                          <tr key={item.id} className="border-t border-border/50 hover:bg-purple-900/10">
+                            <td className="p-3">
+                              {item.archivo_arte ? (
+                                <div className="w-20 h-14 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                                  <img
+                                    src={getImageUrl(item.archivo_arte) || ''}
+                                    alt="Arte"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="w-20 h-14 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                                  <Image className="h-5 w-5 text-zinc-600" />
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3 text-zinc-300">{item.mueble}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab Editar */}
+          {activeTab === 'editar' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Columna Izquierda - Lista de artes con checkbox */}
+              <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
+                <div className="px-4 py-3 border-b border-border bg-zinc-800/50 flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-purple-300">Editar Arte</h4>
+                  <button
+                    onClick={selectAllArtes}
+                    className="text-xs text-purple-400 hover:text-purple-300"
+                  >
+                    {selectedArteIds.size === taskInventory.length ? 'Deseleccionar todas' : 'Seleccionar todas'}
+                  </button>
+                </div>
+                <div className="max-h-[500px] overflow-auto">
+                  <table className="w-full text-xs min-w-[500px]">
+                    <thead className="sticky top-0 bg-zinc-800 z-10">
+                      <tr className="text-left">
+                        <th className="p-3 w-10">
+                          <input
+                            type="checkbox"
+                            checked={selectedArteIds.size === taskInventory.length && taskInventory.length > 0}
+                            onChange={selectAllArtes}
+                            className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500"
+                          />
+                        </th>
+                        <th className="p-3 font-medium text-purple-300">Mueble</th>
+                        <th className="p-3 font-medium text-purple-300">RSV ID</th>
+                        <th className="p-3 font-medium text-purple-300">Ancho</th>
+                        <th className="p-3 font-medium text-purple-300">Alto</th>
+                        <th className="p-3 font-medium text-purple-300">Archivo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {taskInventory.map((item) => (
+                        <tr
+                          key={item.id}
+                          className={`border-t border-border/50 transition-colors ${
+                            selectedArteIds.has(item.id) ? 'bg-purple-900/30' : 'hover:bg-purple-900/10'
+                          }`}
+                        >
+                          <td className="p-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedArteIds.has(item.id)}
+                              onChange={() => toggleArteSelection(item.id)}
+                              className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500"
+                            />
+                          </td>
+                          <td className="p-3 text-zinc-300">{item.mueble}</td>
+                          <td className="p-3 text-zinc-300">{item.rsv_id}</td>
+                          <td className="p-3 text-zinc-300">{item.ancho || '-'}</td>
+                          <td className="p-3 text-zinc-300">{item.alto || '-'}</td>
+                          <td className="p-3">
+                            {item.archivo_arte ? (
+                              <div className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                                <img
+                                  src={getImageUrl(item.archivo_arte) || ''}
+                                  alt="Arte"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            ) : (
+                              <span className="text-zinc-500">Sin archivo</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Columna Derecha - Opciones de edicion */}
+              <div className="space-y-4">
+                {/* Botones de accion */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    onClick={handleUpdateImage}
+                    disabled={selectedArteIds.size === 0 || isUpdating}
+                    className={`flex items-center justify-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+                      selectedArteIds.size > 0
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <Upload className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">Actualizar</span>
+                  </button>
+                  <button
+                    onClick={handleUpdateMasivo}
+                    disabled={isUpdating}
+                    className="flex items-center justify-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  >
+                    <Layers className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">Masivo</span>
+                  </button>
+                  <button
+                    onClick={handleClearImage}
+                    disabled={selectedArteIds.size === 0 || isUpdating}
+                    className={`flex items-center justify-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+                      selectedArteIds.size > 0
+                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <Trash2 className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">Limpiar</span>
+                  </button>
+                </div>
+
+                {/* Selector de opcion */}
+                <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                  <label className="block text-sm font-medium text-zinc-300 mb-2">
+                    Escoja una opcion
+                  </label>
+                  <select
+                    value={uploadOption}
+                    onChange={(e) => setUploadOption(e.target.value as UploadOption)}
+                    className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-1 focus:ring-purple-500"
+                  >
+                    <option value="file">Subir archivo</option>
+                    <option value="existing">Escoger existente</option>
+                    <option value="link">Subir link</option>
+                  </select>
+                </div>
+
+                {/* Contenido segun opcion */}
+                <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                  {uploadOption === 'file' && (
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">
+                        Subir archivo
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="w-full text-sm text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700"
+                      />
+                      {filePreview && (
+                        <div className="mt-3">
+                          <img src={filePreview} alt="Preview" className="max-h-40 rounded-lg" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {uploadOption === 'existing' && (
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">
+                        Seleccionar archivo existente
+                      </label>
+                      {isLoadingArtes ? (
+                        <div className="flex items-center gap-2 text-zinc-400">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Cargando artes...
+                        </div>
+                      ) : (
+                        <select
+                          value={existingArtUrl}
+                          onChange={(e) => setExistingArtUrl(e.target.value)}
+                          className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-1 focus:ring-purple-500"
+                        >
+                          <option value="">Seleccionar...</option>
+                          {artesExistentes.map((arte) => (
+                            <option key={arte.id} value={arte.url}>
+                              {arte.nombre} ({arte.usos} usos)
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {existingArtUrl && (
+                        <div className="mt-3">
+                          <img src={existingArtUrl} alt="Preview" className="max-h-40 rounded-lg" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {uploadOption === 'link' && (
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">
+                        URL de la imagen
+                      </label>
+                      <input
+                        type="url"
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        placeholder="https://..."
+                        className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-1 focus:ring-purple-500"
+                      />
+                      {linkUrl && (
+                        <div className="mt-3">
+                          <img src={linkUrl} alt="Preview" className="max-h-40 rounded-lg" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab Atender */}
+          {activeTab === 'atender' && (
+            <div className="space-y-4">
+              {/* Toolbar de agrupación */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {(['inventario', 'ciudad', 'grupo'] as const).map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => setGroupBy(g)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                        groupBy === g
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Por {g.charAt(0).toUpperCase() + g.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-zinc-400">
+                  {Object.values(decisiones).filter(d => d?.decision).length} de {Object.keys(groupedInventory).length} decisiones tomadas
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Columna Principal - Cards de artes */}
+                <div className="lg:col-span-2 space-y-4">
+                  {/* Cards */}
+                  <div className="space-y-4 max-h-[400px] overflow-auto">
+                    {Object.entries(groupedInventory).map(([groupKey, items]) => (
+                      <div key={groupKey} className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
+                        {/* Header del grupo */}
+                        <div className={`px-4 py-3 border-b border-border ${groupBy !== 'inventario' ? 'bg-purple-900/20' : 'bg-zinc-800/50'}`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div>
+                              <span className="text-sm font-medium text-purple-300">
+                                {groupBy === 'inventario' ? items[0]?.codigo_unico : groupKey}
+                              </span>
+                              {groupBy !== 'inventario' && (
+                                <span className="text-xs text-zinc-500 ml-2">({items.length} items)</span>
+                              )}
+                            </div>
+                            {/* Select de decisión a nivel de grupo */}
+                            <select
+                              value={decisiones[groupKey]?.decision || ''}
+                              onChange={(e) => handleDecisionChange(groupKey, e.target.value)}
+                              className={`px-3 py-1.5 text-sm rounded-lg bg-zinc-800 border transition-colors ${
+                                !decisiones[groupKey]?.decision
+                                  ? 'border-amber-500/50 text-amber-400'
+                                  : decisiones[groupKey]?.decision === 'aprobar'
+                                  ? 'border-green-500/50 text-green-400'
+                                  : decisiones[groupKey]?.decision === 'rechazar'
+                                  ? 'border-red-500/50 text-red-400'
+                                  : 'border-blue-500/50 text-blue-400'
+                              }`}
+                            >
+                              <option value="">-- Seleccionar acción --</option>
+                              <option value="aprobar">✓ Aprobar</option>
+                              <option value="rechazar">✗ Rechazar</option>
+                              <option value="corregir">✎ Corregir</option>
+                            </select>
+                          </div>
+                          {/* Textarea para motivo de rechazo */}
+                          {decisiones[groupKey]?.decision === 'rechazar' && (
+                            <div className="mt-2">
+                              <textarea
+                                placeholder="Escribe el motivo del rechazo (obligatorio)"
+                                value={decisiones[groupKey]?.motivoRechazo || ''}
+                                onChange={(e) => handleMotivoChange(groupKey, e.target.value)}
+                                className={`w-full px-3 py-2 text-sm rounded-lg bg-zinc-800 border resize-none ${
+                                  !decisiones[groupKey]?.motivoRechazo?.trim()
+                                    ? 'border-red-500/50'
+                                    : 'border-zinc-700'
+                                }`}
+                                rows={2}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Lista de items dentro del grupo */}
+                        <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {items.map((item) => (
+                            <div key={item.id} className="bg-zinc-800/50 rounded-lg p-3 border border-border">
+                              <div className="flex gap-3">
+                                {/* Preview */}
+                                <div className="flex-shrink-0">
+                                  {item.archivo_arte ? (
+                                    <div className="w-20 h-16 rounded overflow-hidden bg-zinc-700 border border-zinc-600">
+                                      <img
+                                        src={getImageUrl(item.archivo_arte) || ''}
+                                        alt="Arte"
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="w-20 h-16 rounded bg-zinc-700 border border-zinc-600 flex items-center justify-center">
+                                      <Image className="h-5 w-5 text-zinc-500" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Info */}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-white truncate">{item.codigo_unico}</p>
+                                  <p className="text-xs text-zinc-400 truncate">{item.mueble}</p>
+                                  <p className="text-xs text-zinc-500 truncate">{item.ubicacion}</p>
+                                  <div className="mt-1 flex items-center gap-2">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                                      item.estado_arte === 'aprobado'
+                                        ? 'bg-green-500/20 text-green-400'
+                                        : item.estado_arte === 'rechazado'
+                                        ? 'bg-red-500/20 text-red-400'
+                                        : 'bg-zinc-500/20 text-zinc-400'
+                                    }`}>
+                                      {item.estado_arte === 'aprobado' ? 'Aprobado' : item.estado_arte === 'rechazado' ? 'Rechazado' : 'Sin revisar'}
+                                    </span>
+                                    {item.archivo_arte && (
+                                      <button
+                                        onClick={() => downloadImage(getImageUrl(item.archivo_arte)!, `${item.codigo_unico}.jpg`)}
+                                        className="text-[10px] text-zinc-400 hover:text-white"
+                                        title="Descargar"
+                                      >
+                                        <Download className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Footer con validación y botón Finalizar */}
+                  <div className="border border-border rounded-lg bg-zinc-900/50 p-4">
+                    {validationErrors.length > 0 && (
+                      <div className="mb-4 p-3 bg-red-900/30 border border-red-500/50 rounded-lg">
+                        <p className="text-red-400 font-medium text-sm mb-1">Por favor completa:</p>
+                        <ul className="text-xs text-red-300 list-disc list-inside space-y-0.5">
+                          {validationErrors.slice(0, 5).map((err, i) => <li key={i}>{err}</li>)}
+                          {validationErrors.length > 5 && (
+                            <li>...y {validationErrors.length - 5} más</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
+                      <div className="text-sm text-zinc-400">
+                        <span className="font-medium text-white">{Object.values(decisiones).filter(d => d?.decision).length}</span>
+                        {' / '}
+                        <span>{Object.keys(groupedInventory).length}</span>
+                        {' decisiones tomadas'}
+                      </div>
+                      <button
+                        onClick={handleFinalizar}
+                        disabled={isFinalizando || isUpdating}
+                        className="w-full sm:w-auto px-6 py-2.5 text-sm font-medium bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isFinalizando ? (
+                          <>
+                            <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Finalizando...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="h-4 w-4" />
+                            Finalizar Revisión
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Columna Derecha - Comentarios */}
+                <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden h-fit">
+                  <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
+                    <h4 className="text-sm font-medium text-purple-300 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      Comentarios
+                    </h4>
+                  </div>
+                  <div className="p-4">
+                    <CommentsSection campanaId={campanaId} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>        {/* Footer */}
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-border bg-zinc-900/50 flex justify-end flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Create Task Modal Component
 function CreateTaskModal({
@@ -913,21 +2207,45 @@ function CreateTaskModal({
   isSubmitting: boolean;
   error: string | null;
 }) {
+  // Obtener usuario actual y catorcenas
+  const { user } = useAuthStore();
+  const { data: catorcenasData } = useQuery({
+    queryKey: ['catorcenas-modal'],
+    queryFn: () => solicitudesService.getCatorcenas(),
+  });
+  const catorcenas = catorcenasData?.data || [];
+  const years = catorcenasData?.years || [];
+
+  // Query para usuarios (asignados)
+  const { data: usuariosData, isLoading: isLoadingUsuarios } = useQuery({
+    queryKey: ['usuarios-modal'],
+    queryFn: () => campanasService.getUsuarios(),
+  });
+  const usuarios = usuariosData || [];
+
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [tipo, setTipo] = useState('');
   const [proveedorId, setProveedorId] = useState<number | null>(null);
   const [fechaFin, setFechaFin] = useState('');
-  const [estatus, setEstatus] = useState<TaskRow['estatus']>('pendiente');
+  const [estatus, setEstatus] = useState<string>('Pendiente');
   // Campos específicos para Instalación
   const [fechaInstalacion, setFechaInstalacion] = useState('');
   const [horaInstalacion, setHoraInstalacion] = useState('');
   const [contactoSitio, setContactoSitio] = useState('');
   const [telefonoContacto, setTelefonoContacto] = useState('');
   // Campos específicos para Revisión de artes
-  const [tipoRevision, setTipoRevision] = useState('inicial');
-  const [prioridad, setPrioridad] = useState('normal');
-  const [comentariosRevision, setComentariosRevision] = useState('');
+  const [identificador, setIdentificador] = useState('');
+  const [catorcenaEntrega, setCatorcenaEntrega] = useState<string | null>(null);
+  const [asignadoId, setAsignadoId] = useState<number | null>(null);
+  const [asignadoNombre, setAsignadoNombre] = useState(''); // Nombre del usuario seleccionado
+  const [asignadoSearch, setAsignadoSearch] = useState('');
+  const [showAsignadoDropdown, setShowAsignadoDropdown] = useState(false);
+  const [yearEntrega, setYearEntrega] = useState<number>(new Date().getFullYear());
+  const [fechaCreacion, setFechaCreacion] = useState(() => {
+    const now = new Date();
+    return now.toISOString().slice(0, 16);
+  });
   // Campos específicos para Impresión
   const [tipoMaterial, setTipoMaterial] = useState('');
   const [cantidad, setCantidad] = useState(1);
@@ -935,6 +2253,21 @@ function CreateTaskModal({
   const [acabado, setAcabado] = useState('');
 
   const selectedProveedor = proveedores.find(p => p.id === proveedorId);
+
+  // Filtrar catorcenas por año seleccionado
+  const catorcenasOptions = useMemo(() => {
+    return catorcenas.filter(c => c.a_o === yearEntrega);
+  }, [catorcenas, yearEntrega]);
+
+  // Filtrar usuarios por búsqueda
+  const filteredUsuarios = useMemo(() => {
+    if (!asignadoSearch.trim()) return usuarios;
+    const search = asignadoSearch.toLowerCase();
+    return usuarios.filter(u =>
+      u.nombre.toLowerCase().includes(search) ||
+      String(u.id).includes(search)
+    );
+  }, [usuarios, asignadoSearch]);
 
   const handleSubmit = () => {
     const payload: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string } = {
@@ -945,11 +2278,23 @@ function CreateTaskModal({
       estatus,
       inventario_ids: selectedIds,
       campana_id: campanaId,
-      creador: 'Usuario Actual',
-      identificador: `TASK-${Date.now()}`,
+      creador: user ? `${user.id}, ${user.nombre}` : 'Usuario no identificado',
+      identificador: tipo === 'Revisión de artes' ? identificador : `TASK-${Date.now()}`,
     };
 
-    if (proveedorId && selectedProveedor) {
+    // Campos adicionales para Revisión de artes
+    if (tipo === 'Revisión de artes') {
+      (payload as any).catorcena_entrega = catorcenaEntrega;
+      (payload as any).fecha_creacion = new Date().toISOString();
+      (payload as any).contenido = identificador; // El identificador es el contenido
+      (payload as any).listado_inventario = selectedIds.join(','); // Lista de IDs de inventario
+      // Asignado para Revisión usa usuarios
+      if (asignadoId && asignadoNombre) {
+        payload.asignado = asignadoNombre; // Usar solo el nombre del usuario
+        (payload as any).id_asignado = String(asignadoId); // ID del usuario asignado
+      }
+    } else if (proveedorId && selectedProveedor) {
+      // Para otros tipos usa proveedores
       payload.proveedores_id = proveedorId;
       payload.nombre_proveedores = selectedProveedor.nombre;
       payload.asignado = selectedProveedor.nombre;
@@ -965,16 +2310,20 @@ function CreateTaskModal({
     setTipo('');
     setProveedorId(null);
     setFechaFin('');
-    setEstatus('pendiente');
+    setEstatus('Pendiente');
     // Reset campos de Instalación
     setFechaInstalacion('');
     setHoraInstalacion('');
     setContactoSitio('');
     setTelefonoContacto('');
     // Reset campos de Revisión
-    setTipoRevision('inicial');
-    setPrioridad('normal');
-    setComentariosRevision('');
+    setIdentificador('');
+    setCatorcenaEntrega(null);
+    setAsignadoId(null);
+    setAsignadoNombre('');
+    setAsignadoSearch('');
+    setShowAsignadoDropdown(false);
+    setFechaCreacion(new Date().toISOString().slice(0, 16));
     // Reset campos de Impresión
     setTipoMaterial('');
     setCantidad(1);
@@ -1043,18 +2392,20 @@ function CreateTaskModal({
         {/* Formulario condicional según tipo */}
         {tipo && (
           <div className="space-y-4 border-t border-border pt-4">
-            {/* Campos comunes */}
-            <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
-              <input
-                type="text"
-                value={titulo}
-                onChange={(e) => setTitulo(e.target.value)}
-                disabled={isSubmitting}
-                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                placeholder={tipo === 'Instalacion' ? 'Ej: Instalación en Reforma' : tipo === 'Revision' ? 'Ej: Revisión arte campaña X' : 'Ej: Impresión lona 3x2'}
-              />
-            </div>
+            {/* Campos comunes - Solo mostrar Título para tipos que no son Revisión de artes */}
+            {tipo !== 'Revisión de artes' && (
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                <input
+                  type="text"
+                  value={titulo}
+                  onChange={(e) => setTitulo(e.target.value)}
+                  disabled={isSubmitting}
+                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                  placeholder={tipo === 'Instalacion' ? 'Ej: Instalación en Reforma' : 'Ej: Impresión lona 3x2'}
+                />
+              </div>
+            )}
 
             {/* === FORMULARIO INSTALACIÓN === */}
             {tipo === 'Instalacion' && (
@@ -1143,56 +2494,143 @@ function CreateTaskModal({
             )}
 
             {/* === FORMULARIO REVISIÓN DE ARTES === */}
-            {tipo === 'Revision' && (
+            {tipo === 'Revisión de artes' && (
               <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1">Tipo de revisión</label>
-                    <select
-                      value={tipoRevision}
-                      onChange={(e) => setTipoRevision(e.target.value)}
-                      disabled={isSubmitting}
-                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                    >
-                      <option value="inicial">Revisión inicial</option>
-                      <option value="correccion">Corrección</option>
-                      <option value="final">Aprobación final</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1">Prioridad</label>
-                    <select
-                      value={prioridad}
-                      onChange={(e) => setPrioridad(e.target.value)}
-                      disabled={isSubmitting}
-                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                    >
-                      <option value="baja">Baja</option>
-                      <option value="normal">Normal</option>
-                      <option value="alta">Alta</option>
-                      <option value="urgente">Urgente</option>
-                    </select>
-                  </div>
-                </div>
+                {/* Identificador */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha límite de revisión</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Identificador *</label>
                   <input
-                    type="date"
-                    value={fechaFin}
-                    onChange={(e) => setFechaFin(e.target.value)}
+                    type="text"
+                    value={identificador}
+                    onChange={(e) => setIdentificador(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    placeholder="Identificador"
                   />
                 </div>
+
+                {/* Título */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Comentarios para revisión</label>
-                  <textarea
-                    value={comentariosRevision}
-                    onChange={(e) => setComentariosRevision(e.target.value)}
-                    rows={3}
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título</label>
+                  <input
+                    type="text"
+                    value={titulo}
+                    onChange={(e) => setTitulo(e.target.value)}
                     disabled={isSubmitting}
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
-                    placeholder="Puntos a revisar, observaciones..."
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    placeholder="Título"
+                  />
+                </div>
+
+                {/* Descripción */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción *</label>
+                  <input
+                    type="text"
+                    value={descripcion}
+                    onChange={(e) => setDescripcion(e.target.value)}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    placeholder="Descripción"
+                  />
+                </div>
+
+                {/* Catorcena de entrega */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega</label>
+                  <select
+                    value={catorcenaEntrega || ''}
+                    onChange={(e) => setCatorcenaEntrega(e.target.value || null)}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                  >
+                    <option value="">Seleccionar</option>
+                    {/* Catorcenas desde 1, 2024 hasta 26, 2026 */}
+                    {[2024, 2025, 2026].flatMap(year =>
+                      Array.from({ length: 26 }, (_, i) => i + 1).map(num => (
+                        <option key={`${num}-${year}`} value={`Catorcena ${num}, ${year}`}>
+                          Catorcena {num}, {year}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                {/* Asignado */}
+                <div className="relative">
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignado *</label>
+                  {isLoadingUsuarios ? (
+                    <div className="flex items-center gap-2 py-2 text-zinc-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Cargando...</span>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={asignadoSearch}
+                        onChange={(e) => {
+                          setAsignadoSearch(e.target.value);
+                          setShowAsignadoDropdown(true);
+                          if (!e.target.value) {
+                            setAsignadoId(null);
+                            setAsignadoNombre('');
+                          }
+                        }}
+                        onFocus={() => setShowAsignadoDropdown(true)}
+                        onBlur={() => setTimeout(() => setShowAsignadoDropdown(false), 200)}
+                        placeholder="Buscar usuario..."
+                        disabled={isSubmitting}
+                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                      />
+                      {showAsignadoDropdown && filteredUsuarios.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {filteredUsuarios.map((u) => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              onClick={() => {
+                                setAsignadoId(u.id);
+                                setAsignadoNombre(u.nombre);
+                                setAsignadoSearch(`${u.id}, ${u.nombre}`);
+                                setShowAsignadoDropdown(false);
+                              }}
+                              className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
+                            >
+                              {u.id}, {u.nombre}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Fecha creación (solo lectura) */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha creación *</label>
+                  <input
+                    type="text"
+                    value={new Date().toLocaleString('es-MX', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                    disabled
+                    className="w-full px-3 py-2 text-sm bg-zinc-800/50 border border-border rounded-lg text-zinc-400 cursor-not-allowed"
+                  />
+                </div>
+
+                {/* Creador (solo lectura) */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Creador *</label>
+                  <input
+                    type="text"
+                    value={user ? `${user.id}, ${user.nombre}` : 'Usuario no identificado'}
+                    disabled
+                    className="w-full px-3 py-2 text-sm bg-zinc-800/50 border border-border rounded-lg text-zinc-400 cursor-not-allowed"
                   />
                 </div>
               </>
@@ -1316,11 +2754,11 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!tipo || !titulo.trim() || isSubmitting}
+            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : !titulo.trim()) || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isSubmitting ? 'Creando...' : 'Crear tarea'}
+            {isSubmitting ? 'Generando...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : 'Crear tarea'}
           </button>
         </div>
       </div>
@@ -1549,7 +2987,7 @@ function SummaryCards({ stats, activeTab }: { stats: SummaryStats; activeTab: Ma
     }
     if (activeTab === 'atender') {
       return [
-        { label: 'Por Revisar', value: stats.sinArte + stats.enRevision, icon: Eye, color: 'amber' },
+        { label: 'Por Revisar', value: stats.sinArte, icon: Eye, color: 'amber' },
         { label: 'Aprobados', value: stats.aprobados, icon: CheckCircle2, color: 'green' },
         { label: 'Rechazados', value: stats.rechazados, icon: AlertCircle, color: 'red' },
         { label: 'Tareas Activas', value: stats.tareasActivas, icon: ClipboardList, color: 'blue' },
@@ -1645,10 +3083,42 @@ export function TareaSeguimientoPage() {
     catorcena: null,
   });
 
-  // Dropdown visibility state
+  // Dropdown visibility state (legacy - kept for compatibility)
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [showSortDropdown, setShowSortDropdown] = useState(false);
+
+  // ========== FILTROS AVANZADOS PARA CADA TABLA ==========
+  
+  // --- Subir Artes (versionario) ---
+  const [filtersVersionario, setFiltersVersionario] = useState<FilterCondition[]>([]);
+  const [showFiltersVersionario, setShowFiltersVersionario] = useState(false);
+  const [activeGroupingsVersionario, setActiveGroupingsVersionario] = useState<GroupByField[]>([]);
+  const [showGroupingVersionario, setShowGroupingVersionario] = useState(false);
+  const [sortFieldVersionario, setSortFieldVersionario] = useState<string | null>(null);
+  const [sortDirectionVersionario, setSortDirectionVersionario] = useState<'asc' | 'desc'>('asc');
+  const [showSortVersionario, setShowSortVersionario] = useState(false);
+  const [expandedGroupsVersionario, setExpandedGroupsVersionario] = useState<Set<string>>(new Set());
+
+  // --- Revisar y Aprobar (atender) ---
+  const [filtersAtender, setFiltersAtender] = useState<FilterCondition[]>([]);
+  const [showFiltersAtender, setShowFiltersAtender] = useState(false);
+  const [activeGroupingsAtender, setActiveGroupingsAtender] = useState<GroupByField[]>([]);
+  const [showGroupingAtender, setShowGroupingAtender] = useState(false);
+  const [sortFieldAtender, setSortFieldAtender] = useState<string | null>(null);
+  const [sortDirectionAtender, setSortDirectionAtender] = useState<'asc' | 'desc'>('asc');
+  const [showSortAtender, setShowSortAtender] = useState(false);
+  const [expandedGroupsAtender, setExpandedGroupsAtender] = useState<Set<string>>(new Set());
+
+  // --- Validar Instalación (testigo) ---
+  const [filtersTestigo, setFiltersTestigo] = useState<FilterCondition[]>([]);
+  const [showFiltersTestigo, setShowFiltersTestigo] = useState(false);
+  const [activeGroupingsTestigo, setActiveGroupingsTestigo] = useState<GroupByField[]>([]);
+  const [showGroupingTestigo, setShowGroupingTestigo] = useState(false);
+  const [sortFieldTestigo, setSortFieldTestigo] = useState<string | null>(null);
+  const [sortDirectionTestigo, setSortDirectionTestigo] = useState<'asc' | 'desc'>('asc');
+  const [showSortTestigo, setShowSortTestigo] = useState(false);
+  const [expandedGroupsTestigo, setExpandedGroupsTestigo] = useState<Set<string>>(new Set());
 
   // Helper: check if grouped
   const isGrouped = groupByField !== 'none';
@@ -1664,6 +3134,8 @@ export function TareaSeguimientoPage() {
   // Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploadArtModalOpen, setIsUploadArtModalOpen] = useState(false);
+  const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
 
   // ---- Query Client for mutations ----
   const queryClient = useQueryClient();
@@ -1688,7 +3160,7 @@ export function TareaSeguimientoPage() {
   const { data: inventarioArteAPI = [], isLoading: isLoadingInventarioArte, isFetched: isFetchedConArte } = useQuery({
     queryKey: ['campana-inventario-arte', campanaId],
     queryFn: () => campanasService.getInventarioConArte(campanaId),
-    enabled: campanaId > 0 && (activeMainTab === 'atender' || !initialTabDetermined),
+    enabled: campanaId > 0 && (activeMainTab === 'atender' || !initialTabDetermined || isTaskDetailModalOpen),
   });
 
   // Inventario para TESTIGOS (para tab "Validar Instalación")
@@ -1699,10 +3171,10 @@ export function TareaSeguimientoPage() {
     enabled: campanaId > 0 && (activeMainTab === 'testigo' || !initialTabDetermined),
   });
 
-  // Tareas de la campaña
+  // Tareas de la campaña (activas = Activo o Pendiente)
   const { data: tareasAPI = [], isLoading: isLoadingTareas } = useQuery({
     queryKey: ['campana-tareas', campanaId],
-    queryFn: () => campanasService.getTareas(campanaId),
+    queryFn: () => campanasService.getTareas(campanaId, { activas: true }),
     enabled: campanaId > 0,
   });
 
@@ -1710,7 +3182,7 @@ export function TareaSeguimientoPage() {
   const { data: artesExistentes = [], isLoading: isLoadingArtes } = useQuery({
     queryKey: ['campana-artes-existentes', campanaId],
     queryFn: () => campanasService.getArtesExistentes(campanaId),
-    enabled: campanaId > 0 && isUploadArtModalOpen,
+    enabled: campanaId > 0 && (isUploadArtModalOpen || isTaskDetailModalOpen),
   });
 
   // Proveedores para asignar tareas
@@ -1760,11 +3232,13 @@ export function TareaSeguimientoPage() {
     mutationFn: ({ reservaIds, archivo }: { reservaIds: number[]; archivo: string }) =>
       campanasService.assignArte(campanaId, reservaIds, archivo),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte', campanaId] });
-      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId] });
-      queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes', campanaId] });
-      setIsUploadArtModalOpen(false);
-      setSelectedInventoryIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte', campanaId], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes', campanaId], refetchType: 'all' });
+      if (isUploadArtModalOpen) {
+        setIsUploadArtModalOpen(false);
+        setSelectedInventoryIds(new Set());
+      }
       setUploadArtError(null);
     },
     onError: (error) => {
@@ -1776,7 +3250,7 @@ export function TareaSeguimientoPage() {
     mutationFn: ({ reservaIds, status, comentario }: { reservaIds: number[]; status: 'Aprobado' | 'Rechazado'; comentario?: string }) =>
       campanasService.updateArteStatus(campanaId, reservaIds, status, comentario),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', campanaId] });
       setSelectedInventoryIds(new Set());
     },
@@ -1792,8 +3266,19 @@ export function TareaSeguimientoPage() {
   });
 
   const createTareaMutation = useMutation({
-    mutationFn: (data: { titulo: string; descripcion?: string; tipo?: string; ids_reservas?: string; proveedores_id?: number; nombre_proveedores?: string }) =>
-      campanasService.createTarea(campanaId, data),
+    mutationFn: (data: {
+      titulo: string;
+      descripcion?: string;
+      tipo?: string;
+      ids_reservas?: string;
+      proveedores_id?: number;
+      nombre_proveedores?: string;
+      asignado?: string;
+      id_asignado?: string;
+      contenido?: string;
+      catorcena_entrega?: string;
+      listado_inventario?: string;
+    }) => campanasService.createTarea(campanaId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
       setIsCreateModalOpen(false);
@@ -1804,6 +3289,101 @@ export function TareaSeguimientoPage() {
       setCreateTaskError(error instanceof Error ? error.message : 'Error al crear tarea');
     },
   });
+
+  // ========== FUNCIONES HELPER PARA FILTROS AVANZADOS ==========
+
+  // --- Funciones para Subir Artes (versionario) ---
+  const addFilterVersionario = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS_INVENTARIO[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFiltersVersionario(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilterVersionario = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFiltersVersionario(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilterVersionario = useCallback((id: string) => {
+    setFiltersVersionario(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearFiltersVersionario = useCallback(() => {
+    setFiltersVersionario([]);
+  }, []);
+
+  const toggleGroupingVersionario = useCallback((field: GroupByField) => {
+    setActiveGroupingsVersionario(prev => {
+      if (prev.includes(field)) return prev.filter(f => f !== field);
+      if (prev.length < 2) return [...prev, field];
+      return [prev[1], field];
+    });
+  }, []);
+
+  // --- Funciones para Revisar y Aprobar (atender) ---
+  const addFilterAtender = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS_INVENTARIO[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFiltersAtender(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilterAtender = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFiltersAtender(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilterAtender = useCallback((id: string) => {
+    setFiltersAtender(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearFiltersAtender = useCallback(() => {
+    setFiltersAtender([]);
+  }, []);
+
+  const toggleGroupingAtender = useCallback((field: GroupByField) => {
+    setActiveGroupingsAtender(prev => {
+      if (prev.includes(field)) return prev.filter(f => f !== field);
+      if (prev.length < 2) return [...prev, field];
+      return [prev[1], field];
+    });
+  }, []);
+
+  // --- Funciones para Validar Instalación (testigo) ---
+  const addFilterTestigo = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS_INVENTARIO[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFiltersTestigo(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilterTestigo = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFiltersTestigo(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilterTestigo = useCallback((id: string) => {
+    setFiltersTestigo(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearFiltersTestigo = useCallback(() => {
+    setFiltersTestigo([]);
+  }, []);
+
+  const toggleGroupingTestigo = useCallback((field: GroupByField) => {
+    setActiveGroupingsTestigo(prev => {
+      if (prev.includes(field)) return prev.filter(f => f !== field);
+      if (prev.length < 2) return [...prev, field];
+      return [prev[1], field];
+    });
+  }, []);
 
   // Helper function to transform InventarioConArte to InventoryRow
   const transformInventarioToRow = useCallback((item: InventarioConArte, defaultArteStatus: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = 'sin_revisar'): InventoryRow => {
@@ -1861,6 +3441,7 @@ export function TareaSeguimientoPage() {
   }, [inventarioSinArteAPI, transformInventarioToRow]);
 
   // Transform inventario con arte para tab "Atender arte"
+
   const inventoryArteData = useMemo((): InventoryRow[] => {
     return inventarioArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar'));
   }, [inventarioArteAPI, transformInventarioToRow]);
@@ -1870,6 +3451,103 @@ export function TareaSeguimientoPage() {
     return inventarioTestigosAPI.map((item) => transformInventarioToRow(item, 'aprobado'));
   }, [inventarioTestigosAPI, transformInventarioToRow]);
 
+  // ========== DATOS FILTRADOS Y ORDENADOS ==========
+
+  // Datos filtrados y ordenados para Subir Artes (versionario)
+  const filteredVersionarioData = useMemo(() => {
+    let data = applyFilters(inventorySinArteData, filtersVersionario);
+    
+    // Aplicar ordenamiento
+    if (sortFieldVersionario) {
+      data = [...data].sort((a, b) => {
+        const aVal = a[sortFieldVersionario as keyof InventoryRow];
+        const bVal = b[sortFieldVersionario as keyof InventoryRow];
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        let comparison = 0;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          comparison = aVal - bVal;
+        } else {
+          comparison = String(aVal).localeCompare(String(bVal));
+        }
+        return sortDirectionVersionario === 'asc' ? comparison : -comparison;
+      });
+    }
+    return data;
+  }, [inventorySinArteData, filtersVersionario, sortFieldVersionario, sortDirectionVersionario]);
+
+  // Datos filtrados y ordenados para Revisar y Aprobar (atender)
+  const filteredAtenderData = useMemo(() => {
+    let data = applyFilters(inventoryArteData, filtersAtender);
+    
+    if (sortFieldAtender) {
+      data = [...data].sort((a, b) => {
+        const aVal = a[sortFieldAtender as keyof InventoryRow];
+        const bVal = b[sortFieldAtender as keyof InventoryRow];
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        let comparison = 0;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          comparison = aVal - bVal;
+        } else {
+          comparison = String(aVal).localeCompare(String(bVal));
+        }
+        return sortDirectionAtender === 'asc' ? comparison : -comparison;
+      });
+    }
+    return data;
+  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender]);
+
+  // Datos filtrados y ordenados para Validar Instalación (testigo)
+  const filteredTestigoData = useMemo(() => {
+    let data = applyFilters(inventoryTestigosData, filtersTestigo);
+    
+    if (sortFieldTestigo) {
+      data = [...data].sort((a, b) => {
+        const aVal = a[sortFieldTestigo as keyof InventoryRow];
+        const bVal = b[sortFieldTestigo as keyof InventoryRow];
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        let comparison = 0;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          comparison = aVal - bVal;
+        } else {
+          comparison = String(aVal).localeCompare(String(bVal));
+        }
+        return sortDirectionTestigo === 'asc' ? comparison : -comparison;
+      });
+    }
+    return data;
+  }, [inventoryTestigosData, filtersTestigo, sortFieldTestigo, sortDirectionTestigo]);
+
+  // Obtener valores únicos para los selectores de filtros
+  const getUniqueValuesVersionario = useMemo(() => {
+    const values: Record<string, string[]> = {};
+    FILTER_FIELDS_INVENTARIO.forEach(field => {
+      const unique = [...new Set(inventorySinArteData.map(item => String(item[field.field as keyof InventoryRow] || '')))].filter(v => v).sort();
+      values[field.field] = unique;
+    });
+    return values;
+  }, [inventorySinArteData]);
+
+  const getUniqueValuesAtender = useMemo(() => {
+    const values: Record<string, string[]> = {};
+    FILTER_FIELDS_INVENTARIO.forEach(field => {
+      const unique = [...new Set(inventoryArteData.map(item => String(item[field.field as keyof InventoryRow] || '')))].filter(v => v).sort();
+      values[field.field] = unique;
+    });
+    return values;
+  }, [inventoryArteData]);
+
+  const getUniqueValuesTestigo = useMemo(() => {
+    const values: Record<string, string[]> = {};
+    FILTER_FIELDS_INVENTARIO.forEach(field => {
+      const unique = [...new Set(inventoryTestigosData.map(item => String(item[field.field as keyof InventoryRow] || '')))].filter(v => v).sort();
+      values[field.field] = unique;
+    });
+    return values;
+  }, [inventoryTestigosData]);
+
   // Transform tareas from API to TaskRow format
   const tasks = useMemo((): TaskRow[] => {
     return tareasAPI
@@ -1877,7 +3555,7 @@ export function TareaSeguimientoPage() {
       .map((t) => ({
         id: t.id.toString(),
         tipo: t.tipo || 'Tarea',
-        estatus: (t.estatus === 'Pendiente' ? 'pendiente' : t.estatus === 'En Progreso' ? 'en_progreso' : 'pendiente') as 'pendiente' | 'en_progreso' | 'completada' | 'cancelada',
+        estatus: t.estatus || 'Pendiente', // Mostrar el estatus real de la BD
         identificador: `TASK-${t.id.toString().padStart(3, '0')}`,
         fecha_inicio: t.fecha_inicio?.split('T')[0] || '',
         fecha_fin: t.fecha_fin?.split('T')[0] || '',
@@ -1896,7 +3574,7 @@ export function TareaSeguimientoPage() {
       .map((t) => ({
         id: t.id.toString(),
         tipo: t.tipo || 'Tarea',
-        estatus: 'completada' as 'pendiente' | 'en_progreso' | 'completada' | 'cancelada',
+        estatus: t.estatus || 'Atendido',
         identificador: `TASK-${t.id.toString().padStart(3, '0')}`,
         fecha_inicio: t.fecha_inicio?.split('T')[0] || '',
         fecha_fin: t.fecha_fin?.split('T')[0] || '',
@@ -2153,11 +3831,11 @@ export function TareaSeguimientoPage() {
 
     return {
       totalInventario: allItems.length,
-      sinArte: allItems.filter(i => i.estado_arte === 'sin_revisar' || !i.archivo_arte).length,
+      sinArte: activeMainTab === 'versionario' ? allItems.filter(i => !i.archivo_arte).length : allItems.filter(i => i.estado_arte === 'sin_revisar' || i.estado_arte === 'en_revision').length,
       enRevision: allItems.filter(i => i.estado_arte === 'en_revision').length,
       aprobados: allItems.filter(i => i.estado_arte === 'aprobado').length,
       rechazados: allItems.filter(i => i.estado_arte === 'rechazado').length,
-      tareasActivas: tasks.filter(t => t.estatus === 'pendiente' || t.estatus === 'en_progreso').length,
+      tareasActivas: tasks.filter(t => t.estatus?.toLowerCase() === 'pendiente' || t.estatus?.toLowerCase() === 'en_progreso' || t.estatus?.toLowerCase() === 'en progreso').length,
       tareasCompletadas: completedTasks.length,
     };
   }, [inventorySinArteData, inventoryArteData, inventoryTestigosData, activeMainTab, tasks, completedTasks]);
@@ -2202,6 +3880,12 @@ export function TareaSeguimientoPage() {
       ids_reservas: reservaIds.join(','),
       proveedores_id: task.proveedores_id,
       nombre_proveedores: task.nombre_proveedores,
+      // Campos para Revisión de artes
+      asignado: (task as any).asignado,
+      id_asignado: (task as any).id_asignado,
+      contenido: (task as any).contenido,
+      catorcena_entrega: (task as any).catorcena_entrega,
+      listado_inventario: (task as any).listado_inventario,
     });
   }, [selectedInventoryItems, createTareaMutation]);
 
@@ -2331,10 +4015,10 @@ export function TareaSeguimientoPage() {
       <td className="p-2">
         {item.archivo_arte ? (
           <img
-            src={item.archivo_arte}
+            src={getImageUrl(item.archivo_arte) || ''}
             alt="Arte"
             className="w-10 h-10 object-cover rounded cursor-pointer hover:opacity-80"
-            onClick={() => window.open(item.archivo_arte, '_blank')}
+            onClick={() => window.open(getImageUrl(item.archivo_arte) || '', '_blank')}
           />
         ) : (
           <span className="text-zinc-500 text-xs">Sin archivo</span>
@@ -2347,7 +4031,7 @@ export function TareaSeguimientoPage() {
       <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
       <td className="p-2 text-xs text-blue-400 max-w-[150px] truncate" title={item.archivo_arte}>
         {item.archivo_arte ? (
-          <a href={item.archivo_arte} target="_blank" rel="noopener noreferrer" className="hover:underline">
+          <a href={getImageUrl(item.archivo_arte) || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
             {item.archivo_arte.split('/').pop()}
           </a>
         ) : '-'}
@@ -2847,6 +4531,35 @@ export function TareaSeguimientoPage() {
             )}
           </div>
 
+          {/* Filter Toolbar (Versionario tab) */}
+          {activeMainTab === 'versionario' && (
+            <div className="px-4 py-2 border-b border-border flex items-center justify-between">
+              <span className="text-xs text-zinc-400">{filteredVersionarioData.length} de {inventorySinArteData.length} espacios</span>
+              <FilterToolbar
+                filters={filtersVersionario}
+                showFilters={showFiltersVersionario}
+                setShowFilters={setShowFiltersVersionario}
+                addFilter={addFilterVersionario}
+                updateFilter={updateFilterVersionario}
+                removeFilter={removeFilterVersionario}
+                clearFilters={clearFiltersVersionario}
+                uniqueValues={getUniqueValuesVersionario}
+                activeGroupings={activeGroupingsVersionario}
+                showGrouping={showGroupingVersionario}
+                setShowGrouping={setShowGroupingVersionario}
+                toggleGrouping={toggleGroupingVersionario}
+                sortField={sortFieldVersionario}
+                sortDirection={sortDirectionVersionario}
+                showSort={showSortVersionario}
+                setShowSort={setShowSortVersionario}
+                setSortField={setSortFieldVersionario}
+                setSortDirection={setSortDirectionVersionario}
+                filteredCount={filteredVersionarioData.length}
+                totalCount={inventorySinArteData.length}
+              />
+            </div>
+          )}
+
           {/* Action Buttons (Versionario tab) */}
           {activeMainTab === 'versionario' && (
             <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-purple-900/10 to-transparent flex items-center justify-between">
@@ -2888,6 +4601,35 @@ export function TareaSeguimientoPage() {
             </div>
           )}
 
+          {/* Filter Toolbar (Atender tab) */}
+          {activeMainTab === 'atender' && (
+            <div className="px-4 py-2 border-b border-border flex items-center justify-between">
+              <span className="text-xs text-zinc-400">{filteredAtenderData.length} de {inventoryArteData.length} artes</span>
+              <FilterToolbar
+                filters={filtersAtender}
+                showFilters={showFiltersAtender}
+                setShowFilters={setShowFiltersAtender}
+                addFilter={addFilterAtender}
+                updateFilter={updateFilterAtender}
+                removeFilter={removeFilterAtender}
+                clearFilters={clearFiltersAtender}
+                uniqueValues={getUniqueValuesAtender}
+                activeGroupings={activeGroupingsAtender}
+                showGrouping={showGroupingAtender}
+                setShowGrouping={setShowGroupingAtender}
+                toggleGrouping={toggleGroupingAtender}
+                sortField={sortFieldAtender}
+                sortDirection={sortDirectionAtender}
+                showSort={showSortAtender}
+                setShowSort={setShowSortAtender}
+                setSortField={setSortFieldAtender}
+                setSortDirection={setSortDirectionAtender}
+                filteredCount={filteredAtenderData.length}
+                totalCount={inventoryArteData.length}
+              />
+            </div>
+          )}
+
           {/* Action Buttons (Atender tab) */}
           {activeMainTab === 'atender' && (
             <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-purple-900/10 to-transparent flex items-center justify-between">
@@ -2910,56 +4652,11 @@ export function TareaSeguimientoPage() {
                 ) : (
                   <div className="flex items-center gap-2 text-zinc-400">
                     <Info className="h-4 w-4" />
-                    <span className="text-xs">Selecciona artes para aprobar, rechazar o crear tareas</span>
+                    <span className="text-xs">Selecciona artes para crear tareas de revision</span>
                   </div>
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    const reservaIds = selectedInventoryItems.flatMap(item =>
-                      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
-                    );
-                    if (reservaIds.length > 0) {
-                      updateArteStatusMutation.mutate({ reservaIds, status: 'Aprobado' });
-                    }
-                  }}
-                  disabled={selectedInventoryIds.size === 0 || updateArteStatusMutation.isPending}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                    selectedInventoryIds.size > 0
-                      ? 'bg-green-600 hover:bg-green-700 text-white'
-                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                  }`}
-                >
-                  {updateArteStatusMutation.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                  )}
-                  Aprobar
-                </button>
-                <button
-                  onClick={() => {
-                    const comentario = prompt('Ingresa el motivo del rechazo:');
-                    if (comentario) {
-                      const reservaIds = selectedInventoryItems.flatMap(item =>
-                        item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
-                      );
-                      if (reservaIds.length > 0) {
-                        updateArteStatusMutation.mutate({ reservaIds, status: 'Rechazado', comentario });
-                      }
-                    }
-                  }}
-                  disabled={selectedInventoryIds.size === 0 || updateArteStatusMutation.isPending}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                    selectedInventoryIds.size > 0
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                  }`}
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Rechazar
-                </button>
                 <button
                   onClick={() => setIsCreateModalOpen(true)}
                   disabled={selectedInventoryIds.size === 0}
@@ -2973,6 +4670,35 @@ export function TareaSeguimientoPage() {
                   Crear Tarea
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Filter Toolbar (Testigo tab) */}
+          {activeMainTab === 'testigo' && (
+            <div className="px-4 py-2 border-b border-border flex items-center justify-between">
+              <span className="text-xs text-zinc-400">{filteredTestigoData.length} de {inventoryTestigosData.length} testigos</span>
+              <FilterToolbar
+                filters={filtersTestigo}
+                showFilters={showFiltersTestigo}
+                setShowFilters={setShowFiltersTestigo}
+                addFilter={addFilterTestigo}
+                updateFilter={updateFilterTestigo}
+                removeFilter={removeFilterTestigo}
+                clearFilters={clearFiltersTestigo}
+                uniqueValues={getUniqueValuesTestigo}
+                activeGroupings={activeGroupingsTestigo}
+                showGrouping={showGroupingTestigo}
+                setShowGrouping={setShowGroupingTestigo}
+                toggleGrouping={toggleGroupingTestigo}
+                sortField={sortFieldTestigo}
+                sortDirection={sortDirectionTestigo}
+                showSort={showSortTestigo}
+                setShowSort={setShowSortTestigo}
+                setSortField={setSortFieldTestigo}
+                setSortDirection={setSortDirectionTestigo}
+                filteredCount={filteredTestigoData.length}
+                totalCount={inventoryTestigosData.length}
+              />
             </div>
           )}
 
@@ -3631,7 +5357,13 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300 max-w-[150px] truncate">{task.descripcion}</td>
                             <td className="p-2 text-zinc-300">{task.titulo}</td>
                             <td className="p-2">
-                              <button className="px-2 py-1 text-[10px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors">
+                              <button
+                                onClick={() => {
+                                  setSelectedTask(task);
+                                  setIsTaskDetailModalOpen(true);
+                                }}
+                                className="px-2 py-1 text-[10px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                              >
                                 Abrir
                               </button>
                             </td>
@@ -3750,6 +5482,47 @@ export function TareaSeguimientoPage() {
         isLoadingArtes={isLoadingArtes}
         isSubmitting={assignArteMutation.isPending}
         error={uploadArtError}
+        campanaId={campanaId}
+      />
+
+      {/* Task Detail Modal */}
+      <TaskDetailModal
+        isOpen={isTaskDetailModalOpen}
+        onClose={() => {
+          setIsTaskDetailModalOpen(false);
+          setSelectedTask(null);
+        }}
+        task={selectedTask}
+        inventoryData={inventoryArteData}
+        artesExistentes={artesExistentes}
+        isLoadingArtes={isLoadingArtes}
+        onApprove={(reservaIds) => {
+          updateArteStatusMutation.mutate({ reservaIds, status: 'Aprobado' });
+        }}
+        onReject={(reservaIds, comentario) => {
+          // Primero actualizar el estado a Rechazado
+          updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Rechazado', comentario })
+            .then(() => {
+              // Después de rechazar exitosamente, crear tarea de corrección para el creador original
+              if (selectedTask && selectedTask.creador) {
+                createTareaMutation.mutate({
+                  titulo: `Corrección de artes - Rechazo`,
+                  descripcion: `Artes rechazados con el siguiente motivo:
+
+${comentario || 'Sin motivo especificado'}
+
+Por favor corrige los artes y vuelve a enviar a revisión.`,
+                  tipo: 'Correccion',
+                  asignado: selectedTask.creador,
+                  ids_reservas: reservaIds.join(','),
+                });
+              }
+            });
+        }}
+        onUpdateArte={(reservaIds, archivo) => {
+          assignArteMutation.mutate({ reservaIds, archivo });
+        }}
+        isUpdating={updateArteStatusMutation.isPending || assignArteMutation.isPending}
         campanaId={campanaId}
       />
     </div>

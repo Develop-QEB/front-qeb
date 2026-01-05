@@ -174,6 +174,7 @@ export interface TareaCampana {
   id: number;
   titulo: string | null;
   descripcion: string | null;
+  contenido: string | null;
   tipo: string | null;
   estatus: string | null;
   fecha_inicio: string;
@@ -182,13 +183,20 @@ export interface TareaCampana {
   id_responsable: number;
   responsable_nombre: string | null;
   responsable_foto: string | null;
+  correo_electronico: string | null;
   asignado: string | null;
   id_asignado: string | null;
   archivo: string | null;
   evidencia: string | null;
   ids_reservas: string | null;
+  listado_inventario: string | null;
   proveedores_id: number | null;
   nombre_proveedores: string | null;
+  // Campos adicionales de la query con JOINs
+  inventario_id?: string | null;
+  APS?: string | null;
+  tarea_reserva?: string | null;
+  Archivo_reserva?: string | null;
 }
 
 export interface CreateTareaData {
@@ -525,9 +533,13 @@ export const campanasService = {
   // TAREAS
   // ============================================================================
 
-  async getTareas(id: number, estatus?: string): Promise<TareaCampana[]> {
+  async getTareas(id: number, options?: { estatus?: string; activas?: boolean }): Promise<TareaCampana[]> {
+    const params: Record<string, string | boolean> = {};
+    if (options?.estatus) params.estatus = options.estatus;
+    if (options?.activas) params.activas = 'true';
+
     const response = await api.get<ApiResponse<TareaCampana[]>>(`/campanas/${id}/tareas`, {
-      params: estatus ? { estatus } : undefined,
+      params: Object.keys(params).length > 0 ? params : undefined,
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener tareas');
@@ -566,6 +578,14 @@ export const campanasService = {
     );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al verificar arte');
+    }
+    return response.data.data;
+  },
+
+  async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
+    const response = await api.get<ApiResponse<{ id: number; nombre: string }[]>>('/campanas/usuarios/lista');
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener usuarios');
     }
     return response.data.data;
   },
