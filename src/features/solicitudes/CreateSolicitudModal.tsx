@@ -1558,7 +1558,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <div className="space-y-6">
               {/* KPIs Totales */}
               <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/30">
-                <div className="grid grid-cols-5 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-white">{totals.totalRenta}</div>
                     <div className="text-xs text-zinc-400">Renta</div>
@@ -1570,10 +1570,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-400">{totals.totalRenta + totals.totalBonificacion}</div>
                     <div className="text-xs text-zinc-400">Total Caras</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-400">{formatCurrency(totals.tarifaEfectiva)}</div>
-                    <div className="text-xs text-zinc-400">Tarifa Efectiva</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-amber-400">{formatCurrency(totals.totalPrecio)}</div>
@@ -1876,8 +1872,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                     <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Total</th>
                                     <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Tarifa Púb.</th>
                                     <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Precio Total</th>
-                                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Tarifa Efect.</th>
-                                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Desc.</th>
                                     <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500"></th>
                                   </tr>
                                 </thead>
@@ -1909,8 +1903,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-center text-white font-medium">{totalCaras}</td>
                                         <td className="px-2 py-2 text-xs text-right text-zinc-300">{formatCurrency(cara.tarifaPublica)}</td>
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
-                                        <td className="px-2 py-2 text-xs text-right text-purple-400">{formatCurrency(tarifaEfectiva)}</td>
-                                        <td className="px-2 py-2 text-xs text-right text-amber-400">{descuento.toFixed(2)}%</td>
                                         <td className="px-2 py-2 text-center">
                                           <button
                                             type="button"
@@ -1995,7 +1987,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
               {/* Totals */}
               <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/30">
-                <div className="grid grid-cols-5 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-white">{totals.totalRenta}</div>
                     <div className="text-xs text-zinc-400">Renta</div>
@@ -2005,18 +1997,90 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <div className="text-xs text-zinc-400">Bonificación</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-400">{totals.totalRenta - totals.totalBonificacion}</div>
+                    <div className="text-2xl font-bold text-blue-400">{totals.totalRenta + totals.totalBonificacion}</div>
                     <div className="text-xs text-zinc-400">Total Caras</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-400">{formatCurrency(totals.tarifaEfectiva)}</div>
-                    <div className="text-xs text-zinc-400">Tarifa Efectiva</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-amber-400">{formatCurrency(totals.totalPrecio)}</div>
                     <div className="text-xs text-zinc-400">Inversión</div>
                   </div>
                 </div>
+              </div>
+
+              {/* Resumen de Catorcenas y Artículos */}
+              <div className="rounded-xl border border-zinc-700/50 overflow-hidden">
+                <div className="px-4 py-3 bg-zinc-800/50 border-b border-zinc-700/50">
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-purple-400" />
+                    Desglose por Catorcenas
+                  </h3>
+                </div>
+                {groupedCaras.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-zinc-500 text-sm">
+                    No hay caras agregadas
+                  </div>
+                ) : (
+                  <div className="divide-y divide-zinc-700/50">
+                    {groupedCaras.map(([key, items]) => {
+                      const [year, cat] = key.split('-');
+                      const groupTotal = items.reduce((acc, c) => acc + c.precioTotal, 0);
+                      const groupRenta = items.reduce((acc, c) => acc + c.renta, 0);
+                      const groupBonif = items.reduce((acc, c) => acc + c.bonificacion, 0);
+
+                      // Group by articulo within this catorcena
+                      const byArticulo = items.reduce((acc, cara) => {
+                        const artKey = cara.articulo.ItemCode;
+                        if (!acc[artKey]) {
+                          acc[artKey] = {
+                            articulo: cara.articulo,
+                            renta: 0,
+                            bonificacion: 0,
+                            precioTotal: 0,
+                            items: []
+                          };
+                        }
+                        acc[artKey].renta += cara.renta;
+                        acc[artKey].bonificacion += cara.bonificacion;
+                        acc[artKey].precioTotal += cara.precioTotal;
+                        acc[artKey].items.push(cara);
+                        return acc;
+                      }, {} as Record<string, { articulo: any; renta: number; bonificacion: number; precioTotal: number; items: any[] }>);
+
+                      return (
+                        <div key={key} className="bg-zinc-900/30">
+                          {/* Catorcena header */}
+                          <div className="flex items-center justify-between px-4 py-3 bg-zinc-800/30">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-white">Catorcena {cat} / {year}</span>
+                              <span className="text-xs text-zinc-500">({items.length} caras)</span>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm">
+                              <span className="text-zinc-400">{groupRenta} renta</span>
+                              <span className="text-emerald-400">+{groupBonif} bonif.</span>
+                              <span className="text-amber-400 font-medium">{formatCurrency(groupTotal)}</span>
+                            </div>
+                          </div>
+                          {/* Artículos dentro de esta catorcena */}
+                          <div className="px-4 py-2 space-y-1">
+                            {Object.entries(byArticulo).map(([artCode, data]) => (
+                              <div key={artCode} className="flex items-center justify-between py-1.5 px-3 bg-zinc-800/20 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-purple-400 font-medium">{data.articulo.ItemCode}</span>
+                                  <span className="text-xs text-zinc-400 truncate max-w-[200px]">{data.articulo.ItemName}</span>
+                                </div>
+                                <div className="flex items-center gap-3 text-xs">
+                                  <span className="text-white">{data.renta} renta</span>
+                                  <span className="text-emerald-400">+{data.bonificacion} bonif.</span>
+                                  <span className="text-amber-400">{formatCurrency(data.precioTotal)}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Asignados */}

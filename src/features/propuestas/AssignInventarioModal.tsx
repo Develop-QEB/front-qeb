@@ -1916,28 +1916,43 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   // Confirmation modal content reused in both views
   const confirmModalJSX = confirmModal.isOpen && (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !isSaving && setConfirmModal(prev => ({ ...prev, isOpen: false }))} />
       <div className="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-6 w-[400px] animate-in fade-in zoom-in duration-200">
         <h3 className="text-lg font-bold text-white mb-2">{confirmModal.title}</h3>
         <p className="text-zinc-400 mb-6">{confirmModal.message}</p>
+        {isSaving && (
+          <div className="flex items-center gap-3 mb-4 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+            <div className="h-5 w-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+            <span className="text-purple-300 text-sm">Procesando reservas, por favor espera...</span>
+          </div>
+        )}
         <div className="flex justify-end gap-3 flex">
           <button
             onClick={() => {
               if (confirmModal.onCancel) confirmModal.onCancel();
-              setConfirmModal(prev => ({ ...prev, isOpen: false }));
+              else setConfirmModal(prev => ({ ...prev, isOpen: false }));
             }}
-            className="px-4 py-2 rounded-lg text-zinc-400 hover:bg-zinc-800 transition-colors text-sm font-medium"
+            disabled={isSaving}
+            className="px-4 py-2 rounded-lg text-zinc-400 hover:bg-zinc-800 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {confirmModal.cancelText || 'Cancelar'}
           </button>
           <button
             onClick={confirmModal.onConfirm}
-            className={`px-4 py-2 rounded-lg text-white transition-colors text-sm font-medium ${confirmModal.isDestructive
+            disabled={isSaving}
+            className={`px-4 py-2 rounded-lg text-white transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${confirmModal.isDestructive
               ? 'bg-red-500 hover:bg-red-600'
               : 'bg-purple-500 hover:bg-purple-600'
               }`}
           >
-            {confirmModal.confirmText || 'Confirmar'}
+            {isSaving ? (
+              <>
+                <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              confirmModal.confirmText || 'Confirmar'
+            )}
           </button>
         </div>
       </div>
