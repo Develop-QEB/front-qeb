@@ -1912,14 +1912,6 @@ function TaskDetailModal({
                     <span className="truncate">Actualizar</span>
                   </button>
                   <button
-                    onClick={handleUpdateMasivo}
-                    disabled={isUpdating}
-                    className="flex items-center justify-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                  >
-                    <Layers className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">Masivo</span>
-                  </button>
-                  <button
                     onClick={handleClearImage}
                     disabled={selectedArteIds.size === 0 || isUpdating}
                     className={`flex items-center justify-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
@@ -3159,7 +3151,7 @@ export function TareaSeguimientoPage() {
   const [sortDirectionAtender, setSortDirectionAtender] = useState<'asc' | 'desc'>('asc');
   const [showSortAtender, setShowSortAtender] = useState(false);
   const [expandedGroupsAtender, setExpandedGroupsAtender] = useState<Set<string>>(new Set());
-  const [activeEstadoTareaTab, setActiveEstadoTareaTab] = useState<'todos' | 'sin_atender' | 'en_progreso' | 'atendido'>('todos');
+  const [activeEstadoArteTab, setActiveEstadoArteTab] = useState<'todos' | 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado'>('todos');
 
   // --- Validar Instalación (testigo) ---
   const [filtersTestigo, setFiltersTestigo] = useState<FilterCondition[]>([]);
@@ -3547,9 +3539,9 @@ export function TareaSeguimientoPage() {
   const filteredAtenderData = useMemo(() => {
     let data = applyFilters(inventoryArteData, filtersAtender);
 
-    // Filtrar por estado_tarea según el tab activo
-    if (activeEstadoTareaTab !== 'todos') {
-      data = data.filter(item => item.estado_tarea === activeEstadoTareaTab);
+    // Filtrar por estado_arte según el tab activo
+    if (activeEstadoArteTab !== 'todos') {
+      data = data.filter(item => item.estado_arte === activeEstadoArteTab);
     }
 
     if (sortFieldAtender) {
@@ -3568,7 +3560,7 @@ export function TareaSeguimientoPage() {
       });
     }
     return data;
-  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoTareaTab]);
+  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoArteTab]);
 
   // Datos filtrados y ordenados para Validar Instalación (testigo)
   const filteredTestigoData = useMemo(() => {
@@ -4375,28 +4367,29 @@ export function TareaSeguimientoPage() {
             </div>
           )}
 
-          {/* Estado Tarea Tabs (Atender tab) */}
+          {/* Estado Arte Tabs (Atender tab) */}
           {activeMainTab === 'atender' && (
             <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
               <div className="flex items-center gap-1">
                 {[
                   { key: 'todos' as const, label: 'Todos', count: inventoryArteData.length },
-                  { key: 'sin_atender' as const, label: 'Sin Atender', count: inventoryArteData.filter(i => i.estado_tarea === 'sin_atender').length },
-                  { key: 'en_progreso' as const, label: 'En Progreso', count: inventoryArteData.filter(i => i.estado_tarea === 'en_progreso').length },
-                  { key: 'atendido' as const, label: 'Instalado', count: inventoryArteData.filter(i => i.estado_tarea === 'atendido').length },
+                  { key: 'sin_revisar' as const, label: 'Sin Revisar', count: inventoryArteData.filter(i => i.estado_arte === 'sin_revisar').length },
+                  { key: 'en_revision' as const, label: 'En Revisión', count: inventoryArteData.filter(i => i.estado_arte === 'en_revision').length },
+                  { key: 'aprobado' as const, label: 'Aprobado', count: inventoryArteData.filter(i => i.estado_arte === 'aprobado').length },
+                  { key: 'rechazado' as const, label: 'Rechazado', count: inventoryArteData.filter(i => i.estado_arte === 'rechazado').length },
                 ].map(tab => (
                   <button
                     key={tab.key}
-                    onClick={() => setActiveEstadoTareaTab(tab.key)}
+                    onClick={() => setActiveEstadoArteTab(tab.key)}
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
-                      activeEstadoTareaTab === tab.key
+                      activeEstadoArteTab === tab.key
                         ? 'bg-purple-600 text-white'
                         : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
                     }`}
                   >
                     {tab.label}
                     <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                      activeEstadoTareaTab === tab.key
+                      activeEstadoArteTab === tab.key
                         ? 'bg-purple-500/50 text-purple-100'
                         : 'bg-zinc-700 text-zinc-400'
                     }`}>
