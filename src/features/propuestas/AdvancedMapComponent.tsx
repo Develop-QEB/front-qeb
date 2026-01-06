@@ -146,34 +146,67 @@ export function AdvancedMapComponent({
     placesServiceRef.current = new google.maps.places.PlacesService(map);
   };
 
-  // Search POI
+  // Search POI with pagination to get more results
   const handleSearchPOI = () => {
     if (!poiSearch.trim() || !placesServiceRef.current || !mapRef.current) return;
 
     setIsSearching(true);
     const bounds = mapRef.current.getBounds();
+    const allResults: google.maps.places.PlaceResult[] = [];
 
     const request: google.maps.places.TextSearchRequest = {
       query: poiSearch,
       bounds: bounds || undefined,
     };
 
-    placesServiceRef.current.textSearch(request, (results, status) => {
-      setIsSearching(false);
+    const processResults = (
+      results: google.maps.places.PlaceResult[] | null,
+      status: google.maps.places.PlacesServiceStatus,
+      pagination: google.maps.places.PlaceSearchPagination | null
+    ) => {
       if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        const newMarkers: POIMarker[] = results.slice(0, 15).map((place, idx) => ({
-          id: `poi-${Date.now()}-${idx}`,
-          position: {
-            lat: place.geometry?.location?.lat() || 0,
-            lng: place.geometry?.location?.lng() || 0,
-          },
-          name: place.name || 'POI',
-          type: 'poi',
-          range: searchRange,
-        }));
-        setPoiMarkers(prev => [...prev, ...newMarkers]);
+        allResults.push(...results);
+
+        // If we have more pages and less than 60 results, get more
+        if (pagination?.hasNextPage && allResults.length < 60) {
+          setTimeout(() => pagination.nextPage(), 200);
+        } else {
+          // Done - create markers from all results
+          setIsSearching(false);
+          const timestamp = Date.now();
+          const newMarkers: POIMarker[] = allResults.slice(0, 60).map((place, idx) => ({
+            id: `poi-${timestamp}-${idx}`,
+            position: {
+              lat: place.geometry?.location?.lat() || 0,
+              lng: place.geometry?.location?.lng() || 0,
+            },
+            name: place.name || 'POI',
+            type: 'poi',
+            range: searchRange,
+          }));
+          setPoiMarkers(prev => [...prev, ...newMarkers]);
+        }
+      } else {
+        setIsSearching(false);
+        // If we have some results, still show them
+        if (allResults.length > 0) {
+          const timestamp = Date.now();
+          const newMarkers: POIMarker[] = allResults.map((place, idx) => ({
+            id: `poi-${timestamp}-${idx}`,
+            position: {
+              lat: place.geometry?.location?.lat() || 0,
+              lng: place.geometry?.location?.lng() || 0,
+            },
+            name: place.name || 'POI',
+            type: 'poi',
+            range: searchRange,
+          }));
+          setPoiMarkers(prev => [...prev, ...newMarkers]);
+        }
       }
-    });
+    };
+
+    placesServiceRef.current.textSearch(request, processResults);
   };
 
   // Add custom pin

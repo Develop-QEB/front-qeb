@@ -155,7 +155,7 @@ export function ClientePropuestaPage() {
     const counts: Record<string, number> = {};
     inventario.forEach(i => {
       const ciudad = i.plaza || 'Sin ciudad';
-      counts[ciudad] = (counts[ciudad] || 0) + i.caras_totales;
+      counts[ciudad] = (counts[ciudad] || 0) + (Number(i.caras_totales) || 0);
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
   }, [inventario]);
@@ -164,7 +164,7 @@ export function ClientePropuestaPage() {
     const counts: Record<string, number> = {};
     inventario.forEach(i => {
       const formato = i.tipo_de_mueble || 'Otros';
-      counts[formato] = (counts[formato] || 0) + i.caras_totales;
+      counts[formato] = (counts[formato] || 0) + (Number(i.caras_totales) || 0);
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [inventario]);
@@ -709,7 +709,7 @@ export function ClientePropuestaPage() {
                   {expandedGroups.has(groupKey) ? <ChevronDown className="h-4 w-4 text-[#0054A6]" /> : <ChevronRight className="h-4 w-4 text-[#0054A6]" />}
                   <span className="text-sm font-medium text-gray-800">{groupKey}</span>
                   <span className="text-xs text-gray-500">({items.length})</span>
-                  <span className="ml-auto text-xs font-semibold text-[#0054A6]">{items.reduce((s, i) => s + i.caras_totales, 0)} caras</span>
+                  <span className="ml-auto text-xs font-semibold text-[#0054A6]">{items.reduce((s, i) => s + (Number(i.caras_totales) || 0), 0)} caras</span>
                 </button>
                 {expandedGroups.has(groupKey) && (
                   <table className="w-full text-sm">

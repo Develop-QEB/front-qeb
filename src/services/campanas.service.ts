@@ -220,6 +220,51 @@ export interface ArteExistente {
   usos: number;
 }
 
+// Órdenes de Montaje
+export interface OrdenMontajeCAT {
+  plaza: string | null;
+  tipo: string | null; // formato
+  asesor: string | null;
+  aps_especifico: number | null;
+  fecha_inicio_periodo: string | null;
+  fecha_fin_periodo: string | null;
+  cliente: string | null;
+  marca: string | null;
+  campania: string | null;
+  numero_articulo: string | null;
+  negociacion: 'BONIFICACION' | 'RENTA';
+  caras: number;
+  tarifa: number | null;
+  monto_total: number | null;
+  campania_id: number | null;
+  grupo_id: number | null;
+  tipo_fila: string | null;
+}
+
+export interface OrdenMontajeINVIAN {
+  Campania: string | null;
+  Anunciante: string | null;
+  Operacion: string | null;
+  CodigoContrato: number | null;
+  PrecioPorCara: number | null;
+  Vendedor: string | null;
+  Descripcion: string | null;
+  InicioPeriodo: string | null;
+  FinSegmento: string | null;
+  Arte: string | null;
+  CodigoArte: number | null;
+  ArteUrl: string | null;
+  OrigenArte: string | null;
+  Unidad: string | null;
+  Cara: string | null;
+  Ciudad: string | null;
+  TipoDistribucion: string | null;
+  Reproducciones: string | null;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+  status_campania: string | null;
+}
+
 // Función para construir el payload de DeliveryNote para SAP
 export function buildDeliveryNote(
   campana: CampanaWithComments,
@@ -582,10 +627,42 @@ export const campanasService = {
     return response.data.data;
   },
 
-  async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
+async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
     const response = await api.get<ApiResponse<{ id: number; nombre: string }[]>>('/campanas/usuarios/lista');
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener usuarios');
+    }
+    return response.data.data;
+  },
+
+  // ============================================================================
+  // ÓRDENES DE MONTAJE
+  // ============================================================================
+
+  async getOrdenMontajeCAT(params: {
+    status?: string;
+    catorcenaInicio?: number;
+    catorcenaFin?: number;
+    yearInicio?: number;
+    yearFin?: number;
+  } = {}): Promise<OrdenMontajeCAT[]> {
+    const response = await api.get<ApiResponse<OrdenMontajeCAT[]>>('/campanas/ordenes-montaje/cat', { params });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener orden de montaje CAT');
+    }
+    return response.data.data;
+  },
+
+  async getOrdenMontajeINVIAN(params: {
+    status?: string;
+    catorcenaInicio?: number;
+    catorcenaFin?: number;
+    yearInicio?: number;
+    yearFin?: number;
+  } = {}): Promise<OrdenMontajeINVIAN[]> {
+    const response = await api.get<ApiResponse<OrdenMontajeINVIAN[]>>('/campanas/ordenes-montaje/invian', { params });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener orden de montaje INVIAN');
     }
     return response.data.data;
   },

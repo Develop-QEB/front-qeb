@@ -115,7 +115,7 @@ export function CompartirPropuestaPage() {
     const counts: Record<string, number> = {};
     inventario.forEach(i => {
       const ciudad = i.plaza || 'Sin ciudad';
-      counts[ciudad] = (counts[ciudad] || 0) + i.caras_totales;
+      counts[ciudad] = (counts[ciudad] || 0) + (Number(i.caras_totales) || 0);
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
   }, [inventario]);
@@ -125,7 +125,7 @@ export function CompartirPropuestaPage() {
     const counts: Record<string, number> = {};
     inventario.forEach(i => {
       const formato = i.tipo_de_mueble || 'Otros';
-      counts[formato] = (counts[formato] || 0) + i.caras_totales;
+      counts[formato] = (counts[formato] || 0) + (Number(i.caras_totales) || 0);
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [inventario]);
@@ -274,6 +274,61 @@ export function CompartirPropuestaPage() {
     a.href = url;
     a.download = `reservas_propuesta_${propuestaId}_seleccionados.kml`;
     a.click();
+  };
+
+  // Download KML for a specific group
+  const handleDownloadGroupKML = (groupName: string, items: InventarioReservado[]) => {
+    const placemarks = items
+      .filter(i => i.latitud && i.longitud)
+      .map(i => `
+        <Placemark>
+          <name>${i.codigo_unico}</name>
+          <description>
+            <![CDATA[
+              Plaza: ${i.plaza || 'N/A'}<br/>
+              Tipo: ${i.tipo_de_cara || 'N/A'}<br/>
+              Formato: ${i.tipo_de_mueble || 'N/A'}<br/>
+              Caras: ${i.caras_totales}<br/>
+              Periodo: ${i.numero_catorcena ? `Catorcena ${i.numero_catorcena}, ${i.anio_catorcena}` : 'N/A'}
+            ]]>
+          </description>
+          <Point>
+            <coordinates>${i.longitud},${i.latitud},0</coordinates>
+          </Point>
+        </Placemark>
+      `).join('');
+
+    const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${groupName} - ${items.length} inventarios</name>
+    ${placemarks}
+  </Document>
+</kml>`;
+
+    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeName = groupName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    a.download = `grupo_${safeName}_propuesta_${propuestaId}.kml`;
+    a.click();
+  };
+
+  // Center map on group items
+  const handleShowGroupOnMap = (items: InventarioReservado[]) => {
+    const validItems = items.filter(i => i.latitud && i.longitud);
+    if (validItems.length === 0 || !mapRef.current) return;
+
+    // Create bounds
+    const bounds = new google.maps.LatLngBounds();
+    validItems.forEach(item => {
+      bounds.extend({ lat: item.latitud, lng: item.longitud });
+    });
+    mapRef.current.fitBounds(bounds, 50);
+
+    // Also select these items
+    setSelectedItems(new Set(items.map(i => i.id)));
   };
 
   // Toggle item selection
@@ -531,8 +586,8 @@ export function CompartirPropuestaPage() {
 
         Object.entries(articulos).forEach(([articulo, items]) => {
           // Calculate group totals
-          const groupCaras = items.reduce((sum, i) => sum + i.caras_totales, 0);
-          const groupTarifa = items.reduce((sum, i) => sum + (i.tarifa_publica || 0) * i.caras_totales, 0);
+          const groupCaras = items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0);
+          const groupTarifa = items.reduce((sum, i) => sum + (Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 0), 0);
 
           // === ARTICULO SUB-HEADER ===
           doc.setFillColor(...IMU_GREEN);
@@ -919,10 +974,27 @@ export function CompartirPropuestaPage() {
                       )}
                       <span className="text-sm font-medium text-white">{groupKey}</span>
                       <span className="text-xs text-zinc-500">({items.length} items)</span>
-                      <span className="ml-auto text-xs text-blue-400">
-                        {items.reduce((sum, i) => sum + i.caras_totales, 0)} caras
-                      </span>
                     </button>
+                    {/* Group action buttons */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-blue-400">
+                        {items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0)} caras
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleShowGroupOnMap(items); }}
+                        className="p-1.5 hover:bg-purple-500/20 rounded text-purple-400 transition-colors"
+                        title="Ver en mapa"
+                      >
+                        <Map className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDownloadGroupKML(groupKey, items); }}
+                        className="p-1.5 hover:bg-blue-500/20 rounded text-blue-400 transition-colors"
+                        title="Descargar KML del grupo"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                   {expandedGroups.has(groupKey) && (
                     <table className="w-full text-sm">
@@ -1029,14 +1101,19 @@ export function CompartirPropuestaPage() {
                     <Marker
                       key={item.id}
                       position={{ lat: item.latitud, lng: item.longitud }}
-                      onClick={() => setSelectedMarker(item)}
+                      onClick={() => {
+                        setSelectedMarker(item);
+                        toggleItemSelection(item.id);
+                      }}
                       icon={{
                         path: google.maps.SymbolPath.CIRCLE,
-                        scale: 7,
-                        fillColor: item.tipo_de_cara === 'Flujo' ? '#ef4444' : item.tipo_de_cara === 'Contraflujo' ? '#3b82f6' : '#a855f7',
-                        fillOpacity: 0.9,
-                        strokeColor: '#fff',
-                        strokeWeight: 1.5,
+                        scale: selectedItems.has(item.id) ? 10 : 7,
+                        fillColor: selectedItems.has(item.id)
+                          ? '#22c55e' // Verde si está seleccionado
+                          : item.tipo_de_cara === 'Flujo' ? '#ef4444' : item.tipo_de_cara === 'Contraflujo' ? '#3b82f6' : '#a855f7',
+                        fillOpacity: selectedItems.has(item.id) ? 1 : 0.9,
+                        strokeColor: selectedItems.has(item.id) ? '#fff' : '#fff',
+                        strokeWeight: selectedItems.has(item.id) ? 3 : 1.5,
                       }}
                     />
                   )

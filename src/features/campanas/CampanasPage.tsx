@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown,
-  List, LayoutGrid, Building2, MapPin, Loader2, Package
+  List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -16,6 +16,7 @@ import { Campana, Catorcena } from '../../types';
 type ViewType = 'tabla' | 'catorcena';
 import { formatDate } from '../../lib/utils';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
+import { OrdenesMontajeModal } from './OrdenesMontajeModal';
 
 // Colors for dynamic tags
 const TAG_COLORS = [
@@ -502,6 +503,7 @@ export function CampanasPage() {
   const [selectedCatorcenaInicio, setSelectedCatorcenaInicio] = useState('');
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedCampana, setSelectedCampana] = useState<Campana | null>(null);
+  const [ordenesMontajeModalOpen, setOrdenesMontajeModalOpen] = useState(false);
   const limit = 20;
 
   // Estado para la vista activa (tabs)
@@ -918,6 +920,13 @@ export function CampanasPage() {
     setEditModalOpen(true);
   };
 
+  // Validar si el botón Editar debe estar deshabilitado
+  const isEditDisabled = (campana: Campana): boolean => {
+    const statusLower = campana.status?.toLowerCase() || '';
+    const disabledStatuses = ['finalizado', 'sin cotizacion activa', 'cancelada'];
+    return disabledStatuses.includes(statusLower) || campana.has_aps === true;
+  };
+
   const renderCampanaRow = (item: Campana, index: number) => {
     const statusColor = getStatusColor(item.status);
     const periodStatus = getPeriodStatus(item.fecha_inicio, item.fecha_fin);
@@ -1007,8 +1016,13 @@ export function CampanasPage() {
             </button>
             <button
               onClick={() => handleEditCampana(item)}
-              className="p-2 rounded-lg bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border border-zinc-500/20 hover:border-zinc-500/40 transition-all"
-              title="Editar campaña"
+              disabled={isEditDisabled(item)}
+              className={`p-2 rounded-lg border transition-all ${
+                isEditDisabled(item)
+                  ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                  : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
+              }`}
+              title={isEditDisabled(item) ? 'No editable (tiene APS o status no permite edición)' : 'Editar campaña'}
             >
               <Edit2 className="h-3.5 w-3.5" />
             </button>
@@ -1176,6 +1190,15 @@ export function CampanasPage() {
               >
                 <Download className="h-4 w-4" />
                 Exportar CSV
+              </button>
+
+              {/* Órdenes de Montaje */}
+              <button
+                onClick={() => setOrdenesMontajeModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30 transition-all"
+              >
+                <ClipboardList className="h-4 w-4" />
+                Órdenes de Montaje
               </button>
             </div>
 
@@ -1535,8 +1558,13 @@ export function CampanasPage() {
                                   </button>
                                   <button
                                     onClick={() => handleEditCampana(campana)}
-                                    className="p-1.5 rounded-lg bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border border-zinc-500/20 transition-all"
-                                    title="Editar campaña"
+                                    disabled={isEditDisabled(campana)}
+                                    className={`p-1.5 rounded-lg border transition-all ${
+                                      isEditDisabled(campana)
+                                        ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                                        : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20'
+                                    }`}
+                                    title={isEditDisabled(campana) ? 'No editable' : 'Editar campaña'}
                                   >
                                     <Edit2 className="h-3 w-3" />
                                   </button>
@@ -1729,6 +1757,12 @@ export function CampanasPage() {
           campana={selectedCampana}
         />
       )}
+
+      {/* Órdenes de Montaje Modal */}
+      <OrdenesMontajeModal
+        isOpen={ordenesMontajeModalOpen}
+        onClose={() => setOrdenesMontajeModalOpen(false)}
+      />
     </div>
   );
 }

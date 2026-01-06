@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
-  FileText, MapPin, Layers, Pencil, Map, Package,
+  FileText, MapPin, Layers, Pencil, Map, Package, Share2,
   Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown,
   Loader2, Building2, Calendar, Tag, Info, Check, Lock, Unlock
 } from 'lucide-react';
@@ -128,6 +129,7 @@ const STEPS = [
 
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const mapRef = useRef<google.maps.Map | null>(null);
 
   // Load Google Maps with required libraries
@@ -471,6 +473,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const totalRequerido = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
     const totalReservado = flujoReservado + contraflujoReservado + bonificacionReservado;
 
+    // Calcular si tiene reservas y si todas tienen APS (grupo bloqueado)
+    const reservasConAPS = caraReservas.filter(r => r.hasAPS);
+    const reservasSinAPS = caraReservas.filter(r => !r.hasAPS);
+    const hasAllAPS = caraReservas.length > 0 && reservasSinAPS.length === 0;
+    const hasSomeAPS = reservasConAPS.length > 0;
+
     return {
       flujoReservado,
       contraflujoReservado,
@@ -479,6 +487,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       totalReservado,
       isComplete: totalReservado >= totalRequerido && totalRequerido > 0,
       percentage: totalRequerido > 0 ? Math.round((totalReservado / totalRequerido) * 100) : 0,
+      hasAllAPS, // true si todas las reservas tienen APS - grupo completamente bloqueado
+      hasSomeAPS, // true si alguna reserva tiene APS
+      reservasConAPS: reservasConAPS.length,
+      reservasSinAPS: reservasSinAPS.length,
     };
   };
 
@@ -823,6 +835,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 <p className="text-sm text-zinc-400">Campaña #{campana.id}</p>
               </div>
               <div className="flex items-center gap-3">
+                {campana.cotizacion_id && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      navigate(`/propuestas/compartir/${campana.cotizacion_id}`);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 rounded-xl text-sm font-medium hover:bg-cyan-500/30 transition-colors"
+                  >
+                    <Share2 className="h-4 w-4" />
+                    Compartir
+                  </button>
+                )}
                 <button
                   onClick={handleSave}
                   disabled={updateMutation.isPending}
@@ -1348,21 +1372,35 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleEditCara(cara);
+                                        if (!completionStatus.hasAllAPS) {
+                                          handleEditCara(cara);
+                                        }
                                       }}
-                                      className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30"
-                                      title="Editar cara"
+                                      disabled={completionStatus.hasAllAPS}
+                                      className={`p-2 rounded-lg border ${
+                                        completionStatus.hasAllAPS
+                                          ? 'bg-zinc-700/30 text-zinc-500 border-zinc-600/30 cursor-not-allowed'
+                                          : 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border-cyan-500/30'
+                                      }`}
+                                      title={completionStatus.hasAllAPS ? "Grupo bloqueado - todas las reservas tienen APS" : "Editar cara"}
                                     >
-                                      <Pencil className="h-4 w-4" />
+                                      {completionStatus.hasAllAPS ? <Lock className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
                                     </button>
 
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleOpenSearchForCara(cara);
+                                        if (!completionStatus.hasAllAPS) {
+                                          handleOpenSearchForCara(cara);
+                                        }
                                       }}
-                                      className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30"
-                                      title="Buscar inventario"
+                                      disabled={completionStatus.hasAllAPS}
+                                      className={`p-2 rounded-lg border ${
+                                        completionStatus.hasAllAPS
+                                          ? 'bg-zinc-700/30 text-zinc-500 border-zinc-600/30 cursor-not-allowed'
+                                          : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border-purple-500/30'
+                                      }`}
+                                      title={completionStatus.hasAllAPS ? "Grupo bloqueado - todas las reservas tienen APS" : "Buscar inventario"}
                                     >
                                       <Search className="h-4 w-4" />
                                     </button>
