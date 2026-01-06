@@ -82,7 +82,7 @@ type TasksTab = 'tradicionales' | 'completadas' | 'calendario';
 type CalendarView = 'month' | 'week' | 'day' | 'list';
 
 // Opciones de agrupación
-type GroupByField = 'none' | 'catorcena' | 'ciudad' | 'plaza' | 'mueble' | 'tipo_medio' | 'aps';
+type GroupByField = 'none' | 'catorcena' | 'ciudad' | 'plaza' | 'mueble' | 'tipo_medio' | 'aps' | 'grupo' | 'estado_arte' | 'estado_tarea';
 type SortField = 'codigo_unico' | 'catorcena' | 'ciudad' | 'plaza' | 'mueble' | 'tipo_medio' | 'aps';
 type SortDirection = 'asc' | 'desc';
 
@@ -232,6 +232,10 @@ const FILTER_FIELDS_INVENTARIO: FilterFieldConfig[] = [
 // Opciones de agrupación para las tablas
 const GROUPING_OPTIONS_INVENTARIO: { field: GroupByField; label: string }[] = [
   { field: 'catorcena', label: 'Catorcena' },
+  { field: 'aps', label: 'APS' },
+  { field: 'grupo', label: 'Grupo' },
+  { field: 'estado_arte', label: 'Estado Arte' },
+  { field: 'estado_tarea', label: 'Estado Tarea' },
   { field: 'ciudad', label: 'Ciudad' },
   { field: 'plaza', label: 'Plaza' },
   { field: 'mueble', label: 'Formato' },
@@ -288,6 +292,32 @@ const estadoArteLabels: Record<string, string> = {
   aprobado: 'Aprobado',
   rechazado: 'Rechazado',
 };
+
+// Función para obtener la clave de agrupación basada en el campo
+function getGroupKeyForField(item: InventoryRow, field: GroupByField): string {
+  switch (field) {
+    case 'catorcena':
+      return `Catorcena ${item.catorcena} - ${item.anio}`;
+    case 'aps':
+      return `APS ${item.aps ?? 'Sin asignar'}`;
+    case 'grupo':
+      return item.grupo_id ? `Grupo ${item.grupo_id}` : `Item ${item.id}`;
+    case 'estado_arte':
+      return estadoArteLabels[item.estado_arte || 'sin_revisar'] || 'Sin estado';
+    case 'estado_tarea':
+      return estadoTareaLabels[item.estado_tarea || 'sin_atender'] || 'Sin estado';
+    case 'ciudad':
+      return item.ciudad || 'Sin ciudad';
+    case 'plaza':
+      return item.plaza || 'Sin plaza';
+    case 'mueble':
+      return item.mueble || 'Sin formato';
+    case 'tipo_medio':
+      return item.tipo_medio || 'Sin tipo';
+    default:
+      return 'Sin agrupar';
+  }
+}
 
 const estadoTareaLabels: Record<string, string> = {
   sin_atender: 'Sin Atender',
@@ -1038,7 +1068,6 @@ const TIPOS_TAREA = [
   { value: 'Impresión', label: 'Impresión', description: 'Impresión de materiales publicitarios' },
 ];
 
-
 // ============================================================================
 // FILTER TOOLBAR COMPONENT (Reutilizable para las 3 tablas)
 // ============================================================================
@@ -1055,6 +1084,7 @@ interface FilterToolbarProps {
   showGrouping: boolean;
   setShowGrouping: (show: boolean) => void;
   toggleGrouping: (field: GroupByField) => void;
+  clearGroupings: () => void;
   sortField: string | null;
   sortDirection: 'asc' | 'desc';
   showSort: boolean;
@@ -1067,16 +1097,23 @@ interface FilterToolbarProps {
 
 function FilterToolbar({
   filters, showFilters, setShowFilters, addFilter, updateFilter, removeFilter, clearFilters, uniqueValues,
-  activeGroupings, showGrouping, setShowGrouping, toggleGrouping,
+  activeGroupings, showGrouping, setShowGrouping, toggleGrouping, clearGroupings,
   sortField, sortDirection, showSort, setShowSort, setSortField, setSortDirection,
   filteredCount, totalCount,
 }: FilterToolbarProps) {
+  // Función para cerrar un dropdown específico al hacer clic fuera
+  const closeOtherDropdowns = (keep: 'filters' | 'grouping' | 'sort') => {
+    if (keep !== 'filters') setShowFilters(false);
+    if (keep !== 'grouping') setShowGrouping(false);
+    if (keep !== 'sort') setShowSort(false);
+  };
+
   return (
     <div className="flex items-center gap-2">
       {/* Botón Filtrar */}
       <div className="relative">
         <button
-          onClick={() => { setShowFilters(!showFilters); setShowGrouping(false); setShowSort(false); }}
+          onClick={() => { closeOtherDropdowns('filters'); setShowFilters(!showFilters); }}
           className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
             filters.length > 0 ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
           }`}
@@ -1086,20 +1123,20 @@ function FilterToolbar({
           {filters.length > 0 && <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">{filters.length}</span>}
         </button>
         {showFilters && (
-          <div className="absolute right-0 top-full mt-1 z-50 w-[480px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+          <div className="absolute right-0 top-full mt-1 z-50 w-[520px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
               <button onClick={() => setShowFilters(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
             </div>
-            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-purple pr-1">
               {filters.map((filter, index) => (
                 <div key={filter.id} className="flex items-center gap-2">
                   {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
                   {index === 0 && <span className="w-8"></span>}
-                  <select value={filter.field} onChange={(e) => updateFilter(filter.id, { field: e.target.value })} className="w-[110px] text-xs bg-background border border-border rounded px-2 py-1.5">
+                  <select value={filter.field} onChange={(e) => updateFilter(filter.id, { field: e.target.value })} className="w-[130px] text-xs bg-background border border-border rounded px-2 py-1.5">
                     {FILTER_FIELDS_INVENTARIO.map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}
                   </select>
-                  <select value={filter.operator} onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })} className="w-[85px] text-xs bg-background border border-border rounded px-2 py-1.5">
+                  <select value={filter.operator} onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })} className="w-[90px] text-xs bg-background border border-border rounded px-2 py-1.5">
                     {FILTER_OPERATORS.filter(op => { const fc = FILTER_FIELDS_INVENTARIO.find(f => f.field === filter.field); return fc && op.forTypes.includes(fc.type); }).map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
                   </select>
                   <select value={filter.value} onChange={(e) => updateFilter(filter.id, { value: e.target.value })} className="flex-1 text-xs bg-background border border-border rounded px-2 py-1.5">
@@ -1111,7 +1148,7 @@ function FilterToolbar({
               ))}
               {filters.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-3">Sin filtros. Haz clic en "Añadir".</p>}
             </div>
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-purple-900/30">
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-purple-900/30">
               <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded"><Plus className="h-3 w-3" /> Añadir</button>
               <button onClick={clearFilters} disabled={filters.length === 0} className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Limpiar</button>
             </div>
@@ -1123,26 +1160,39 @@ function FilterToolbar({
       {/* Botón Agrupar */}
       <div className="relative">
         <button
-          onClick={() => { setShowGrouping(!showGrouping); setShowFilters(false); setShowSort(false); }}
-          className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
+          onClick={() => { closeOtherDropdowns('grouping'); setShowGrouping(!showGrouping); }}
+          className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
+            activeGroupings.length > 0 ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+          }`}
           title="Agrupar"
         >
           <Layers className="h-3.5 w-3.5" />
-          {activeGroupings.length > 0 && <span className="px-1 py-0.5 rounded bg-purple-600 text-[10px]">{activeGroupings.length}</span>}
+          {activeGroupings.length > 0 && <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">{activeGroupings.length}</span>}
         </button>
         {showGrouping && (
-          <div className="absolute right-0 top-full mt-1 z-10 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide px-2 py-1">Agrupar por (max 2)</p>
-            {GROUPING_OPTIONS_INVENTARIO.map(({ field, label }) => (
-              <button key={field} onClick={() => toggleGrouping(field)} className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'}`}>
-                <div className={`w-4 h-4 rounded border flex items-center justify-center ${activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'}`}>
-                  {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
-                </div>
-                {label}
-                {activeGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
-                {activeGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+          <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]">
+            <div className="flex items-center justify-between mb-2 px-2">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Agrupar por (max 5)</p>
+              <button onClick={() => setShowGrouping(false)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+            </div>
+            {GROUPING_OPTIONS_INVENTARIO.map(({ field, label }) => {
+              const idx = activeGroupings.indexOf(field);
+              const colors = ['text-purple-400', 'text-pink-400', 'text-blue-400', 'text-green-400', 'text-orange-400'];
+              return (
+                <button key={field} onClick={() => toggleGrouping(field)} className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'}`}>
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center ${activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'}`}>
+                    {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
+                  </div>
+                  {label}
+                  {idx >= 0 && <span className={`ml-auto text-[10px] ${colors[idx]}`}>{idx + 1}°</span>}
+                </button>
+              );
+            })}
+            <div className="border-t border-purple-900/30 mt-2 pt-2">
+              <button onClick={clearGroupings} disabled={activeGroupings.length === 0} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1 disabled:opacity-30 disabled:cursor-not-allowed">
+                Quitar agrupación
               </button>
-            ))}
+            </div>
           </div>
         )}
       </div>
@@ -1150,7 +1200,7 @@ function FilterToolbar({
       {/* Botón Ordenar */}
       <div className="relative">
         <button
-          onClick={() => { setShowSort(!showSort); setShowFilters(false); setShowGrouping(false); }}
+          onClick={() => { closeOtherDropdowns('sort'); setShowSort(!showSort); }}
           className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${sortField ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'}`}
           title="Ordenar"
         >
@@ -2982,8 +3032,7 @@ function SummaryCards({ stats, activeTab }: { stats: SummaryStats; activeTab: Ma
   const cards = useMemo(() => {
     if (activeTab === 'versionario') {
       return [
-        { label: 'Total Inventario', value: stats.totalInventario, icon: ClipboardList, color: 'purple' },
-        { label: 'Sin Arte', value: stats.sinArte, icon: Image, color: 'amber' },
+        { label: 'Inventario sin Artes', value: stats.sinArte, icon: Image, color: 'amber' },
       ];
     }
     if (activeTab === 'atender') {
@@ -3094,7 +3143,7 @@ export function TareaSeguimientoPage() {
   // --- Subir Artes (versionario) ---
   const [filtersVersionario, setFiltersVersionario] = useState<FilterCondition[]>([]);
   const [showFiltersVersionario, setShowFiltersVersionario] = useState(false);
-  const [activeGroupingsVersionario, setActiveGroupingsVersionario] = useState<GroupByField[]>([]);
+  const [activeGroupingsVersionario, setActiveGroupingsVersionario] = useState<GroupByField[]>(['catorcena', 'aps', 'grupo']);
   const [showGroupingVersionario, setShowGroupingVersionario] = useState(false);
   const [sortFieldVersionario, setSortFieldVersionario] = useState<string | null>(null);
   const [sortDirectionVersionario, setSortDirectionVersionario] = useState<'asc' | 'desc'>('asc');
@@ -3104,25 +3153,30 @@ export function TareaSeguimientoPage() {
   // --- Revisar y Aprobar (atender) ---
   const [filtersAtender, setFiltersAtender] = useState<FilterCondition[]>([]);
   const [showFiltersAtender, setShowFiltersAtender] = useState(false);
-  const [activeGroupingsAtender, setActiveGroupingsAtender] = useState<GroupByField[]>([]);
+  const [activeGroupingsAtender, setActiveGroupingsAtender] = useState<GroupByField[]>(['catorcena', 'aps', 'grupo']);
   const [showGroupingAtender, setShowGroupingAtender] = useState(false);
   const [sortFieldAtender, setSortFieldAtender] = useState<string | null>(null);
   const [sortDirectionAtender, setSortDirectionAtender] = useState<'asc' | 'desc'>('asc');
   const [showSortAtender, setShowSortAtender] = useState(false);
   const [expandedGroupsAtender, setExpandedGroupsAtender] = useState<Set<string>>(new Set());
+  const [activeEstadoTareaTab, setActiveEstadoTareaTab] = useState<'todos' | 'sin_atender' | 'en_progreso' | 'atendido'>('todos');
 
   // --- Validar Instalación (testigo) ---
   const [filtersTestigo, setFiltersTestigo] = useState<FilterCondition[]>([]);
   const [showFiltersTestigo, setShowFiltersTestigo] = useState(false);
-  const [activeGroupingsTestigo, setActiveGroupingsTestigo] = useState<GroupByField[]>([]);
+  const [activeGroupingsTestigo, setActiveGroupingsTestigo] = useState<GroupByField[]>(['catorcena']);
   const [showGroupingTestigo, setShowGroupingTestigo] = useState(false);
   const [sortFieldTestigo, setSortFieldTestigo] = useState<string | null>(null);
   const [sortDirectionTestigo, setSortDirectionTestigo] = useState<'asc' | 'desc'>('asc');
   const [showSortTestigo, setShowSortTestigo] = useState(false);
   const [expandedGroupsTestigo, setExpandedGroupsTestigo] = useState<Set<string>>(new Set());
 
-  // Helper: check if grouped
-  const isGrouped = groupByField !== 'none';
+  // Helper: check if grouped (basado en el tab activo)
+  const isGrouped = useMemo(() => {
+    if (activeMainTab === 'versionario') return activeGroupingsVersionario.length > 0;
+    if (activeMainTab === 'atender') return activeGroupingsAtender.length > 0;
+    return activeGroupingsTestigo.length > 0;
+  }, [activeMainTab, activeGroupingsVersionario, activeGroupingsAtender, activeGroupingsTestigo]);
 
   // Tasks state
   const [tasksSearch, setTasksSearch] = useState('');
@@ -3319,9 +3373,13 @@ export function TareaSeguimientoPage() {
   const toggleGroupingVersionario = useCallback((field: GroupByField) => {
     setActiveGroupingsVersionario(prev => {
       if (prev.includes(field)) return prev.filter(f => f !== field);
-      if (prev.length < 2) return [...prev, field];
-      return [prev[1], field];
+      if (prev.length < 5) return [...prev, field];
+      return [...prev.slice(1), field];
     });
+  }, []);
+
+  const clearGroupingsVersionario = useCallback(() => {
+    setActiveGroupingsVersionario([]);
   }, []);
 
   // --- Funciones para Revisar y Aprobar (atender) ---
@@ -3350,9 +3408,13 @@ export function TareaSeguimientoPage() {
   const toggleGroupingAtender = useCallback((field: GroupByField) => {
     setActiveGroupingsAtender(prev => {
       if (prev.includes(field)) return prev.filter(f => f !== field);
-      if (prev.length < 2) return [...prev, field];
-      return [prev[1], field];
+      if (prev.length < 5) return [...prev, field];
+      return [...prev.slice(1), field];
     });
+  }, []);
+
+  const clearGroupingsAtender = useCallback(() => {
+    setActiveGroupingsAtender([]);
   }, []);
 
   // --- Funciones para Validar Instalación (testigo) ---
@@ -3381,9 +3443,13 @@ export function TareaSeguimientoPage() {
   const toggleGroupingTestigo = useCallback((field: GroupByField) => {
     setActiveGroupingsTestigo(prev => {
       if (prev.includes(field)) return prev.filter(f => f !== field);
-      if (prev.length < 2) return [...prev, field];
-      return [prev[1], field];
+      if (prev.length < 5) return [...prev, field];
+      return [...prev.slice(1), field];
     });
+  }, []);
+
+  const clearGroupingsTestigo = useCallback(() => {
+    setActiveGroupingsTestigo([]);
   }, []);
 
   // Helper function to transform InventarioConArte to InventoryRow
@@ -3480,7 +3546,12 @@ export function TareaSeguimientoPage() {
   // Datos filtrados y ordenados para Revisar y Aprobar (atender)
   const filteredAtenderData = useMemo(() => {
     let data = applyFilters(inventoryArteData, filtersAtender);
-    
+
+    // Filtrar por estado_tarea según el tab activo
+    if (activeEstadoTareaTab !== 'todos') {
+      data = data.filter(item => item.estado_tarea === activeEstadoTareaTab);
+    }
+
     if (sortFieldAtender) {
       data = [...data].sort((a, b) => {
         const aVal = a[sortFieldAtender as keyof InventoryRow];
@@ -3497,7 +3568,7 @@ export function TareaSeguimientoPage() {
       });
     }
     return data;
-  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender]);
+  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoTareaTab]);
 
   // Datos filtrados y ordenados para Validar Instalación (testigo)
   const filteredTestigoData = useMemo(() => {
@@ -3615,16 +3686,16 @@ export function TareaSeguimientoPage() {
   const filteredInventory = useMemo(() => {
     let data: InventoryRow[];
 
-    // Seleccionar fuente de datos según tab activo
+    // Seleccionar fuente de datos filtrados según tab activo
     if (activeMainTab === 'versionario') {
-      // Tab "Subir Artes": inventario SIN arte
-      data = inventorySinArteData;
+      // Tab "Subir Artes": usar datos ya filtrados
+      data = filteredVersionarioData;
     } else if (activeMainTab === 'atender') {
-      // Tab "Revisar y Aprobar": inventario CON arte
-      data = inventoryArteData;
+      // Tab "Revisar y Aprobar": usar datos ya filtrados
+      data = filteredAtenderData;
     } else {
-      // Tab "Validar Instalación": inventario para testigos
-      data = inventoryTestigosData;
+      // Tab "Validar Instalación": usar datos ya filtrados
+      data = filteredTestigoData;
     }
 
     // Filter by format for non-atender tabs (atender already has format in query)
@@ -3644,23 +3715,6 @@ export function TareaSeguimientoPage() {
           item.ubicacion.toLowerCase().includes(search) ||
           item.ciudad.toLowerCase().includes(search)
       );
-    }
-
-    // Apply dropdown filters
-    if (filters.ciudad) {
-      data = data.filter(item => item.ciudad === filters.ciudad);
-    }
-    if (filters.plaza) {
-      data = data.filter(item => item.plaza === filters.plaza);
-    }
-    if (filters.mueble) {
-      data = data.filter(item => item.mueble === filters.mueble);
-    }
-    if (filters.tipo_medio) {
-      data = data.filter(item => item.tipo_medio === filters.tipo_medio);
-    }
-    if (filters.catorcena !== null) {
-      data = data.filter(item => item.catorcena === filters.catorcena);
     }
 
     // Apply sorting
@@ -3706,7 +3760,7 @@ export function TareaSeguimientoPage() {
     });
 
     return data;
-  }, [inventorySinArteData, inventoryArteData, inventoryTestigosData, inventorySearch, activeFormat, activeMainTab, filters, sortField, sortDirection]);
+  }, [filteredVersionarioData, filteredAtenderData, filteredTestigoData, inventorySearch, activeFormat, activeMainTab, sortField, sortDirection]);
 
   const filteredTasks = useMemo(() => {
     let data = tasks;
@@ -3735,83 +3789,76 @@ export function TareaSeguimientoPage() {
     );
   }, [completedTasks, tasksSearch]);
 
-  // Group inventory by selected field (simple single-level grouping)
+  // Agrupación simple para tab "Validar Instalación" basada en activeGroupingsTestigo
+  // Solo usa el primer campo de agrupación para mantener compatibilidad con el renderizado existente
   const simpleGroupedInventory = useMemo(() => {
-    if (groupByField === 'none') return {};
+    if (activeGroupingsTestigo.length === 0) return {} as Record<string, InventoryRow[]>;
 
     const groups: Record<string, InventoryRow[]> = {};
+    const groupField = activeGroupingsTestigo[0];
 
     filteredInventory.forEach((item) => {
-      let key = '';
-      switch (groupByField) {
-        case 'catorcena':
-          key = `Catorcena ${item.catorcena} - ${item.anio}`;
-          break;
-        case 'ciudad':
-          key = item.ciudad || 'Sin ciudad';
-          break;
-        case 'plaza':
-          key = item.plaza || 'Sin plaza';
-          break;
-        case 'mueble':
-          key = item.mueble || 'Sin mueble';
-          break;
-        case 'tipo_medio':
-          key = item.tipo_medio || 'Sin tipo';
-          break;
-        case 'aps':
-          key = item.aps ? `APS ${item.aps}` : 'Sin APS';
-          break;
-        default:
-          key = 'Otros';
-      }
-
+      const key = getGroupKeyForField(item, groupField);
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     });
 
     return groups;
-  }, [filteredInventory, groupByField]);
+  }, [filteredInventory, activeGroupingsTestigo]);
 
-  // Agrupación jerárquica de 3 niveles para tab "Subir Artes": Catorcena -> APS -> Grupo
+  // Agrupación para tab "Subir Artes" basada en activeGroupingsVersionario
+  // Estructura: Nivel1 -> Nivel2 -> Nivel3 -> Items (máximo 3 niveles de agrupación + items)
   const versionarioGroupedInventory = useMemo(() => {
+    const numLevels = Math.min(activeGroupingsVersionario.length, 3);
+
+    // Si no hay agrupaciones, devolver estructura vacía
+    if (numLevels === 0) {
+      return {} as Record<string, Record<string, Record<string, InventoryRow[]>>>;
+    }
+
     const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
 
     filteredInventory.forEach((item) => {
-      const catorcenaKey = `Catorcena ${item.catorcena} - ${item.anio}`;
-      const apsKey = `APS ${item.aps}`;
-      const grupoKey = item.grupo_id ? `Grupo ${item.grupo_id}` : `Item ${item.id}`;
+      const level1Key = activeGroupingsVersionario[0] ? getGroupKeyForField(item, activeGroupingsVersionario[0]) : 'Todo';
+      const level2Key = activeGroupingsVersionario[1] ? getGroupKeyForField(item, activeGroupingsVersionario[1]) : 'Items';
+      const level3Key = activeGroupingsVersionario[2] ? getGroupKeyForField(item, activeGroupingsVersionario[2]) : 'Items';
 
-      if (!groups[catorcenaKey]) groups[catorcenaKey] = {};
-      if (!groups[catorcenaKey][apsKey]) groups[catorcenaKey][apsKey] = {};
-      if (!groups[catorcenaKey][apsKey][grupoKey]) groups[catorcenaKey][apsKey][grupoKey] = [];
+      if (!groups[level1Key]) groups[level1Key] = {};
+      if (!groups[level1Key][level2Key]) groups[level1Key][level2Key] = {};
+      if (!groups[level1Key][level2Key][level3Key]) groups[level1Key][level2Key][level3Key] = [];
 
-      groups[catorcenaKey][apsKey][grupoKey].push(item);
+      groups[level1Key][level2Key][level3Key].push(item);
     });
 
     return groups;
-  }, [filteredInventory]);
+  }, [filteredInventory, activeGroupingsVersionario]);
 
-  // Agrupación jerárquica de 4 niveles para tab "Atender Arte": Catorcena -> APS -> Estado Arte -> Estado Tarea
+  // Agrupación para tab "Atender Arte" basada en activeGroupingsAtender
+  // Estructura: Nivel1 -> Nivel2 -> Nivel3 -> Items (máximo 3 niveles de agrupación + items)
   const atenderGroupedInventory = useMemo(() => {
-    const groups: Record<string, Record<string, Record<string, Record<string, InventoryRow[]>>>> = {};
+    const numLevels = Math.min(activeGroupingsAtender.length, 3);
+
+    // Si no hay agrupaciones, devolver estructura vacía
+    if (numLevels === 0) {
+      return {} as Record<string, Record<string, Record<string, InventoryRow[]>>>;
+    }
+
+    const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
 
     filteredInventory.forEach((item) => {
-      const catorcenaKey = `Catorcena: ${item.catorcena}, Año: ${item.anio}`;
-      const apsKey = `APS ${item.aps ?? 'Sin asignar'}`;
-      const arteKey = estadoArteLabels[item.estado_arte || 'sin_revisar'];
-      const tareaKey = estadoTareaLabels[item.estado_tarea || 'sin_atender'];
+      const level1Key = activeGroupingsAtender[0] ? getGroupKeyForField(item, activeGroupingsAtender[0]) : 'Todo';
+      const level2Key = activeGroupingsAtender[1] ? getGroupKeyForField(item, activeGroupingsAtender[1]) : 'Items';
+      const level3Key = activeGroupingsAtender[2] ? getGroupKeyForField(item, activeGroupingsAtender[2]) : 'Items';
 
-      if (!groups[catorcenaKey]) groups[catorcenaKey] = {};
-      if (!groups[catorcenaKey][apsKey]) groups[catorcenaKey][apsKey] = {};
-      if (!groups[catorcenaKey][apsKey][arteKey]) groups[catorcenaKey][apsKey][arteKey] = {};
-      if (!groups[catorcenaKey][apsKey][arteKey][tareaKey]) groups[catorcenaKey][apsKey][arteKey][tareaKey] = [];
+      if (!groups[level1Key]) groups[level1Key] = {};
+      if (!groups[level1Key][level2Key]) groups[level1Key][level2Key] = {};
+      if (!groups[level1Key][level2Key][level3Key]) groups[level1Key][level2Key][level3Key] = [];
 
-      groups[catorcenaKey][apsKey][arteKey][tareaKey].push(item);
+      groups[level1Key][level2Key][level3Key].push(item);
     });
 
     return groups;
-  }, [filteredInventory]);
+  }, [filteredInventory, activeGroupingsAtender]);
 
   // Get selected inventory items for modals
   const selectedInventoryItems = useMemo(() => {
@@ -4257,281 +4304,6 @@ export function TareaSeguimientoPage() {
             </div>
           </div>
 
-          {/* Inventory Toolbar */}
-          <div className="p-4 border-b border-border">
-            <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
-              {/* Search */}
-              <div className="relative flex-1 max-w-xs">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Buscar por codigo, ciudad, plaza..."
-                  value={inventorySearch}
-                  onChange={(e) => setInventorySearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-                />
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Filter Dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={() => {
-                      setShowFilterDropdown(!showFilterDropdown);
-                      setShowGroupDropdown(false);
-                      setShowSortDropdown(false);
-                    }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                      hasActiveFilters
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
-                    }`}
-                  >
-                    <Filter className="h-3.5 w-3.5" />
-                    <span>Filtrar</span>
-                    {hasActiveFilters && (
-                      <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-[10px]">
-                        {Object.values(filters).filter(v => v !== '' && v !== null).length}
-                      </span>
-                    )}
-                  </button>
-                  {showFilterDropdown && (
-                    <div className="absolute top-full right-0 mt-1 w-64 bg-card border border-border rounded-lg shadow-xl z-50 p-3 space-y-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-zinc-300">Filtros</span>
-                        {hasActiveFilters && (
-                          <button
-                            onClick={() => setFilters({ ciudad: '', plaza: '', mueble: '', tipo_medio: '', catorcena: null })}
-                            className="text-[10px] text-purple-400 hover:text-purple-300"
-                          >
-                            Limpiar todo
-                          </button>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1">Ciudad</label>
-                        <select
-                          value={filters.ciudad}
-                          onChange={(e) => setFilters(f => ({ ...f, ciudad: e.target.value }))}
-                          className="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
-                        >
-                          <option value="">Todas</option>
-                          {filterOptions.ciudades.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1">Plaza</label>
-                        <select
-                          value={filters.plaza}
-                          onChange={(e) => setFilters(f => ({ ...f, plaza: e.target.value }))}
-                          className="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
-                        >
-                          <option value="">Todas</option>
-                          {filterOptions.plazas.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1">Mueble</label>
-                        <select
-                          value={filters.mueble}
-                          onChange={(e) => setFilters(f => ({ ...f, mueble: e.target.value }))}
-                          className="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
-                        >
-                          <option value="">Todos</option>
-                          {filterOptions.muebles.map(m => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1">Tipo de Medio</label>
-                        <select
-                          value={filters.tipo_medio}
-                          onChange={(e) => setFilters(f => ({ ...f, tipo_medio: e.target.value }))}
-                          className="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
-                        >
-                          <option value="">Todos</option>
-                          {filterOptions.tiposMedio.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1">Catorcena</label>
-                        <select
-                          value={filters.catorcena ?? ''}
-                          onChange={(e) => setFilters(f => ({ ...f, catorcena: e.target.value ? parseInt(e.target.value) : null }))}
-                          className="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
-                        >
-                          <option value="">Todas</option>
-                          {filterOptions.catorcenas.map(c => <option key={c} value={c}>Catorcena {c}</option>)}
-                        </select>
-                      </div>
-                      <button
-                        onClick={() => setShowFilterDropdown(false)}
-                        className="w-full mt-2 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-                      >
-                        Aplicar
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Group Dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={() => {
-                      setShowGroupDropdown(!showGroupDropdown);
-                      setShowFilterDropdown(false);
-                      setShowSortDropdown(false);
-                    }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                      isGrouped
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
-                    }`}
-                  >
-                    <Layers className="h-3.5 w-3.5" />
-                    <span>Agrupar</span>
-                  </button>
-                  {showGroupDropdown && (
-                    <div className="absolute top-full right-0 mt-1 w-48 bg-card border border-border rounded-lg shadow-xl z-50 py-1">
-                      {GROUP_BY_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.value}
-                          onClick={() => {
-                            setGroupByField(opt.value);
-                            setShowGroupDropdown(false);
-                            if (opt.value !== 'none') {
-                              setExpandedNodes(new Set(['all']));
-                            }
-                          }}
-                          className={`w-full px-3 py-2 text-left text-xs transition-colors ${
-                            groupByField === opt.value
-                              ? 'bg-purple-600/30 text-purple-300'
-                              : 'hover:bg-purple-900/30 text-zinc-300'
-                          }`}
-                        >
-                          {opt.label}
-                          {groupByField === opt.value && (
-                            <Check className="h-3 w-3 inline ml-2" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Sort Dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={() => {
-                      setShowSortDropdown(!showSortDropdown);
-                      setShowFilterDropdown(false);
-                      setShowGroupDropdown(false);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30"
-                  >
-                    <ArrowUpDown className="h-3.5 w-3.5" />
-                    <span>Ordenar</span>
-                  </button>
-                  {showSortDropdown && (
-                    <div className="absolute top-full right-0 mt-1 w-48 bg-card border border-border rounded-lg shadow-xl z-50 py-1">
-                      <div className="px-3 py-1.5 border-b border-border">
-                        <span className="text-[10px] text-zinc-500 uppercase">Ordenar por</span>
-                      </div>
-                      {SORT_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.value}
-                          onClick={() => {
-                            if (sortField === opt.value) {
-                              setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
-                            } else {
-                              setSortField(opt.value);
-                              setSortDirection('asc');
-                            }
-                          }}
-                          className={`w-full px-3 py-2 text-left text-xs transition-colors flex items-center justify-between ${
-                            sortField === opt.value
-                              ? 'bg-purple-600/30 text-purple-300'
-                              : 'hover:bg-purple-900/30 text-zinc-300'
-                          }`}
-                        >
-                          <span>{opt.label}</span>
-                          {sortField === opt.value && (
-                            <span className="text-[10px] text-purple-400">
-                              {sortDirection === 'asc' ? 'A-Z' : 'Z-A'}
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                      <div className="px-3 py-2 border-t border-border">
-                        <button
-                          onClick={() => setShowSortDropdown(false)}
-                          className="w-full px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-                        >
-                          Aplicar
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Download */}
-                <button
-                  onClick={() => console.log('Download inventory')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Active filters display */}
-            {hasActiveFilters && (
-              <div className="flex items-center gap-2 mt-3 flex-wrap">
-                <span className="text-[10px] text-zinc-500">Filtros activos:</span>
-                {filters.ciudad && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-[10px]">
-                    Ciudad: {filters.ciudad}
-                    <button onClick={() => setFilters(f => ({ ...f, ciudad: '' }))} className="hover:text-white">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {filters.plaza && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-[10px]">
-                    Plaza: {filters.plaza}
-                    <button onClick={() => setFilters(f => ({ ...f, plaza: '' }))} className="hover:text-white">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {filters.mueble && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-[10px]">
-                    Mueble: {filters.mueble}
-                    <button onClick={() => setFilters(f => ({ ...f, mueble: '' }))} className="hover:text-white">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {filters.tipo_medio && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-[10px]">
-                    Tipo: {filters.tipo_medio}
-                    <button onClick={() => setFilters(f => ({ ...f, tipo_medio: '' }))} className="hover:text-white">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {filters.catorcena !== null && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-[10px]">
-                    Catorcena: {filters.catorcena}
-                    <button onClick={() => setFilters(f => ({ ...f, catorcena: null }))} className="hover:text-white">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-
           {/* Filter Toolbar (Versionario tab) */}
           {activeMainTab === 'versionario' && (
             <div className="px-4 py-2 border-b border-border flex items-center justify-between">
@@ -4549,6 +4321,7 @@ export function TareaSeguimientoPage() {
                 showGrouping={showGroupingVersionario}
                 setShowGrouping={setShowGroupingVersionario}
                 toggleGrouping={toggleGroupingVersionario}
+                clearGroupings={clearGroupingsVersionario}
                 sortField={sortFieldVersionario}
                 sortDirection={sortDirectionVersionario}
                 showSort={showSortVersionario}
@@ -4602,6 +4375,39 @@ export function TareaSeguimientoPage() {
             </div>
           )}
 
+          {/* Estado Tarea Tabs (Atender tab) */}
+          {activeMainTab === 'atender' && (
+            <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
+              <div className="flex items-center gap-1">
+                {[
+                  { key: 'todos' as const, label: 'Todos', count: inventoryArteData.length },
+                  { key: 'sin_atender' as const, label: 'Sin Atender', count: inventoryArteData.filter(i => i.estado_tarea === 'sin_atender').length },
+                  { key: 'en_progreso' as const, label: 'En Progreso', count: inventoryArteData.filter(i => i.estado_tarea === 'en_progreso').length },
+                  { key: 'atendido' as const, label: 'Instalado', count: inventoryArteData.filter(i => i.estado_tarea === 'atendido').length },
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveEstadoTareaTab(tab.key)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+                      activeEstadoTareaTab === tab.key
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+                    }`}
+                  >
+                    {tab.label}
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      activeEstadoTareaTab === tab.key
+                        ? 'bg-purple-500/50 text-purple-100'
+                        : 'bg-zinc-700 text-zinc-400'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Filter Toolbar (Atender tab) */}
           {activeMainTab === 'atender' && (
             <div className="px-4 py-2 border-b border-border flex items-center justify-between">
@@ -4619,6 +4425,7 @@ export function TareaSeguimientoPage() {
                 showGrouping={showGroupingAtender}
                 setShowGrouping={setShowGroupingAtender}
                 toggleGrouping={toggleGroupingAtender}
+                clearGroupings={clearGroupingsAtender}
                 sortField={sortFieldAtender}
                 sortDirection={sortDirectionAtender}
                 showSort={showSortAtender}
@@ -4691,6 +4498,7 @@ export function TareaSeguimientoPage() {
                 showGrouping={showGroupingTestigo}
                 setShowGrouping={setShowGroupingTestigo}
                 toggleGrouping={toggleGroupingTestigo}
+                clearGroupings={clearGroupingsTestigo}
                 sortField={sortFieldTestigo}
                 sortDirection={sortDirectionTestigo}
                 showSort={showSortTestigo}
@@ -4802,161 +4610,200 @@ export function TareaSeguimientoPage() {
                 icon={activeMainTab === 'versionario' ? Image : activeMainTab === 'atender' ? Eye : Camera}
               />
             ) : activeMainTab === 'atender' ? (
-              // Vista jerárquica de 4 niveles para Atender Arte: Catorcena -> APS -> Estado Arte -> Estado Tarea
+              // Vista jerárquica de 3 niveles para Revisar y Aprobar
               <div className="divide-y divide-border">
-                {Object.entries(atenderGroupedInventory).map(([catorcenaKey, apsGroups]) => {
-                  const catorcenaExpanded = expandedNodes.has(`atender-${catorcenaKey}`);
-                  const catorcenaItemCount = Object.values(apsGroups).reduce(
-                    (sum, arteGroups) => sum + Object.values(arteGroups).reduce(
-                      (s, tareaGroups) => s + Object.values(tareaGroups).reduce((t, items) => t + items.length, 0), 0
-                    ), 0
+                {Object.entries(atenderGroupedInventory).map(([level1Key, level2Groups]) => {
+                  const level1Expanded = expandedNodes.has(`atender-${level1Key}`);
+                  const level1ItemCount = Object.values(level2Groups).reduce(
+                    (sum, level3Groups) => sum + Object.values(level3Groups).reduce((s, items) => s + items.length, 0), 0
                   );
+                  const getAllLevel1Items = () => Object.values(level2Groups).flatMap(l3 => Object.values(l3).flat());
                   return (
-                    <div key={catorcenaKey}>
-                      {/* Nivel 1: Catorcena */}
+                    <div key={level1Key}>
+                      {/* Nivel 1 */}
                       <button
-                        onClick={() => toggleNode(`atender-${catorcenaKey}`)}
+                        onClick={() => toggleNode(`atender-${level1Key}`)}
                         className="w-full px-4 py-3 flex items-center justify-between bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
                       >
                         <div className="flex items-center gap-2">
-                          {catorcenaExpanded ? (
+                          {level1Expanded ? (
                             <ChevronDown className="h-4 w-4 text-purple-400" />
                           ) : (
                             <ChevronRight className="h-4 w-4 text-purple-400" />
                           )}
-                          <span className="text-sm font-bold text-white">{catorcenaKey}</span>
+                          <span className="text-sm font-bold text-white">{level1Key}</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const allItems = getAllLevel1Items();
+                              const allSelected = allItems.every(item => selectedInventoryIds.has(item.id));
+                              setSelectedInventoryIds(prev => {
+                                const next = new Set(prev);
+                                allItems.forEach(item => {
+                                  if (allSelected) next.delete(item.id);
+                                  else next.add(item.id);
+                                });
+                                return next;
+                              });
+                            }}
+                            className={`ml-2 w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                              getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0
+                                ? 'bg-purple-600 border-purple-600'
+                                : 'border-purple-500/50 hover:border-purple-400'
+                            }`}
+                          >
+                            {getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0 && (
+                              <Check className="h-3 w-3 text-white" />
+                            )}
+                          </button>
                         </div>
                         <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
-                          {catorcenaItemCount}
+                          {level1ItemCount}
                         </Badge>
                       </button>
-                      {catorcenaExpanded && (
+                      {level1Expanded && (
                         <div className="pl-4">
-                          {Object.entries(apsGroups).map(([apsKey, arteGroups]) => {
-                            const apsNodeKey = `atender-${catorcenaKey}|${apsKey}`;
-                            const apsExpanded = expandedNodes.has(apsNodeKey);
-                            const apsItemCount = Object.values(arteGroups).reduce(
-                              (s, tareaGroups) => s + Object.values(tareaGroups).reduce((t, items) => t + items.length, 0), 0
-                            );
+                          {Object.entries(level2Groups).map(([level2Key, level3Groups]) => {
+                            const level2NodeKey = `atender-${level1Key}|${level2Key}`;
+                            const level2Expanded = expandedNodes.has(level2NodeKey);
+                            const level2ItemCount = Object.values(level3Groups).reduce((s, items) => s + items.length, 0);
+                            const getAllLevel2Items = () => Object.values(level3Groups).flat();
                             return (
-                              <div key={apsNodeKey} className="border-l-2 border-purple-600/30">
-                                {/* Nivel 2: APS */}
+                              <div key={level2NodeKey} className="border-l-2 border-purple-600/30">
+                                {/* Nivel 2 */}
                                 <button
-                                  onClick={() => toggleNode(apsNodeKey)}
+                                  onClick={() => toggleNode(level2NodeKey)}
                                   className="w-full px-4 py-2 flex items-center justify-between bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
                                 >
                                   <div className="flex items-center gap-2">
-                                    {apsExpanded ? (
+                                    {level2Expanded ? (
                                       <ChevronDown className="h-3.5 w-3.5 text-purple-400" />
                                     ) : (
                                       <ChevronRight className="h-3.5 w-3.5 text-purple-400" />
                                     )}
-                                    <span className="text-xs font-semibold text-purple-300">{apsKey}</span>
+                                    <span className="text-xs font-semibold text-purple-300">{level2Key}</span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const allItems = getAllLevel2Items();
+                                        const allSelected = allItems.every(item => selectedInventoryIds.has(item.id));
+                                        setSelectedInventoryIds(prev => {
+                                          const next = new Set(prev);
+                                          allItems.forEach(item => {
+                                            if (allSelected) next.delete(item.id);
+                                            else next.add(item.id);
+                                          });
+                                          return next;
+                                        });
+                                      }}
+                                      className={`ml-2 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                        getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0
+                                          ? 'bg-purple-600 border-purple-600'
+                                          : 'border-purple-500/50 hover:border-purple-400'
+                                      }`}
+                                    >
+                                      {getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0 && (
+                                        <Check className="h-2.5 w-2.5 text-white" />
+                                      )}
+                                    </button>
                                   </div>
                                   <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
-                                    {apsItemCount}
+                                    {level2ItemCount}
                                   </Badge>
                                 </button>
-                                {apsExpanded && (
+                                {level2Expanded && (
                                   <div className="pl-4">
-                                    {Object.entries(arteGroups).map(([arteKey, tareaGroups]) => {
-                                      const arteNodeKey = `${apsNodeKey}|${arteKey}`;
-                                      const arteExpanded = expandedNodes.has(arteNodeKey);
-                                      const arteItemCount = Object.values(tareaGroups).reduce((t, items) => t + items.length, 0);
+                                    {Object.entries(level3Groups).map(([level3Key, items]) => {
+                                      const level3NodeKey = `${level2NodeKey}|${level3Key}`;
+                                      const level3Expanded = expandedNodes.has(level3NodeKey);
                                       return (
-                                        <div key={arteNodeKey} className="border-l-2 border-amber-500/20">
-                                          {/* Nivel 3: Estado Arte */}
+                                        <div key={level3NodeKey} className="border-l-2 border-amber-500/20">
+                                          {/* Nivel 3 */}
                                           <button
-                                            onClick={() => toggleNode(arteNodeKey)}
+                                            onClick={() => toggleNode(level3NodeKey)}
                                             className="w-full px-4 py-1.5 flex items-center justify-between hover:bg-amber-900/10 transition-colors"
                                           >
                                             <div className="flex items-center gap-2">
-                                              {arteExpanded ? (
+                                              {level3Expanded ? (
                                                 <ChevronDown className="h-3 w-3 text-amber-400" />
                                               ) : (
                                                 <ChevronRight className="h-3 w-3 text-amber-400" />
                                               )}
-                                              <span className="text-[11px] font-medium text-amber-300">{arteKey}</span>
+                                              <span className="text-[11px] font-medium text-amber-300">{level3Key}</span>
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const allSelected = items.every(item => selectedInventoryIds.has(item.id));
+                                                  setSelectedInventoryIds(prev => {
+                                                    const next = new Set(prev);
+                                                    items.forEach(item => {
+                                                      if (allSelected) next.delete(item.id);
+                                                      else next.add(item.id);
+                                                    });
+                                                    return next;
+                                                  });
+                                                }}
+                                                className={`ml-2 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                  items.every(item => selectedInventoryIds.has(item.id))
+                                                    ? 'bg-amber-600 border-amber-600'
+                                                    : 'border-amber-500/50 hover:border-amber-400'
+                                                }`}
+                                              >
+                                                {items.every(item => selectedInventoryIds.has(item.id)) && (
+                                                  <Check className="h-2.5 w-2.5 text-white" />
+                                                )}
+                                              </button>
                                             </div>
                                             <Badge className="bg-amber-600/20 text-amber-300 border-amber-500/20 text-[10px]">
-                                              {arteItemCount}
+                                              {items.length}
                                             </Badge>
                                           </button>
-                                          {arteExpanded && (
-                                            <div className="pl-4">
-                                              {Object.entries(tareaGroups).map(([tareaKey, items]) => {
-                                                const tareaNodeKey = `${arteNodeKey}|${tareaKey}`;
-                                                const tareaExpanded = expandedNodes.has(tareaNodeKey);
-                                                return (
-                                                  <div key={tareaNodeKey} className="border-l-2 border-blue-500/20">
-                                                    {/* Nivel 4: Estado Tarea */}
-                                                    <button
-                                                      onClick={() => toggleNode(tareaNodeKey)}
-                                                      className="w-full px-4 py-1 flex items-center justify-between hover:bg-blue-900/10 transition-colors"
-                                                    >
-                                                      <div className="flex items-center gap-2">
-                                                        {tareaExpanded ? (
-                                                          <ChevronDown className="h-3 w-3 text-blue-400" />
-                                                        ) : (
-                                                          <ChevronRight className="h-3 w-3 text-blue-400" />
+                                          {level3Expanded && (
+                                            <div className="bg-card/50 ml-4">
+                                              <table className="w-full text-xs">
+                                                <thead className="bg-purple-900/20">
+                                                  <tr className="border-b border-border text-left">
+                                                    <th className="p-2 w-8">
+                                                      <button
+                                                        onClick={() => {
+                                                          const allSelected = items.every(item => selectedInventoryIds.has(item.id));
+                                                          setSelectedInventoryIds(prev => {
+                                                            const next = new Set(prev);
+                                                            items.forEach(item => {
+                                                              if (allSelected) next.delete(item.id);
+                                                              else next.add(item.id);
+                                                            });
+                                                            return next;
+                                                          });
+                                                        }}
+                                                        className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                                          items.every(item => selectedInventoryIds.has(item.id))
+                                                            ? 'bg-purple-600 border-purple-600'
+                                                            : 'border-purple-500/50 hover:border-purple-400'
+                                                        }`}
+                                                      >
+                                                        {items.every(item => selectedInventoryIds.has(item.id)) && (
+                                                          <Check className="h-3 w-3 text-white" />
                                                         )}
-                                                        <span className="text-[10px] font-medium text-blue-300">{tareaKey}</span>
-                                                      </div>
-                                                      <Badge className="bg-blue-600/20 text-blue-300 border-blue-500/20 text-[9px]">
-                                                        {items.length}
-                                                      </Badge>
-                                                    </button>
-                                                    {tareaExpanded && (
-                                                      <div className="bg-card/50">
-                                                        <table className="w-full text-xs">
-                                                          <thead className="bg-purple-900/20">
-                                                            <tr className="border-b border-border text-left">
-                                                              <th className="p-2 w-8">
-                                                                <button
-                                                                  onClick={() => {
-                                                                    const allSelected = items.every(item => selectedInventoryIds.has(item.id));
-                                                                    setSelectedInventoryIds(prev => {
-                                                                      const next = new Set(prev);
-                                                                      items.forEach(item => {
-                                                                        if (allSelected) next.delete(item.id);
-                                                                        else next.add(item.id);
-                                                                      });
-                                                                      return next;
-                                                                    });
-                                                                  }}
-                                                                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                                                                    items.every(item => selectedInventoryIds.has(item.id))
-                                                                      ? 'bg-purple-600 border-purple-600'
-                                                                      : 'border-purple-500/50 hover:border-purple-400'
-                                                                  }`}
-                                                                >
-                                                                  {items.every(item => selectedInventoryIds.has(item.id)) && (
-                                                                    <Check className="h-3 w-3 text-white" />
-                                                                  )}
-                                                                </button>
-                                                              </th>
-                                                              <th className="p-2 font-medium text-purple-300">ID</th>
-                                                              <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
-                                                              <th className="p-2 font-medium text-purple-300">Archivo</th>
-                                                              <th className="p-2 font-medium text-purple-300">Ubicación</th>
-                                                              <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
-                                                              <th className="p-2 font-medium text-purple-300">Formato</th>
-                                                              <th className="p-2 font-medium text-purple-300">Plaza</th>
-                                                              <th className="p-2 font-medium text-purple-300">Ciudad</th>
-                                                              <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
-                                                              <th className="p-2 font-medium text-purple-300">IMU</th>
-                                                              <th className="p-2 font-medium text-purple-300">Instalado</th>
-                                                            </tr>
-                                                          </thead>
-                                                          <tbody>
-                                                            {items.map((item) => renderInventoryRow(item))}
-                                                          </tbody>
-                                                        </table>
-                                                      </div>
-                                                    )}
-                                                  </div>
-                                                );
-                                              })}
+                                                      </button>
+                                                    </th>
+                                                    <th className="p-2 font-medium text-purple-300">ID</th>
+                                                    <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
+                                                    <th className="p-2 font-medium text-purple-300">Archivo</th>
+                                                    <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                                    <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
+                                                    <th className="p-2 font-medium text-purple-300">Formato</th>
+                                                    <th className="p-2 font-medium text-purple-300">Plaza</th>
+                                                    <th className="p-2 font-medium text-purple-300">Ciudad</th>
+                                                    <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
+                                                    <th className="p-2 font-medium text-purple-300">IMU</th>
+                                                    <th className="p-2 font-medium text-purple-300">Instalado</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {items.map((item) => renderInventoryRow(item))}
+                                                </tbody>
+                                              </table>
                                             </div>
                                           )}
                                         </div>
@@ -4974,77 +4821,131 @@ export function TareaSeguimientoPage() {
                 })}
               </div>
             ) : activeMainTab === 'versionario' ? (
-              // Vista jerárquica de 3 niveles para Subir Artes: Catorcena -> APS -> Grupo
+              // Vista jerárquica de 3 niveles para Subir Artes
               <div className="divide-y divide-border">
-                {Object.entries(versionarioGroupedInventory).map(([catorcenaKey, apsGroups]) => {
-                  const catorcenaExpanded = expandedNodes.has(catorcenaKey);
-                  const catorcenaItemCount = Object.values(apsGroups).reduce(
-                    (sum, grupoItems) => sum + Object.values(grupoItems).reduce((s, items) => s + items.length, 0), 0
+                {Object.entries(versionarioGroupedInventory).map(([level1Key, level2Groups]) => {
+                  const level1Expanded = expandedNodes.has(level1Key);
+                  // Contar items recursivamente
+                  const level1ItemCount = Object.values(level2Groups).reduce(
+                    (sum, level3Groups) => sum + Object.values(level3Groups).reduce((s, items) => s + items.length, 0), 0
                   );
+                  // Obtener todos los items recursivamente
+                  const getAllLevel1Items = () => Object.values(level2Groups).flatMap(l3 => Object.values(l3).flat());
                   return (
-                    <div key={catorcenaKey}>
-                      {/* Nivel 1: Catorcena */}
+                    <div key={level1Key}>
+                      {/* Nivel 1 */}
                       <button
-                        onClick={() => toggleNode(catorcenaKey)}
+                        onClick={() => toggleNode(level1Key)}
                         className="w-full px-4 py-3 flex items-center justify-between bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
                       >
                         <div className="flex items-center gap-2">
-                          {catorcenaExpanded ? (
+                          {level1Expanded ? (
                             <ChevronDown className="h-4 w-4 text-purple-400" />
                           ) : (
                             <ChevronRight className="h-4 w-4 text-purple-400" />
                           )}
-                          <span className="text-sm font-bold text-white">{catorcenaKey}</span>
+                          <span className="text-sm font-bold text-white">{level1Key}</span>
+                          {/* Checkbox para seleccionar todo el nivel 1 */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const allItems = getAllLevel1Items();
+                              const allSelected = allItems.every(item => selectedInventoryIds.has(item.id));
+                              setSelectedInventoryIds(prev => {
+                                const next = new Set(prev);
+                                allItems.forEach(item => {
+                                  if (allSelected) next.delete(item.id);
+                                  else next.add(item.id);
+                                });
+                                return next;
+                              });
+                            }}
+                            className={`ml-2 w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                              getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0
+                                ? 'bg-purple-600 border-purple-600'
+                                : 'border-purple-500/50 hover:border-purple-400'
+                            }`}
+                          >
+                            {getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0 && (
+                              <Check className="h-3 w-3 text-white" />
+                            )}
+                          </button>
                         </div>
                         <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
-                          {catorcenaItemCount} elemento{catorcenaItemCount !== 1 ? 's' : ''}
+                          {level1ItemCount} elemento{level1ItemCount !== 1 ? 's' : ''}
                         </Badge>
                       </button>
-                      {catorcenaExpanded && (
+                      {level1Expanded && (
                         <div className="pl-4">
-                          {Object.entries(apsGroups).map(([apsKey, grupoItems]) => {
-                            const apsNodeKey = `${catorcenaKey}|${apsKey}`;
-                            const apsExpanded = expandedNodes.has(apsNodeKey);
-                            const apsItemCount = Object.values(grupoItems).reduce((s, items) => s + items.length, 0);
+                          {Object.entries(level2Groups).map(([level2Key, level3Groups]) => {
+                            const level2NodeKey = `${level1Key}|${level2Key}`;
+                            const level2Expanded = expandedNodes.has(level2NodeKey);
+                            const level2ItemCount = Object.values(level3Groups).reduce((s, items) => s + items.length, 0);
+                            const getAllLevel2Items = () => Object.values(level3Groups).flat();
                             return (
-                              <div key={apsNodeKey} className="border-l-2 border-purple-600/30">
-                                {/* Nivel 2: APS */}
+                              <div key={level2NodeKey} className="border-l-2 border-purple-600/30">
+                                {/* Nivel 2 */}
                                 <button
-                                  onClick={() => toggleNode(apsNodeKey)}
+                                  onClick={() => toggleNode(level2NodeKey)}
                                   className="w-full px-4 py-2 flex items-center justify-between bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
                                 >
                                   <div className="flex items-center gap-2">
-                                    {apsExpanded ? (
+                                    {level2Expanded ? (
                                       <ChevronDown className="h-3.5 w-3.5 text-purple-400" />
                                     ) : (
                                       <ChevronRight className="h-3.5 w-3.5 text-purple-400" />
                                     )}
-                                    <span className="text-xs font-semibold text-purple-300">{apsKey}</span>
+                                    <span className="text-xs font-semibold text-purple-300">{level2Key}</span>
+                                    {/* Checkbox para seleccionar todo el nivel 2 */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const allItems = getAllLevel2Items();
+                                        const allSelected = allItems.every(item => selectedInventoryIds.has(item.id));
+                                        setSelectedInventoryIds(prev => {
+                                          const next = new Set(prev);
+                                          allItems.forEach(item => {
+                                            if (allSelected) next.delete(item.id);
+                                            else next.add(item.id);
+                                          });
+                                          return next;
+                                        });
+                                      }}
+                                      className={`ml-2 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                        getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0
+                                          ? 'bg-purple-600 border-purple-600'
+                                          : 'border-purple-500/50 hover:border-purple-400'
+                                      }`}
+                                    >
+                                      {getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0 && (
+                                        <Check className="h-2.5 w-2.5 text-white" />
+                                      )}
+                                    </button>
                                   </div>
                                   <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
-                                    {apsItemCount}
+                                    {level2ItemCount}
                                   </Badge>
                                 </button>
-                                {apsExpanded && (
+                                {level2Expanded && (
                                   <div className="pl-4">
-                                    {Object.entries(grupoItems).map(([grupoKey, items]) => {
-                                      const grupoNodeKey = `${catorcenaKey}|${apsKey}|${grupoKey}`;
-                                      const grupoExpanded = expandedNodes.has(grupoNodeKey);
+                                    {Object.entries(level3Groups).map(([level3Key, items]) => {
+                                      const level3NodeKey = `${level2NodeKey}|${level3Key}`;
+                                      const level3Expanded = expandedNodes.has(level3NodeKey);
                                       return (
-                                        <div key={grupoNodeKey} className="border-l-2 border-purple-500/20">
-                                          {/* Nivel 3: Grupo */}
+                                        <div key={level3NodeKey} className="border-l-2 border-purple-500/20">
+                                          {/* Nivel 3 */}
                                           <button
-                                            onClick={() => toggleNode(grupoNodeKey)}
+                                            onClick={() => toggleNode(level3NodeKey)}
                                             className="w-full px-4 py-1.5 flex items-center justify-between hover:bg-purple-900/10 transition-colors"
                                           >
                                             <div className="flex items-center gap-2">
-                                              {grupoExpanded ? (
+                                              {level3Expanded ? (
                                                 <ChevronDown className="h-3 w-3 text-zinc-400" />
                                               ) : (
                                                 <ChevronRight className="h-3 w-3 text-zinc-400" />
                                               )}
-                                              <span className="text-[11px] font-medium text-zinc-400">{grupoKey}</span>
-                                              {/* Checkbox para seleccionar todo el grupo */}
+                                              <span className="text-[11px] font-medium text-zinc-400">{level3Key}</span>
+                                              {/* Checkbox para seleccionar todo el nivel 3 */}
                                               <button
                                                 onClick={(e) => {
                                                   e.stopPropagation();
@@ -5052,11 +4953,8 @@ export function TareaSeguimientoPage() {
                                                   setSelectedInventoryIds(prev => {
                                                     const next = new Set(prev);
                                                     items.forEach(item => {
-                                                      if (allSelected) {
-                                                        next.delete(item.id);
-                                                      } else {
-                                                        next.add(item.id);
-                                                      }
+                                                      if (allSelected) next.delete(item.id);
+                                                      else next.add(item.id);
                                                     });
                                                     return next;
                                                   });
@@ -5076,7 +4974,7 @@ export function TareaSeguimientoPage() {
                                               {items.length} cara{items.length !== 1 ? 's' : ''}
                                             </span>
                                           </button>
-                                          {grupoExpanded && (
+                                          {level3Expanded && (
                                             <div className="bg-card/50 ml-4">
                                               <table className="w-full text-xs">
                                                 <thead className="bg-purple-900/20">
