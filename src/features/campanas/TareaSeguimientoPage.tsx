@@ -12,6 +12,7 @@ import {
   Plus,
   Edit,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   Calendar as CalendarIcon,
   List,
