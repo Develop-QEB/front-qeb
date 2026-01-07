@@ -1159,7 +1159,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Populate form when editing
   useEffect(() => {
-    if (isEditMode && editSolicitudData && cuicData && articulosData) {
+    if (isEditMode && editSolicitudData && cuicData && articulosData && catorcenasData?.data) {
       const sol = editSolicitudData.solicitud;
 
       // Find the CUIC item from SAP data - cuic is stored as string, CUIC from SAP is number
@@ -1200,29 +1200,94 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             ItemName: cara.articulo || ''
           };
 
+          // Find matching catorcena from catorcenasData by matching dates
+          let catNum = 1;
+          let catYear = new Date().getFullYear();
+          if (cara.inicio_periodo) {
+            const initDate = new Date(cara.inicio_periodo);
+            if (!isNaN(initDate.getTime())) {
+              // Normalize date to compare (remove time component)
+              const initDateStr = initDate.toISOString().split('T')[0];
+
+              // Find catorcena that matches this period
+              const matchingCat = catorcenasData.data.find(cat => {
+                const catStartStr = new Date(cat.fecha_inicio).toISOString().split('T')[0];
+                return catStartStr === initDateStr;
+              });
+
+              if (matchingCat) {
+                catNum = matchingCat.numero_catorcena;
+                catYear = matchingCat.a_o;
+              } else {
+                // Fallback: find catorcena where date falls within range
+                const matchingRange = catorcenasData.data.find(cat => {
+                  const catStart = new Date(cat.fecha_inicio);
+                  const catEnd = new Date(cat.fecha_fin);
+                  return initDate >= catStart && initDate <= catEnd;
+                });
+                if (matchingRange) {
+                  catNum = matchingRange.numero_catorcena;
+                  catYear = matchingRange.a_o;
+                } else {
+                  // Last fallback: use year from date
+                  catYear = initDate.getFullYear();
+                }
+              }
+            }
+          }
+
           return {
-            id: `edit-${idx}-${Date.now()}`,
+            id: `edit-${idx}-${Date.now()}-${Math.random()}`,
             articulo,
             estado: cara.estados || '',
             ciudades: cara.ciudad ? cara.ciudad.split(', ').map(c => c.trim()) : [],
             formato: cara.formato || '',
             tipo: cara.tipo || '',
             nse: cara.nivel_socioeconomico ? cara.nivel_socioeconomico.split(',') : [],
-            catorcenaNum: 1,
-            catorcenaYear: new Date().getFullYear(),
+            catorcenaNum: catNum,
+            catorcenaYear: catYear,
             periodoInicio: cara.inicio_periodo || '',
             periodoFin: cara.fin_periodo || '',
-            renta: cara.caras || 1,
-            bonificacion: cara.bonificacion || 0,
-            tarifaPublica: cara.tarifa_publica || 0,
-            descuento: cara.descuento || 0,
-            precioTotal: cara.costo || 0,
+            renta: Number(cara.caras) || 1,
+            bonificacion: Number(cara.bonificacion) || 0,
+            tarifaPublica: Number(cara.tarifa_publica) || 0,
+            descuento: Number(cara.descuento) || 0,
+            precioTotal: Number(cara.costo) || 0,
           };
         });
         setCaras(loadedCaras);
+
+        // Set year/catorcena range from loaded caras for fechaInicio/fechaFin
+        if (loadedCaras.length > 0) {
+          // Find min and max catorcenas
+          let minYear = loadedCaras[0].catorcenaYear;
+          let maxYear = loadedCaras[0].catorcenaYear;
+          let minCat = loadedCaras[0].catorcenaNum;
+          let maxCat = loadedCaras[0].catorcenaNum;
+
+          loadedCaras.forEach(c => {
+            if (c.catorcenaYear < minYear || (c.catorcenaYear === minYear && c.catorcenaNum < minCat)) {
+              minYear = c.catorcenaYear;
+              minCat = c.catorcenaNum;
+            }
+            if (c.catorcenaYear > maxYear || (c.catorcenaYear === maxYear && c.catorcenaNum > maxCat)) {
+              maxYear = c.catorcenaYear;
+              maxCat = c.catorcenaNum;
+            }
+          });
+
+          setYearInicio(minYear);
+          setCatorcenaInicio(minCat);
+          setYearFin(maxYear);
+          setCatorcenaFin(maxCat);
+
+          // Auto-expand all catorcenas in edit mode so user can see them
+          const catKeys = new Set(loadedCaras.map(c => `${c.catorcenaYear}-${c.catorcenaNum}`));
+          setExpandedCatorcenas(catKeys);
+        }
       }
     }
-  }, [isEditMode, editSolicitudData, cuicData, articulosData]);
+  }, [isEditMode, editSolicitudData, cuicData, articulosData, catorcenasData]);
 
   // Toggle NSE
   const toggleNse = (nse: string) => {
@@ -1852,7 +1917,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                             </div>
                             <div className="flex items-center gap-4 text-sm">
                               <span className="text-zinc-400">{groupRenta} renta</span>
-                              <span className="text-emerald-400">+{groupBonif} bonif.</span>
+                              <span className="text-emerald-400">{groupBonif} bonif.</span>
                               <span className="text-amber-400 font-medium">{formatCurrency(groupTotal)}</span>
                             </div>
                           </button>
@@ -1930,7 +1995,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         <span className="text-sm font-medium text-zinc-400">Totales:</span>
                         <div className="flex items-center gap-6 text-sm">
                           <span className="text-white">{totals.totalRenta} renta</span>
-                          <span className="text-emerald-400">+{totals.totalBonificacion} bonif.</span>
+                          <span className="text-emerald-400">{totals.totalBonificacion} bonif.</span>
                           <span className="text-amber-400 font-bold">{formatCurrency(totals.totalPrecio)}</span>
                         </div>
                       </div>
@@ -2056,7 +2121,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                             </div>
                             <div className="flex items-center gap-4 text-sm">
                               <span className="text-zinc-400">{groupRenta} renta</span>
-                              <span className="text-emerald-400">+{groupBonif} bonif.</span>
+                              <span className="text-emerald-400">{groupBonif} bonif.</span>
                               <span className="text-amber-400 font-medium">{formatCurrency(groupTotal)}</span>
                             </div>
                           </div>
@@ -2070,7 +2135,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                 </div>
                                 <div className="flex items-center gap-3 text-xs">
                                   <span className="text-white">{data.renta} renta</span>
-                                  <span className="text-emerald-400">+{data.bonificacion} bonif.</span>
+                                  <span className="text-emerald-400">{data.bonificacion} bonif.</span>
                                   <span className="text-amber-400">{formatCurrency(data.precioTotal)}</span>
                                 </div>
                               </div>

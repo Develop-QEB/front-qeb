@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { GoogleMap, useLoadScript, Circle, InfoWindow } from '@react-google-maps/api';
+import { usePrefetch } from '../../hooks/usePrefetch';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import {
   Package,
@@ -753,6 +754,14 @@ export function DashboardPage() {
   const [showPins, setShowPins] = useState(true);
   const [selectedPlaza, setSelectedPlaza] = useState<string | null>(null);
   const [inventoryPage, setInventoryPage] = useState(1);
+
+  // Prefetch todas las vistas al cargar el dashboard
+  const { prefetchAll } = usePrefetch();
+
+  useEffect(() => {
+    // Precargar datos de todas las vistas en background
+    prefetchAll();
+  }, [prefetchAll]);
 
   const { data: filterOptions } = useQuery({
     queryKey: ['dashboard', 'filter-options'],

@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
-  Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown,
-  List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList
+  Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
+  List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -205,6 +205,84 @@ function FilterChip({
       )}
     </div>
   );
+}
+
+// Advanced Filter Types and Config
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
+
+interface AdvancedFilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: string;
+  label: string;
+  type: 'string' | 'number';
+}
+
+const CAMPANA_FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'id', label: 'ID', type: 'number' },
+  { field: 'nombre', label: 'Nombre', type: 'string' },
+  { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
+  { field: 'status', label: 'Status', type: 'string' },
+  { field: 'articulo', label: 'Artículo', type: 'string' },
+  { field: 'ciudad', label: 'Ciudad', type: 'string' },
+];
+
+const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
+  { value: '=', label: 'Igual a', forTypes: ['string', 'number'] },
+  { value: '!=', label: 'Diferente de', forTypes: ['string', 'number'] },
+  { value: 'contains', label: 'Contiene', forTypes: ['string'] },
+  { value: 'not_contains', label: 'No contiene', forTypes: ['string'] },
+  { value: '>', label: 'Mayor que', forTypes: ['number'] },
+  { value: '<', label: 'Menor que', forTypes: ['number'] },
+  { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
+  { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
+];
+
+// Function to apply advanced filters to data
+function applyAdvancedFilters<T>(data: T[], filters: AdvancedFilterCondition[]): T[] {
+  if (filters.length === 0) return data;
+
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = (item as Record<string, unknown>)[filter.field];
+      const filterValue = filter.value;
+
+      if (!filterValue) return true;
+
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+
+      switch (filter.operator) {
+        case '=':
+          return strValue === strFilterValue;
+        case '!=':
+          return strValue !== strFilterValue;
+        case 'contains':
+          return strValue.includes(strFilterValue);
+        case 'not_contains':
+          return !strValue.includes(strFilterValue);
+        case '>':
+          return Number(fieldValue) > Number(filterValue);
+        case '<':
+          return Number(fieldValue) < Number(filterValue);
+        case '>=':
+          return Number(fieldValue) >= Number(filterValue);
+        case '<=':
+          return Number(fieldValue) <= Number(filterValue);
+        default:
+          return true;
+      }
+    });
+  });
 }
 
 // Period Filter Popover Component
@@ -498,7 +576,11 @@ export function CampanasPage() {
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
   const [groupBy, setGroupBy] = useState('');
+  const [sortBy, setSortBy] = useState('fecha_inicio');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showFilters, setShowFilters] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedCatorcenaInicio, setSelectedCatorcenaInicio] = useState('');
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -601,8 +683,45 @@ export function CampanasPage() {
       }
     }
 
+    // Apply advanced filters
+    if (advancedFilters.length > 0) {
+      items = applyAdvancedFilters(items, advancedFilters);
+    }
+
+    // Apply sorting
+    if (sortBy && items.length > 0) {
+      items = [...items].sort((a, b) => {
+        let aVal: string | number | null = null;
+        let bVal: string | number | null = null;
+
+        switch (sortBy) {
+          case 'fecha_inicio':
+            aVal = a.fecha_inicio;
+            bVal = b.fecha_inicio;
+            break;
+          case 'nombre':
+            aVal = a.nombre?.toLowerCase() || '';
+            bVal = b.nombre?.toLowerCase() || '';
+            break;
+          case 'cliente':
+            aVal = (a.cliente_nombre || a.cliente_razon_social || '').toLowerCase();
+            bVal = (b.cliente_nombre || b.cliente_razon_social || '').toLowerCase();
+            break;
+          case 'status':
+            aVal = a.status?.toLowerCase() || '';
+            bVal = b.status?.toLowerCase() || '';
+            break;
+        }
+
+        if (aVal === null || bVal === null) return 0;
+        if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
     return items;
-  }, [data?.data, debouncedSearch, selectedCatorcenaInicio]);
+  }, [data?.data, debouncedSearch, selectedCatorcenaInicio, advancedFilters, sortBy, sortOrder]);
 
   // Group data
   const groupedData = useMemo(() => {
@@ -857,7 +976,50 @@ export function CampanasPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || debouncedSearch || selectedCatorcenaInicio);
+  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || debouncedSearch || selectedCatorcenaInicio || advancedFilters.length > 0 || sortBy !== 'fecha_inicio');
+
+  // Get unique values for each field (for advanced filter dropdowns)
+  const getUniqueFieldValues = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    if (!data?.data) return valuesMap;
+
+    CAMPANA_FILTER_FIELDS.forEach(fieldConfig => {
+      const values = new Set<string>();
+      data.data.forEach(item => {
+        const val = item[fieldConfig.field as keyof Campana];
+        if (val !== null && val !== undefined && val !== '') {
+          values.add(String(val));
+        }
+      });
+      valuesMap[fieldConfig.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [data?.data]);
+
+  // Advanced filter functions
+  const addAdvancedFilter = () => {
+    const newFilter: AdvancedFilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: CAMPANA_FILTER_FIELDS[0].field,
+      operator: '=',
+      value: '',
+    };
+    setAdvancedFilters(prev => [...prev, newFilter]);
+  };
+
+  const updateAdvancedFilter = (id: string, updates: Partial<AdvancedFilterCondition>) => {
+    setAdvancedFilters(prev =>
+      prev.map(f => (f.id === id ? { ...f, ...updates } : f))
+    );
+  };
+
+  const removeAdvancedFilter = (id: string) => {
+    setAdvancedFilters(prev => prev.filter(f => f.id !== id));
+  };
+
+  const clearAdvancedFilters = () => {
+    setAdvancedFilters([]);
+  };
 
   const clearAllFilters = () => {
     setSearch('');
@@ -867,8 +1029,11 @@ export function CampanasPage() {
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
     setSelectedCatorcenaInicio('');
+    setSortBy('fecha_inicio');
+    setSortOrder('desc');
     setGroupBy('');
     setExpandedGroups(new Set());
+    setAdvancedFilters([]);
     setPage(1);
   };
 
@@ -942,70 +1107,80 @@ export function CampanasPage() {
     return (
       <tr key={`campana-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
         {/* ID */}
-        <td className="px-3 py-3">
-          <span className="text-zinc-400 text-xs font-mono">{item.id}</span>
+        <td className="px-4 py-3">
+          <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">#{item.id}</span>
         </td>
         {/* Periodo */}
-        <td className="px-3 py-3">
+        <td className="px-4 py-3">
           <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
             {periodStatus}
           </span>
         </td>
-        {/* Creador */}
-        <td className="px-3 py-3">
-          {item.creador_nombre ? (() => {
-            const color = getTagColor(item.creador_nombre);
-            return (
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${color.bg} ${color.text} border ${color.border}`}>
-                {item.creador_nombre}
-              </span>
-            );
-          })() : (
+        {/* Creador - Avatar style */}
+        <td className="px-4 py-3">
+          {item.creador_nombre ? (
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center">
+                <User className="h-3 w-3 text-purple-400" />
+              </div>
+              <span className="text-zinc-300 text-sm">{item.creador_nombre}</span>
+            </div>
+          ) : (
             <span className="text-zinc-500 text-xs">-</span>
           )}
         </td>
         {/* Campaña */}
-        <td className="px-3 py-3">
-          <span className="font-semibold text-white text-sm">{item.nombre}</span>
+        <td className="px-4 py-3">
+          <span className="font-medium text-white text-sm">{item.nombre}</span>
         </td>
-        {/* Cliente */}
-        <td className="px-3 py-3">
-          {(item.cliente_nombre || item.cliente_razon_social) ? (() => {
-            const clienteName = item.cliente_nombre || item.cliente_razon_social || '';
-            const color = getTagColor(clienteName);
-            return (
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${color.bg} ${color.text} border ${color.border} max-w-[180px]`} title={clienteName}>
-                <span className="truncate">{clienteName}</span>
-              </span>
-            );
-          })() : (
-            <span className="text-zinc-500 text-xs">-</span>
-          )}
+        {/* Cliente - Simple text */}
+        <td className="px-4 py-3">
+          <span className="text-zinc-300 text-sm max-w-[180px] truncate block" title={item.cliente_nombre || item.cliente_razon_social || '-'}>
+            {item.cliente_nombre || item.cliente_razon_social || '-'}
+          </span>
         </td>
         {/* Status */}
-        <td className="px-3 py-3">
+        <td className="px-4 py-3">
           <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
             {item.status}
           </span>
         </td>
-        {/* Cat. Inicio */}
-        <td className="px-3 py-3">
-          <span className="text-zinc-300 text-xs">{catIni}</span>
+        {/* Cat. Inicio - Badge style */}
+        <td className="px-4 py-3">
+          {item.catorcena_inicio_num && item.catorcena_inicio_anio ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
+              <Calendar className="h-3 w-3" />
+              {item.catorcena_inicio_num}/{item.catorcena_inicio_anio}
+            </span>
+          ) : (
+            <span className="text-zinc-500 text-xs">-</span>
+          )}
         </td>
-        {/* Cat. Fin */}
-        <td className="px-3 py-3">
-          <span className="text-zinc-300 text-xs">{catFin}</span>
+        {/* Cat. Fin - Badge style */}
+        <td className="px-4 py-3">
+          {item.catorcena_fin_num && item.catorcena_fin_anio ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
+              <Calendar className="h-3 w-3" />
+              {item.catorcena_fin_num}/{item.catorcena_fin_anio}
+            </span>
+          ) : (
+            <span className="text-zinc-500 text-xs">-</span>
+          )}
         </td>
         {/* APS */}
-        <td className="px-3 py-3 text-center">
+        <td className="px-4 py-3 text-center">
           {item.has_aps ? (
-            <Check className="h-4 w-4 text-emerald-400 mx-auto" />
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/20">
+              <Check className="h-3.5 w-3.5 text-emerald-400" />
+            </span>
           ) : (
-            <Minus className="h-4 w-4 text-zinc-600 mx-auto" />
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-zinc-800">
+              <Minus className="h-3.5 w-3.5 text-zinc-600" />
+            </span>
           )}
         </td>
         {/* Acciones */}
-        <td className="px-3 py-3">
+        <td className="px-4 py-3">
           <div className="flex items-center gap-1">
             <button
               onClick={() => handleOpenCampana(item.id)}
@@ -1205,11 +1380,119 @@ export function CampanasPage() {
             {/* Filters Row (Expandable) */}
             {showFilters && (
               <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-zinc-800/50 relative z-50">
+                {/* Advanced Filter Button with Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      advancedFilters.length > 0
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                    }`}
+                    title="Filtros avanzados"
+                  >
+                    <Filter className="h-3.5 w-3.5" />
+                    <span>Filtrar</span>
+                    {advancedFilters.length > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-purple-800 text-[10px]">
+                        {advancedFilters.length}
+                      </span>
+                    )}
+                  </button>
+                  {showAdvancedFilters && (
+                    <div className="absolute left-0 top-full mt-1 z-[100] w-[520px] bg-zinc-900 border border-purple-500/30 rounded-xl shadow-2xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-purple-300">Filtros avanzados</span>
+                        <button
+                          onClick={() => setShowAdvancedFilters(false)}
+                          className="text-zinc-500 hover:text-white"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                        {advancedFilters.map((filter, index) => (
+                          <div key={filter.id} className="flex items-center gap-2">
+                            {index > 0 && (
+                              <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>
+                            )}
+                            {index === 0 && <span className="w-8"></span>}
+                            <select
+                              value={filter.field}
+                              onChange={(e) => updateAdvancedFilter(filter.id, { field: e.target.value })}
+                              className="w-[120px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                            >
+                              {CAMPANA_FILTER_FIELDS.map((f) => (
+                                <option key={f.field} value={f.field}>{f.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={filter.operator}
+                              onChange={(e) => updateAdvancedFilter(filter.id, { operator: e.target.value as FilterOperator })}
+                              className="w-[100px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                            >
+                              {FILTER_OPERATORS.filter(op => {
+                                const fieldConfig = CAMPANA_FILTER_FIELDS.find(f => f.field === filter.field);
+                                return fieldConfig && op.forTypes.includes(fieldConfig.type);
+                              }).map((op) => (
+                                <option key={op.value} value={op.value}>{op.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={filter.value}
+                              onChange={(e) => updateAdvancedFilter(filter.id, { value: e.target.value })}
+                              className="flex-1 text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                            >
+                              <option value="">Seleccionar...</option>
+                              {getUniqueFieldValues[filter.field]?.map((val) => (
+                                <option key={val} value={val}>{val}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => removeAdvancedFilter(filter.id)}
+                              className="text-red-400 hover:text-red-300 p-1"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                        {advancedFilters.length === 0 && (
+                          <p className="text-xs text-zinc-500 text-center py-4">
+                            Sin filtros avanzados. Haz clic en "Añadir" para crear uno.
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
+                        <button
+                          onClick={addAdvancedFilter}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Añadir
+                        </button>
+                        <button
+                          onClick={clearAdvancedFilters}
+                          disabled={advancedFilters.length === 0}
+                          className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Limpiar
+                        </button>
+                      </div>
+                      {advancedFilters.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-zinc-800">
+                          <span className="text-[10px] text-zinc-500">
+                            {filteredData.length} de {data?.data?.length || 0} registros
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="h-4 w-px bg-zinc-700 mx-1" />
+
                 {/* Status Filter */}
-                <span className="text-xs text-zinc-500 mr-1">
-                  <Filter className="h-3 w-3 inline mr-1" />
-                  Filtrar:
-                </span>
+                <span className="text-xs text-zinc-500 mr-1">Estatus:</span>
                 <FilterChip
                   label="Estatus"
                   options={STATUS_OPTIONS}
@@ -1251,6 +1534,27 @@ export function CampanasPage() {
                     setPage(1);
                   }}
                 />
+
+                <div className="h-4 w-px bg-zinc-700 mx-1" />
+
+                {/* Sort */}
+                <span className="text-xs text-zinc-500 mr-1">
+                  <ArrowUpDown className="h-3 w-3 inline mr-1" />
+                  Ordenar:
+                </span>
+                <FilterChip
+                  label="Campo"
+                  options={['fecha_inicio', 'nombre', 'cliente', 'status']}
+                  value={sortBy}
+                  onChange={(val) => { setSortBy(val); setPage(1); }}
+                  onClear={() => { setSortBy('fecha_inicio'); setPage(1); }}
+                />
+                <button
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 transition-all"
+                >
+                  {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
+                </button>
 
                 <div className="h-4 w-px bg-zinc-700 mx-1" />
 
@@ -1335,16 +1639,16 @@ export function CampanasPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">ID</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Periodo</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Creador</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Inicio</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Fin</th>
-                      <th className="px-3 py-3 text-center text-xs font-semibold text-purple-300 uppercase tracking-wider">APS</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Acciones</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Periodo</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Creador</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Inicio</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Fin</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-purple-300 uppercase tracking-wider">APS</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1367,10 +1671,12 @@ export function CampanasPage() {
                     {filteredData.length === 0 && !groupedData && (
                       <tr>
                         <td colSpan={10} className="px-4 py-12 text-center">
-                          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
-                            <Megaphone className="w-8 h-8 text-purple-400" />
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-purple-500/10">
+                              <Megaphone className="w-6 h-6 text-purple-400" />
+                            </div>
+                            <span className="text-zinc-500 text-sm">No se encontraron campañas</span>
                           </div>
-                          <p className="text-zinc-500">No se encontraron campañas</p>
                         </td>
                       </tr>
                     )}
@@ -1379,15 +1685,13 @@ export function CampanasPage() {
               </div>
 
               {/* Pagination */}
-              {!groupBy && data?.pagination && (
+              {!groupBy && data?.pagination && totalPages > 1 && (
                 <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
                   <span className="text-sm text-purple-300/70">
-                    Mostrando <span className="font-semibold text-purple-300">{startItem}–{endItem}</span> de <span className="font-semibold text-purple-300">{total}</span> campañas
+                    Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{totalPages}</span>
+                    <span className="text-purple-300/50 ml-2">({total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-purple-300/50 mr-2">
-                      Página {page} de {totalPages}
-                    </span>
                     <button
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
