@@ -2,9 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Search, Download, Trash2,
+  Search, Download, Trash2, FileText,
   Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
-
   ArrowUpDown, Calendar, Clock, Plus, Eye, Edit2, PlayCircle, MessageSquare
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
@@ -105,6 +104,86 @@ function FilterChip({
       )}
     </div>
   );
+}
+
+// Advanced Filter Types and Config
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
+
+interface AdvancedFilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: string;
+  label: string;
+  type: 'string' | 'number';
+}
+
+const SOLICITUD_FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'id', label: 'ID', type: 'number' },
+  { field: 'razon_social', label: 'Cliente', type: 'string' },
+  { field: 'cuic', label: 'CUIC', type: 'string' },
+  { field: 'descripcion', label: 'Descripción', type: 'string' },
+  { field: 'marca_nombre', label: 'Marca', type: 'string' },
+  { field: 'presupuesto', label: 'Presupuesto', type: 'number' },
+  { field: 'asignado', label: 'Asignado', type: 'string' },
+  { field: 'status', label: 'Status', type: 'string' },
+];
+
+const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
+  { value: '=', label: 'Igual a', forTypes: ['string', 'number'] },
+  { value: '!=', label: 'Diferente de', forTypes: ['string', 'number'] },
+  { value: 'contains', label: 'Contiene', forTypes: ['string'] },
+  { value: 'not_contains', label: 'No contiene', forTypes: ['string'] },
+  { value: '>', label: 'Mayor que', forTypes: ['number'] },
+  { value: '<', label: 'Menor que', forTypes: ['number'] },
+  { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
+  { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
+];
+
+// Function to apply advanced filters to data
+function applyAdvancedFilters<T>(data: T[], filters: AdvancedFilterCondition[]): T[] {
+  if (filters.length === 0) return data;
+
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = (item as Record<string, unknown>)[filter.field];
+      const filterValue = filter.value;
+
+      if (!filterValue) return true; // Empty filter value matches all
+
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+
+      switch (filter.operator) {
+        case '=':
+          return strValue === strFilterValue;
+        case '!=':
+          return strValue !== strFilterValue;
+        case 'contains':
+          return strValue.includes(strFilterValue);
+        case 'not_contains':
+          return !strValue.includes(strFilterValue);
+        case '>':
+          return Number(fieldValue) > Number(filterValue);
+        case '<':
+          return Number(fieldValue) < Number(filterValue);
+        case '>=':
+          return Number(fieldValue) >= Number(filterValue);
+        case '<=':
+          return Number(fieldValue) <= Number(filterValue);
+        default:
+          return true;
+      }
+    });
+  });
 }
 
 // Period Filter Popover Component
@@ -418,6 +497,8 @@ export function SolicitudesPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [groupBy, setGroupBy] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -545,44 +626,41 @@ export function SolicitudesPage() {
     return null;
   };
 
-  // Handle export CSV
-  const handleExportCSV = async () => {
-    try {
-      const allData = await solicitudesService.exportAll({
-        status: status || undefined,
-        search: debouncedSearch || undefined,
-        yearInicio,
-        yearFin,
-        catorcenaInicio,
-        catorcenaFin,
-      });
+  // Handle export CSV - exports only visible/filtered data
+  const handleExportCSV = () => {
+    // Use filtered data if advanced filters are applied, otherwise use current page data
+    const dataToExport = advancedFilters.length > 0 ? filteredData : (data?.data || []);
 
-      const headers = ['ID', 'Fecha', 'Cliente', 'CUIC', 'Descripcion', 'Marca', 'Presupuesto', 'Asignado', 'Status'];
-      const rows = allData.map(s => [
-        s.id,
-        formatDate(s.fecha),
-        s.razon_social || '',
-        s.cuic || '',
-        s.descripcion || '',
-        s.marca_nombre || '',
-        s.presupuesto,
-        s.asignado || '',
-        s.status
-      ]);
-
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      ].join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `solicitudes_${new Date().toISOString().split('T')[0]}.csv`;
-      link.click();
-    } catch (error) {
-      console.error('Error exporting:', error);
+    if (dataToExport.length === 0) {
+      return;
     }
+
+    const headers = ['ID', 'Fecha', 'Cliente', 'CUIC', 'Descripcion', 'Marca', 'Presupuesto', 'Asignado', 'Status'];
+    const rows = dataToExport.map(s => [
+      s.id,
+      formatDate(s.fecha),
+      s.razon_social || '',
+      s.cuic || '',
+      s.descripcion || '',
+      s.marca_nombre || '',
+      s.presupuesto,
+      s.asignado || '',
+      s.status
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `solicitudes_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
   };
 
   // Get current catorcena
@@ -629,7 +707,56 @@ export function SolicitudesPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || sortBy !== 'fecha');
+  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0);
+
+  // Get unique values for each field (for advanced filter dropdowns)
+  const getUniqueFieldValues = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    if (!data?.data) return valuesMap;
+
+    SOLICITUD_FILTER_FIELDS.forEach(fieldConfig => {
+      const values = new Set<string>();
+      data.data.forEach(item => {
+        const val = item[fieldConfig.field as keyof Solicitud];
+        if (val !== null && val !== undefined && val !== '') {
+          values.add(String(val));
+        }
+      });
+      valuesMap[fieldConfig.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [data?.data]);
+
+  // Apply advanced filters to data
+  const filteredData = useMemo(() => {
+    if (!data?.data) return [];
+    return applyAdvancedFilters(data.data, advancedFilters);
+  }, [data?.data, advancedFilters]);
+
+  // Advanced filter functions
+  const addAdvancedFilter = () => {
+    const newFilter: AdvancedFilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: SOLICITUD_FILTER_FIELDS[0].field,
+      operator: '=',
+      value: '',
+    };
+    setAdvancedFilters(prev => [...prev, newFilter]);
+  };
+
+  const updateAdvancedFilter = (id: string, updates: Partial<AdvancedFilterCondition>) => {
+    setAdvancedFilters(prev =>
+      prev.map(f => (f.id === id ? { ...f, ...updates } : f))
+    );
+  };
+
+  const removeAdvancedFilter = (id: string) => {
+    setAdvancedFilters(prev => prev.filter(f => f.id !== id));
+  };
+
+  const clearAdvancedFilters = () => {
+    setAdvancedFilters([]);
+  };
 
   const clearAllFilters = () => {
     setStatus('');
@@ -641,6 +768,7 @@ export function SolicitudesPage() {
     setSortOrder('desc');
     setGroupBy('');
     setExpandedGroups(new Set());
+    setAdvancedFilters([]);
     setPage(1);
   };
 
@@ -916,11 +1044,119 @@ export function SolicitudesPage() {
             {/* Filters Row (Expandable) */}
             {showFilters && (
               <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-zinc-800/50 relative z-50">
+                {/* Advanced Filter Button with Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      advancedFilters.length > 0
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                    }`}
+                    title="Filtros avanzados"
+                  >
+                    <Filter className="h-3.5 w-3.5" />
+                    <span>Filtrar</span>
+                    {advancedFilters.length > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-purple-800 text-[10px]">
+                        {advancedFilters.length}
+                      </span>
+                    )}
+                  </button>
+                  {showAdvancedFilters && (
+                    <div className="absolute left-0 top-full mt-1 z-[100] w-[520px] bg-zinc-900 border border-purple-500/30 rounded-xl shadow-2xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-purple-300">Filtros avanzados</span>
+                        <button
+                          onClick={() => setShowAdvancedFilters(false)}
+                          className="text-zinc-500 hover:text-white"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                        {advancedFilters.map((filter, index) => (
+                          <div key={filter.id} className="flex items-center gap-2">
+                            {index > 0 && (
+                              <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>
+                            )}
+                            {index === 0 && <span className="w-8"></span>}
+                            <select
+                              value={filter.field}
+                              onChange={(e) => updateAdvancedFilter(filter.id, { field: e.target.value })}
+                              className="w-[120px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                            >
+                              {SOLICITUD_FILTER_FIELDS.map((f) => (
+                                <option key={f.field} value={f.field}>{f.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={filter.operator}
+                              onChange={(e) => updateAdvancedFilter(filter.id, { operator: e.target.value as FilterOperator })}
+                              className="w-[100px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                            >
+                              {FILTER_OPERATORS.filter(op => {
+                                const fieldConfig = SOLICITUD_FILTER_FIELDS.find(f => f.field === filter.field);
+                                return fieldConfig && op.forTypes.includes(fieldConfig.type);
+                              }).map((op) => (
+                                <option key={op.value} value={op.value}>{op.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={filter.value}
+                              onChange={(e) => updateAdvancedFilter(filter.id, { value: e.target.value })}
+                              className="flex-1 text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                            >
+                              <option value="">Seleccionar...</option>
+                              {getUniqueFieldValues[filter.field]?.map((val) => (
+                                <option key={val} value={val}>{val}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => removeAdvancedFilter(filter.id)}
+                              className="text-red-400 hover:text-red-300 p-1"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                        {advancedFilters.length === 0 && (
+                          <p className="text-xs text-zinc-500 text-center py-4">
+                            Sin filtros avanzados. Haz clic en "Añadir" para crear uno.
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
+                        <button
+                          onClick={addAdvancedFilter}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Añadir
+                        </button>
+                        <button
+                          onClick={clearAdvancedFilters}
+                          disabled={advancedFilters.length === 0}
+                          className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Limpiar
+                        </button>
+                      </div>
+                      {advancedFilters.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-zinc-800">
+                          <span className="text-[10px] text-zinc-500">
+                            {filteredData.length} de {data?.data?.length || 0} registros
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="h-4 w-px bg-zinc-700 mx-1" />
+
                 {/* Status Filter */}
-                <span className="text-xs text-zinc-500 mr-1">
-                  <Filter className="h-3 w-3 inline mr-1" />
-                  Filtrar:
-                </span>
+                <span className="text-xs text-zinc-500 mr-1">Status:</span>
                 <FilterChip
                   label="Status"
                   options={allStatuses}
@@ -1064,12 +1300,17 @@ export function SolicitudesPage() {
                         </React.Fragment>
                       ))
                     ) : (
-                      data?.data?.map((item, idx) => renderSolicitudRow(item, idx))
+                      (advancedFilters.length > 0 ? filteredData : data?.data)?.map((item, idx) => renderSolicitudRow(item, idx))
                     )}
-                    {(!data?.data || data.data.length === 0) && !groupedData && (
+                    {(advancedFilters.length > 0 ? filteredData.length === 0 : (!data?.data || data.data.length === 0)) && !groupedData && (
                       <tr>
-                        <td colSpan={9} className="px-4 py-12 text-center text-zinc-500">
-                          No se encontraron solicitudes
+                        <td colSpan={9} className="px-4 py-12 text-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-purple-500/10">
+                              <FileText className="w-6 h-6 text-purple-400" />
+                            </div>
+                            <span className="text-zinc-500 text-sm">No se encontraron solicitudes</span>
+                          </div>
                         </td>
                       </tr>
                     )}

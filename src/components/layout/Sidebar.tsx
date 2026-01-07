@@ -12,28 +12,39 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
+import { usePrefetch } from '../../hooks/usePrefetch';
 
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
 }
 
-const navigation = [
+type PrefetchKey = 'prefetchClientes' | 'prefetchProveedores' | 'prefetchSolicitudes' | 'prefetchPropuestas' | 'prefetchCampanas' | 'prefetchInventarios';
+
+const navigation: { name: string; href: string; icon: React.ElementType; prefetchKey?: PrefetchKey }[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Clientes', href: '/clientes', icon: Users },
-  { name: 'Proveedores', href: '/proveedores', icon: Building2 },
-  { name: 'Solicitudes', href: '/solicitudes', icon: FileText },
-  { name: 'Propuestas', href: '/propuestas', icon: Send },
-  { name: 'Campañas', href: '/campanas', icon: Megaphone },
-  { name: 'Inventarios', href: '/inventarios', icon: MapPin },
+  { name: 'Clientes', href: '/clientes', icon: Users, prefetchKey: 'prefetchClientes' },
+  { name: 'Proveedores', href: '/proveedores', icon: Building2, prefetchKey: 'prefetchProveedores' },
+  { name: 'Solicitudes', href: '/solicitudes', icon: FileText, prefetchKey: 'prefetchSolicitudes' },
+  { name: 'Propuestas', href: '/propuestas', icon: Send, prefetchKey: 'prefetchPropuestas' },
+  { name: 'Campañas', href: '/campanas', icon: Megaphone, prefetchKey: 'prefetchCampanas' },
+  { name: 'Inventarios', href: '/inventarios', icon: MapPin, prefetchKey: 'prefetchInventarios' },
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
+  const prefetch = usePrefetch();
 
   const handleLogout = () => {
     logout();
+  };
+
+  // Prefetch en hover
+  const handleMouseEnter = (prefetchKey?: PrefetchKey) => {
+    if (prefetchKey && prefetch[prefetchKey]) {
+      prefetch[prefetchKey]();
+    }
   };
 
   return (
@@ -91,6 +102,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <li key={item.name}>
                 <NavLink
                   to={item.href}
+                  onMouseEnter={() => handleMouseEnter(item.prefetchKey)}
                   className={({ isActive }) =>
                     cn(
                       'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-light transition-all duration-200',
