@@ -265,6 +265,15 @@ export interface OrdenMontajeINVIAN {
   status_campania: string | null;
 }
 
+export interface ComentarioRevisionArte {
+  id: number;
+  tarea_id: number;
+  autor_id: number;
+  autor_nombre: string;
+  contenido: string;
+  fecha: string;
+}
+
 // Función para construir el payload de DeliveryNote para SAP
 export function buildDeliveryNote(
   campana: CampanaWithComments,
@@ -665,5 +674,29 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
       throw new Error(response.data.error || 'Error al obtener orden de montaje INVIAN');
     }
     return response.data.data;
+  },
+
+  // Comentarios de Revisión de Artes
+  async getComentariosRevisionArte(campanaId: number, tareaId: string): Promise<ComentarioRevisionArte[]> {
+    const response = await api.get<ApiResponse<ComentarioRevisionArte[]>>(`/campanas/${campanaId}/tareas/${tareaId}/comentarios-arte`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al obtener comentarios');
+    }
+    return response.data.data || [];
+  },
+
+  async addComentarioRevisionArte(campanaId: number, tareaId: string, contenido: string): Promise<ComentarioRevisionArte> {
+    const response = await api.post<ApiResponse<ComentarioRevisionArte>>(`/campanas/${campanaId}/tareas/${tareaId}/comentarios-arte`, { contenido });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al agregar comentario');
+    }
+    return response.data.data;
+  },
+
+  async deleteComentarioRevisionArte(campanaId: number, comentarioId: number): Promise<void> {
+    const response = await api.delete<ApiResponse<void>>(`/campanas/${campanaId}/comentarios-arte/${comentarioId}`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar comentario');
+    }
   },
 };
