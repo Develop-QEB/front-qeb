@@ -38,6 +38,7 @@ import {
   MessageSquare,
   MapPin,
   Send,
+  History,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioConArte, TareaCampana, ArteExistente } from '../../services/campanas.service';
@@ -45,6 +46,7 @@ import { proveedoresService } from '../../services/proveedores.service';
 import { Proveedor, Catorcena } from '../../types';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Badge } from '../../components/ui/badge';
+import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { useAuthStore } from '../../store/authStore';
 
 // URL base para archivos estáticos
@@ -178,11 +180,12 @@ interface CalendarEvent {
 }
 
 // Tipos para el sistema de decisiones de revisión de artes
-type DecisionArte = 'aprobar' | 'rechazar' | 'corregir' | null;
+type DecisionArte = 'aprobar' | 'rechazar' | null;
 
 interface ArteDecision {
   decision: DecisionArte;
-  motivoRechazo?: string;
+  motivoRechazo?: string; // Usado para rechazo (obligatorio)
+  comentarioAprobacion?: string; // Usado para aprobación (opcional)
 }
 
 type DecisionesState = Record<string, ArteDecision>;
@@ -1093,14 +1096,20 @@ interface FilterToolbarProps {
   setSortDirection: (dir: 'asc' | 'desc') => void;
   filteredCount: number;
   totalCount: number;
+  useFixedDropdowns?: boolean; // Para modales - usar position fixed
 }
 
 function FilterToolbar({
   filters, showFilters, setShowFilters, addFilter, updateFilter, removeFilter, clearFilters, uniqueValues,
   activeGroupings, showGrouping, setShowGrouping, toggleGrouping, clearGroupings,
   sortField, sortDirection, showSort, setShowSort, setSortField, setSortDirection,
-  filteredCount, totalCount,
+  filteredCount, totalCount, useFixedDropdowns = false,
 }: FilterToolbarProps) {
+  const filterBtnRef = useRef<HTMLButtonElement>(null);
+  const groupBtnRef = useRef<HTMLButtonElement>(null);
+  const sortBtnRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
+
   // Función para cerrar un dropdown específico al hacer clic fuera
   const closeOtherDropdowns = (keep: 'filters' | 'grouping' | 'sort') => {
     if (keep !== 'filters') setShowFilters(false);
@@ -1108,11 +1117,40 @@ function FilterToolbar({
     if (keep !== 'sort') setShowSort(false);
   };
 
+  // Calcular posición para dropdowns fixed - siempre debajo del botón
+  const getDropdownPosition = (btnRef: React.RefObject<HTMLButtonElement | null>, dropdownWidth: number = 240) => {
+    if (!useFixedDropdowns || !btnRef.current) return {};
+    const rect = btnRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+
+    // Calcular left alineando a la derecha del botón
+    let left = rect.right - dropdownWidth;
+
+    // Si se sale por la izquierda, alinear a la izquierda del botón
+    if (left < 8) {
+      left = rect.left;
+    }
+
+    // Si aún así se sale por la derecha, ajustar
+    if (left + dropdownWidth > viewportWidth - 8) {
+      left = viewportWidth - dropdownWidth - 8;
+    }
+
+    return {
+      position: 'fixed' as const,
+      top: rect.bottom + 4,
+      left,
+      maxHeight: 'calc(100vh - ' + (rect.bottom + 20) + 'px)',
+      overflowY: 'auto' as const,
+    };
+  };
+
   return (
     <div className="flex items-center gap-2">
       {/* Botón Filtrar */}
       <div className="relative">
         <button
+          ref={filterBtnRef}
           onClick={() => { closeOtherDropdowns('filters'); setShowFilters(!showFilters); }}
           className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
             filters.length > 0 ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
@@ -1123,7 +1161,10 @@ function FilterToolbar({
           {filters.length > 0 && <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">{filters.length}</span>}
         </button>
         {showFilters && (
-          <div className="absolute right-0 top-full mt-1 z-50 w-[520px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+          <div
+            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[520px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4`}
+            style={useFixedDropdowns ? getDropdownPosition(filterBtnRef, 520) : undefined}
+          >
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
               <button onClick={() => setShowFilters(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
@@ -1160,6 +1201,7 @@ function FilterToolbar({
       {/* Botón Agrupar */}
       <div className="relative">
         <button
+          ref={groupBtnRef}
           onClick={() => { closeOtherDropdowns('grouping'); setShowGrouping(!showGrouping); }}
           className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
             activeGroupings.length > 0 ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
@@ -1170,7 +1212,10 @@ function FilterToolbar({
           {activeGroupings.length > 0 && <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">{activeGroupings.length}</span>}
         </button>
         {showGrouping && (
-          <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]">
+          <div
+            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]`}
+            style={useFixedDropdowns ? getDropdownPosition(groupBtnRef, 200) : undefined}
+          >
             <div className="flex items-center justify-between mb-2 px-2">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Agrupar por (max 5)</p>
               <button onClick={() => setShowGrouping(false)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
@@ -1200,6 +1245,7 @@ function FilterToolbar({
       {/* Botón Ordenar */}
       <div className="relative">
         <button
+          ref={sortBtnRef}
           onClick={() => { closeOtherDropdowns('sort'); setShowSort(!showSort); }}
           className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${sortField ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'}`}
           title="Ordenar"
@@ -1207,7 +1253,10 @@ function FilterToolbar({
           <ArrowUpDown className="h-3.5 w-3.5" />
         </button>
         {showSort && (
-          <div className="absolute right-0 top-full mt-1 z-50 w-[240px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
+          <div
+            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[240px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3`}
+            style={useFixedDropdowns ? getDropdownPosition(sortBtnRef, 240) : undefined}
+          >
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-purple-300">Ordenar por</span>
               <button onClick={() => setShowSort(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
@@ -1233,28 +1282,38 @@ function FilterToolbar({
   );
 }
 
-// Comments Section Component
-function CommentsSection({ campanaId }: { campanaId: number }) {
+// Comments Section Component - Comentarios específicos de revisión de artes por tarea
+function CommentsSection({ campanaId, tareaId }: { campanaId: number; tareaId: string }) {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const [comment, setComment] = useState('');
   const commentsEndRef = useRef<HTMLDivElement>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState<number | null>(null);
 
-  // Obtener comentarios de la campaña
-  const { data: campana } = useQuery({
-    queryKey: ['campana', campanaId],
-    queryFn: () => campanasService.getById(campanaId),
-    enabled: campanaId > 0,
+  // Obtener comentarios de revisión de artes para esta tarea específica
+  const { data: comentarios = [] } = useQuery({
+    queryKey: ['comentarios-revision-arte', campanaId, tareaId],
+    queryFn: () => campanasService.getComentariosRevisionArte(campanaId, tareaId),
+    enabled: !!campanaId && !!tareaId,
   });
-
-  const comentarios = campana?.comentarios || [];
 
   // Mutación para agregar comentario
   const addCommentMutation = useMutation({
-    mutationFn: (contenido: string) => campanasService.addComment(campanaId, contenido),
+    mutationFn: (contenido: string) => campanasService.addComentarioRevisionArte(campanaId, tareaId, contenido),
     onSuccess: () => {
       setComment('');
-      queryClient.invalidateQueries({ queryKey: ['campana', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['comentarios-revision-arte', campanaId, tareaId] });
+    },
+  });
+
+  // Mutación para eliminar comentario
+  const deleteCommentMutation = useMutation({
+    mutationFn: (comentarioId: number) => campanasService.deleteComentarioRevisionArte(campanaId, comentarioId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['comentarios-revision-arte', campanaId, tareaId] });
+      setDeleteModalOpen(false);
+      setCommentToDelete(null);
     },
   });
 
@@ -1271,6 +1330,17 @@ function CommentsSection({ campanaId }: { campanaId: number }) {
     }
   };
 
+  const handleDeleteClick = (comentarioId: number) => {
+    setCommentToDelete(comentarioId);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (commentToDelete) {
+      deleteCommentMutation.mutate(commentToDelete);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('es-MX', {
@@ -1282,26 +1352,38 @@ function CommentsSection({ campanaId }: { campanaId: number }) {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-[250px]">
       {/* Lista de comentarios */}
-      <div className="flex-1 overflow-y-auto divide-y divide-purple-900/20 max-h-[300px] mb-3 scrollbar-purple">
+      <div className="flex-1 overflow-y-auto divide-y divide-purple-900/20 min-h-[180px] max-h-[350px] mb-3 scrollbar-purple">
         {comentarios.length === 0 ? (
-          <div className="text-center py-6 text-zinc-400">
-            <MessageSquare className="h-6 w-6 mx-auto mb-2 opacity-50" />
-            <p className="text-xs">No hay comentarios aún</p>
+          <div className="flex flex-col items-center justify-center h-full py-8 text-zinc-400">
+            <MessageSquare className="h-8 w-8 mb-3 opacity-50" />
+            <p className="text-sm">No hay comentarios aún</p>
+            <p className="text-xs text-zinc-500 mt-1">Sé el primero en comentar</p>
           </div>
         ) : (
-          [...comentarios].reverse().map((c: { id: number; autor_nombre?: string; fecha: string; contenido: string }) => (
-            <div key={c.id} className="flex gap-2 py-2">
-              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-[10px] font-medium text-white">
+          comentarios.map((c: { id: number; autor_id: number; autor_nombre?: string; fecha: string; contenido: string }) => (
+            <div key={c.id} className="flex gap-3 py-3 px-1 group">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-medium text-white">
                 {(c.autor_nombre || 'U')[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-medium text-white">{c.autor_nombre || 'Usuario'}</span>
-                  <span className="text-[9px] text-zinc-500">{formatDate(c.fecha)}</span>
+                  <span className="text-xs font-medium text-white">{c.autor_nombre || 'Usuario'}</span>
+                  <span className="text-[10px] text-zinc-500">{formatDate(c.fecha)}</span>
+                  {/* Botón eliminar - solo para comentarios propios */}
+                  {user?.id === c.autor_id && (
+                    <button
+                      onClick={() => handleDeleteClick(c.id)}
+                      disabled={deleteCommentMutation.isPending}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition-all"
+                      title="Eliminar comentario"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
-                <p className="text-[11px] text-zinc-300 mt-0.5 break-words">{c.contenido}</p>
+                <p className="text-sm text-zinc-300 mt-1 break-words">{c.contenido}</p>
               </div>
             </div>
           ))
@@ -1336,6 +1418,22 @@ function CommentsSection({ campanaId }: { campanaId: number }) {
           </button>
         </div>
       </div>
+
+      {/* Modal de confirmación para eliminar */}
+      <ConfirmModal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setCommentToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Eliminar comentario"
+        message="¿Estás seguro de que deseas eliminar este comentario? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        variant="danger"
+        isLoading={deleteCommentMutation.isPending}
+      />
     </div>
   );
 }
@@ -1352,6 +1450,7 @@ function TaskDetailModal({
   onApprove,
   onReject,
   onUpdateArte,
+  onTaskComplete,
   isUpdating,
   campanaId,
 }: {
@@ -1361,9 +1460,10 @@ function TaskDetailModal({
   inventoryData: InventoryRow[];
   artesExistentes: ArteExistente[];
   isLoadingArtes: boolean;
-  onApprove: (reservaIds: number[]) => void;
+  onApprove: (reservaIds: number[], comentario?: string) => void;
   onReject: (reservaIds: number[], comentario: string) => void;
   onUpdateArte: (reservaIds: number[], archivo: string) => void;
+  onTaskComplete: (taskId: string) => void;
   isUpdating: boolean;
   campanaId: number;
 }) {
@@ -1382,6 +1482,24 @@ function TaskDetailModal({
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [existingArtUrl, setExistingArtUrl] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+
+  // Estados para filtros y agrupaciones - Paso 1 (Resumen)
+  const [filtersResumen, setFiltersResumen] = useState<FilterCondition[]>([]);
+  const [showFiltersResumen, setShowFiltersResumen] = useState(false);
+  const [activeGroupingsResumen, setActiveGroupingsResumen] = useState<GroupByField[]>([]);
+  const [showGroupingResumen, setShowGroupingResumen] = useState(false);
+  const [sortFieldResumen, setSortFieldResumen] = useState<string | null>(null);
+  const [sortDirectionResumen, setSortDirectionResumen] = useState<'asc' | 'desc'>('asc');
+  const [showSortResumen, setShowSortResumen] = useState(false);
+
+  // Estados para filtros y agrupaciones - Paso 2 (Editar)
+  const [filtersEditar, setFiltersEditar] = useState<FilterCondition[]>([]);
+  const [showFiltersEditar, setShowFiltersEditar] = useState(false);
+  const [activeGroupingsEditar, setActiveGroupingsEditar] = useState<GroupByField[]>([]);
+  const [showGroupingEditar, setShowGroupingEditar] = useState(false);
+  const [sortFieldEditar, setSortFieldEditar] = useState<string | null>(null);
+  const [sortDirectionEditar, setSortDirectionEditar] = useState<'asc' | 'desc'>('asc');
+  const [showSortEditar, setShowSortEditar] = useState(false);
 
   // Filtrar inventario que pertenece a esta tarea
   const taskInventory = useMemo(() => {
@@ -1425,6 +1543,158 @@ function TaskDetailModal({
     });
     return groups;
   }, [taskInventory, groupBy]);
+
+  // === Funciones helper para filtros - Paso 1 (Resumen) ===
+  const addFilterResumen = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS_INVENTARIO[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFiltersResumen(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilterResumen = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFiltersResumen(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilterResumen = useCallback((id: string) => {
+    setFiltersResumen(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearFiltersResumen = useCallback(() => setFiltersResumen([]), []);
+
+  const toggleGroupingResumen = useCallback((field: GroupByField) => {
+    setActiveGroupingsResumen(prev => {
+      if (prev.includes(field)) return prev.filter(f => f !== field);
+      if (prev.length >= 5) return prev;
+      return [...prev, field];
+    });
+  }, []);
+
+  const clearGroupingsResumen = useCallback(() => setActiveGroupingsResumen([]), []);
+
+  // === Funciones helper para filtros - Paso 2 (Editar) ===
+  const addFilterEditar = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS_INVENTARIO[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFiltersEditar(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilterEditar = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFiltersEditar(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilterEditar = useCallback((id: string) => {
+    setFiltersEditar(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearFiltersEditar = useCallback(() => setFiltersEditar([]), []);
+
+  const toggleGroupingEditar = useCallback((field: GroupByField) => {
+    setActiveGroupingsEditar(prev => {
+      if (prev.includes(field)) return prev.filter(f => f !== field);
+      if (prev.length >= 5) return prev;
+      return [...prev, field];
+    });
+  }, []);
+
+  const clearGroupingsEditar = useCallback(() => setActiveGroupingsEditar([]), []);
+
+  // === Valores únicos para filtros ===
+  const uniqueValuesModal = useMemo(() => {
+    const values: Record<string, string[]> = {};
+    FILTER_FIELDS_INVENTARIO.forEach(field => {
+      const uniqueSet = new Set<string>();
+      taskInventory.forEach(item => {
+        const value = (item as Record<string, unknown>)[field.field];
+        if (value !== null && value !== undefined && value !== '') {
+          uniqueSet.add(String(value));
+        }
+      });
+      values[field.field] = Array.from(uniqueSet).sort();
+    });
+    return values;
+  }, [taskInventory]);
+
+  // === Datos filtrados y ordenados - Paso 1 (Resumen) ===
+  const filteredDataResumen = useMemo(() => {
+    let data = [...taskInventory];
+
+    // Aplicar filtros
+    if (filtersResumen.length > 0) {
+      data = applyFilters(data, filtersResumen);
+    }
+
+    // Aplicar ordenamiento
+    if (sortFieldResumen) {
+      data.sort((a, b) => {
+        const aVal = (a as Record<string, unknown>)[sortFieldResumen];
+        const bVal = (b as Record<string, unknown>)[sortFieldResumen];
+        const aStr = String(aVal ?? '');
+        const bStr = String(bVal ?? '');
+        return sortDirectionResumen === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
+      });
+    }
+
+    return data;
+  }, [taskInventory, filtersResumen, sortFieldResumen, sortDirectionResumen]);
+
+  // === Datos filtrados y ordenados - Paso 2 (Editar) ===
+  const filteredDataEditar = useMemo(() => {
+    let data = [...taskInventory];
+
+    // Aplicar filtros
+    if (filtersEditar.length > 0) {
+      data = applyFilters(data, filtersEditar);
+    }
+
+    // Aplicar ordenamiento
+    if (sortFieldEditar) {
+      data.sort((a, b) => {
+        const aVal = (a as Record<string, unknown>)[sortFieldEditar];
+        const bVal = (b as Record<string, unknown>)[sortFieldEditar];
+        const aStr = String(aVal ?? '');
+        const bStr = String(bVal ?? '');
+        return sortDirectionEditar === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
+      });
+    }
+
+    return data;
+  }, [taskInventory, filtersEditar, sortFieldEditar, sortDirectionEditar]);
+
+  // === Datos agrupados - Paso 1 (Resumen) ===
+  const groupedDataResumen = useMemo(() => {
+    if (activeGroupingsResumen.length === 0) return {} as Record<string, InventoryRow[]>;
+
+    const groups: Record<string, InventoryRow[]> = {};
+    filteredDataResumen.forEach(item => {
+      const keyParts = activeGroupingsResumen.map(field => getGroupKeyForField(item, field));
+      const key = keyParts.join(' > ');
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+    return groups;
+  }, [filteredDataResumen, activeGroupingsResumen]);
+
+  // === Datos agrupados - Paso 2 (Editar) ===
+  const groupedDataEditar = useMemo(() => {
+    if (activeGroupingsEditar.length === 0) return {} as Record<string, InventoryRow[]>;
+
+    const groups: Record<string, InventoryRow[]> = {};
+    filteredDataEditar.forEach(item => {
+      const keyParts = activeGroupingsEditar.map(field => getGroupKeyForField(item, field));
+      const key = keyParts.join(' > ');
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+    return groups;
+  }, [filteredDataEditar, activeGroupingsEditar]);
 
   const toggleArteSelection = (id: string) => {
     setSelectedArteIds(prev => {
@@ -1474,7 +1744,8 @@ function TaskDetailModal({
       ...prev,
       [key]: {
         decision: (decision || null) as DecisionArte,
-        motivoRechazo: decision !== 'rechazar' ? undefined : prev[key]?.motivoRechazo
+        motivoRechazo: decision !== 'rechazar' ? undefined : prev[key]?.motivoRechazo,
+        comentarioAprobacion: decision !== 'aprobar' ? undefined : prev[key]?.comentarioAprobacion
       }
     }));
     setValidationErrors([]);
@@ -1484,6 +1755,13 @@ function TaskDetailModal({
     setDecisiones(prev => ({
       ...prev,
       [key]: { ...prev[key], motivoRechazo: motivo }
+    }));
+  };
+
+  const handleComentarioAprobacionChange = (key: string, comentario: string) => {
+    setDecisiones(prev => ({
+      ...prev,
+      [key]: { ...prev[key], comentarioAprobacion: comentario }
     }));
   };
 
@@ -1506,7 +1784,7 @@ function TaskDetailModal({
     setIsFinalizando(true);
 
     try {
-      const aprobados: number[] = [];
+      const aprobados: { ids: number[]; comentario: string; items: InventoryRow[] }[] = [];
       const rechazados: { ids: number[]; motivo: string; items: InventoryRow[] }[] = [];
 
       Object.entries(groupedInventory).forEach(([key, items]) => {
@@ -1516,17 +1794,22 @@ function TaskDetailModal({
         );
 
         if (d?.decision === 'aprobar') {
-          aprobados.push(...ids);
+          aprobados.push({ ids, comentario: d.comentarioAprobacion || '', items });
         }
         if (d?.decision === 'rechazar') {
           rechazados.push({ ids, motivo: d.motivoRechazo || '', items });
         }
-        // 'corregir' no hace nada por ahora, solo marca para corrección
       });
 
       // Aprobar todos los marcados como aprobados
       if (aprobados.length > 0) {
-        onApprove(aprobados);
+        const todosIds = aprobados.flatMap(a => a.ids);
+        // Construir comentario combinado si hay comentarios
+        const comentariosAprobacion = aprobados
+          .filter(a => a.comentario.trim())
+          .map(a => `**${a.items.map(i => i.codigo_unico).join(', ')}:**\n${a.comentario}`)
+          .join('\n\n---\n\n');
+        onApprove(todosIds, comentariosAprobacion || undefined);
       }
 
       // Rechazar y crear tarea de corrección con todos los rechazados
@@ -1537,6 +1820,11 @@ function TaskDetailModal({
         ).join('\n\n---\n\n');
 
         onReject(todosIds, descripcion);
+      }
+
+      // Marcar la tarea como completada (Atendido)
+      if (task?.id) {
+        onTaskComplete(task.id);
       }
 
       // Limpiar estado y cerrar modal
@@ -1663,7 +1951,7 @@ function TaskDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
-      <div className="bg-card border border-border rounded-xl w-full max-w-6xl max-h-[95vh] overflow-hidden shadow-2xl flex flex-col">
+      <div className="bg-card border border-border rounded-xl w-full max-w-6xl max-h-[95vh] shadow-2xl flex flex-col">
         {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-border bg-gradient-to-r from-purple-900/30 to-transparent flex-shrink-0">
           <div className="flex items-start sm:items-center justify-between gap-2">
@@ -1708,110 +1996,265 @@ function TaskDetailModal({
         <div className="flex-1 overflow-auto p-4 sm:p-6">
           {/* Tab Resumen */}
           {activeTab === 'resumen' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Columna Izquierda - Info de la tarea */}
-              <div className="space-y-4">
-                <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                  <h4 className="text-sm font-medium text-purple-300 mb-3">Informacion de la Tarea</h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-zinc-500">Tipo:</span>
-                      <p className="text-white font-medium">{task.tipo}</p>
-                    </div>
-                    <div>
-                      <span className="text-zinc-500">ID:</span>
-                      <p className="text-white font-medium">{task.id}</p>
-                    </div>
-                    <div>
-                      <span className="text-zinc-500">Titulo:</span>
-                      <p className="text-white font-medium">{task.titulo || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-zinc-500">Estatus:</span>
-                      <p className="text-white font-medium">{task.estatus}</p>
-                    </div>
-                    <div>
-                      <span className="text-zinc-500">Fecha Inicio:</span>
-                      <p className="text-white font-medium">{task.fecha_inicio || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-zinc-500">Fecha Fin:</span>
-                      <p className="text-white font-medium">{task.fecha_fin || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-zinc-500">Asignado:</span>
-                      <p className="text-white font-medium">{task.asignado || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-zinc-500">Responsable:</span>
-                      <p className="text-white font-medium">{task.responsable || task.creador || '-'}</p>
-                    </div>
+            <div className="space-y-4">
+              {/* Info de la tarea - Compacta */}
+              <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Tarea</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div>
+                    <span className="text-zinc-500">Tipo:</span>
+                    <p className="text-white font-medium">{task.tipo}</p>
                   </div>
-                  {task.descripcion && (
-                    <div className="mt-3 pt-3 border-t border-border">
-                      <span className="text-zinc-500 text-sm">Descripcion:</span>
-                      <p className="text-white text-sm mt-1">{task.descripcion}</p>
-                    </div>
-                  )}
-                  {task.contenido && (
-                    <div className="mt-3 pt-3 border-t border-border">
-                      <span className="text-zinc-500 text-sm">Contenido:</span>
-                      <p className="text-white text-sm mt-1">{task.contenido}</p>
-                    </div>
-                  )}
+                  <div>
+                    <span className="text-zinc-500">ID:</span>
+                    <p className="text-white font-medium">{task.id}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Titulo:</span>
+                    <p className="text-white font-medium">{task.titulo || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Estatus:</span>
+                    <p className="text-white font-medium">{task.estatus}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Fecha Inicio:</span>
+                    <p className="text-white font-medium">{task.fecha_inicio || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Fecha Fin:</span>
+                    <p className="text-white font-medium">{task.fecha_fin || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Asignado:</span>
+                    <p className="text-white font-medium">{task.asignado || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Responsable:</span>
+                    <p className="text-white font-medium">{task.responsable || task.creador || '-'}</p>
+                  </div>
                 </div>
+                {/* Sección especial para tareas de Corrección (rechazo) */}
+                {task.tipo === 'Correccion' && task.descripcion && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <AlertCircle className="h-5 w-5 text-red-400" />
+                        <h5 className="text-sm font-medium text-red-300">Motivo del Rechazo</h5>
+                      </div>
+                      {(() => {
+                        // Parsear la descripción para extraer códigos y motivo
+                        const desc = task.descripcion || '';
 
-                {/* Mapa placeholder */}
-                <div className="bg-zinc-900/50 rounded-lg p-4 border border-border h-64 flex items-center justify-center">
-                  <div className="text-center text-zinc-500">
-                    <MapPin className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">Mapa de ubicaciones</p>
-                    <p className="text-xs mt-1">{taskInventory.length} ubicaciones</p>
+                        // Extraer códigos: todo lo que está entre ** y :** (los : están dentro del **)
+                        const codigosMatch = desc.match(/\*\*(.+?):\*\*/);
+                        const codigosAfectados = codigosMatch ? codigosMatch[1].trim() : null;
+
+                        // Extraer motivo: todo lo que está después de **códigos:** hasta "Por favor" o fin
+                        let motivoRechazo = '';
+                        if (codigosAfectados) {
+                          // Buscar el texto después de **códigos:**
+                          const afterCodigos = desc.split(/\*\*[^*]+:\*\*\s*/)[1];
+                          if (afterCodigos) {
+                            // Quitar "Por favor corrige..." si existe
+                            motivoRechazo = afterCodigos.split(/Por favor/i)[0].trim();
+                          }
+                        }
+
+                        // Si no se pudo extraer, limpiar la descripción completa
+                        if (!motivoRechazo) {
+                          motivoRechazo = desc
+                            .replace(/Artes rechazados con el siguiente motivo:\s*/i, '')
+                            .replace(/\*\*[^*]+:\*\*\s*/g, '')
+                            .replace(/Por favor corrige los artes y vuelve a enviar a revisión\./i, '')
+                            .trim();
+                        }
+
+                        return (
+                          <div className="space-y-3">
+                            {codigosAfectados && (
+                              <div>
+                                <span className="text-zinc-400 text-xs uppercase tracking-wide">Artes afectados:</span>
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {codigosAfectados.split(',').map((codigo, idx) => (
+                                    <span key={idx} className="px-2 py-0.5 bg-zinc-800 rounded text-xs text-zinc-300 font-mono">
+                                      {codigo.trim()}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            <div>
+                              <span className="text-zinc-400 text-xs uppercase tracking-wide">Motivo:</span>
+                              <p className="mt-1 text-white text-sm bg-zinc-800/50 rounded p-2 border-l-2 border-red-500">
+                                {motivoRechazo || 'Sin motivo especificado'}
+                              </p>
+                            </div>
+                            <p className="text-amber-400/80 text-xs mt-2">
+                              ⚠️ Por favor corrige los artes y vuelve a enviar a revisión.
+                            </p>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
-                </div>
+                )}
+                {/* Descripción normal para otros tipos de tarea */}
+                {task.tipo !== 'Correccion' && (task.descripcion || task.contenido) && (
+                  <div className="mt-3 pt-3 border-t border-border grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {task.descripcion && (
+                      <div>
+                        <span className="text-zinc-500 text-sm">Descripción:</span>
+                        <p className="text-white text-sm mt-1">{task.descripcion}</p>
+                      </div>
+                    )}
+                    {task.contenido && (
+                      <div>
+                        <span className="text-zinc-500 text-sm">Contenido:</span>
+                        <p className="text-white text-sm mt-1">{task.contenido}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Contenido para tareas de Corrección */}
+                {task.tipo === 'Correccion' && task.contenido && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <span className="text-zinc-500 text-sm">Contenido:</span>
+                    <p className="text-white text-sm mt-1">{task.contenido}</p>
+                  </div>
+                )}
               </div>
 
-              {/* Columna Derecha - Lista de artes */}
-              <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
-                <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
-                  <h4 className="text-sm font-medium text-purple-300">Artes Asociadas ({taskInventory.length})</h4>
+              {/* Lista de artes con filtros */}
+              <div className="bg-zinc-900/50 rounded-lg border border-border">
+                {/* Header con filtros - fuera del overflow para que los dropdowns se vean */}
+                <div className="px-4 py-3 border-b border-border bg-zinc-800/50 rounded-t-lg flex items-center justify-between gap-4 relative z-20">
+                  <h4 className="text-sm font-medium text-purple-300">
+                    Inventario Asociado ({filteredDataResumen.length} de {taskInventory.length})
+                  </h4>
+                  <FilterToolbar
+                    filters={filtersResumen}
+                    showFilters={showFiltersResumen}
+                    setShowFilters={setShowFiltersResumen}
+                    addFilter={addFilterResumen}
+                    updateFilter={updateFilterResumen}
+                    removeFilter={removeFilterResumen}
+                    clearFilters={clearFiltersResumen}
+                    uniqueValues={uniqueValuesModal}
+                    activeGroupings={activeGroupingsResumen}
+                    showGrouping={showGroupingResumen}
+                    setShowGrouping={setShowGroupingResumen}
+                    toggleGrouping={toggleGroupingResumen}
+                    clearGroupings={clearGroupingsResumen}
+                    sortField={sortFieldResumen}
+                    sortDirection={sortDirectionResumen}
+                    showSort={showSortResumen}
+                    setShowSort={setShowSortResumen}
+                    setSortField={setSortFieldResumen}
+                    setSortDirection={setSortDirectionResumen}
+                    filteredCount={filteredDataResumen.length}
+                    totalCount={taskInventory.length}
+                    useFixedDropdowns={true}
+                  />
                 </div>
-                <div className="max-h-[500px] overflow-auto">
+                {/* Contenido de la tabla con scroll */}
+                <div className="min-h-[200px] max-h-[400px] overflow-auto">
                   {taskInventory.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-zinc-400">
+                    <div className="flex flex-col items-center justify-center py-12 text-zinc-400 h-[200px]">
                       <Image className="h-12 w-12 mb-3 opacity-50" />
-                      <p className="text-sm">Sin artes asociadas</p>
+                      <p className="text-sm">Sin inventario asociado</p>
+                    </div>
+                  ) : activeGroupingsResumen.length > 0 ? (
+                    /* Vista agrupada */
+                    <div className="divide-y divide-border">
+                      {Object.entries(groupedDataResumen).map(([groupKey, items]) => (
+                        <div key={groupKey} className="bg-zinc-900/30">
+                          <div className="px-4 py-2 bg-purple-900/20 border-b border-purple-500/20 flex items-center justify-between">
+                            <span className="text-sm font-medium text-purple-300">{groupKey}</span>
+                            <Badge className="bg-purple-500/20 text-purple-300">{items.length}</Badge>
+                          </div>
+                          <table className="w-full text-xs">
+                            <thead className="bg-zinc-800/50">
+                              <tr className="text-left">
+                                <th className="p-2 font-medium text-purple-300">Arte</th>
+                                <th className="p-2 font-medium text-purple-300">Código</th>
+                                <th className="p-2 font-medium text-purple-300">Ciudad</th>
+                                <th className="p-2 font-medium text-purple-300">Mueble</th>
+                                <th className="p-2 font-medium text-purple-300">Medidas</th>
+                                <th className="p-2 font-medium text-purple-300">Catorcena</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {items.map((item) => (
+                                <tr key={item.id} className="border-t border-border/30 hover:bg-purple-900/10">
+                                  <td className="p-2">
+                                    {item.archivo_arte ? (
+                                      <div className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                                        <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
+                                      </div>
+                                    ) : (
+                                      <div className="w-14 h-10 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                                        <Image className="h-4 w-4 text-zinc-600" />
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-2 text-zinc-300 font-mono text-[10px]">{item.codigo_unico}</td>
+                                  <td className="p-2 text-zinc-300">{item.ciudad}</td>
+                                  <td className="p-2 text-zinc-300">{item.mueble}</td>
+                                  <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
+                                  <td className="p-2 text-zinc-400">C{item.catorcena}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))}
                     </div>
                   ) : (
+                    /* Vista tabla normal */
                     <table className="w-full text-xs">
                       <thead className="sticky top-0 bg-zinc-800 z-10">
                         <tr className="text-left">
-                          <th className="p-3 font-medium text-purple-300">Archivo</th>
-                          <th className="p-3 font-medium text-purple-300">Tipo Mueble</th>
+                          <th className="p-3 font-medium text-purple-300">Arte</th>
+                          <th className="p-3 font-medium text-purple-300">Código</th>
+                          <th className="p-3 font-medium text-purple-300">Ciudad</th>
+                          <th className="p-3 font-medium text-purple-300">Plaza</th>
+                          <th className="p-3 font-medium text-purple-300">Mueble</th>
+                          <th className="p-3 font-medium text-purple-300">Medidas</th>
+                          <th className="p-3 font-medium text-purple-300">Catorcena</th>
+                          <th className="p-3 font-medium text-purple-300">Estado</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {taskInventory.map((item) => (
+                        {filteredDataResumen.map((item) => (
                           <tr key={item.id} className="border-t border-border/50 hover:bg-purple-900/10">
                             <td className="p-3">
                               {item.archivo_arte ? (
-                                <div className="w-20 h-14 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
-                                  <img
-                                    src={getImageUrl(item.archivo_arte) || ''}
-                                    alt="Arte"
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).style.display = 'none';
-                                    }}
-                                  />
+                                <div className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                                  <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
                                 </div>
                               ) : (
-                                <div className="w-20 h-14 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-                                  <Image className="h-5 w-5 text-zinc-600" />
+                                <div className="w-16 h-12 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                                  <Image className="h-4 w-4 text-zinc-600" />
                                 </div>
                               )}
                             </td>
+                            <td className="p-3 text-zinc-300 font-mono text-[10px]">{item.codigo_unico}</td>
+                            <td className="p-3 text-zinc-300">{item.ciudad}</td>
+                            <td className="p-3 text-zinc-400">{item.plaza}</td>
                             <td className="p-3 text-zinc-300">{item.mueble}</td>
+                            <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
+                            <td className="p-3 text-zinc-400">C{item.catorcena}</td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] ${
+                                item.estado_arte === 'aprobado' ? 'bg-green-500/20 text-green-400' :
+                                item.estado_arte === 'rechazado' ? 'bg-red-500/20 text-red-400' :
+                                item.estado_arte === 'en_revision' ? 'bg-yellow-500/20 text-yellow-400' :
+                                'bg-zinc-500/20 text-zinc-400'
+                              }`}>
+                                {item.estado_arte || 'Sin revisar'}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1826,102 +2269,197 @@ function TaskDetailModal({
           {activeTab === 'editar' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Columna Izquierda - Lista de artes con checkbox */}
-              <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
-                <div className="px-4 py-3 border-b border-border bg-zinc-800/50 flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-purple-300">Editar Arte</h4>
-                  <button
-                    onClick={selectAllArtes}
-                    className="text-xs text-purple-400 hover:text-purple-300"
-                  >
-                    {selectedArteIds.size === taskInventory.length ? 'Deseleccionar todas' : 'Seleccionar todas'}
-                  </button>
+              <div className="bg-zinc-900/50 rounded-lg border border-border">
+                {/* Header con filtros - fuera del overflow para que los dropdowns se vean */}
+                <div className="px-4 py-3 border-b border-border bg-zinc-800/50 rounded-t-lg flex flex-col gap-2 relative z-20">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium text-purple-300">
+                      Seleccionar Arte ({filteredDataEditar.length} de {taskInventory.length})
+                    </h4>
+                    <button
+                      onClick={selectAllArtes}
+                      className="text-xs text-purple-400 hover:text-purple-300"
+                    >
+                      {selectedArteIds.size === filteredDataEditar.length ? 'Deseleccionar' : 'Seleccionar todo'}
+                    </button>
+                  </div>
+                  <div className="flex justify-end">
+                    <FilterToolbar
+                      filters={filtersEditar}
+                      showFilters={showFiltersEditar}
+                      setShowFilters={setShowFiltersEditar}
+                      addFilter={addFilterEditar}
+                      updateFilter={updateFilterEditar}
+                      removeFilter={removeFilterEditar}
+                      clearFilters={clearFiltersEditar}
+                      uniqueValues={uniqueValuesModal}
+                      activeGroupings={activeGroupingsEditar}
+                      showGrouping={showGroupingEditar}
+                      setShowGrouping={setShowGroupingEditar}
+                      toggleGrouping={toggleGroupingEditar}
+                      clearGroupings={clearGroupingsEditar}
+                      sortField={sortFieldEditar}
+                      sortDirection={sortDirectionEditar}
+                      showSort={showSortEditar}
+                      setShowSort={setShowSortEditar}
+                      setSortField={setSortFieldEditar}
+                      setSortDirection={setSortDirectionEditar}
+                      filteredCount={filteredDataEditar.length}
+                      totalCount={taskInventory.length}
+                      useFixedDropdowns={true}
+                    />
+                  </div>
                 </div>
-                <div className="max-h-[500px] overflow-auto">
-                  <table className="w-full text-xs min-w-[500px]">
-                    <thead className="sticky top-0 bg-zinc-800 z-10">
-                      <tr className="text-left">
-                        <th className="p-3 w-10">
-                          <input
-                            type="checkbox"
-                            checked={selectedArteIds.size === taskInventory.length && taskInventory.length > 0}
-                            onChange={selectAllArtes}
-                            className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500"
-                          />
-                        </th>
-                        <th className="p-3 font-medium text-purple-300">Mueble</th>
-                        <th className="p-3 font-medium text-purple-300">RSV ID</th>
-                        <th className="p-3 font-medium text-purple-300">Ancho</th>
-                        <th className="p-3 font-medium text-purple-300">Alto</th>
-                        <th className="p-3 font-medium text-purple-300">Archivo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {taskInventory.map((item) => (
-                        <tr
-                          key={item.id}
-                          className={`border-t border-border/50 transition-colors ${
-                            selectedArteIds.has(item.id) ? 'bg-purple-900/30' : 'hover:bg-purple-900/10'
-                          }`}
-                        >
-                          <td className="p-3">
+                {/* Contenido de la tabla con scroll */}
+                <div className="min-h-[200px] max-h-[450px] overflow-auto">
+                  {activeGroupingsEditar.length > 0 ? (
+                    /* Vista agrupada */
+                    <div className="divide-y divide-border">
+                      {Object.entries(groupedDataEditar).map(([groupKey, items]) => (
+                        <div key={groupKey} className="bg-zinc-900/30">
+                          <div className="px-4 py-2 bg-purple-900/20 border-b border-purple-500/20 flex items-center justify-between">
+                            <span className="text-sm font-medium text-purple-300">{groupKey}</span>
+                            <Badge className="bg-purple-500/20 text-purple-300">{items.length}</Badge>
+                          </div>
+                          <table className="w-full text-xs">
+                            <thead className="bg-zinc-800/50">
+                              <tr className="text-left">
+                                <th className="p-2 w-8">
+                                  <input
+                                    type="checkbox"
+                                    checked={items.every(item => selectedArteIds.has(item.id))}
+                                    onChange={() => {
+                                      const allSelected = items.every(item => selectedArteIds.has(item.id));
+                                      setSelectedArteIds(prev => {
+                                        const next = new Set(prev);
+                                        items.forEach(item => {
+                                          if (allSelected) next.delete(item.id);
+                                          else next.add(item.id);
+                                        });
+                                        return next;
+                                      });
+                                    }}
+                                    className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500"
+                                  />
+                                </th>
+                                <th className="p-2 font-medium text-purple-300">Arte</th>
+                                <th className="p-2 font-medium text-purple-300">Código</th>
+                                <th className="p-2 font-medium text-purple-300">Mueble</th>
+                                <th className="p-2 font-medium text-purple-300">Medidas</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {items.map((item) => (
+                                <tr key={item.id} className={`border-t border-border/30 transition-colors ${selectedArteIds.has(item.id) ? 'bg-purple-900/30' : 'hover:bg-purple-900/10'}`}>
+                                  <td className="p-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedArteIds.has(item.id)}
+                                      onChange={() => toggleArteSelection(item.id)}
+                                      className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500"
+                                    />
+                                  </td>
+                                  <td className="p-2">
+                                    {item.archivo_arte ? (
+                                      <div className="w-12 h-9 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                                        <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
+                                      </div>
+                                    ) : (
+                                      <div className="w-12 h-9 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                                        <Image className="h-3 w-3 text-zinc-600" />
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-2 text-zinc-300 font-mono text-[10px]">{item.codigo_unico}</td>
+                                  <td className="p-2 text-zinc-300">{item.mueble}</td>
+                                  <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    /* Vista tabla normal */
+                    <table className="w-full text-xs min-w-[500px]">
+                      <thead className="sticky top-0 bg-zinc-800 z-10">
+                        <tr className="text-left">
+                          <th className="p-3 w-10">
                             <input
                               type="checkbox"
-                              checked={selectedArteIds.has(item.id)}
-                              onChange={() => toggleArteSelection(item.id)}
+                              checked={selectedArteIds.size === filteredDataEditar.length && filteredDataEditar.length > 0}
+                              onChange={() => {
+                                if (selectedArteIds.size === filteredDataEditar.length) {
+                                  setSelectedArteIds(new Set());
+                                } else {
+                                  setSelectedArteIds(new Set(filteredDataEditar.map(item => item.id)));
+                                }
+                              }}
                               className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500"
                             />
-                          </td>
-                          <td className="p-3 text-zinc-300">{item.mueble}</td>
-                          <td className="p-3 text-zinc-300">{item.rsv_id}</td>
-                          <td className="p-3 text-zinc-300">{item.ancho || '-'}</td>
-                          <td className="p-3 text-zinc-300">{item.alto || '-'}</td>
-                          <td className="p-3">
-                            {item.archivo_arte ? (
-                              <div className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
-                                <img
-                                  src={getImageUrl(item.archivo_arte) || ''}
-                                  alt="Arte"
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                            ) : (
-                              <span className="text-zinc-500">Sin archivo</span>
-                            )}
-                          </td>
+                          </th>
+                          <th className="p-3 font-medium text-purple-300">Arte</th>
+                          <th className="p-3 font-medium text-purple-300">Código</th>
+                          <th className="p-3 font-medium text-purple-300">Ciudad</th>
+                          <th className="p-3 font-medium text-purple-300">Mueble</th>
+                          <th className="p-3 font-medium text-purple-300">Medidas</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredDataEditar.map((item) => (
+                          <tr
+                            key={item.id}
+                            className={`border-t border-border/50 transition-colors ${
+                              selectedArteIds.has(item.id) ? 'bg-purple-900/30' : 'hover:bg-purple-900/10'
+                            }`}
+                          >
+                            <td className="p-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedArteIds.has(item.id)}
+                                onChange={() => toggleArteSelection(item.id)}
+                                className="rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500"
+                              />
+                            </td>
+                            <td className="p-3">
+                              {item.archivo_arte ? (
+                                <div className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                                  <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="w-14 h-10 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                                  <Image className="h-4 w-4 text-zinc-600" />
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3 text-zinc-300 font-mono text-[10px]">{item.codigo_unico}</td>
+                            <td className="p-3 text-zinc-300">{item.ciudad}</td>
+                            <td className="p-3 text-zinc-300">{item.mueble}</td>
+                            <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
 
               {/* Columna Derecha - Opciones de edicion */}
               <div className="space-y-4">
                 {/* Botones de accion */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="flex justify-center">
                   <button
                     onClick={handleUpdateImage}
                     disabled={selectedArteIds.size === 0 || isUpdating}
-                    className={`flex items-center justify-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+                    className={`flex items-center justify-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
                       selectedArteIds.size > 0
                         ? 'bg-purple-600 hover:bg-purple-700 text-white'
                         : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                     }`}
                   >
                     <Upload className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">Actualizar</span>
-                  </button>
-                  <button
-                    onClick={handleClearImage}
-                    disabled={selectedArteIds.size === 0 || isUpdating}
-                    className={`flex items-center justify-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
-                      selectedArteIds.size > 0
-                        ? 'bg-red-600 hover:bg-red-700 text-white'
-                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                    }`}
-                  >
-                    <Trash2 className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">Limpiar</span>
+                    <span className="truncate">Actualizar Arte</span>
                   </button>
                 </div>
 
@@ -2070,18 +2608,27 @@ function TaskDetailModal({
                                   ? 'border-amber-500/50 text-amber-400'
                                   : decisiones[groupKey]?.decision === 'aprobar'
                                   ? 'border-green-500/50 text-green-400'
-                                  : decisiones[groupKey]?.decision === 'rechazar'
-                                  ? 'border-red-500/50 text-red-400'
-                                  : 'border-blue-500/50 text-blue-400'
+                                  : 'border-red-500/50 text-red-400'
                               }`}
                             >
                               <option value="">-- Seleccionar acción --</option>
                               <option value="aprobar">✓ Aprobar</option>
                               <option value="rechazar">✗ Rechazar</option>
-                              <option value="corregir">✎ Corregir</option>
                             </select>
                           </div>
-                          {/* Textarea para motivo de rechazo */}
+                          {/* Textarea para comentario de aprobación (opcional) */}
+                          {decisiones[groupKey]?.decision === 'aprobar' && (
+                            <div className="mt-2">
+                              <textarea
+                                placeholder="Comentario de aprobación (opcional)"
+                                value={decisiones[groupKey]?.comentarioAprobacion || ''}
+                                onChange={(e) => handleComentarioAprobacionChange(groupKey, e.target.value)}
+                                className="w-full px-3 py-2 text-sm rounded-lg bg-zinc-800 border border-zinc-700 resize-none"
+                                rows={2}
+                              />
+                            </div>
+                          )}
+                          {/* Textarea para motivo de rechazo (obligatorio) */}
                           {decisiones[groupKey]?.decision === 'rechazar' && (
                             <div className="mt-2">
                               <textarea
@@ -2100,56 +2647,126 @@ function TaskDetailModal({
                         </div>
 
                         {/* Lista de items dentro del grupo */}
-                        <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {items.map((item) => (
-                            <div key={item.id} className="bg-zinc-800/50 rounded-lg p-3 border border-border">
-                              <div className="flex gap-3">
-                                {/* Preview */}
-                                <div className="flex-shrink-0">
-                                  {item.archivo_arte ? (
-                                    <div className="w-20 h-16 rounded overflow-hidden bg-zinc-700 border border-zinc-600">
+                        <div className="p-3">
+                          {groupBy === 'inventario' ? (
+                            // Vista individual: mostrar todas las cards
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {items.map((item) => (
+                                <div key={item.id} className="bg-zinc-800/50 rounded-lg p-3 border border-border">
+                                  <div className="flex gap-3">
+                                    {/* Preview */}
+                                    <div className="flex-shrink-0">
+                                      {item.archivo_arte ? (
+                                        <div className="w-20 h-16 rounded overflow-hidden bg-zinc-700 border border-zinc-600">
+                                          <img
+                                            src={getImageUrl(item.archivo_arte) || ''}
+                                            alt="Arte"
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </div>
+                                      ) : (
+                                        <div className="w-20 h-16 rounded bg-zinc-700 border border-zinc-600 flex items-center justify-center">
+                                          <Image className="h-5 w-5 text-zinc-500" />
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Info */}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-white truncate">{item.codigo_unico}</p>
+                                      <p className="text-xs text-zinc-400 truncate">{item.mueble}</p>
+                                      <p className="text-xs text-zinc-500 truncate">{item.ubicacion}</p>
+                                      <div className="mt-1 flex items-center gap-2">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                                          item.estado_arte === 'aprobado'
+                                            ? 'bg-green-500/20 text-green-400'
+                                            : item.estado_arte === 'rechazado'
+                                            ? 'bg-red-500/20 text-red-400'
+                                            : 'bg-zinc-500/20 text-zinc-400'
+                                        }`}>
+                                          {item.estado_arte === 'aprobado' ? 'Aprobado' : item.estado_arte === 'rechazado' ? 'Rechazado' : 'Sin revisar'}
+                                        </span>
+                                        {item.archivo_arte && (
+                                          <button
+                                            onClick={() => downloadImage(getImageUrl(item.archivo_arte)!, `${item.codigo_unico}.jpg`)}
+                                            className="text-[10px] text-zinc-400 hover:text-white"
+                                            title="Descargar"
+                                          >
+                                            <Download className="h-3 w-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            // Vista agrupada (ciudad/grupo): mostrar solo UNA card representativa con conteo
+                            <div className="bg-zinc-800/50 rounded-lg p-4 border border-border">
+                              <div className="flex gap-4">
+                                {/* Preview de la imagen representativa */}
+                                <div className="flex-shrink-0 relative">
+                                  {items[0]?.archivo_arte ? (
+                                    <div className="w-32 h-24 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600">
                                       <img
-                                        src={getImageUrl(item.archivo_arte) || ''}
+                                        src={getImageUrl(items[0].archivo_arte) || ''}
                                         alt="Arte"
                                         className="w-full h-full object-cover"
                                       />
                                     </div>
                                   ) : (
-                                    <div className="w-20 h-16 rounded bg-zinc-700 border border-zinc-600 flex items-center justify-center">
-                                      <Image className="h-5 w-5 text-zinc-500" />
+                                    <div className="w-32 h-24 rounded-lg bg-zinc-700 border border-zinc-600 flex items-center justify-center">
+                                      <Image className="h-8 w-8 text-zinc-500" />
                                     </div>
                                   )}
+                                  {/* Badge con cantidad */}
+                                  <div className="absolute -top-2 -right-2 bg-purple-600 text-white text-sm font-bold rounded-full w-8 h-8 flex items-center justify-center shadow-lg">
+                                    {items.length}
+                                  </div>
                                 </div>
 
-                                {/* Info */}
+                                {/* Info del grupo */}
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-white truncate">{item.codigo_unico}</p>
-                                  <p className="text-xs text-zinc-400 truncate">{item.mueble}</p>
-                                  <p className="text-xs text-zinc-500 truncate">{item.ubicacion}</p>
-                                  <div className="mt-1 flex items-center gap-2">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                                      item.estado_arte === 'aprobado'
-                                        ? 'bg-green-500/20 text-green-400'
-                                        : item.estado_arte === 'rechazado'
-                                        ? 'bg-red-500/20 text-red-400'
-                                        : 'bg-zinc-500/20 text-zinc-400'
-                                    }`}>
-                                      {item.estado_arte === 'aprobado' ? 'Aprobado' : item.estado_arte === 'rechazado' ? 'Rechazado' : 'Sin revisar'}
-                                    </span>
-                                    {item.archivo_arte && (
-                                      <button
-                                        onClick={() => downloadImage(getImageUrl(item.archivo_arte)!, `${item.codigo_unico}.jpg`)}
-                                        className="text-[10px] text-zinc-400 hover:text-white"
-                                        title="Descargar"
-                                      >
-                                        <Download className="h-3 w-3" />
-                                      </button>
+                                  <p className="text-base font-semibold text-white mb-1">
+                                    {items.length} ubicacion{items.length !== 1 ? 'es' : ''} con esta imagen
+                                  </p>
+                                  <p className="text-xs text-zinc-400 mb-2">
+                                    {groupBy === 'ciudad' ? 'Ciudad' : 'Grupo'}: <span className="text-purple-300 font-medium">{groupKey}</span>
+                                  </p>
+                                  {/* Estados resumidos */}
+                                  <div className="flex flex-wrap gap-2">
+                                    {items.filter(i => i.estado_arte === 'aprobado').length > 0 && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/20 text-green-400">
+                                        {items.filter(i => i.estado_arte === 'aprobado').length} aprobado{items.filter(i => i.estado_arte === 'aprobado').length !== 1 ? 's' : ''}
+                                      </span>
+                                    )}
+                                    {items.filter(i => i.estado_arte === 'rechazado').length > 0 && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/20 text-red-400">
+                                        {items.filter(i => i.estado_arte === 'rechazado').length} rechazado{items.filter(i => i.estado_arte === 'rechazado').length !== 1 ? 's' : ''}
+                                      </span>
+                                    )}
+                                    {items.filter(i => i.estado_arte !== 'aprobado' && i.estado_arte !== 'rechazado').length > 0 && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-500/20 text-zinc-400">
+                                        {items.filter(i => i.estado_arte !== 'aprobado' && i.estado_arte !== 'rechazado').length} sin revisar
+                                      </span>
                                     )}
                                   </div>
+                                  {/* Botón de descarga */}
+                                  {items[0]?.archivo_arte && (
+                                    <button
+                                      onClick={() => downloadImage(getImageUrl(items[0].archivo_arte)!, `${groupKey}.jpg`)}
+                                      className="mt-2 text-xs text-zinc-400 hover:text-white flex items-center gap-1"
+                                      title="Descargar"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                      Descargar imagen
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             </div>
-                          ))}
+                          )}
                         </div>
                       </div>
                     ))}
@@ -2206,7 +2823,7 @@ function TaskDetailModal({
                     </h4>
                   </div>
                   <div className="p-4">
-                    <CommentsSection campanaId={campanaId} />
+                    <CommentsSection campanaId={campanaId} tareaId={task?.id || ''} />
                   </div>
                 </div>
               </div>
@@ -3151,7 +3768,7 @@ export function TareaSeguimientoPage() {
   const [sortDirectionAtender, setSortDirectionAtender] = useState<'asc' | 'desc'>('asc');
   const [showSortAtender, setShowSortAtender] = useState(false);
   const [expandedGroupsAtender, setExpandedGroupsAtender] = useState<Set<string>>(new Set());
-  const [activeEstadoArteTab, setActiveEstadoArteTab] = useState<'todos' | 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado'>('todos');
+  const [activeEstadoArteTab, setActiveEstadoArteTab] = useState<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado'>('sin_revisar');
 
   // --- Validar Instalación (testigo) ---
   const [filtersTestigo, setFiltersTestigo] = useState<FilterCondition[]>([]);
@@ -3218,10 +3835,10 @@ export function TareaSeguimientoPage() {
     enabled: campanaId > 0 && (activeMainTab === 'testigo' || !initialTabDetermined),
   });
 
-  // Tareas de la campaña (activas = Activo o Pendiente)
+  // Tareas de la campaña (todas para poder filtrar en activas/completadas)
   const { data: tareasAPI = [], isLoading: isLoadingTareas } = useQuery({
     queryKey: ['campana-tareas', campanaId],
-    queryFn: () => campanasService.getTareas(campanaId, { activas: true }),
+    queryFn: () => campanasService.getTareas(campanaId, {}),
     enabled: campanaId > 0,
   });
 
@@ -3279,14 +3896,16 @@ export function TareaSeguimientoPage() {
     mutationFn: ({ reservaIds, archivo }: { reservaIds: number[]; archivo: string }) =>
       campanasService.assignArte(campanaId, reservaIds, archivo),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte', campanaId], refetchType: 'all' });
-      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId], refetchType: 'all' });
-      queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes', campanaId], refetchType: 'all' });
+      // Refetch forzado de todos los queries de inventario
+      queryClient.refetchQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
+      queryClient.refetchQueries({ queryKey: ['campana-inventario-arte'], exact: false });
+      queryClient.refetchQueries({ queryKey: ['campana-artes-existentes'], exact: false });
       if (isUploadArtModalOpen) {
         setIsUploadArtModalOpen(false);
         setSelectedInventoryIds(new Set());
       }
       setUploadArtError(null);
+      setSelectedInventoryIds(new Set());
     },
     onError: (error) => {
       setUploadArtError(error instanceof Error ? error.message : 'Error al asignar arte');
@@ -3299,6 +3918,7 @@ export function TareaSeguimientoPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
       setSelectedInventoryIds(new Set());
     },
   });
@@ -3334,6 +3954,15 @@ export function TareaSeguimientoPage() {
     },
     onError: (error) => {
       setCreateTaskError(error instanceof Error ? error.message : 'Error al crear tarea');
+    },
+  });
+
+  // Mutación para actualizar tarea (marcar como completada)
+  const updateTareaMutation = useMutation({
+    mutationFn: ({ tareaId, data }: { tareaId: number; data: Partial<TareaCampana> }) =>
+      campanasService.updateTarea(campanaId, tareaId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
     },
   });
 
@@ -3445,13 +4074,20 @@ export function TareaSeguimientoPage() {
   }, []);
 
   // Helper function to transform InventarioConArte to InventoryRow
-  const transformInventarioToRow = useCallback((item: InventarioConArte, defaultArteStatus: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = 'sin_revisar'): InventoryRow => {
+  const transformInventarioToRow = useCallback((item: InventarioConArte, defaultArteStatus: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = 'sin_revisar', tareasActivas: number[] = []): InventoryRow => {
     // Mapear arte_aprobado a estado_arte
     let estadoArte: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = defaultArteStatus;
     const arteAprobadoLower = (item.arte_aprobado || '').toLowerCase();
+
+    // Verificar si este item está en alguna tarea activa
+    const itemRsvIds = (item.rsv_id || item.rsv_ids || item.rsvId || '').split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+    const tieneTaskActiva = tareasActivas.some(tareaRsvId => itemRsvIds.includes(tareaRsvId));
+
     if (arteAprobadoLower === 'aprobado') estadoArte = 'aprobado';
     else if (arteAprobadoLower === 'rechazado') estadoArte = 'rechazado';
     else if (arteAprobadoLower === 'pendiente' || arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisión') estadoArte = 'en_revision';
+    // Si tiene tarea activa asignada, es "en_revision"
+    else if (tieneTaskActiva) estadoArte = 'en_revision';
     // Si no tiene ninguno de los estados anteriores, se queda con defaultArteStatus (sin_revisar)
 
     // Mapear tarea/estatus a estado_tarea
@@ -3494,16 +4130,22 @@ export function TareaSeguimientoPage() {
     };
   }, []);
 
+  // Extraer IDs de reservas de tareas activas (no completadas)
+  const tareasActivasRsvIds = useMemo((): number[] => {
+    return tareasAPI
+      .filter(t => t.estatus !== 'Atendido' && t.estatus !== 'Completado')
+      .flatMap(t => (t.ids_reservas || '').split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)));
+  }, [tareasAPI]);
+
   // Transform inventario SIN arte para tab "Subir Artes"
   const inventorySinArteData = useMemo((): InventoryRow[] => {
     return inventarioSinArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar'));
   }, [inventarioSinArteAPI, transformInventarioToRow]);
 
   // Transform inventario con arte para tab "Atender arte"
-
   const inventoryArteData = useMemo((): InventoryRow[] => {
-    return inventarioArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar'));
-  }, [inventarioArteAPI, transformInventarioToRow]);
+    return inventarioArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar', tareasActivasRsvIds));
+  }, [inventarioArteAPI, transformInventarioToRow, tareasActivasRsvIds]);
 
   // Transform inventario para testigos (tab "Validar Instalación")
   const inventoryTestigosData = useMemo((): InventoryRow[] => {
@@ -3539,8 +4181,8 @@ export function TareaSeguimientoPage() {
   const filteredAtenderData = useMemo(() => {
     let data = applyFilters(inventoryArteData, filtersAtender);
 
-    // Filtrar por estado_arte según el tab activo
-    if (activeEstadoArteTab !== 'todos') {
+    // Filtrar por estado_arte según el tab activo (solo si no hay búsqueda)
+    if (!inventorySearch) {
       data = data.filter(item => item.estado_arte === activeEstadoArteTab);
     }
 
@@ -3560,7 +4202,7 @@ export function TareaSeguimientoPage() {
       });
     }
     return data;
-  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoArteTab]);
+  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoArteTab, inventorySearch]);
 
   // Datos filtrados y ordenados para Validar Instalación (testigo)
   const filteredTestigoData = useMemo(() => {
@@ -3616,6 +4258,7 @@ export function TareaSeguimientoPage() {
   const tasks = useMemo((): TaskRow[] => {
     return tareasAPI
       .filter((t) => t.estatus !== 'Atendido' && t.estatus !== 'Completado')
+      .sort((a, b) => b.id - a.id) // Más recientes primero
       .map((t) => ({
         id: t.id.toString(),
         tipo: t.tipo || 'Tarea',
@@ -3635,6 +4278,7 @@ export function TareaSeguimientoPage() {
   const completedTasks = useMemo((): TaskRow[] => {
     return tareasAPI
       .filter((t) => t.estatus === 'Atendido' || t.estatus === 'Completado')
+      .sort((a, b) => b.id - a.id) // Más recientes primero
       .map((t) => ({
         id: t.id.toString(),
         tipo: t.tipo || 'Tarea',
@@ -3701,6 +4345,8 @@ export function TareaSeguimientoPage() {
       const search = inventorySearch.toLowerCase();
       data = data.filter(
         (item) =>
+          item.id.toLowerCase().includes(search) ||
+          item.rsv_id.toLowerCase().includes(search) ||
           item.codigo_unico.toLowerCase().includes(search) ||
           item.plaza.toLowerCase().includes(search) ||
           item.mueble.toLowerCase().includes(search) ||
@@ -3810,7 +4456,10 @@ export function TareaSeguimientoPage() {
 
     const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
 
-    filteredInventory.forEach((item) => {
+    // Ordenar items por ID descendente (más recientes primero) antes de agrupar
+    const sortedInventory = [...filteredInventory].sort((a, b) => parseInt(b.id) - parseInt(a.id));
+
+    sortedInventory.forEach((item) => {
       const level1Key = activeGroupingsVersionario[0] ? getGroupKeyForField(item, activeGroupingsVersionario[0]) : 'Todo';
       const level2Key = activeGroupingsVersionario[1] ? getGroupKeyForField(item, activeGroupingsVersionario[1]) : 'Items';
       const level3Key = activeGroupingsVersionario[2] ? getGroupKeyForField(item, activeGroupingsVersionario[2]) : 'Items';
@@ -3822,7 +4471,19 @@ export function TareaSeguimientoPage() {
       groups[level1Key][level2Key][level3Key].push(item);
     });
 
-    return groups;
+    // Ordenar las keys de los grupos de forma descendente
+    const sortedGroups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
+    Object.keys(groups).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(level1Key => {
+      sortedGroups[level1Key] = {};
+      Object.keys(groups[level1Key]).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(level2Key => {
+        sortedGroups[level1Key][level2Key] = {};
+        Object.keys(groups[level1Key][level2Key]).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(level3Key => {
+          sortedGroups[level1Key][level2Key][level3Key] = groups[level1Key][level2Key][level3Key];
+        });
+      });
+    });
+
+    return sortedGroups;
   }, [filteredInventory, activeGroupingsVersionario]);
 
   // Agrupación para tab "Atender Arte" basada en activeGroupingsAtender
@@ -3837,7 +4498,10 @@ export function TareaSeguimientoPage() {
 
     const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
 
-    filteredInventory.forEach((item) => {
+    // Ordenar items por ID descendente (más recientes primero) antes de agrupar
+    const sortedInventory = [...filteredInventory].sort((a, b) => parseInt(b.id) - parseInt(a.id));
+
+    sortedInventory.forEach((item) => {
       const level1Key = activeGroupingsAtender[0] ? getGroupKeyForField(item, activeGroupingsAtender[0]) : 'Todo';
       const level2Key = activeGroupingsAtender[1] ? getGroupKeyForField(item, activeGroupingsAtender[1]) : 'Items';
       const level3Key = activeGroupingsAtender[2] ? getGroupKeyForField(item, activeGroupingsAtender[2]) : 'Items';
@@ -3849,7 +4513,19 @@ export function TareaSeguimientoPage() {
       groups[level1Key][level2Key][level3Key].push(item);
     });
 
-    return groups;
+    // Ordenar las keys de los grupos de forma descendente
+    const sortedGroups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
+    Object.keys(groups).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(level1Key => {
+      sortedGroups[level1Key] = {};
+      Object.keys(groups[level1Key]).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(level2Key => {
+        sortedGroups[level1Key][level2Key] = {};
+        Object.keys(groups[level1Key][level2Key]).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(level3Key => {
+          sortedGroups[level1Key][level2Key][level3Key] = groups[level1Key][level2Key][level3Key];
+        });
+      });
+    });
+
+    return sortedGroups;
   }, [filteredInventory, activeGroupingsAtender]);
 
   // Get selected inventory items for modals
@@ -4372,7 +5048,6 @@ export function TareaSeguimientoPage() {
             <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
               <div className="flex items-center gap-1">
                 {[
-                  { key: 'todos' as const, label: 'Todos', count: inventoryArteData.length },
                   { key: 'sin_revisar' as const, label: 'Sin Revisar', count: inventoryArteData.filter(i => i.estado_arte === 'sin_revisar').length },
                   { key: 'en_revision' as const, label: 'En Revisión', count: inventoryArteData.filter(i => i.estado_arte === 'en_revision').length },
                   { key: 'aprobado' as const, label: 'Aprobado', count: inventoryArteData.filter(i => i.estado_arte === 'aprobado').length },
@@ -4404,7 +5079,27 @@ export function TareaSeguimientoPage() {
           {/* Filter Toolbar (Atender tab) */}
           {activeMainTab === 'atender' && (
             <div className="px-4 py-2 border-b border-border flex items-center justify-between">
-              <span className="text-xs text-zinc-400">{filteredAtenderData.length} de {inventoryArteData.length} artes</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-zinc-400">{filteredAtenderData.length} de {inventoryArteData.length} artes</span>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por ID, código, plaza..."
+                    value={inventorySearch}
+                    onChange={(e) => setInventorySearch(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                  />
+                  {inventorySearch && (
+                    <button
+                      onClick={() => setInventorySearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
               <FilterToolbar
                 filters={filtersAtender}
                 showFilters={showFiltersAtender}
@@ -4458,6 +5153,26 @@ export function TareaSeguimientoPage() {
                 )}
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const reservaIds = selectedInventoryItems.flatMap(item =>
+                      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+                    );
+                    if (reservaIds.length > 0) {
+                      assignArteMutation.mutate({ reservaIds, archivo: '' });
+                      setSelectedInventoryIds(new Set());
+                    }
+                  }}
+                  disabled={selectedInventoryIds.size === 0 || assignArteMutation.isPending}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                    selectedInventoryIds.size > 0
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                  }`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Limpiar Arte
+                </button>
                 <button
                   onClick={() => setIsCreateModalOpen(true)}
                   disabled={selectedInventoryIds.size === 0}
@@ -5128,7 +5843,7 @@ export function TareaSeguimientoPage() {
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
-                  {tasks.filter(t => t.estatus === 'pendiente' || t.estatus === 'en_progreso').length} activas
+                  {tasks.length} activas
                 </Badge>
                 <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
                   {completedTasks.length} completadas
@@ -5388,8 +6103,8 @@ export function TareaSeguimientoPage() {
         inventoryData={inventoryArteData}
         artesExistentes={artesExistentes}
         isLoadingArtes={isLoadingArtes}
-        onApprove={(reservaIds) => {
-          updateArteStatusMutation.mutate({ reservaIds, status: 'Aprobado' });
+        onApprove={(reservaIds, comentario) => {
+          updateArteStatusMutation.mutate({ reservaIds, status: 'Aprobado', comentario });
         }}
         onReject={(reservaIds, comentario) => {
           // Primero actualizar el estado a Rechazado
@@ -5413,6 +6128,9 @@ Por favor corrige los artes y vuelve a enviar a revisión.`,
         }}
         onUpdateArte={(reservaIds, archivo) => {
           assignArteMutation.mutate({ reservaIds, archivo });
+        }}
+        onTaskComplete={(taskId) => {
+          updateTareaMutation.mutate({ tareaId: parseInt(taskId), data: { estatus: 'Atendido' } });
         }}
         isUpdating={updateArteStatusMutation.isPending || assignArteMutation.isPending}
         campanaId={campanaId}

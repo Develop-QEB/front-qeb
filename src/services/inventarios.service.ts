@@ -129,4 +129,76 @@ export const inventariosService = {
     }
     return response.data.data;
   },
+
+  async getHistorial(id: number): Promise<{
+    inventario: {
+      id: number;
+      codigo_unico: string;
+      ubicacion: string;
+      mueble: string;
+      plaza: string;
+      estado: string;
+      tipo_de_cara: string;
+      tradicional_digital: string;
+      latitud: number;
+      longitud: number;
+      ancho: number;
+      alto: number;
+    };
+    historial: Array<{
+      reserva_id: number;
+      reserva_estatus: string;
+      archivo: string | null;
+      arte_aprobado: string | null;
+      fecha_reserva: string;
+      instalado: boolean;
+      APS: number | null;
+      inicio_periodo: string;
+      fin_periodo: string;
+      tipo_medio: string;
+      campana_id: number;
+      campana_nombre: string;
+      cliente_nombre: string;
+      numero_catorcena: number;
+      anio_catorcena: number;
+    }>;
+  }> {
+    const response = await api.get<ApiResponse<{
+      inventario: {
+        id: number;
+        codigo_unico: string;
+        ubicacion: string;
+        mueble: string;
+        plaza: string;
+        estado: string;
+        tipo_de_cara: string;
+        tradicional_digital: string;
+        latitud: number;
+        longitud: number;
+        ancho: number;
+        alto: number;
+      };
+      historial: Array<{
+        reserva_id: number;
+        reserva_estatus: string;
+        archivo: string | null;
+        arte_aprobado: string | null;
+        fecha_reserva: string;
+        instalado: boolean;
+        APS: number | null;
+        inicio_periodo: string;
+        fin_periodo: string;
+        tipo_medio: string;
+        campana_id: number;
+        campana_nombre: string;
+        cliente_nombre: string;
+        numero_catorcena: number;
+        anio_catorcena: number;
+      }>;
+    }>>(`/inventarios/${id}/historial`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener historial');
+    }
+    return response.data.data;
+  },
 };
