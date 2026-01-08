@@ -1612,7 +1612,7 @@ function TaskDetailModal({
     FILTER_FIELDS_INVENTARIO.forEach(field => {
       const uniqueSet = new Set<string>();
       taskInventory.forEach(item => {
-        const value = (item as Record<string, unknown>)[field.field];
+        const value = (item as unknown as Record<string, unknown>)[field.field];
         if (value !== null && value !== undefined && value !== '') {
           uniqueSet.add(String(value));
         }
@@ -1634,8 +1634,8 @@ function TaskDetailModal({
     // Aplicar ordenamiento
     if (sortFieldResumen) {
       data.sort((a, b) => {
-        const aVal = (a as Record<string, unknown>)[sortFieldResumen];
-        const bVal = (b as Record<string, unknown>)[sortFieldResumen];
+        const aVal = (a as unknown as Record<string, unknown>)[sortFieldResumen];
+        const bVal = (b as unknown as Record<string, unknown>)[sortFieldResumen];
         const aStr = String(aVal ?? '');
         const bStr = String(bVal ?? '');
         return sortDirectionResumen === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
@@ -1657,8 +1657,8 @@ function TaskDetailModal({
     // Aplicar ordenamiento
     if (sortFieldEditar) {
       data.sort((a, b) => {
-        const aVal = (a as Record<string, unknown>)[sortFieldEditar];
-        const bVal = (b as Record<string, unknown>)[sortFieldEditar];
+        const aVal = (a as unknown as Record<string, unknown>)[sortFieldEditar];
+        const bVal = (b as unknown as Record<string, unknown>)[sortFieldEditar];
         const aStr = String(aVal ?? '');
         const bStr = String(bVal ?? '');
         return sortDirectionEditar === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
