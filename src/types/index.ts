@@ -201,6 +201,7 @@ export interface Propuesta {
   articulo: string;
   updated_at: string | null;
   // Campos adicionales del JOIN
+  cliente_nombre?: string;
   marca_nombre?: string;
   creador_nombre?: string;
   nombre_comercial?: string;
