@@ -56,20 +56,37 @@ const STATIC_URL = API_URL.replace(/\/api$/, '');
 // Helper para normalizar URLs de imágenes
 const getImageUrl = (url: string | undefined | null): string | null => {
   if (!url) return null;
-  
+
   // Si es un data URL (base64), usarlo directamente
   if (url.startsWith('data:')) {
-    
     return url;
   }
-  // Si ya es una URL completa, usarla tal cual
+
+  // Si es una URL completa con localhost, convertirla a la URL del entorno actual
+  if (url.includes('localhost')) {
+    try {
+      const urlObj = new URL(url);
+      const path = urlObj.pathname;
+      return `${STATIC_URL}${path}`;
+    } catch {
+      // Si falla el parseo, extraer el path manualmente
+      const match = url.match(/localhost:\d+(.+)/);
+      if (match) {
+        return `${STATIC_URL}${match[1]}`;
+      }
+    }
+  }
+
+  // Si ya es una URL completa (no localhost), usarla tal cual
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
+
   // Si es una ruta relativa, agregar la URL base
   if (url.startsWith('/')) {
     return `${STATIC_URL}${url}`;
   }
+
   // Si no tiene slash al inicio, agregarlo
   return `${STATIC_URL}/${url}`;
 };
@@ -180,12 +197,13 @@ interface CalendarEvent {
 }
 
 // Tipos para el sistema de decisiones de revisión de artes
-type DecisionArte = 'aprobar' | 'rechazar' | null;
+type DecisionArte = 'aprobar' | 'rechazar' | 'corregir' | null;
 
 interface ArteDecision {
   decision: DecisionArte;
   motivoRechazo?: string; // Usado para rechazo (obligatorio)
   comentarioAprobacion?: string; // Usado para aprobación (opcional)
+  instruccionesCorreccion?: string; // Usado para corregir (obligatorio)
 }
 
 type DecisionesState = Record<string, ArteDecision>;
@@ -1449,6 +1467,7 @@ function TaskDetailModal({
   isLoadingArtes,
   onApprove,
   onReject,
+  onCorrect,
   onUpdateArte,
   onTaskComplete,
   isUpdating,
@@ -1462,6 +1481,7 @@ function TaskDetailModal({
   isLoadingArtes: boolean;
   onApprove: (reservaIds: number[], comentario?: string) => void;
   onReject: (reservaIds: number[], comentario: string) => void;
+  onCorrect: (reservaIds: number[], instrucciones: string) => void;
   onUpdateArte: (reservaIds: number[], archivo: string) => void;
   onTaskComplete: (taskId: string) => void;
   isUpdating: boolean;
@@ -1745,7 +1765,8 @@ function TaskDetailModal({
       [key]: {
         decision: (decision || null) as DecisionArte,
         motivoRechazo: decision !== 'rechazar' ? undefined : prev[key]?.motivoRechazo,
-        comentarioAprobacion: decision !== 'aprobar' ? undefined : prev[key]?.comentarioAprobacion
+        comentarioAprobacion: decision !== 'aprobar' ? undefined : prev[key]?.comentarioAprobacion,
+        instruccionesCorreccion: decision !== 'corregir' ? undefined : prev[key]?.instruccionesCorreccion
       }
     }));
     setValidationErrors([]);
@@ -1765,6 +1786,13 @@ function TaskDetailModal({
     }));
   };
 
+  const handleInstruccionesCorreccionChange = (key: string, instrucciones: string) => {
+    setDecisiones(prev => ({
+      ...prev,
+      [key]: { ...prev[key], instruccionesCorreccion: instrucciones }
+    }));
+  };
+
   const validarDecisiones = (): boolean => {
     const errors: string[] = [];
     Object.keys(groupedInventory).forEach(key => {
@@ -1773,6 +1801,8 @@ function TaskDetailModal({
         errors.push(`Falta seleccionar acción para: ${key}`);
       } else if (decision.decision === 'rechazar' && !decision.motivoRechazo?.trim()) {
         errors.push(`Falta motivo de rechazo para: ${key}`);
+      } else if (decision.decision === 'corregir' && !decision.instruccionesCorreccion?.trim()) {
+        errors.push(`Falta instrucciones de corrección para: ${key}`);
       }
     });
     setValidationErrors(errors);
@@ -1786,6 +1816,7 @@ function TaskDetailModal({
     try {
       const aprobados: { ids: number[]; comentario: string; items: InventoryRow[] }[] = [];
       const rechazados: { ids: number[]; motivo: string; items: InventoryRow[] }[] = [];
+      const correcciones: { ids: number[]; instrucciones: string; items: InventoryRow[] }[] = [];
 
       Object.entries(groupedInventory).forEach(([key, items]) => {
         const d = decisiones[key];
@@ -1798,6 +1829,9 @@ function TaskDetailModal({
         }
         if (d?.decision === 'rechazar') {
           rechazados.push({ ids, motivo: d.motivoRechazo || '', items });
+        }
+        if (d?.decision === 'corregir') {
+          correcciones.push({ ids, instrucciones: d.instruccionesCorreccion || '', items });
         }
       });
 
@@ -1820,6 +1854,16 @@ function TaskDetailModal({
         ).join('\n\n---\n\n');
 
         onReject(todosIds, descripcion);
+      }
+
+      // Enviar a corrección (sin rechazar) con instrucciones
+      if (correcciones.length > 0) {
+        const todosIds = correcciones.flatMap(c => c.ids);
+        const descripcion = correcciones.map(c =>
+          `**${c.items.map(i => i.codigo_unico).join(', ')}:**\n${c.instrucciones}`
+        ).join('\n\n---\n\n');
+
+        onCorrect(todosIds, descripcion);
       }
 
       // Marcar la tarea como completada (Atendido)
@@ -2608,11 +2652,14 @@ function TaskDetailModal({
                                   ? 'border-amber-500/50 text-amber-400'
                                   : decisiones[groupKey]?.decision === 'aprobar'
                                   ? 'border-green-500/50 text-green-400'
+                                  : decisiones[groupKey]?.decision === 'corregir'
+                                  ? 'border-orange-500/50 text-orange-400'
                                   : 'border-red-500/50 text-red-400'
                               }`}
                             >
                               <option value="">-- Seleccionar acción --</option>
                               <option value="aprobar">✓ Aprobar</option>
+                              <option value="corregir">⟳ Corregir</option>
                               <option value="rechazar">✗ Rechazar</option>
                             </select>
                           </div>
@@ -2624,6 +2671,22 @@ function TaskDetailModal({
                                 value={decisiones[groupKey]?.comentarioAprobacion || ''}
                                 onChange={(e) => handleComentarioAprobacionChange(groupKey, e.target.value)}
                                 className="w-full px-3 py-2 text-sm rounded-lg bg-zinc-800 border border-zinc-700 resize-none"
+                                rows={2}
+                              />
+                            </div>
+                          )}
+                          {/* Textarea para instrucciones de corrección (obligatorio) */}
+                          {decisiones[groupKey]?.decision === 'corregir' && (
+                            <div className="mt-2">
+                              <textarea
+                                placeholder="Escribe las instrucciones de corrección (obligatorio)"
+                                value={decisiones[groupKey]?.instruccionesCorreccion || ''}
+                                onChange={(e) => handleInstruccionesCorreccionChange(groupKey, e.target.value)}
+                                className={`w-full px-3 py-2 text-sm rounded-lg bg-zinc-800 border resize-none ${
+                                  !decisiones[groupKey]?.instruccionesCorreccion?.trim()
+                                    ? 'border-orange-500/50'
+                                    : 'border-zinc-700'
+                                }`}
                                 rows={2}
                               />
                             </div>
@@ -3769,6 +3832,7 @@ export function TareaSeguimientoPage() {
   const [showSortAtender, setShowSortAtender] = useState(false);
   const [expandedGroupsAtender, setExpandedGroupsAtender] = useState<Set<string>>(new Set());
   const [activeEstadoArteTab, setActiveEstadoArteTab] = useState<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado'>('sin_revisar');
+  const [hasAutoSelectedEstadoArteTab, setHasAutoSelectedEstadoArteTab] = useState(false);
 
   // --- Validar Instalación (testigo) ---
   const [filtersTestigo, setFiltersTestigo] = useState<FilterCondition[]>([]);
@@ -3887,6 +3951,41 @@ export function TareaSeguimientoPage() {
     inventarioTestigosAPI.length,
   ]);
 
+  // ---- Determinar tab de estado_arte inicial basado en contenido ----
+  useEffect(() => {
+    // Solo auto-seleccionar una vez cuando los datos estén disponibles
+    if (hasAutoSelectedEstadoArteTab) return;
+    if (!isFetchedConArte || inventarioArteAPI.length === 0) return;
+
+    // Contar items por estado
+    const counts = {
+      sin_revisar: 0,
+      en_revision: 0,
+      aprobado: 0,
+      rechazado: 0,
+    };
+
+    inventarioArteAPI.forEach(item => {
+      const arteAprobadoLower = (item.arte_aprobado || '').toLowerCase();
+      if (arteAprobadoLower === 'aprobado') counts.aprobado++;
+      else if (arteAprobadoLower === 'rechazado') counts.rechazado++;
+      else if (arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisión') counts.en_revision++;
+      // 'Pendiente' o vacío = sin_revisar
+      else counts.sin_revisar++;
+    });
+
+    // Seleccionar el primer tab con contenido (de izquierda a derecha)
+    const tabOrder: Array<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado'> = ['sin_revisar', 'en_revision', 'aprobado', 'rechazado'];
+    for (const tab of tabOrder) {
+      if (counts[tab] > 0) {
+        setActiveEstadoArteTab(tab);
+        break;
+      }
+    }
+
+    setHasAutoSelectedEstadoArteTab(true);
+  }, [hasAutoSelectedEstadoArteTab, isFetchedConArte, inventarioArteAPI]);
+
   // ---- Error State ----
   const [uploadArtError, setUploadArtError] = useState<string | null>(null);
   const [createTaskError, setCreateTaskError] = useState<string | null>(null);
@@ -3896,10 +3995,10 @@ export function TareaSeguimientoPage() {
     mutationFn: ({ reservaIds, archivo }: { reservaIds: number[]; archivo: string }) =>
       campanasService.assignArte(campanaId, reservaIds, archivo),
     onSuccess: () => {
-      // Refetch forzado de todos los queries de inventario
-      queryClient.refetchQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
-      queryClient.refetchQueries({ queryKey: ['campana-inventario-arte'], exact: false });
-      queryClient.refetchQueries({ queryKey: ['campana-artes-existentes'], exact: false });
+      // Invalidar todos los queries de inventario para forzar recarga cuando se activen
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
       if (isUploadArtModalOpen) {
         setIsUploadArtModalOpen(false);
         setSelectedInventoryIds(new Set());
@@ -4085,9 +4184,11 @@ export function TareaSeguimientoPage() {
 
     if (arteAprobadoLower === 'aprobado') estadoArte = 'aprobado';
     else if (arteAprobadoLower === 'rechazado') estadoArte = 'rechazado';
-    else if (arteAprobadoLower === 'pendiente' || arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisión') estadoArte = 'en_revision';
+    else if (arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisión') estadoArte = 'en_revision';
     // Si tiene tarea activa asignada, es "en_revision"
     else if (tieneTaskActiva) estadoArte = 'en_revision';
+    // 'Pendiente' o sin estado = sin_revisar (esperando que se cree una tarea)
+    else if (arteAprobadoLower === 'pendiente' || arteAprobadoLower === '') estadoArte = 'sin_revisar';
     // Si no tiene ninguno de los estados anteriores, se queda con defaultArteStatus (sin_revisar)
 
     // Mapear tarea/estatus a estado_tarea
@@ -4138,18 +4239,39 @@ export function TareaSeguimientoPage() {
   }, [tareasAPI]);
 
   // Transform inventario SIN arte para tab "Subir Artes"
+  // Incluye de-duplicación por ID de inventario para evitar claves duplicadas en React
   const inventorySinArteData = useMemo((): InventoryRow[] => {
-    return inventarioSinArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar'));
+    const rows = inventarioSinArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar'));
+    const seen = new Set<string>();
+    return rows.filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
   }, [inventarioSinArteAPI, transformInventarioToRow]);
 
   // Transform inventario con arte para tab "Atender arte"
+  // Incluye de-duplicación por ID de inventario para evitar claves duplicadas en React
   const inventoryArteData = useMemo((): InventoryRow[] => {
-    return inventarioArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar', tareasActivasRsvIds));
+    const rows = inventarioArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar', tareasActivasRsvIds));
+    const seen = new Set<string>();
+    return rows.filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
   }, [inventarioArteAPI, transformInventarioToRow, tareasActivasRsvIds]);
 
   // Transform inventario para testigos (tab "Validar Instalación")
+  // Incluye de-duplicación por ID de inventario para evitar claves duplicadas en React
   const inventoryTestigosData = useMemo((): InventoryRow[] => {
-    return inventarioTestigosAPI.map((item) => transformInventarioToRow(item, 'aprobado'));
+    const rows = inventarioTestigosAPI.map((item) => transformInventarioToRow(item, 'aprobado'));
+    const seen = new Set<string>();
+    return rows.filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
   }, [inventarioTestigosAPI, transformInventarioToRow]);
 
   // ========== DATOS FILTRADOS Y ORDENADOS ==========
@@ -6119,6 +6241,26 @@ export function TareaSeguimientoPage() {
 ${comentario || 'Sin motivo especificado'}
 
 Por favor corrige los artes y vuelve a enviar a revisión.`,
+                  tipo: 'Correccion',
+                  asignado: selectedTask.creador,
+                  ids_reservas: reservaIds.join(','),
+                });
+              }
+            });
+        }}
+        onCorrect={(reservaIds, instrucciones) => {
+          // Establecer estado a Pendiente (no Rechazado) y crear tarea de corrección
+          updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Pendiente', comentario: instrucciones })
+            .then(() => {
+              // Crear tarea de corrección para el creador original
+              if (selectedTask && selectedTask.creador) {
+                createTareaMutation.mutate({
+                  titulo: `Corrección de artes - Ajustes necesarios`,
+                  descripcion: `Se requieren ajustes en los artes:
+
+${instrucciones || 'Sin instrucciones especificadas'}
+
+Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
                   tipo: 'Correccion',
                   asignado: selectedTask.creador,
                   ids_reservas: reservaIds.join(','),
