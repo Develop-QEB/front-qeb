@@ -956,7 +956,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       id: `${Date.now()}-${Math.random()}`,
       articulo: newCara.articulo,
       estado: newCara.estado,
-      ciudades: newCara.ciudades.length > 0 ? newCara.ciudades : ['Todas'],
+      ciudades: newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades,
       formato: newCara.formato,
       tipo: newCara.tipo,
       nse: newCara.nse,
@@ -1379,7 +1379,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-6">
           {/* Step 1: Cliente */}
           {step === 1 && (
             <div className="space-y-6">
@@ -2117,7 +2117,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           <div className="flex items-center justify-between px-4 py-3 bg-zinc-800/30">
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-white">Catorcena {cat} / {year}</span>
-                              <span className="text-xs text-zinc-500">({items.length} caras)</span>
+                              <span className="text-xs text-zinc-500">({Object.keys(byArticulo).length} artículos)</span>
                             </div>
                             <div className="flex items-center gap-4 text-sm">
                               <span className="text-zinc-400">{groupRenta} renta</span>

@@ -222,6 +222,20 @@ export const solicitudesService = {
     }
     return response.data.data;
   },
+
+  async uploadArchivo(id: number, file: File): Promise<{ url: string }> {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    const response = await api.post<ApiResponse<{ url: string }>>(`/solicitudes/${id}/archivo`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al subir archivo');
+    }
+    return response.data.data;
+  },
 };
 
 // Types for full details

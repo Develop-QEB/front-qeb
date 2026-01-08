@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, Check, Users, Building2,
-  Package, Calendar, FileText, MapPin, RefreshCw, Save, Loader2, Edit3
+  Package, Calendar, FileText, MapPin, RefreshCw, Save, Loader2, Edit3, Upload, File
 } from 'lucide-react';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { formatCurrency } from '../../lib/utils';
@@ -287,6 +287,11 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
   const [descripcion, setDescripcion] = useState('');
   const [notas, setNotas] = useState('');
 
+  // File state
+  const [existingFile, setExistingFile] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
   // Editable client fields (after CUIC selection)
   const [editableAsesor, setEditableAsesor] = useState('');
   const [editableRazonSocial, setEditableRazonSocial] = useState('');
@@ -453,6 +458,15 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
     return [];
   }, [formatosByCiudades, newCaraForm.ciudades]);
 
+  // Filter cities by estado for new cara
+  const filteredCiudadesForNewCara = useMemo(() => {
+    if (!inventarioFilters?.ciudades || !newCaraForm.estado) return [];
+    return inventarioFilters.ciudades
+      .filter(c => c.estado === newCaraForm.estado)
+      .map(c => c.ciudad)
+      .filter((c): c is string => !!c);
+  }, [inventarioFilters, newCaraForm.estado]);
+
   // Update editable fields when CUIC changes
   useEffect(() => {
     if (selectedCuic) {
@@ -482,6 +496,11 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
       setNombreCampania(solicitudData.cotizacion?.nombre_campania || '');
       setDescripcion(sol.descripcion || '');
       setNotas(sol.notas || '');
+
+      // Load existing file
+      if (sol.archivo) {
+        setExistingFile(sol.archivo);
+      }
 
       // Load asignados
       if (sol.id_asignado && sol.asignado) {
@@ -573,7 +592,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
       tempId: `new-${Date.now()}-${Math.random()}`,
       articulo: newCaraForm.articulo,
       estado: newCaraForm.estado,
-      ciudades: newCaraForm.ciudades.length > 0 ? newCaraForm.ciudades : ['Todas'],
+      ciudades: newCaraForm.ciudades.length > 0 ? newCaraForm.ciudades : filteredCiudadesForNewCara,
       formato: newCaraForm.formato,
       tipo: newCaraForm.tipo,
       nse: newCaraForm.nse,
@@ -620,14 +639,32 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
     return { renta, bonif, inversion, totalCaras, tarifaEfectiva };
   }, [existingTotals, newTotals]);
 
+  // ====== FILE UPLOAD MUTATION ======
+  const uploadFileMutation = useMutation({
+    mutationFn: async (file: File) => solicitudesService.uploadArchivo(solicitudId!, file),
+    onSuccess: (data) => {
+      if (data.url) {
+        setExistingFile(data.url);
+      }
+    },
+  });
+
   // ====== UPDATE MUTATION ======
   const updateMutation = useMutation({
     mutationFn: async (data: any) => solicitudesService.update(solicitudId!, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
-      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['solicitud-edit', solicitudId] });
-      queryClient.invalidateQueries({ queryKey: ['solicitud-details', solicitudId] });
+    onSuccess: async () => {
+      // Upload file if selected
+      if (selectedFile) {
+        await uploadFileMutation.mutateAsync(selectedFile);
+      }
+      // Invalidate all related queries with refetchType 'all' to ensure updates
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['solicitudes'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['solicitud-edit', solicitudId], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['solicitud-details', solicitudId], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['solicitud-full', solicitudId], refetchType: 'all' }),
+      ]);
       onClose();
     },
   });
@@ -652,6 +689,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
         caras_flujo: Math.ceil(c.caras / 2),
         caras_contraflujo: Math.floor(c.caras / 2),
         descuento: c.caras > 0 ? (c.bonificacion / (c.caras + c.bonificacion)) * 100 : 0,
+        articulo: c.articulo || '',
       })),
       ...newCaras.map(c => ({
         ciudad: c.ciudades.join(', '),
@@ -669,6 +707,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
         caras_flujo: Math.ceil(c.renta / 2),
         caras_contraflujo: Math.floor(c.renta / 2),
         descuento: c.renta > 0 ? (c.bonificacion / (c.renta + c.bonificacion)) * 100 : 0,
+        articulo: c.articulo.ItemCode,
       })),
     ];
 
@@ -733,7 +772,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-6">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
@@ -789,6 +828,69 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                       <label className="text-xs text-zinc-500">Notas</label>
                       <input type="text" value={notas} onChange={(e) => setNotas(e.target.value)}
                         className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
+                    </div>
+                    {/* File Upload Section */}
+                    <div>
+                      <label className="text-xs text-zinc-500 mb-2 block">Archivo (opcional)</label>
+                      {existingFile && !selectedFile ? (
+                        <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                          <File className="h-5 w-5 text-emerald-400" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-emerald-300 truncate">
+                              {existingFile.split('/').pop()}
+                            </p>
+                            <a
+                              href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}${existingFile}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-emerald-400 hover:text-emerald-300 underline"
+                            >
+                              Ver archivo
+                            </a>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-3 py-1.5 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
+                          >
+                            Cambiar
+                          </button>
+                        </div>
+                      ) : selectedFile ? (
+                        <div className="flex items-center gap-3 p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg">
+                          <Upload className="h-5 w-5 text-violet-400" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-violet-300 truncate">{selectedFile.name}</p>
+                            <p className="text-xs text-zinc-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedFile(null)}
+                            className="p-1.5 hover:bg-red-500/20 rounded text-red-400"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-zinc-700 hover:border-violet-500/50 rounded-lg text-zinc-400 hover:text-violet-300 transition-colors"
+                        >
+                          <Upload className="h-4 w-4" />
+                          <span className="text-sm">Seleccionar archivo</span>
+                        </button>
+                      )}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) setSelectedFile(file);
+                        }}
+                        className="hidden"
+                      />
                     </div>
                   </div>
                 </div>

@@ -424,6 +424,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     yearFin: undefined as number | undefined,
     catorcenaInicio: undefined as number | undefined,
     catorcenaFin: undefined as number | undefined,
+    asignadosIds: '' as string,
   });
   const [isUpdatingPropuesta, setIsUpdatingPropuesta] = useState(false);
 
@@ -692,6 +693,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         yearFin: yFin,
         catorcenaInicio: cInicio,
         catorcenaFin: cFin,
+        asignadosIds: propuesta.id_asignado || '',
       });
 
       // Set caras from solicitud
@@ -743,6 +745,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   }, [caras]);
 
   // Detect if there are unsaved changes
+  const currentAsignadosIds = asignados.map(u => u.id).join(',');
   const hasChanges = useMemo(() => {
     return (
       nombreCampania !== initialValues.nombreCampania ||
@@ -751,14 +754,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       yearInicio !== initialValues.yearInicio ||
       yearFin !== initialValues.yearFin ||
       catorcenaInicio !== initialValues.catorcenaInicio ||
-      catorcenaFin !== initialValues.catorcenaFin
+      catorcenaFin !== initialValues.catorcenaFin ||
+      currentAsignadosIds !== initialValues.asignadosIds
     );
-  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, initialValues]);
+  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, initialValues]);
 
   // Handle update propuesta
   const handleUpdatePropuesta = async () => {
     setIsUpdatingPropuesta(true);
     try {
+      // Update propuesta data
       await propuestasService.updatePropuesta(propuesta.id, {
         nombre_campania: nombreCampania,
         notas,
@@ -769,6 +774,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         catorcena_fin: catorcenaFin,
       });
 
+      // Update asignados if changed
+      const newAsignadosIds = asignados.map(u => u.id).join(',');
+      if (newAsignadosIds !== initialValues.asignadosIds) {
+        const asignadosStr = asignados.map(u => u.nombre).join(', ');
+        await propuestasService.updateAsignados(propuesta.id, asignadosStr, newAsignadosIds);
+      }
+
       // Update initial values to current values
       setInitialValues({
         nombreCampania,
@@ -778,9 +790,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         yearFin,
         catorcenaInicio,
         catorcenaFin,
+        asignadosIds: newAsignadosIds,
       });
 
       queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
       alert('Propuesta actualizada correctamente');
     } catch (error) {
       console.error('Error updating propuesta:', error);
@@ -1219,8 +1233,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     // Fetch disponibles based on cara characteristics (gets all, filter in frontend)
     setIsSearching(true);
     try {
+      // If ciudad has many cities (more than 3), just filter by state only
+      // This handles the case where all cities from a state are auto-selected
+      let ciudadFilter = cara.ciudad || undefined;
+      if (ciudadFilter) {
+        const ciudadCount = ciudadFilter.split(',').length;
+        if (ciudadCount > 3) {
+          // Too many cities - just use state filter for broader search
+          ciudadFilter = undefined;
+        }
+      }
+
       const response = await inventariosService.getDisponibles({
-        ciudad: cara.ciudad || undefined,
+        ciudad: ciudadFilter,
         estado: cara.estados || undefined,
         formato: cara.formato || undefined,
         // Don't filter by flujo in backend - get all and filter in frontend
@@ -1245,8 +1270,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
     setIsSearching(true);
     try {
+      // If ciudad has many cities (more than 3), just filter by state only
+      let ciudadFilter = selectedCaraForSearch.ciudad || undefined;
+      if (ciudadFilter) {
+        const ciudadCount = ciudadFilter.split(',').length;
+        if (ciudadCount > 3) {
+          ciudadFilter = undefined;
+        }
+      }
+
       const response = await inventariosService.getDisponibles({
-        ciudad: selectedCaraForSearch.ciudad || undefined,
+        ciudad: ciudadFilter,
         estado: selectedCaraForSearch.estados || undefined,
         formato: selectedCaraForSearch.formato || undefined,
         // Don't filter by flujo in backend - get all and filter in frontend
@@ -3052,25 +3086,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs text-zinc-500">Asignados</label>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const asignadosStr = asignados.map(u => u.nombre).join(', ');
-                              const idsStr = asignados.map(u => u.id).join(',');
-                              await propuestasService.updateAsignados(propuesta.id, asignadosStr, idsStr);
-                              alert('Asignados actualizados correctamente');
-                            } catch (error) {
-                              alert('Error al actualizar asignados');
-                            }
-                          }}
-                          className="flex items-center gap-1 px-2 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 rounded text-xs transition-colors"
-                        >
-                          <Save className="h-3 w-3" />
-                          Guardar
-                        </button>
-                      </div>
+                      <label className="text-xs text-zinc-500">Asignados</label>
                       <div className="flex flex-wrap gap-1.5 min-h-[38px] p-2 bg-zinc-800 border border-zinc-700 rounded-lg">
                         {asignados.length === 0 ? (
                           <span className="text-zinc-500 text-sm">Sin asignar</span>
@@ -3204,7 +3220,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       {archivoPropuesta ? (
                         <div className="flex items-center gap-2">
                           <a
-                            href={archivoPropuesta}
+                            href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}${archivoPropuesta}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs hover:bg-emerald-500/30 transition-colors"
@@ -3212,6 +3228,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                             <FileText className="h-3.5 w-3.5" />
                             Ver Archivo
                           </a>
+                          <span className="text-zinc-500 text-xs truncate max-w-[120px]" title={archivoPropuesta.split('/').pop()}>
+                            {archivoPropuesta.split('/').pop()}
+                          </span>
                           <button
                             onClick={() => archivoInputRef.current?.click()}
                             className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700/50 text-zinc-300 border border-zinc-600 rounded-lg text-xs hover:bg-zinc-700 transition-colors"
@@ -3581,21 +3600,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                   className="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-zinc-800/30 transition-colors"
                                   onClick={() => toggleCara(cara.localId)}
                                 >
-                                  {/* Completion indicator with difference badge */}
-                                  <div className="relative">
-                                    <div className={`w-2 h-2 rounded-full ${
-                                      statusColor === 'emerald' ? 'bg-emerald-500' :
-                                      statusColor === 'amber' ? 'bg-amber-500 animate-pulse' :
-                                      'bg-red-500 animate-pulse'
-                                    }`} />
-                                    {status.totalDiff !== 0 && (
-                                      <div className={`absolute -top-2 -right-3 px-1.5 py-0.5 text-[9px] font-bold rounded ${
-                                        status.totalDiff > 0 ? 'bg-amber-500 text-amber-950' : 'bg-red-500 text-white'
-                                      }`}>
-                                        {status.totalDiff > 0 ? `+${status.totalDiff}` : status.totalDiff}
-                                      </div>
-                                    )}
-                                  </div>
+                                  {/* Completion indicator */}
+                                  <div className={`w-2 h-2 rounded-full ${
+                                    statusColor === 'emerald' ? 'bg-emerald-500' :
+                                    statusColor === 'amber' ? 'bg-amber-500 animate-pulse' :
+                                    'bg-red-500 animate-pulse'
+                                  }`} />
 
                                   <button className="text-zinc-400 ml-2">
                                     {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
