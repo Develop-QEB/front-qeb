@@ -393,10 +393,14 @@ export function InventariosPage() {
                                 <div className="flex-shrink-0 text-center">
                                   <p className="text-xs text-zinc-500 mb-1">Arte</p>
                                   <img
-                                    src={item.archivo.startsWith('http') ? item.archivo : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${item.archivo}`}
+                                    src={item.archivo?.startsWith('http') ? item.archivo : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${item.archivo}`}
                                     alt="Arte"
                                     className="w-16 h-16 object-cover rounded-lg cursor-pointer hover:opacity-80"
-                                    onClick={() => window.open(item.archivo.startsWith('http') ? item.archivo : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${item.archivo}`, '_blank')}
+                                    onClick={() => {
+                                      if (item.archivo) {
+                                        window.open(item.archivo.startsWith('http') ? item.archivo : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${item.archivo}`, '_blank');
+                                      }
+                                    }}
                                   />
                                 </div>
                               )}
