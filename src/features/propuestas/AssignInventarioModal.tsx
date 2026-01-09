@@ -950,8 +950,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
   }, [caras, catorcenasData]);
 
-  // Years options
-  const years = catorcenasData?.years || [];
+  // Years options (filtered like EditSolicitudModal)
+  const yearInicioOptions = useMemo(() => {
+    if (!catorcenasData?.years) return [];
+    if (yearFin) return catorcenasData.years.filter(y => y <= yearFin);
+    return catorcenasData.years;
+  }, [catorcenasData, yearFin]);
+
+  const yearFinOptions = useMemo(() => {
+    if (!catorcenasData?.years) return [];
+    if (yearInicio) return catorcenasData.years.filter(y => y >= yearInicio);
+    return catorcenasData.years;
+  }, [catorcenasData, yearInicio]);
+
+  const catorcenasInicioOptions = useMemo(() => {
+    if (!catorcenasData?.data || !yearInicio) return [];
+    const cats = catorcenasData.data.filter(c => c.a_o === yearInicio);
+    if (yearInicio === yearFin && catorcenaFin) return cats.filter(c => c.numero_catorcena <= catorcenaFin);
+    return cats;
+  }, [catorcenasData, yearInicio, yearFin, catorcenaFin]);
+
+  const catorcenasFinOptions = useMemo(() => {
+    if (!catorcenasData?.data || !yearFin) return [];
+    const cats = catorcenasData.data.filter(c => c.a_o === yearFin);
+    if (yearInicio === yearFin && catorcenaInicio) return cats.filter(c => c.numero_catorcena >= catorcenaInicio);
+    return cats;
+  }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
 
   // Available periods based on year range
   const availablePeriods = useMemo(() => {
@@ -3085,30 +3109,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         placeholder="Nombre de la campaña"
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       <label className="text-xs text-zinc-500">Asignados</label>
-                      <div className="flex flex-wrap gap-1.5 min-h-[38px] p-2 bg-zinc-800 border border-zinc-700 rounded-lg">
-                        {asignados.length === 0 ? (
-                          <span className="text-zinc-500 text-sm">Sin asignar</span>
-                        ) : (
-                          asignados.map(user => (
-                            <span
-                              key={user.id}
-                              className="inline-flex items-center gap-1.5 px-2 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg text-xs"
-                            >
-                              <span className="font-medium">{user.nombre}</span>
-                              <span className="text-purple-400/70 text-[10px] px-1 py-0.5 bg-purple-500/10 rounded">{user.area || 'Sin área'}</span>
-                              <button
-                                onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
-                                className="hover:text-white ml-0.5"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </span>
-                          ))
-                        )}
-                      </div>
-                      {/* User selector dropdown */}
+                      {/* Add user button */}
                       <select
                         value=""
                         onChange={(e) => {
@@ -3118,41 +3121,61 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                             setAsignados(prev => [...prev, selectedUser]);
                           }
                         }}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                       >
                         <option value="">+ Agregar asignado...</option>
                         {users?.filter((u: UserOption) => !asignados.find(a => a.id === u.id)).map((u: UserOption) => (
                           <option key={u.id} value={u.id}>{u.nombre} - {u.area}</option>
                         ))}
                       </select>
+                      {/* Selected users tags */}
+                      {asignados.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {asignados.map(user => (
+                            <span
+                              key={user.id}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-xs"
+                            >
+                              {user.nombre}
+                              <button
+                                onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
+                                className="hover:text-white"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Period */}
+                  {/* Period - Same style as EditSolicitudModal */}
                   <div className="grid grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs text-zinc-500">Año Inicio</label>
                       <select
                         value={yearInicio || ''}
-                        onChange={(e) => setYearInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        onChange={(e) => { setYearInicio(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaInicio(undefined); }}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                       >
                         <option value="">Seleccionar</option>
-                        {years.map(y => (
+                        {yearInicioOptions.map(y => (
                           <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Catorcena Inicio</label>
+                      <label className="text-xs text-zinc-500">Cat. Inicio</label>
                       <select
                         value={catorcenaInicio || ''}
                         onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        disabled={!yearInicio}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
                       >
                         <option value="">Seleccionar</option>
-                        {Array.from({ length: 26 }, (_, i) => i + 1).map(c => (
-                          <option key={c} value={c}>{c}</option>
+                        {catorcenasInicioOptions.map(c => (
+                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
                         ))}
                       </select>
                     </div>
@@ -3160,25 +3183,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       <label className="text-xs text-zinc-500">Año Fin</label>
                       <select
                         value={yearFin || ''}
-                        onChange={(e) => setYearFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        onChange={(e) => { setYearFin(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaFin(undefined); }}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                       >
                         <option value="">Seleccionar</option>
-                        {years.map(y => (
+                        {yearFinOptions.map(y => (
                           <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Catorcena Fin</label>
+                      <label className="text-xs text-zinc-500">Cat. Fin</label>
                       <select
                         value={catorcenaFin || ''}
                         onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        disabled={!yearFin}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
                       >
                         <option value="">Seleccionar</option>
-                        {Array.from({ length: 26 }, (_, i) => i + 1).map(c => (
-                          <option key={c} value={c}>{c}</option>
+                        {catorcenasFinOptions.map(c => (
+                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
                         ))}
                       </select>
                     </div>
@@ -3206,49 +3230,54 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     </div>
                   </div>
 
-                  {/* Archivo and Update Button */}
-                  <div className="flex items-center justify-between pt-2 border-t border-zinc-700/30">
-                    {/* Archivo section */}
-                    <div className="flex items-center gap-3">
-                      <input
-                        ref={archivoInputRef}
-                        type="file"
-                        className="hidden"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                        onChange={handleArchivoUpload}
-                      />
-                      {archivoPropuesta ? (
-                        <div className="flex items-center gap-2">
+                  {/* Archivo section - Same style as EditSolicitudModal */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-zinc-500">Archivo (opcional)</label>
+                    <input
+                      ref={archivoInputRef}
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                      onChange={handleArchivoUpload}
+                    />
+                    {archivoPropuesta ? (
+                      <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                        <FileText className="h-5 w-5 text-emerald-400" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-emerald-300 truncate">
+                            {archivoPropuesta.split('/').pop()}
+                          </p>
                           <a
                             href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}${archivoPropuesta}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs hover:bg-emerald-500/30 transition-colors"
+                            className="text-xs text-emerald-400 hover:text-emerald-300 underline"
                           >
-                            <FileText className="h-3.5 w-3.5" />
-                            Ver Archivo
+                            Ver archivo
                           </a>
-                          <span className="text-zinc-500 text-xs truncate max-w-[120px]" title={archivoPropuesta.split('/').pop()}>
-                            {archivoPropuesta.split('/').pop()}
-                          </span>
-                          <button
-                            onClick={() => archivoInputRef.current?.click()}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700/50 text-zinc-300 border border-zinc-600 rounded-lg text-xs hover:bg-zinc-700 transition-colors"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            Cambiar
-                          </button>
                         </div>
-                      ) : (
                         <button
+                          type="button"
                           onClick={() => archivoInputRef.current?.click()}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700/50 text-zinc-300 border border-zinc-600 rounded-lg text-xs hover:bg-zinc-700 transition-colors"
+                          className="px-3 py-1.5 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
                         >
-                          <Download className="h-3.5 w-3.5" />
-                          Subir Archivo
+                          Cambiar
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => archivoInputRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-zinc-700 hover:border-violet-500/50 rounded-lg text-zinc-400 hover:text-violet-300 transition-colors"
+                      >
+                        <Download className="h-4 w-4" />
+                        <span className="text-sm">Seleccionar archivo</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Update button */}
+                  <div className="flex justify-end pt-2 border-t border-zinc-700/30">
 
                     {/* Update button - shows when there are changes */}
                     {hasChanges && (
