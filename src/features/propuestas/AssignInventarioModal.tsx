@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, Download, Eye
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
@@ -167,7 +167,102 @@ interface ReservaItem {
   ubicacion?: string | null;
   solicitudCaraId?: number; // For linking to cara
   reservaId?: number; // For existing reservas from DB
+  grupo_completo_id?: number | null; // For grouping complete groups
 }
+
+// ============ ADVANCED FILTERS SYSTEM (copied from CampanaDetailPage) ============
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
+
+interface FilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: string;
+  label: string;
+  type: 'string' | 'number';
+}
+
+// Campos para filtrar reservas
+const FILTER_FIELDS_RESERVAS: FilterFieldConfig[] = [
+  { field: 'codigo_unico', label: 'Código', type: 'string' },
+  { field: 'tipo', label: 'Tipo', type: 'string' },
+  { field: 'plaza', label: 'Plaza', type: 'string' },
+  { field: 'formato', label: 'Formato', type: 'string' },
+  { field: 'catorcena', label: 'Catorcena', type: 'number' },
+  { field: 'anio', label: 'Año', type: 'number' },
+];
+
+// Operadores disponibles
+const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
+  { value: '=', label: 'Igual a', forTypes: ['string', 'number'] },
+  { value: '!=', label: 'Diferente de', forTypes: ['string', 'number'] },
+  { value: 'contains', label: 'Contiene', forTypes: ['string'] },
+  { value: 'not_contains', label: 'No contiene', forTypes: ['string'] },
+  { value: '>', label: 'Mayor que', forTypes: ['number'] },
+  { value: '<', label: 'Menor que', forTypes: ['number'] },
+  { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
+  { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
+];
+
+// Opciones de agrupación (soporta múltiples niveles)
+type GroupByFieldReservas = 'catorcena' | 'tipo' | 'plaza' | 'formato' | 'grupo';
+interface GroupConfigReservas {
+  field: GroupByFieldReservas;
+  label: string;
+}
+
+const AVAILABLE_GROUPINGS_RESERVAS: GroupConfigReservas[] = [
+  { field: 'catorcena', label: 'Catorcena' },
+  { field: 'tipo', label: 'Tipo' },
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'formato', label: 'Formato' },
+  { field: 'grupo', label: 'Grupo Completo' },
+];
+
+// Función para aplicar filtros a los datos
+function applyFiltersReservas<T>(data: T[], filters: FilterCondition[]): T[] {
+  if (filters.length === 0) return data;
+
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = (item as Record<string, unknown>)[filter.field];
+      const filterValue = filter.value;
+
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+
+      switch (filter.operator) {
+        case '=':
+          return strValue === strFilterValue;
+        case '!=':
+          return strValue !== strFilterValue;
+        case 'contains':
+          return strValue.includes(strFilterValue);
+        case 'not_contains':
+          return !strValue.includes(strFilterValue);
+        case '>':
+          return Number(fieldValue) > Number(filterValue);
+        case '<':
+          return Number(fieldValue) < Number(filterValue);
+        case '>=':
+          return Number(fieldValue) >= Number(filterValue);
+        case '<=':
+          return Number(fieldValue) <= Number(filterValue);
+        default:
+          return true;
+      }
+    });
+  });
+}
+// ============ END ADVANCED FILTERS SYSTEM ============
 
 // View states for the modal
 type ViewState = 'main' | 'search-inventory';
@@ -456,6 +551,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const [editingFormato, setEditingFormato] = useState('');
   const [reservadosTipoFilter, setReservadosTipoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo' | 'Bonificacion'>('Todos');
   const [reservadosSortColumn, setReservadosSortColumn] = useState<'codigo' | 'tipo' | 'formato' | 'ciudad'>('ciudad');
+  // Reservas summary states - Advanced Filter System
+  const [filtersReservas, setFiltersReservas] = useState<FilterCondition[]>([]);
+  const [showFiltersReservas, setShowFiltersReservas] = useState(false);
+  const [activeGroupingsReservas, setActiveGroupingsReservas] = useState<GroupByFieldReservas[]>(['catorcena']);
+  const [showGroupingConfigReservas, setShowGroupingConfigReservas] = useState(false);
+  const [sortFieldReservas, setSortFieldReservas] = useState<string | null>(null);
+  const [sortDirectionReservas, setSortDirectionReservas] = useState<'asc' | 'desc'>('asc');
+  const [showSortReservas, setShowSortReservas] = useState(false);
+  const [expandedReservasGroups, setExpandedReservasGroups] = useState<Set<string>>(new Set());
   const [reservadosSortDirection, setReservadosSortDirection] = useState<'asc' | 'desc'>('asc');
   const [disponiblesSearchTerm, setDisponiblesSearchTerm] = useState('');
 
@@ -486,6 +590,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     message: '',
     onConfirm: () => { },
   });
+
+  // Toast notification state
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+    show: false,
+    message: '',
+    type: 'info'
+  });
+
+  // Auto-dismiss toast after 4 seconds
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
+
+  // Helper to show toast
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ show: true, message, type });
+  };
 
   // Expanded groups state for collapsible groups
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Grupo 1']));
@@ -586,6 +710,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
           ubicacion: r.ubicacion,
           solicitudCaraId: r.solicitud_cara_id,
           reservaId: r.reserva_id,
+          grupo_completo_id: r.grupo_completo_id,
         };
       });
 
@@ -858,6 +983,80 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     return { flujo, contraflujo, bonificadas, renta, total, dineroTotal, digitales };
   }, [reservas, caras]);
 
+  // ============ ADVANCED FILTER FUNCTIONS FOR RESERVAS ============
+  // Obtener valores únicos para cada campo
+  const getUniqueValuesReservas = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    FILTER_FIELDS_RESERVAS.forEach(fieldConfig => {
+      const values = new Set<string>();
+      reservas.forEach(item => {
+        const val = item[fieldConfig.field as keyof ReservaItem];
+        if (val !== null && val !== undefined && val !== '') {
+          values.add(String(val));
+        }
+      });
+      valuesMap[fieldConfig.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [reservas]);
+
+  // Funciones para manejar filtros
+  const addFilterReservas = () => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS_RESERVAS[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFiltersReservas(prev => [...prev, newFilter]);
+  };
+
+  const updateFilterReservas = (id: string, updates: Partial<FilterCondition>) => {
+    setFiltersReservas(prev =>
+      prev.map(f => (f.id === id ? { ...f, ...updates } : f))
+    );
+  };
+
+  const removeFilterReservas = (id: string) => {
+    setFiltersReservas(prev => prev.filter(f => f.id !== id));
+  };
+
+  const clearFiltersReservas = () => {
+    setFiltersReservas([]);
+  };
+
+  // Toggle agrupación (soporta múltiples niveles)
+  const toggleGroupingReservas = (field: GroupByFieldReservas) => {
+    setActiveGroupingsReservas(prev => {
+      if (prev.includes(field)) {
+        return prev.filter(f => f !== field);
+      } else if (prev.length < 3) {
+        return [...prev, field];
+      }
+      return prev;
+    });
+  };
+
+  // Filtrar y ordenar reservas
+  const filteredReservasData = useMemo(() => {
+    let data = applyFiltersReservas(reservas, filtersReservas);
+
+    // Aplicar ordenamiento
+    if (sortFieldReservas) {
+      data = [...data].sort((a, b) => {
+        const aVal = a[sortFieldReservas as keyof ReservaItem];
+        const bVal = b[sortFieldReservas as keyof ReservaItem];
+        const aStr = aVal === null || aVal === undefined ? '' : String(aVal);
+        const bStr = bVal === null || bVal === undefined ? '' : String(bVal);
+        const compare = aStr.localeCompare(bStr, undefined, { numeric: true });
+        return sortDirectionReservas === 'asc' ? compare : -compare;
+      });
+    }
+
+    return data;
+  }, [reservas, filtersReservas, sortFieldReservas, sortDirectionReservas]);
+  // ============ END ADVANCED FILTER FUNCTIONS ============
+
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0, bonificacion: 0 };
@@ -1039,13 +1238,47 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       return;
     }
     setEditingCaraId(cara.localId);
+
+    // Find and set the selectedArticulo if we have the articulo code
+    if (cara.articulo && articulosData) {
+      const foundArticulo = articulosData.find(a => a.ItemCode === cara.articulo);
+      if (foundArticulo) {
+        setSelectedArticulo(foundArticulo);
+      }
+    }
+
+    // Calculate caras en renta (flujo + contraflujo)
+    const carasEnRenta = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0);
+
+    // Try to find the matching catorcena from inicio_periodo
+    let catorcenaInicioVal = cara.catorcena_inicio;
+    let anioInicioVal = cara.anio_inicio;
+    let catorcenaFinVal = cara.catorcena_fin;
+    let anioFinVal = cara.anio_fin;
+
+    // If catorcena fields are not set but we have dates, try to find matching catorcena
+    if ((!catorcenaInicioVal || !anioInicioVal) && cara.inicio_periodo && catorcenasData?.data) {
+      const inicioDate = new Date(cara.inicio_periodo);
+      const matchingCatorcena = catorcenasData.data.find(c => {
+        const catStart = new Date(c.fecha_inicio);
+        const catEnd = new Date(c.fecha_fin);
+        return inicioDate >= catStart && inicioDate <= catEnd;
+      });
+      if (matchingCatorcena) {
+        catorcenaInicioVal = matchingCatorcena.numero_catorcena;
+        anioInicioVal = matchingCatorcena.a_o;
+        catorcenaFinVal = matchingCatorcena.numero_catorcena;
+        anioFinVal = matchingCatorcena.a_o;
+      }
+    }
+
     setNewCara({
       ciudad: cara.ciudad,
       estados: cara.estados,
       tipo: cara.tipo,
       flujo: cara.flujo,
       bonificacion: cara.bonificacion,
-      caras: cara.caras,
+      caras: carasEnRenta,
       nivel_socioeconomico: cara.nivel_socioeconomico,
       formato: cara.formato,
       costo: cara.costo,
@@ -1056,37 +1289,87 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       caras_contraflujo: cara.caras_contraflujo,
       articulo: cara.articulo,
       descuento: cara.descuento,
+      catorcena_inicio: catorcenaInicioVal,
+      anio_inicio: anioInicioVal,
+      catorcena_fin: catorcenaFinVal,
+      anio_fin: anioFinVal,
     });
     setShowAddCaraForm(true);
   };
 
-  // Handle save cara (add or update)
-  const handleSaveCara = () => {
+  // Handle save cara (add or update) - persists to database
+  const handleSaveCara = async () => {
     if (!newCara.formato || !newCara.estados) {
       alert('Por favor completa al menos el formato y estado');
       return;
     }
 
-    if (editingCaraId) {
-      // Update existing cara
-      setCaras(prev => prev.map(c =>
-        c.localId === editingCaraId
-          ? { ...c, ...newCara }
-          : c
-      ));
-      setEditingCaraId(null);
-    } else {
-      // Add new cara
-      const newCaraItem: CaraItem = {
-        ...newCara,
-        localId: `cara-new-${Date.now()}`,
-      };
-      setCaras(prev => [...prev, newCaraItem]);
+    // If no ciudad selected but estado is, get all cities from that estado
+    let ciudadToSave = newCara.ciudad;
+    if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {
+      const selectedEstados = newCara.estados.split(',').map(s => s.trim());
+      const allCitiesForEstado = solicitudFilters.ciudades
+        .filter(c => selectedEstados.includes(c.estado))
+        .map(c => c.ciudad);
+      ciudadToSave = allCitiesForEstado.join(', ');
     }
 
-    setNewCara(EMPTY_CARA);
-    setSelectedArticulo(null);
-    setShowAddCaraForm(false);
+    const caraData = {
+      ciudad: ciudadToSave,
+      estados: newCara.estados,
+      tipo: newCara.tipo,
+      flujo: newCara.flujo,
+      bonificacion: newCara.bonificacion,
+      caras: newCara.caras,
+      nivel_socioeconomico: newCara.nivel_socioeconomico,
+      formato: newCara.formato,
+      costo: newCara.costo,
+      tarifa_publica: newCara.tarifa_publica,
+      inicio_periodo: newCara.inicio_periodo,
+      fin_periodo: newCara.fin_periodo,
+      caras_flujo: newCara.caras_flujo,
+      caras_contraflujo: newCara.caras_contraflujo,
+      articulo: newCara.articulo,
+      descuento: newCara.descuento,
+    };
+
+    try {
+      if (editingCaraId) {
+        // Find the cara being edited to get its database ID
+        const caraToEdit = caras.find(c => c.localId === editingCaraId);
+        if (caraToEdit?.id) {
+          // Update in database
+          await propuestasService.updateCara(propuesta.id, caraToEdit.id, caraData);
+        }
+        // Update local state
+        setCaras(prev => prev.map(c =>
+          c.localId === editingCaraId
+            ? { ...c, ...newCara }
+            : c
+        ));
+        setEditingCaraId(null);
+      } else {
+        // Create new cara in database
+        const createdCara = await propuestasService.createCara(propuesta.id, caraData);
+        // Add to local state with the database ID
+        const newCaraItem: CaraItem = {
+          ...newCara,
+          id: createdCara.id,
+          localId: `cara-${createdCara.id}`,
+        };
+        setCaras(prev => [...prev, newCaraItem]);
+      }
+
+      setNewCara(EMPTY_CARA);
+      setSelectedArticulo(null);
+      setShowAddCaraForm(false);
+
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
+    } catch (error) {
+      console.error('Error saving cara:', error);
+      alert('Error al guardar la cara');
+    }
   };
 
   // Handle cancel cara form
@@ -1113,17 +1396,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   }, []);
 
   // Filter for unique inventories (no flujo/contraflujo duplicates)
+  // Filter for unique inventories - hide items whose counterpart is already reserved
   const filterUnicos = useCallback((inventarios: InventarioDisponible[]): InventarioDisponible[] => {
-    const seen = new Set<string>();
-    return inventarios.filter(inv => {
-      // Extract base code (without _Flujo or _Contraflujo)
-      const baseCode = inv.codigo_unico?.split('_')[0] || '';
-      const key = `${baseCode}|${inv.ubicacion}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
+    // Get base codes from already reserved items
+    const reservedBaseCodes = new Set<string>();
+    reservas.forEach(reserva => {
+      // Extract base code from the reserved item's codigo_unico
+      const baseCode = reserva.codigo_unico?.split('_')[0] || '';
+      if (baseCode) {
+        reservedBaseCodes.add(baseCode);
+      }
     });
-  }, []);
+
+    // Filter out items whose base code is already in reservas (counterpart is reserved)
+    return inventarios.filter(inv => {
+      const baseCode = inv.codigo_unico?.split('_')[0] || '';
+      // If any item with this base code is reserved, hide this one
+      return !reservedBaseCodes.has(baseCode);
+    });
+  }, [reservas]);
 
   // Filter for complete inventories - MERGE flujo/contraflujo pairs into single "completo" rows
   const filterCompletos = useCallback((inventarios: InventarioDisponible[]): (InventarioDisponible & { isCompleto?: boolean; flujoId?: number; contraflujoId?: number })[] => {
@@ -1539,6 +1830,74 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
   }, [processedInventory, groupByDistance]);
 
+  // Download disponibles as CSV
+  const downloadDisponiblesCSV = () => {
+    if (processedInventory.length === 0) return;
+
+    // Determine columns based on active filters
+    const baseColumns = ['codigo_unico', 'tipo_de_cara', 'plaza', 'nivel_socioeconomico', 'ubicacion'];
+    const headers = ['Código', 'Tipo', 'Plaza', 'NSE', 'Ubicación'];
+
+    // Add group column if groupByDistance is active
+    if (groupByDistance && groupedInventory) {
+      headers.unshift('Grupo');
+      baseColumns.unshift('_group');
+    }
+
+    // Build rows with group info if applicable
+    const rows: string[][] = [];
+    if (groupByDistance && groupedInventory) {
+      groupedInventory.forEach(([groupName, items]) => {
+        items.forEach(item => {
+          const row = baseColumns.map(col => {
+            if (col === '_group') return groupName;
+            const val = item[col as keyof typeof item];
+            return val === null || val === undefined ? '' : String(val);
+          });
+          rows.push(row);
+        });
+      });
+    } else {
+      processedInventory.forEach(item => {
+        const row = baseColumns.map(col => {
+          const val = item[col as keyof typeof item];
+          return val === null || val === undefined ? '' : String(val);
+        });
+        rows.push(row);
+      });
+    }
+
+    // Create CSV content
+    const escapeCSV = (val: string) => {
+      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+        return `"${val.replace(/"/g, '""')}"`;
+      }
+      return val;
+    };
+
+    const csvContent = [
+      headers.map(escapeCSV).join(','),
+      ...rows.map(row => row.map(escapeCSV).join(','))
+    ].join('\n');
+
+    // Download file
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const filterInfo = [
+      showOnlyUnicos ? 'unicos' : '',
+      showOnlyCompletos ? 'completos' : '',
+      groupByDistance ? 'agrupados' : '',
+      flujoFilter !== 'Todos' ? flujoFilter.toLowerCase() : ''
+    ].filter(Boolean).join('_') || 'todos';
+    link.download = `inventario_disponible_${filterInfo}_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Toggle group expansion
   const toggleGroupExpansion = (groupName: string) => {
     setExpandedGroups(prev => {
@@ -1550,10 +1909,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   };
 
   // Select all in group
-  const selectAllInGroup = (items: ProcessedInventoryItem[]) => {
+  // Toggle all items in a group - if all selected, deselect all; otherwise select all
+  const toggleAllInGroup = (items: ProcessedInventoryItem[]) => {
+    const allSelected = items.every(inv => selectedInventory.has(inv.id));
     setSelectedInventory(prev => {
       const next = new Set(prev);
-      items.forEach(inv => next.add(inv.id));
+      if (allSelected) {
+        // Deselect all
+        items.forEach(inv => next.delete(inv.id));
+      } else {
+        // Select all
+        items.forEach(inv => next.add(inv.id));
+      }
       return next;
     });
   };
@@ -1577,6 +1944,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     const potentialPairs = new Set<string>();
 
     selectedItems.forEach(item => {
+      // If item is already "Completo" (from filtered view), count it as a pair
+      if (item.isCompleto && item.flujoId && item.contraflujoId) {
+        const baseCode = item.codigo_unico?.split('_')[0];
+        if (baseCode) {
+          potentialPairs.add(baseCode);
+        }
+        return;
+      }
+
       const baseCode = item.codigo_unico?.split('_')[0]; // Assuming prefix_suffix format
       if (baseCode) {
         // Check if we have both Flujo and Contraflujo for this base code in selection
@@ -1643,7 +2019,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       });
 
       if (newReservas.length === 0) {
-        alert('No hay caras disponibles para reservar');
+        showToast('No hay caras disponibles para reservar', 'error');
         return;
       }
 
@@ -1670,11 +2046,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         // Also refresh disponibles
         handleRefetchDisponibles();
 
-        alert(`Se guardaron ${result.reservasCreadas} reservas exitosamente`);
+        showToast(`Se guardaron ${result.reservasCreadas} reservas exitosamente`, 'success');
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving reservas:', error);
-        alert(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
       } finally {
         setIsSaving(false);
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -1683,10 +2059,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
     // Prompt logic - siempre mostrar modal con opción de agrupar si hay pares
     if (potentialPairs.size > 0) {
+      // Count how many "completo" items are selected (each reserves 2 caras)
+      const completoCount = selectedItems.filter(i => i.isCompleto).length;
+      const regularCount = selectedItems.filter(i => !i.isCompleto).length;
+      const totalCaras = (completoCount * 2) + regularCount;
+
+      const message = completoCount > 0
+        ? `Se reservarán ${totalCaras} caras (${completoCount} completo${completoCount > 1 ? 's' : ''} = ${completoCount * 2} caras). ¿Agrupar Flujo + Contraflujo como "Completo"?`
+        : `Se detectaron ${potentialPairs.size} pares Flujo + Contraflujo del mismo parabús. ¿Deseas agruparlos como "Completo"?`;
+
       setConfirmModal({
         isOpen: true,
         title: 'Agrupar como Completo',
-        message: `Se detectaron ${potentialPairs.size} pares Flujo + Contraflujo del mismo parabús. ¿Deseas agruparlos como "Completo"?`,
+        message,
         confirmText: 'Sí, Agrupar',
         cancelText: 'No, Mantener Separados',
         onConfirm: () => runReservation(true),
@@ -1708,7 +2093,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const handleReserveAsBonificacion = () => {
     if (!selectedCaraForSearch || selectedInventory.size === 0) return;
     if (selectedInventory.size > remainingToAssign.bonificacion) {
-      alert(`Solo puedes reservar ${remainingToAssign.bonificacion} caras de bonificación`);
+      showToast(`Solo puedes reservar ${remainingToAssign.bonificacion} caras de bonificación`, 'error');
       return;
     }
 
@@ -1748,11 +2133,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
         handleRefetchDisponibles();
 
-        // alert(`Se guardaron ${result.reservasCreadas} bonificaciones exitosamente`);
+        showToast(`Se guardaron ${result.reservasCreadas} bonificaciones exitosamente`, 'success');
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving bonificaciones:', error);
-        alert(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
       } finally {
         setIsSaving(false);
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -1935,9 +2320,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
           handleRefetchDisponibles();
 
           setReservas(prev => prev.filter(r => r.id !== reservaId));
+          showToast('Reserva eliminada correctamente', 'success');
         } catch (error) {
           console.error('Error deleting reserva:', error);
-          alert('Error al eliminar reserva');
+          showToast('Error al eliminar reserva', 'error');
         } finally {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         }
@@ -2017,11 +2403,34 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     </div>
   );
 
+  // Toast notification JSX
+  const toastJSX = toast.show && (
+    <div className={`fixed top-4 right-4 z-[70] animate-in slide-in-from-top fade-in duration-300 max-w-md`}>
+      <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${
+        toast.type === 'success' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300' :
+        toast.type === 'error' ? 'bg-red-500/20 border-red-500/50 text-red-300' :
+        'bg-purple-500/20 border-purple-500/50 text-purple-300'
+      }`}>
+        {toast.type === 'success' && <Check className="h-5 w-5 flex-shrink-0" />}
+        {toast.type === 'error' && <X className="h-5 w-5 flex-shrink-0" />}
+        {toast.type === 'info' && <FileText className="h-5 w-5 flex-shrink-0" />}
+        <span className="text-sm font-medium">{toast.message}</span>
+        <button
+          onClick={() => setToast(prev => ({ ...prev, show: false }))}
+          className="ml-2 p-1 hover:bg-white/10 rounded transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+
   // Render inventory search view
   if (viewState === 'search-inventory') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         {confirmModalJSX}
+        {toastJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
 
         <div className="relative w-[95vw] max-w-[1600px] h-[90vh] bg-zinc-900 rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden">
@@ -2330,6 +2739,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       </button>
                     )}
 
+                    {/* Download CSV */}
+                    <button
+                      onClick={downloadDisponiblesCSV}
+                      disabled={processedInventory.length === 0}
+                      className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+                      title="Descargar CSV"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+
                     {/* Refresh */}
                     <button
                       onClick={handleRefetchDisponibles}
@@ -2505,11 +2924,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          selectAllInGroup(items);
+                                          toggleAllInGroup(items);
                                         }}
                                         className="ml-auto text-xs text-purple-400 hover:text-purple-300"
                                       >
-                                        Seleccionar todos
+                                        {items.every(inv => selectedInventory.has(inv.id)) ? 'Deseleccionar' : 'Seleccionar todos'}
                                       </button>
                                     </div>
                                   </td>
@@ -3494,35 +3913,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         </select>
                       </div>
                     </div>
-                    <div className="grid grid-cols-5 gap-4 mb-4">
+                    <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras Flujo</label>
+                        <label className="text-xs text-zinc-500">Caras en Renta</label>
                         <input
                           type="number"
-                          value={newCara.caras_flujo || ''}
+                          value={newCara.caras || ''}
                           onChange={(e) => {
                             const val = parseInt(e.target.value) || 0;
-                            setNewCara({ ...newCara, caras_flujo: val, caras: val + (newCara.caras_contraflujo || 0) });
+                            // Auto-calculate flujo and contraflujo (half and half)
+                            const flujo = Math.ceil(val / 2);
+                            const contraflujo = Math.floor(val / 2);
+                            setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
                           className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
                           min="0"
                         />
+                        <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras Contraflujo</label>
-                        <input
-                          type="number"
-                          value={newCara.caras_contraflujo || ''}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value) || 0;
-                            setNewCara({ ...newCara, caras_contraflujo: val, caras: (newCara.caras_flujo || 0) + val });
-                          }}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                          min="0"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Bonificación</label>
+                        <label className="text-xs text-zinc-500">Caras Bonificadas</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
@@ -3616,19 +4026,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                             const carasFaltantes = status.totalRequerido - status.totalReservado;
 
                             // Determine status color and indicator
+                            // Green = complete, Red = missing (need to add), Amber = excess (need to remove)
                             const statusColor = status.totalDiff === 0
-                              ? 'emerald' // Exact match
+                              ? 'emerald' // Exact match - complete
+                              : status.totalDiff < 0
+                                ? 'red' // Under-reserved (missing, need to add)
+                                : 'amber'; // Over-reserved (excess, need to remove)
+
+                            // Display text for diff:
+                            // - Missing (totalDiff < 0): show positive "150" (faltan 150)
+                            // - Excess (totalDiff > 0): show negative "-251" (sobran 251, quitar)
+                            const diffDisplay = status.totalDiff === 0
+                              ? null
                               : status.totalDiff > 0
-                                ? 'amber' // Over-reserved (needs attention)
-                                : 'red'; // Under-reserved (deficit)
+                                ? `-${status.totalDiff}` // Excess: need to remove
+                                : `${Math.abs(status.totalDiff)}`; // Missing: need to add
 
                             return (
                               <div key={cara.localId} className={`${statusColor === 'emerald' ? 'bg-emerald-500/5' : statusColor === 'amber' ? 'bg-amber-500/5' : 'bg-red-500/5'}`}>
-                                {/* Cara header */}
-                                <div
-                                  className="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-zinc-800/30 transition-colors"
-                                  onClick={() => toggleCara(cara.localId)}
-                                >
+                                {/* Cara row */}
+                                <div className="flex items-center gap-3 px-5 py-3 hover:bg-zinc-800/30 transition-colors">
                                   {/* Completion indicator */}
                                   <div className={`w-2 h-2 rounded-full ${
                                     statusColor === 'emerald' ? 'bg-emerald-500' :
@@ -3636,9 +4053,6 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                     'bg-red-500 animate-pulse'
                                   }`} />
 
-                                  <button className="text-zinc-400 ml-2">
-                                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                  </button>
                                   <div className="flex-1 grid grid-cols-4 gap-3 text-sm">
                                     <div>
                                       <span className="text-zinc-500 text-xs">Formato</span>
@@ -3656,9 +4070,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                       <span className="text-zinc-500 text-xs">Caras</span>
                                       <div className="flex items-center gap-1">
                                         <p className="text-white font-medium">{status.totalReservado}/{totalCaras}</p>
-                                        {status.totalDiff !== 0 && (
-                                          <span className={`text-xs font-medium ${status.totalDiff > 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                                            ({status.totalDiff > 0 ? '+' : ''}{status.totalDiff})
+                                        {diffDisplay && (
+                                          <span className={`text-xs font-medium ${statusColor === 'amber' ? 'text-amber-400' : 'text-red-400'}`}>
+                                            ({diffDisplay})
                                           </span>
                                         )}
                                       </div>
@@ -3696,66 +4110,6 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                   </div>
                                 </div>
 
-                                {/* Expanded content - reservas */}
-                                {isExpanded && (
-                                  <div className="px-5 py-3 bg-zinc-900/30 border-t border-zinc-700/30">
-                                    {caraReservas.length === 0 ? (
-                                      <div className="text-center py-4 text-zinc-500 text-sm">
-                                        <MapPin className="h-6 w-6 mx-auto mb-2 opacity-30" />
-                                        <p>Sin inventario reservado</p>
-                                        <button
-                                          onClick={() => handleSearchInventory(cara)}
-                                          className="mt-2 text-purple-400 hover:text-purple-300 text-xs"
-                                        >
-                                          Buscar inventario
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
-                                          <thead>
-                                            <tr className="text-zinc-500 text-xs">
-                                              <th className="text-left pb-2">Código</th>
-                                              <th className="text-left pb-2">Tipo</th>
-                                              <th className="text-left pb-2">Plaza</th>
-                                              <th className="text-left pb-2">Formato</th>
-                                              <th className="text-left pb-2">Ubicación</th>
-                                              <th className="text-right pb-2">Acciones</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {caraReservas.map(reserva => (
-                                              <tr key={reserva.id} className="border-t border-zinc-700/30">
-                                                <td className="py-2 text-zinc-300 font-mono text-xs">{reserva.codigo_unico}</td>
-                                                <td className="py-2">
-                                                  <span className={`px-2 py-0.5 rounded-full text-xs ${reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
-                                                    reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' :
-                                                      'bg-emerald-500/20 text-emerald-300'
-                                                    }`}>
-                                                    {reserva.tipo}
-                                                  </span>
-                                                </td>
-                                                <td className="py-2 text-zinc-300">{reserva.plaza}</td>
-                                                <td className="py-2 text-zinc-300">{reserva.formato}</td>
-                                                <td className="py-2 text-zinc-400 truncate max-w-[200px]">{reserva.ubicacion}</td>
-                                                <td className="py-2 text-right">
-                                                  {/* Removed as per request to only allow deletion from searcher 
-                                                  <button
-                                                    onClick={() => setReservas(prev => prev.filter(r => r.id !== reserva.id))}
-                                                    className="p-1 text-red-400 hover:text-red-300"
-                                                  >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                  </button>
-                                                  */}
-                                                </td>
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
                               </div>
                             );
                           })}
@@ -3766,35 +4120,81 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                 </div>
               </div>
 
-              {/* Section 3: Reservas Summary with Map and Selection */}
+              {/* Section 3: Reservas Summary with Map and Selection - ADVANCED FILTERS */}
               {reservas.length > 0 && (() => {
-                // Group reservas by plaza for selection
-                const reservasByPlaza = reservas.reduce((acc, r) => {
-                  const plaza = r.plaza || 'Sin Plaza';
-                  if (!acc[plaza]) acc[plaza] = [];
-                  acc[plaza].push(r);
-                  return acc;
-                }, {} as Record<string, typeof reservas>);
-                const plazas = Object.keys(reservasByPlaza).sort();
+                // Use filtered data from useMemo
+                const filteredReservas = filteredReservasData;
+
+                // Helper to get group key based on field
+                const getFieldValue = (r: ReservaItem, field: GroupByFieldReservas): string => {
+                  switch (field) {
+                    case 'catorcena': return `Cat ${r.catorcena}/${r.anio}`;
+                    case 'tipo': return r.tipo;
+                    case 'plaza': return r.plaza || 'Sin Plaza';
+                    case 'formato': return r.formato || 'Sin Formato';
+                    case 'grupo': return r.grupo_completo_id ? `Grupo ${r.grupo_completo_id}` : 'Sin Grupo';
+                    default: return 'Otros';
+                  }
+                };
+
+                // Multi-level grouping
+                type GroupedData = Record<string, ReservaItem[] | Record<string, ReservaItem[] | Record<string, ReservaItem[]>>>;
+                const groupData = (items: ReservaItem[], fields: GroupByFieldReservas[]): GroupedData => {
+                  if (fields.length === 0) return {};
+                  const [firstField, ...restFields] = fields;
+                  const grouped: GroupedData = {};
+                  items.forEach(item => {
+                    const key = getFieldValue(item, firstField);
+                    if (!grouped[key]) grouped[key] = restFields.length > 0 ? {} : [];
+                    if (restFields.length > 0) {
+                      const subGrouped = groupData([item], restFields);
+                      Object.entries(subGrouped).forEach(([subKey, subItems]) => {
+                        const target = grouped[key] as Record<string, ReservaItem[] | Record<string, ReservaItem[]>>;
+                        if (!target[subKey]) target[subKey] = Array.isArray(subItems) ? [] : {};
+                        if (Array.isArray(subItems)) {
+                          (target[subKey] as ReservaItem[]).push(...subItems);
+                        } else {
+                          Object.entries(subItems).forEach(([thirdKey, thirdItems]) => {
+                            const thirdTarget = target[subKey] as Record<string, ReservaItem[]>;
+                            if (!thirdTarget[thirdKey]) thirdTarget[thirdKey] = [];
+                            thirdTarget[thirdKey].push(...(thirdItems as ReservaItem[]));
+                          });
+                        }
+                      });
+                    } else {
+                      (grouped[key] as ReservaItem[]).push(item);
+                    }
+                  });
+                  return grouped;
+                };
+
+                const groupedReservas = groupData(filteredReservas, activeGroupingsReservas);
+                const groupKeys = Object.keys(groupedReservas).sort();
+
+                // Count items recursively
+                const countItems = (data: unknown): number => {
+                  if (Array.isArray(data)) return data.length;
+                  if (typeof data === 'object' && data !== null) {
+                    return Object.values(data).reduce((sum, v) => sum + countItems(v), 0);
+                  }
+                  return 0;
+                };
 
                 // Toggle functions
                 const toggleAllMapReservas = () => {
-                  if (selectedMapReservas.size === reservas.length) {
+                  if (selectedMapReservas.size === filteredReservas.length) {
                     setSelectedMapReservas(new Set());
                   } else {
-                    setSelectedMapReservas(new Set(reservas.map(r => r.id)));
+                    setSelectedMapReservas(new Set(filteredReservas.map(r => r.id)));
                   }
                 };
-                const togglePlazaMapReservas = (plaza: string) => {
-                  const plazaIds = reservasByPlaza[plaza].map(r => r.id);
-                  const allSelected = plazaIds.every(id => selectedMapReservas.has(id));
+                const toggleGroupItems = (items: ReservaItem[]) => {
+                  const ids = items.map(r => r.id);
+                  const allSelected = ids.every(id => selectedMapReservas.has(id));
                   setSelectedMapReservas(prev => {
                     const next = new Set(prev);
-                    if (allSelected) {
-                      plazaIds.forEach(id => next.delete(id));
-                    } else {
-                      plazaIds.forEach(id => next.add(id));
-                    }
+                    if (allSelected) ids.forEach(id => next.delete(id));
+                    else ids.forEach(id => next.add(id));
                     return next;
                   });
                 };
@@ -3806,6 +4206,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     return next;
                   });
                 };
+                const toggleReservasGroup = (groupKey: string) => {
+                  setExpandedReservasGroups(prev => {
+                    const next = new Set(prev);
+                    if (next.has(groupKey)) next.delete(groupKey);
+                    else next.add(groupKey);
+                    return next;
+                  });
+                };
+
+                // Flatten all items for a group
+                const flattenItems = (data: unknown): ReservaItem[] => {
+                  if (Array.isArray(data)) return data;
+                  if (typeof data === 'object' && data !== null) {
+                    return Object.values(data).flatMap(v => flattenItems(v));
+                  }
+                  return [];
+                };
 
                 return (
                   <div className="bg-zinc-800/30 rounded-2xl border border-zinc-700/50 overflow-hidden">
@@ -3813,91 +4230,377 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       <h3 className="text-sm font-medium text-white flex items-center gap-2">
                         <MapIcon className="h-4 w-4 text-purple-400" />
                         Resumen de Reservas
-                      </h3>
-                      <div className="flex items-center gap-3 text-xs">
-                        <span className="text-zinc-400">
-                          {selectedMapReservas.size > 0
-                            ? `${selectedMapReservas.size} seleccionadas`
-                            : 'Selecciona para resaltar en mapa'}
+                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                          {filteredReservas.length} de {reservas.length}
                         </span>
-                        {selectedMapReservas.size > 0 && (
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        {/* ADVANCED FILTER BUTTON */}
+                        <div className="relative">
                           <button
-                            onClick={() => setSelectedMapReservas(new Set())}
-                            className="text-purple-400 hover:text-purple-300"
+                            onClick={() => { setShowFiltersReservas(!showFiltersReservas); setShowGroupingConfigReservas(false); setShowSortReservas(false); }}
+                            className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
+                              filtersReservas.length > 0
+                                ? 'bg-purple-600 text-white border border-purple-500'
+                                : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+                            }`}
+                            title="Filtrar"
                           >
-                            Limpiar
+                            <Filter className="h-3.5 w-3.5" />
+                            {filtersReservas.length > 0 && (
+                              <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">{filtersReservas.length}</span>
+                            )}
                           </button>
+                          {showFiltersReservas && (
+                            <div className="absolute right-0 top-full mt-1 z-50 w-[520px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+                                <button onClick={() => setShowFiltersReservas(false)} className="text-zinc-400 hover:text-white">
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                              <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-purple pr-1">
+                                {filtersReservas.map((filter, index) => (
+                                  <div key={filter.id} className="flex items-center gap-2">
+                                    {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
+                                    {index === 0 && <span className="w-8"></span>}
+                                    <select
+                                      value={filter.field}
+                                      onChange={(e) => updateFilterReservas(filter.id, { field: e.target.value })}
+                                      className="w-[130px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                                    >
+                                      {FILTER_FIELDS_RESERVAS.map((f) => (
+                                        <option key={f.field} value={f.field}>{f.label}</option>
+                                      ))}
+                                    </select>
+                                    <select
+                                      value={filter.operator}
+                                      onChange={(e) => updateFilterReservas(filter.id, { operator: e.target.value as FilterOperator })}
+                                      className="w-[110px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                                    >
+                                      {FILTER_OPERATORS.filter(op => {
+                                        const fieldConfig = FILTER_FIELDS_RESERVAS.find(f => f.field === filter.field);
+                                        return fieldConfig && op.forTypes.includes(fieldConfig.type);
+                                      }).map((op) => (
+                                        <option key={op.value} value={op.value}>{op.label}</option>
+                                      ))}
+                                    </select>
+                                    <select
+                                      value={filter.value}
+                                      onChange={(e) => updateFilterReservas(filter.id, { value: e.target.value })}
+                                      className="flex-1 text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                                    >
+                                      <option value="">Seleccionar...</option>
+                                      {getUniqueValuesReservas[filter.field]?.map((val) => (
+                                        <option key={val} value={val}>{val}</option>
+                                      ))}
+                                    </select>
+                                    <button onClick={() => removeFilterReservas(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                                {filtersReservas.length === 0 && (
+                                  <p className="text-[11px] text-zinc-500 text-center py-3">Sin filtros. Haz clic en "Añadir".</p>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-between mt-2 pt-2 border-t border-purple-900/30">
+                                <button onClick={addFilterReservas} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
+                                  <Plus className="h-3 w-3" /> Añadir
+                                </button>
+                                <button
+                                  onClick={clearFiltersReservas}
+                                  disabled={filtersReservas.length === 0}
+                                  className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                  Limpiar
+                                </button>
+                              </div>
+                              {filtersReservas.length > 0 && (
+                                <div className="mt-2 pt-2 border-t border-purple-900/30">
+                                  <span className="text-[10px] text-zinc-500">{filteredReservas.length} de {reservas.length} registros</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* GROUP BUTTON - Multi-level */}
+                        <div className="relative">
+                          <button
+                            onClick={() => { setShowGroupingConfigReservas(!showGroupingConfigReservas); setShowFiltersReservas(false); setShowSortReservas(false); }}
+                            className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
+                            title="Agrupar"
+                          >
+                            <Layers className="h-3.5 w-3.5" />
+                            {activeGroupingsReservas.length > 0 && (
+                              <span className="px-1 py-0.5 rounded bg-purple-600 text-[10px]">{activeGroupingsReservas.length}</span>
+                            )}
+                          </button>
+                          {showGroupingConfigReservas && (
+                            <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]">
+                              <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 3)</p>
+                              {AVAILABLE_GROUPINGS_RESERVAS.map(({ field, label }) => (
+                                <button
+                                  key={field}
+                                  onClick={() => toggleGroupingReservas(field)}
+                                  className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
+                                    activeGroupingsReservas.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                                  }`}
+                                >
+                                  <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                    activeGroupingsReservas.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
+                                  }`}>
+                                    {activeGroupingsReservas.includes(field) && <Check className="h-3 w-3 text-white" />}
+                                  </div>
+                                  {label}
+                                  {activeGroupingsReservas.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
+                                  {activeGroupingsReservas.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+                                  {activeGroupingsReservas.indexOf(field) === 2 && <span className="ml-auto text-[10px] text-cyan-400">3°</span>}
+                                </button>
+                              ))}
+                              <div className="border-t border-purple-900/30 mt-2 pt-2">
+                                <button onClick={() => setActiveGroupingsReservas([])} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                                  Quitar agrupación
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* SORT BUTTON */}
+                        <div className="relative">
+                          <button
+                            onClick={() => { setShowSortReservas(!showSortReservas); setShowFiltersReservas(false); setShowGroupingConfigReservas(false); }}
+                            className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
+                            title="Ordenar"
+                          >
+                            <ArrowUpDown className="h-3.5 w-3.5" />
+                          </button>
+                          {showSortReservas && (
+                            <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                              <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Ordenar por</p>
+                              {FILTER_FIELDS_RESERVAS.map(({ field, label }) => (
+                                <button
+                                  key={field}
+                                  onClick={() => {
+                                    if (sortFieldReservas === field) {
+                                      setSortDirectionReservas(prev => prev === 'asc' ? 'desc' : 'asc');
+                                    } else {
+                                      setSortFieldReservas(field);
+                                      setSortDirectionReservas('asc');
+                                    }
+                                  }}
+                                  className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 ${
+                                    sortFieldReservas === field ? 'text-purple-300' : 'text-zinc-400'
+                                  }`}
+                                >
+                                  {label}
+                                  {sortFieldReservas === field && (
+                                    <span className="ml-auto">
+                                      {sortDirectionReservas === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                              <div className="border-t border-purple-900/30 mt-2 pt-2">
+                                <button onClick={() => setSortFieldReservas(null)} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                                  Quitar orden
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {selectedMapReservas.size > 0 && (
+                          <>
+                            <span className="text-zinc-400 text-xs">{selectedMapReservas.size} sel.</span>
+                            <button onClick={() => setSelectedMapReservas(new Set())} className="text-purple-400 hover:text-purple-300 text-xs">
+                              Limpiar
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
-                    <div className="flex min-h-[420px]">
+                    <div className="flex h-[520px]">
                       {/* Selection Panel */}
-                      <div className="w-72 border-r border-zinc-700/50 bg-zinc-900/30 flex flex-col flex-shrink-0">
+                      <div className="w-96 border-r border-zinc-700/50 bg-zinc-900/30 flex flex-col flex-shrink-0">
                         {/* Select All Header */}
-                        <div className="px-4 py-3 border-b border-zinc-700/50 bg-zinc-800/50">
-                          <label className="flex items-center gap-3 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedMapReservas.size === reservas.length && reservas.length > 0}
-                              onChange={toggleAllMapReservas}
-                              className="checkbox-purple"
-                            />
-                            <span className="text-sm font-medium text-white">Seleccionar Todas</span>
-                            <span className="ml-auto px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
-                              {reservas.length}
-                            </span>
-                          </label>
+                        <div className="px-4 py-2.5 border-b border-zinc-700/50 bg-zinc-800/50">
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedMapReservas.size === filteredReservas.length && filteredReservas.length > 0}
+                                onChange={toggleAllMapReservas}
+                                className="checkbox-purple"
+                              />
+                              <span className="text-sm font-medium text-white">Seleccionar</span>
+                              <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                                {filteredReservas.length}
+                              </span>
+                            </label>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => setExpandedReservasGroups(new Set(groupKeys))}
+                                className="p-1.5 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded transition-colors"
+                                title="Expandir todo"
+                              >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setExpandedReservasGroups(new Set())}
+                                className="p-1.5 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded transition-colors"
+                                title="Colapsar todo"
+                              >
+                                <ChevronUp className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                        {/* Plaza Groups */}
+                        {/* Grouped Reservas - Multi-level */}
                         <div className="flex-1 overflow-y-auto scrollbar-thin">
-                          {plazas.map(plaza => {
-                            const plazaReservas = reservasByPlaza[plaza];
-                            const plazaIds = plazaReservas.map(r => r.id);
-                            const allPlazaSelected = plazaIds.every(id => selectedMapReservas.has(id));
-                            const somePlazaSelected = plazaIds.some(id => selectedMapReservas.has(id));
+                          {groupKeys.map(groupKey => {
+                            const groupData = groupedReservas[groupKey];
+                            const isLevel1Array = Array.isArray(groupData);
+                            const level1Items = flattenItems(groupData);
+                            const totalItems = countItems(groupData);
+                            const allSelected = level1Items.every(r => selectedMapReservas.has(r.id));
+                            const someSelected = level1Items.some(r => selectedMapReservas.has(r.id));
+                            const isExpanded = expandedReservasGroups.has(groupKey);
 
                             return (
-                              <div key={plaza} className="border-b border-zinc-800/50">
-                                {/* Plaza Header */}
-                                <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/30 hover:bg-zinc-800/50">
+                              <div key={groupKey} className="border-b border-zinc-700/30">
+                                <button
+                                  onClick={() => toggleReservasGroup(groupKey)}
+                                  className="w-full flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-purple-900/20 to-zinc-800/30 hover:from-purple-900/30 hover:to-zinc-800/50 transition-all"
+                                >
+                                  {isExpanded ? <ChevronDown className="h-4 w-4 text-purple-400" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}
                                   <input
                                     type="checkbox"
-                                    checked={allPlazaSelected}
-                                    ref={(el) => { if (el) el.indeterminate = somePlazaSelected && !allPlazaSelected; }}
-                                    onChange={() => togglePlazaMapReservas(plaza)}
-                                    className="checkbox-purple"
+                                    checked={allSelected}
+                                    ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                                    onChange={(e) => { e.stopPropagation(); toggleGroupItems(level1Items); }}
                                     onClick={(e) => e.stopPropagation()}
+                                    className="checkbox-purple"
                                   />
-                                  <MapPin className="h-3.5 w-3.5 text-zinc-500" />
-                                  <span className="text-sm text-white flex-1">{plaza}</span>
-                                  <span className="text-xs text-zinc-500">{plazaReservas.length}</span>
-                                </div>
-                                {/* Individual Reservas */}
-                                <div className="bg-zinc-900/50">
-                                  {plazaReservas.map(reserva => (
-                                    <label
-                                      key={reserva.id}
-                                      className={`flex items-center gap-2 px-4 py-1.5 pl-8 cursor-pointer text-xs transition-colors ${
-                                        selectedMapReservas.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'
-                                      }`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedMapReservas.has(reserva.id)}
-                                        onChange={() => toggleSingleMapReserva(reserva.id)}
-                                        className="checkbox-purple"
-                                      />
-                                      <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
-                                      <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
-                                        reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
-                                        reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' :
-                                        'bg-emerald-500/20 text-emerald-300'
-                                      }`}>
-                                        {reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}
-                                      </span>
-                                    </label>
-                                  ))}
-                                </div>
+                                  <span className="text-[10px] text-purple-400 font-medium">
+                                    {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[0])?.label}:
+                                  </span>
+                                  <span className="text-sm font-medium text-white flex-1 text-left truncate">{groupKey}</span>
+                                  <span className="px-2 py-0.5 rounded-full text-xs bg-zinc-700/50 text-zinc-300">{totalItems}</span>
+                                </button>
+                                {isExpanded && (
+                                  <div className="bg-zinc-900/40 border-l-2 border-purple-500/30 ml-3">
+                                    {isLevel1Array ? (
+                                      // Direct items
+                                      (groupData as ReservaItem[]).map(reserva => (
+                                        <label
+                                          key={reserva.id}
+                                          className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs transition-colors ${
+                                            selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:bg-zinc-800/40'
+                                          }`}
+                                        >
+                                          <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                          <span className="text-zinc-400 font-mono text-[11px]">{reserva.codigo_unico}</span>
+                                          <span className="text-zinc-500 text-[11px] truncate max-w-[80px]">{reserva.plaza}</span>
+                                          <span className="text-zinc-500 text-[11px]">{reserva.formato}</span>
+                                          <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
+                                            reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
+                                            reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+                                          }`}>{reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                        </label>
+                                      ))
+                                    ) : (
+                                      // Level 2 groups
+                                      Object.entries(groupData as Record<string, ReservaItem[] | Record<string, ReservaItem[]>>).map(([subKey, subData]) => {
+                                        const subFullKey = `${groupKey}-${subKey}`;
+                                        const subItems = flattenItems(subData);
+                                        const isSubExpanded = expandedReservasGroups.has(subFullKey);
+                                        const allSubSelected = subItems.every(r => selectedMapReservas.has(r.id));
+                                        const someSubSelected = subItems.some(r => selectedMapReservas.has(r.id));
+                                        const isLevel2Array = Array.isArray(subData);
+
+                                        return (
+                                          <div key={subKey} className="border-l border-pink-500/20 ml-2">
+                                            <button
+                                              onClick={() => toggleReservasGroup(subFullKey)}
+                                              className="w-full flex items-center gap-2 px-2 py-1.5 bg-zinc-800/20 hover:bg-zinc-800/40"
+                                            >
+                                              {isSubExpanded ? <ChevronDown className="h-3 w-3 text-pink-400" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
+                                              <input
+                                                type="checkbox"
+                                                checked={allSubSelected}
+                                                ref={(el) => { if (el) el.indeterminate = someSubSelected && !allSubSelected; }}
+                                                onChange={(e) => { e.stopPropagation(); toggleGroupItems(subItems); }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="checkbox-purple"
+                                              />
+                                              <span className="text-[10px] text-pink-400">
+                                                {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[1])?.label}:
+                                              </span>
+                                              <span className="text-[11px] text-white flex-1 text-left truncate">{subKey}</span>
+                                              <span className="text-[10px] text-zinc-500">{countItems(subData)}</span>
+                                            </button>
+                                            {isSubExpanded && (
+                                              <div className="ml-2 border-l border-cyan-500/20">
+                                                {isLevel2Array ? (
+                                                  (subData as ReservaItem[]).map(reserva => (
+                                                    <label
+                                                      key={reserva.id}
+                                                      className={`flex items-center gap-2 px-3 py-1 cursor-pointer text-[11px] ${
+                                                        selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:bg-zinc-800/40'
+                                                      }`}
+                                                    >
+                                                      <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                                      <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
+                                                      <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
+                                                        reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
+                                                        reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+                                                      }`}>{reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                                    </label>
+                                                  ))
+                                                ) : (
+                                                  // Level 3 groups
+                                                  Object.entries(subData as Record<string, ReservaItem[]>).map(([thirdKey, thirdItems]) => {
+                                                    const thirdFullKey = `${subFullKey}-${thirdKey}`;
+                                                    const isThirdExpanded = expandedReservasGroups.has(thirdFullKey);
+                                                    return (
+                                                      <div key={thirdKey}>
+                                                        <button
+                                                          onClick={() => toggleReservasGroup(thirdFullKey)}
+                                                          className="w-full flex items-center gap-2 px-2 py-1 bg-zinc-800/10 hover:bg-zinc-800/30"
+                                                        >
+                                                          {isThirdExpanded ? <ChevronDown className="h-3 w-3 text-cyan-400" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
+                                                          <span className="text-[10px] text-cyan-400">
+                                                            {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[2])?.label}:
+                                                          </span>
+                                                          <span className="text-[11px] text-white flex-1 text-left truncate">{thirdKey}</span>
+                                                          <span className="text-[10px] text-zinc-500">{thirdItems.length}</span>
+                                                        </button>
+                                                        {isThirdExpanded && thirdItems.map(reserva => (
+                                                          <label
+                                                            key={reserva.id}
+                                                            className={`flex items-center gap-2 px-4 py-1 cursor-pointer text-[11px] ${
+                                                              selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:bg-zinc-800/40'
+                                                            }`}
+                                                          >
+                                                            <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                                            <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
+                                                          </label>
+                                                        ))}
+                                                      </div>
+                                                    );
+                                                  })
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -3934,7 +4637,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                               zoomControl: true,
                             }}
                           >
-                            {reservas.map(reserva => {
+                            {filteredReservas.map(reserva => {
                               if (!reserva.latitud || !reserva.longitud) return null;
                               const isSelected = selectedMapReservas.has(reserva.id);
                               const hasSelection = selectedMapReservas.size > 0;
@@ -3974,6 +4677,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       </div>
       {/* Confirmation Modal */}
       {confirmModalJSX}
+      {/* Toast Notification */}
+      {toastJSX}
 
       {/* Loading Overlay */}
       {isSaving && (

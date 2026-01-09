@@ -677,28 +677,77 @@ export function AdvancedMapComponent({
         </button>
 
         {/* Color Legend */}
-        <div className="absolute bottom-4 right-3 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-2.5 text-xs space-y-1.5">
-          <div className="text-zinc-400 font-medium mb-1.5">Leyenda</div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-500" />
-            <span className="text-zinc-300">Flujo</span>
+        <div className="absolute bottom-4 right-3 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-3 text-xs max-w-[220px]">
+          <div className="text-zinc-300 font-semibold mb-2 flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 text-purple-400" />
+            Leyenda del Mapa
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500" />
-            <span className="text-zinc-300">Contraflujo</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-purple-500" />
-            <span className="text-zinc-300">Ambos</span>
-          </div>
-          <div className="border-t border-zinc-700 pt-1.5 mt-1.5">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-yellow-400" />
-              <span className="text-zinc-300">Seleccionado</span>
+
+          {/* Tipo de cara - solo mostrar cuando NO hay POIs activos */}
+          {poiMarkers.length === 0 && (
+            <div className="space-y-1.5 mb-2">
+              <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Dirección del tráfico</div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-red-500 ring-1 ring-red-400/30" />
+                <div>
+                  <span className="text-zinc-300">Flujo</span>
+                  <span className="text-zinc-500 text-[10px] ml-1">(a favor)</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
+                <div>
+                  <span className="text-zinc-300">Contraflujo</span>
+                  <span className="text-zinc-500 text-[10px] ml-1">(en contra)</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
+                <div>
+                  <span className="text-zinc-300">Ambos</span>
+                  <span className="text-zinc-500 text-[10px] ml-1">(F+C juntos)</span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="w-3 h-3 rounded-full bg-emerald-500" />
-              <span className="text-zinc-300">Ya reservado</span>
+          )}
+
+          {/* POI mode legend */}
+          {poiMarkers.length > 0 && (
+            <div className="space-y-1.5 mb-2">
+              <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Proximidad a POIs</div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
+                <div>
+                  <span className="text-zinc-300">En rango</span>
+                  <span className="text-zinc-500 text-[10px] ml-1">({inRangeSet.size})</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-gray-500 ring-1 ring-gray-400/30" />
+                <div>
+                  <span className="text-zinc-300">Fuera de rango</span>
+                  <span className="text-zinc-500 text-[10px] ml-1">({outOfRangeSet.size})</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Estado de selección */}
+          <div className="border-t border-zinc-700/70 pt-2 space-y-1.5">
+            <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Estado</div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-yellow-400 ring-2 ring-yellow-300/50" />
+              <div>
+                <span className="text-zinc-300">Seleccionado</span>
+                <span className="text-zinc-500 text-[10px] ml-1">({selectedInventory.size})</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-emerald-500 ring-1 ring-emerald-400/30" />
+              <div>
+                <span className="text-zinc-300">Ya reservado</span>
+                <span className="text-zinc-500 text-[10px] ml-1">(otra cara)</span>
+              </div>
             </div>
           </div>
         </div>

@@ -283,7 +283,63 @@ export const propuestasService = {
     }
     return response.data.data;
   },
+
+  async updateCara(propuestaId: number, caraId: number, data: CaraUpdateData): Promise<SolicitudCara> {
+    const response = await api.patch<ApiResponse<SolicitudCara>>(`/propuestas/${propuestaId}/caras/${caraId}`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar cara');
+    }
+    return response.data.data;
+  },
+
+  async createCara(propuestaId: number, data: CaraUpdateData): Promise<SolicitudCara> {
+    const response = await api.post<ApiResponse<SolicitudCara>>(`/propuestas/${propuestaId}/caras`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear cara');
+    }
+    return response.data.data;
+  },
 };
+
+export interface CaraUpdateData {
+  ciudad?: string;
+  estados?: string;
+  tipo?: string;
+  flujo?: string;
+  bonificacion?: number;
+  caras?: number;
+  nivel_socioeconomico?: string;
+  formato?: string;
+  costo?: number;
+  tarifa_publica?: number;
+  inicio_periodo?: string;
+  fin_periodo?: string;
+  caras_flujo?: number;
+  caras_contraflujo?: number;
+  articulo?: string;
+  descuento?: number;
+}
+
+export interface SolicitudCara {
+  id: number;
+  idquote?: string;
+  ciudad?: string;
+  estados?: string;
+  tipo?: string;
+  flujo?: string;
+  bonificacion?: number;
+  caras: number;
+  nivel_socioeconomico: string;
+  formato: string;
+  costo: number;
+  tarifa_publica: number;
+  inicio_periodo: string;
+  fin_periodo: string;
+  caras_flujo?: number;
+  caras_contraflujo?: number;
+  articulo?: string;
+  descuento?: number;
+}
 
 export interface ReservaModalItem {
   reserva_id: number;
