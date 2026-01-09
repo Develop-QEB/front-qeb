@@ -189,7 +189,8 @@ function GoogleMapsChart({
   showPins,
   onTogglePins,
   selectedPlaza,
-  onSelectPlaza
+  onSelectPlaza,
+  selectedInventoryIds
 }: {
   plazaData: PlazaMapData[];
   allCoords: InventoryCoord[];
@@ -197,6 +198,7 @@ function GoogleMapsChart({
   onTogglePins: () => void;
   selectedPlaza: string | null;
   onSelectPlaza: (p: string | null) => void;
+  selectedInventoryIds: Set<number>;
 }) {
   const { isLoaded } = useLoadScript({ googleMapsApiKey: GOOGLE_MAPS_API_KEY });
   const center = useMemo(() => ({ lat: 23.6345, lng: -102.5528 }), []);
@@ -234,6 +236,14 @@ function GoogleMapsChart({
     gestureHandling: 'cooperative',
   }), []);
 
+  // Filter coords based on selection
+  const filteredCoords = useMemo(() => {
+    if (selectedInventoryIds.size === 0) {
+      return allCoords; // No selection, show all
+    }
+    return allCoords.filter(coord => selectedInventoryIds.has(coord.id));
+  }, [allCoords, selectedInventoryIds]);
+
   // Manejar pines con clustering
   useEffect(() => {
     if (!mapRef.current || !isLoaded) return;
@@ -245,20 +255,20 @@ function GoogleMapsChart({
       clustererRef.current.clearMarkers();
     }
 
-    if (showPins && allCoords.length > 0) {
+    if (showPins && filteredCoords.length > 0) {
       // Crear marcadores para cada inventario
-      const markers = allCoords.map(coord => {
+      const markers = filteredCoords.map(coord => {
         const marker = new google.maps.Marker({
           position: { lat: coord.lat, lng: coord.lng },
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 4,
+            scale: selectedInventoryIds.size > 0 ? 6 : 4, // Bigger pins when filtered
             fillColor: coord.estatus === 'Reservado' ? '#facc15' :
                        coord.estatus === 'Vendido' ? '#06b6d4' :
                        coord.estatus === 'Bloqueado' ? '#f43f5e' : '#22c55e',
-            fillOpacity: 0.8,
+            fillOpacity: 0.9,
             strokeColor: '#fff',
-            strokeWeight: 1,
+            strokeWeight: selectedInventoryIds.size > 0 ? 2 : 1,
           },
           title: `${coord.plaza} - ${coord.estatus}`,
         });
@@ -267,34 +277,39 @@ function GoogleMapsChart({
 
       markersRef.current = markers;
 
-      // Crear clusterer
-      clustererRef.current = new MarkerClusterer({
-        map: mapRef.current,
-        markers,
-        renderer: {
-          render: ({ count, position }) => {
-            const color = count > 500 ? '#ec4899' : count > 100 ? '#d946ef' : '#8b5cf6';
-            return new google.maps.Marker({
-              position,
-              icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: Math.min(20, 10 + Math.log(count) * 3),
-                fillColor: color,
-                fillOpacity: 0.9,
-                strokeColor: '#fff',
-                strokeWeight: 2,
-              },
-              label: {
-                text: count > 999 ? `${(count/1000).toFixed(1)}k` : String(count),
-                color: '#fff',
-                fontSize: '10px',
-                fontWeight: 'bold',
-              },
-              zIndex: count,
-            });
+      // Crear clusterer solo si no hay selección específica
+      if (selectedInventoryIds.size === 0) {
+        clustererRef.current = new MarkerClusterer({
+          map: mapRef.current,
+          markers,
+          renderer: {
+            render: ({ count, position }) => {
+              const color = count > 500 ? '#ec4899' : count > 100 ? '#d946ef' : '#8b5cf6';
+              return new google.maps.Marker({
+                position,
+                icon: {
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: Math.min(20, 10 + Math.log(count) * 3),
+                  fillColor: color,
+                  fillOpacity: 0.9,
+                  strokeColor: '#fff',
+                  strokeWeight: 2,
+                },
+                label: {
+                  text: count > 999 ? `${(count/1000).toFixed(1)}k` : String(count),
+                  color: '#fff',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                },
+                zIndex: count,
+              });
+            },
           },
-        },
-      });
+        });
+      } else {
+        // Show individual markers without clustering when filtered
+        markers.forEach(marker => marker.setMap(mapRef.current));
+      }
     }
 
     return () => {
@@ -303,7 +318,7 @@ function GoogleMapsChart({
         clustererRef.current.clearMarkers();
       }
     };
-  }, [showPins, allCoords, isLoaded]);
+  }, [showPins, filteredCoords, isLoaded, selectedInventoryIds.size]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -332,16 +347,23 @@ function GoogleMapsChart({
             <p className="text-xs text-purple-400/60">{total.toLocaleString()} inventarios en {validPlazas.length} plazas</p>
           </div>
         </div>
-        <button
-          onClick={onTogglePins}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${showPins
-            ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40 shadow-lg shadow-pink-500/20'
-            : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
-          }`}
-        >
-          {showPins ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-          {showPins ? `Ocultar ${allCoords.length.toLocaleString()} Pines` : `Mostrar ${allCoords.length.toLocaleString()} Pines`}
-        </button>
+        <div className="flex items-center gap-2">
+          {selectedInventoryIds.size > 0 && (
+            <span className="px-3 py-1.5 rounded-xl bg-pink-500/20 text-pink-300 text-xs font-medium border border-pink-500/30">
+              {filteredCoords.length} de {allCoords.length.toLocaleString()} pines
+            </span>
+          )}
+          <button
+            onClick={onTogglePins}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${showPins
+              ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40 shadow-lg shadow-pink-500/20'
+              : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
+            }`}
+          >
+            {showPins ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            {showPins ? `Ocultar Pines` : `Mostrar Pines`}
+          </button>
+        </div>
       </div>
       <div className="h-[500px] relative">
         <GoogleMap
@@ -585,11 +607,43 @@ function SimpleBarChart({ data, title }: { data: ChartData[]; title: string }) {
   );
 }
 
-// Inventory Table with Pagination
-function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange }: {
+// Inventory Table with Pagination and Checkboxes
+function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange, selectedIds, onSelectionChange }: {
   data: any[]; isLoading: boolean; page: number; totalPages: number; total: number; onPageChange: (p: number) => void;
+  selectedIds: Set<number>; onSelectionChange: (ids: Set<number>) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+
+  const handleToggleItem = (id: number) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    onSelectionChange(newSet);
+  };
+
+  const handleToggleAll = () => {
+    if (data.every(item => selectedIds.has(item.id))) {
+      // Deselect all on current page
+      const newSet = new Set(selectedIds);
+      data.forEach(item => newSet.delete(item.id));
+      onSelectionChange(newSet);
+    } else {
+      // Select all on current page
+      const newSet = new Set(selectedIds);
+      data.forEach(item => newSet.add(item.id));
+      onSelectionChange(newSet);
+    }
+  };
+
+  const handleClearSelection = () => {
+    onSelectionChange(new Set());
+  };
+
+  const allCurrentPageSelected = data.length > 0 && data.every(item => selectedIds.has(item.id));
+  const someCurrentPageSelected = data.some(item => selectedIds.has(item.id));
 
   return (
     <GlassCard className="overflow-hidden">
@@ -607,6 +661,20 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
           </div>
         </div>
         <div className="flex items-center gap-4">
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1 rounded-full bg-pink-500/20 text-pink-300 text-xs font-medium border border-pink-500/30">
+                {selectedIds.size} seleccionados
+              </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleClearSelection(); }}
+                className="p-1.5 rounded-lg bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+                title="Limpiar selección"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           {!isLoading && totalPages > 1 && (
             <div className="flex items-center gap-2 text-xs text-purple-300">
               <span>Página {page} de {totalPages}</span>
@@ -626,6 +694,15 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                 <table className="w-full">
                   <thead className="sticky top-0 bg-[#1a1025]/98 backdrop-blur-sm z-10">
                     <tr className="border-b border-purple-500/20">
+                      <th className="px-4 py-3 text-left">
+                        <input
+                          type="checkbox"
+                          checked={allCurrentPageSelected}
+                          ref={(el) => { if (el) el.indeterminate = someCurrentPageSelected && !allCurrentPageSelected; }}
+                          onChange={handleToggleAll}
+                          className="w-4 h-4 rounded border-purple-500/50 bg-transparent text-pink-500 focus:ring-pink-500/50 focus:ring-offset-0 cursor-pointer"
+                        />
+                      </th>
                       {['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente'].map((h) => (
                         <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">{h}</th>
                       ))}
@@ -633,34 +710,49 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                   </thead>
                   <tbody>
                     {data.length === 0 ? (
-                      <tr><td colSpan={7} className="px-4 py-8 text-center text-zinc-500">No hay inventarios</td></tr>
+                      <tr><td colSpan={8} className="px-4 py-8 text-center text-zinc-500">No hay inventarios</td></tr>
                     ) : (
-                      data.map((item, idx) => (
-                        <tr key={item.id || idx} className="border-b border-purple-500/10 hover:bg-purple-500/5 transition-colors">
-                          <td className="px-4 py-3">
-                            <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">{item.codigo_unico || item.id}</span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-white">{item.plaza || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-zinc-400">{item.municipio || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-zinc-300">{item.mueble || item.tipo_de_mueble || '-'}</td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${item.tradicional_digital === 'Digital' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-pink-500/20 text-pink-300 border border-pink-500/30'}`}>
-                              {item.tradicional_digital || 'Tradicional'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                              item.estatus === 'Vendido' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' :
-                              item.estatus === 'Reservado' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
-                              item.estatus === 'Bloqueado' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
-                              'bg-green-500/20 text-green-300 border border-green-500/30'
-                            }`}>
-                              {item.estatus || 'Disponible'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-zinc-400 truncate max-w-[150px]">{item.cliente_nombre || '-'}</td>
-                        </tr>
-                      ))
+                      data.map((item, idx) => {
+                        const isSelected = selectedIds.has(item.id);
+                        return (
+                          <tr
+                            key={item.id || idx}
+                            className={`border-b border-purple-500/10 hover:bg-purple-500/5 transition-colors cursor-pointer ${isSelected ? 'bg-pink-500/10' : ''}`}
+                            onClick={() => handleToggleItem(item.id)}
+                          >
+                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleItem(item.id)}
+                                className="w-4 h-4 rounded border-purple-500/50 bg-transparent text-pink-500 focus:ring-pink-500/50 focus:ring-offset-0 cursor-pointer"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">{item.codigo_unico || item.id}</span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-white">{item.plaza || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-zinc-400">{item.municipio || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-zinc-300">{item.mueble || item.tipo_de_mueble || '-'}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${item.tradicional_digital === 'Digital' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-pink-500/20 text-pink-300 border border-pink-500/30'}`}>
+                                {item.tradicional_digital || 'Tradicional'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                                item.estatus === 'Vendido' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' :
+                                item.estatus === 'Reservado' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
+                                item.estatus === 'Bloqueado' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                                'bg-green-500/20 text-green-300 border border-green-500/30'
+                              }`}>
+                                {item.estatus || 'Disponible'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-zinc-400 truncate max-w-[150px]">{item.cliente_nombre || '-'}</td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -754,6 +846,7 @@ export function DashboardPage() {
   const [showPins, setShowPins] = useState(true);
   const [selectedPlaza, setSelectedPlaza] = useState<string | null>(null);
   const [inventoryPage, setInventoryPage] = useState(1);
+  const [selectedInventoryIds, setSelectedInventoryIds] = useState<Set<number>>(new Set());
 
   // Prefetch todas las vistas al cargar el dashboard
   const { prefetchAll } = usePrefetch();
@@ -894,14 +987,16 @@ export function DashboardPage() {
           <SimpleBarChart data={graficas?.porNSE || []} title="Por Nivel Socioeconómico" />
         </div>
 
-        {/* Map */}
+        {/* Map - key forces remount when filters change */}
         <GoogleMapsChart
+          key={`map-${filters.ciudad || 'all'}-${filters.estado || 'all'}-${activeEstatus}`}
           plazaData={inventoryData?.byPlaza || []}
           allCoords={inventoryData?.allCoords || []}
           showPins={showPins}
           onTogglePins={() => setShowPins(!showPins)}
           selectedPlaza={selectedPlaza}
           onSelectPlaza={setSelectedPlaza}
+          selectedInventoryIds={selectedInventoryIds}
         />
 
         {/* Inventory Table */}
@@ -912,6 +1007,8 @@ export function DashboardPage() {
           totalPages={inventoryData?.pagination.totalPages || 1}
           total={inventoryData?.pagination.total || 0}
           onPageChange={setInventoryPage}
+          selectedIds={selectedInventoryIds}
+          onSelectionChange={setSelectedInventoryIds}
         />
 
         {/* Widgets */}
