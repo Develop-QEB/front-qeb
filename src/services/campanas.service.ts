@@ -532,6 +532,20 @@ export const campanasService = {
     return response.data.data;
   },
 
+  async checkReservasTareas(id: number, reservaIds: number[]): Promise<{
+    hasTareas: boolean;
+    tareas: Array<{ id: number; titulo: string | null; tipo: string | null; estatus: string | null; responsable: string | null }>;
+  }> {
+    const response = await api.post<ApiResponse<{
+      hasTareas: boolean;
+      tareas: Array<{ id: number; titulo: string | null; tipo: string | null; estatus: string | null; responsable: string | null }>;
+    }>>(`/campanas/${id}/check-reservas-tareas`, { reservaIds });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al verificar tareas');
+    }
+    return response.data.data;
+  },
+
   async uploadArteFile(file: File): Promise<{ url: string; filename: string }> {
     const formData = new FormData();
     formData.append('file', file);
