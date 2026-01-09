@@ -4012,7 +4012,7 @@ export function TareaSeguimientoPage() {
   });
 
   const updateArteStatusMutation = useMutation({
-    mutationFn: ({ reservaIds, status, comentario }: { reservaIds: number[]; status: 'Aprobado' | 'Rechazado'; comentario?: string }) =>
+    mutationFn: ({ reservaIds, status, comentario }: { reservaIds: number[]; status: 'Aprobado' | 'Rechazado' | 'Pendiente'; comentario?: string }) =>
       campanasService.updateArteStatus(campanaId, reservaIds, status, comentario),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId], refetchType: 'all' });

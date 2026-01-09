@@ -550,7 +550,7 @@ export const campanasService = {
   async updateArteStatus(
     id: number,
     reservaIds: number[],
-    status: 'Aprobado' | 'Rechazado',
+    status: 'Aprobado' | 'Rechazado' | 'Pendiente',
     comentarioRechazo?: string
   ): Promise<{ message: string; affected: number }> {
     const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/arte-status`, {
