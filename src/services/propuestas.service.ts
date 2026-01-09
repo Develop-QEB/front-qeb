@@ -10,6 +10,7 @@ export interface PropuestasParams {
   yearFin?: number;
   catorcenaInicio?: number;
   catorcenaFin?: number;
+  soloAtendidas?: boolean;
 }
 
 export interface PropuestaStats {

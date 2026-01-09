@@ -946,6 +946,7 @@ export function PropuestasPage() {
         yearFin,
         catorcenaInicio,
         catorcenaFin,
+        soloAtendidas: true,
       }),
   });
 
