@@ -805,13 +805,24 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     enabled: isOpen,
   });
 
-  // Reset form when opening modal in create mode (not edit mode) or when editSolicitudId changes
+  // Block body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  // Reset form when opening modal in create mode - set asignados to traficoUsers directly
   useEffect(() => {
     if (isOpen && !isEditMode) {
       // Reset all form state for a fresh start
       setStep(1);
       setSelectedCuic(null);
-      setSelectedAsignados([]);
+      // Set asignados to trafico users (or empty if not loaded yet)
+      setSelectedAsignados(traficoUsers || []);
       setNombreCampania('');
       setDescripcion('');
       setNotas('');
@@ -837,7 +848,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tarifaPublica: 0,
       });
     }
-  }, [isOpen, isEditMode]);
+  }, [isOpen, isEditMode, traficoUsers]);
 
   // Reset form state when switching between different solicitudes in edit mode
   useEffect(() => {
@@ -854,13 +865,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setImu(false);
     }
   }, [editSolicitudId]);
-
-  // Set default asignados when trafico users load (only if asignados is empty)
-  useEffect(() => {
-    if (isOpen && !isEditMode && traficoUsers && traficoUsers.length > 0 && selectedAsignados.length === 0) {
-      setSelectedAsignados(traficoUsers);
-    }
-  }, [traficoUsers, isOpen, isEditMode]);
 
   // Filter cities by estado
   const filteredCiudades = useMemo(() => {
@@ -1192,6 +1196,40 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         setSelectedAsignados([]);
       }
 
+      // Load archivo from solicitud
+      if (sol.archivo) {
+        setArchivo(sol.archivo);
+        setTipoArchivo(sol.tipo_archivo || null);
+      }
+
+      // Load catorcenas from cotizacion dates (like ViewSolicitudModal does)
+      const cotizacion = editSolicitudData.cotizacion;
+      if (cotizacion?.fecha_inicio && cotizacion?.fecha_fin) {
+        const fechaInicioDate = new Date(cotizacion.fecha_inicio);
+        const fechaFinDate = new Date(cotizacion.fecha_fin);
+
+        const inicioCat = catorcenasData.data.find(c => {
+          const cInicio = new Date(c.fecha_inicio);
+          const cFin = new Date(c.fecha_fin);
+          return fechaInicioDate >= cInicio && fechaInicioDate <= cFin;
+        });
+
+        const finCat = catorcenasData.data.find(c => {
+          const cInicio = new Date(c.fecha_inicio);
+          const cFin = new Date(c.fecha_fin);
+          return fechaFinDate >= cInicio && fechaFinDate <= cFin;
+        });
+
+        if (inicioCat) {
+          setYearInicio(inicioCat.a_o);
+          setCatorcenaInicio(inicioCat.numero_catorcena);
+        }
+        if (finCat) {
+          setYearFin(finCat.a_o);
+          setCatorcenaFin(finCat.numero_catorcena);
+        }
+      }
+
       // Set caras from the fetched data
       if (editSolicitudData.caras && editSolicitudData.caras.length > 0) {
         const loadedCaras: CaraEntry[] = editSolicitudData.caras.map((cara, idx) => {
@@ -1257,31 +1295,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         });
         setCaras(loadedCaras);
 
-        // Set year/catorcena range from loaded caras for fechaInicio/fechaFin
+        // Auto-expand all catorcenas in edit mode so user can see them
         if (loadedCaras.length > 0) {
-          // Find min and max catorcenas
-          let minYear = loadedCaras[0].catorcenaYear;
-          let maxYear = loadedCaras[0].catorcenaYear;
-          let minCat = loadedCaras[0].catorcenaNum;
-          let maxCat = loadedCaras[0].catorcenaNum;
-
-          loadedCaras.forEach(c => {
-            if (c.catorcenaYear < minYear || (c.catorcenaYear === minYear && c.catorcenaNum < minCat)) {
-              minYear = c.catorcenaYear;
-              minCat = c.catorcenaNum;
-            }
-            if (c.catorcenaYear > maxYear || (c.catorcenaYear === maxYear && c.catorcenaNum > maxCat)) {
-              maxYear = c.catorcenaYear;
-              maxCat = c.catorcenaNum;
-            }
-          });
-
-          setYearInicio(minYear);
-          setCatorcenaInicio(minCat);
-          setYearFin(maxYear);
-          setCatorcenaFin(maxCat);
-
-          // Auto-expand all catorcenas in edit mode so user can see them
           const catKeys = new Set(loadedCaras.map(c => `${c.catorcenaYear}-${c.catorcenaNum}`));
           setExpandedCatorcenas(catKeys);
         }
@@ -1299,19 +1314,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   };
 
   if (!isOpen) return null;
-
-  // Show loading state when fetching edit data
-  if (isEditMode && editDataLoading) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-zinc-900 rounded-2xl border border-zinc-700 p-8 flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500" />
-          <p className="text-zinc-400">Cargando solicitud...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">

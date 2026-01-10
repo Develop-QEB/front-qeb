@@ -22,12 +22,26 @@ interface UserAvatarProps {
 }
 
 export function UserAvatar({ nombre, foto_perfil, size = 'md', className }: UserAvatarProps) {
-  const [imgError, setImgError] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const initial = nombre?.charAt(0)?.toUpperCase() || 'U';
   const sizeClass = sizeClasses[size];
 
-  // Fallback component (initial avatar)
-  const FallbackAvatar = (
+  if (foto_perfil && !imageError) {
+    return (
+      <img
+        src={`${STATIC_URL}${foto_perfil}`}
+        alt={nombre || 'Usuario'}
+        className={cn(
+          'rounded-full object-cover flex-shrink-0',
+          sizeClass,
+          className
+        )}
+        onError={() => setImageError(true)}
+      />
+    );
+  }
+
+  return (
     <div
       className={cn(
         'rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-white font-medium flex-shrink-0',
@@ -38,26 +52,4 @@ export function UserAvatar({ nombre, foto_perfil, size = 'md', className }: User
       {initial}
     </div>
   );
-
-  if (foto_perfil && !imgError) {
-    // Build full URL - handle both relative and absolute paths
-    const imgSrc = foto_perfil.startsWith('http')
-      ? foto_perfil
-      : `${STATIC_URL}${foto_perfil}`;
-
-    return (
-      <img
-        src={imgSrc}
-        alt={nombre || 'Usuario'}
-        className={cn(
-          'rounded-full object-cover flex-shrink-0',
-          sizeClass,
-          className
-        )}
-        onError={() => setImgError(true)}
-      />
-    );
-  }
-
-  return FallbackAvatar;
 }

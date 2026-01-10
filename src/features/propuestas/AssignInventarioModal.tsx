@@ -15,6 +15,10 @@ import { formatCurrency } from '../../lib/utils';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
+// Static URL for files
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const STATIC_URL = API_URL.replace(/\/api$/, '');
+
 // Dark map styles
 const DARK_MAP_STYLES = [
   { elementType: 'geometry', stylers: [{ color: '#212121' }] },
@@ -488,6 +492,7 @@ const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const queryClient = useQueryClient();
   const mapRef = useRef<google.maps.Map | null>(null);
+  const reservadosMapRef = useRef<google.maps.Map | null>(null);
 
   // Load Google Maps with required libraries
   const { isLoaded: mapsLoaded } = useLoadScript({
@@ -792,21 +797,34 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       let yFin: number | undefined;
       let cFin: number | undefined;
 
-      if (cot?.fecha_inicio) {
-        const fechaInicio = new Date(cot.fecha_inicio);
-        yInicio = fechaInicio.getFullYear();
-        setYearInicio(yInicio);
-        const dayOfYear = Math.floor((fechaInicio.getTime() - new Date(fechaInicio.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-        cInicio = Math.ceil(dayOfYear / 14);
-        setCatorcenaInicio(cInicio);
+      // Load catorcenas from cotizacion dates using proper date comparison
+      if (cot?.fecha_inicio && catorcenasData?.data) {
+        const fechaInicioDate = new Date(cot.fecha_inicio);
+        const inicioCat = catorcenasData.data.find(c => {
+          const cInicioDate = new Date(c.fecha_inicio);
+          const cFinDate = new Date(c.fecha_fin);
+          return fechaInicioDate >= cInicioDate && fechaInicioDate <= cFinDate;
+        });
+        if (inicioCat) {
+          yInicio = inicioCat.a_o;
+          setYearInicio(yInicio);
+          cInicio = inicioCat.numero_catorcena;
+          setCatorcenaInicio(cInicio);
+        }
       }
-      if (cot?.fecha_fin) {
-        const fechaFin = new Date(cot.fecha_fin);
-        yFin = fechaFin.getFullYear();
-        setYearFin(yFin);
-        const dayOfYear = Math.floor((fechaFin.getTime() - new Date(fechaFin.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-        cFin = Math.ceil(dayOfYear / 14);
-        setCatorcenaFin(cFin);
+      if (cot?.fecha_fin && catorcenasData?.data) {
+        const fechaFinDate = new Date(cot.fecha_fin);
+        const finCat = catorcenasData.data.find(c => {
+          const cInicioDate = new Date(c.fecha_inicio);
+          const cFinDate = new Date(c.fecha_fin);
+          return fechaFinDate >= cInicioDate && fechaFinDate <= cFinDate;
+        });
+        if (finCat) {
+          yFin = finCat.a_o;
+          setYearFin(yFin);
+          cFin = finCat.numero_catorcena;
+          setCatorcenaFin(cFin);
+        }
       }
 
       // Store initial values for change detection
@@ -846,7 +864,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         setCaras(carasWithIds);
       }
     }
-  }, [solicitudDetails, propuesta, isOpen, users]);
+  }, [solicitudDetails, propuesta, isOpen, users, catorcenasData]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -1217,13 +1235,27 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       return;
     }
 
+    const caraToDelete = caras.find(c => c.localId === localId);
+
     setConfirmModal({
       isOpen: true,
       title: 'Eliminar Formato',
       message: '¿Estás seguro de que deseas eliminar este formato de la propuesta?',
       confirmText: 'Eliminar',
       isDestructive: true,
-      onConfirm: () => {
+      onConfirm: async () => {
+        // If cara has DB id, delete from database
+        if (caraToDelete?.id) {
+          try {
+            await propuestasService.deleteCara(propuesta.id, caraToDelete.id);
+          } catch (error) {
+            console.error('Error deleting cara:', error);
+            alert('Error al eliminar el formato de la base de datos');
+            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+            return;
+          }
+        }
+        // Update local state
         setCaras(prev => prev.filter(c => c.localId !== localId));
         setReservas(prev => prev.filter(r => !r.id.startsWith(localId)));
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -3396,6 +3428,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       disableDefaultUI: true,
                       zoomControl: true,
                     }}
+                    onLoad={(map) => {
+                      reservadosMapRef.current = map;
+                      // Fit bounds to all reservations
+                      if (currentCaraReservas.length > 0) {
+                        const bounds = new google.maps.LatLngBounds();
+                        currentCaraReservas.forEach(r => {
+                          if (r.latitud && r.longitud) {
+                            bounds.extend({ lat: r.latitud, lng: r.longitud });
+                          }
+                        });
+                        if (!bounds.isEmpty()) {
+                          map.fitBounds(bounds, 50);
+                        }
+                      }
+                    }}
                   >
                     {currentCaraReservas.map(reserva => (
                       reserva.latitud && reserva.longitud && (
@@ -3441,30 +3488,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
             <p className="text-sm text-zinc-400">Propuesta #{propuesta.id}</p>
           </div>
           <div className="flex items-center gap-3">
-            {/* Archivo de solicitud */}
-            {solicitudDetails?.solicitud?.archivo && (
-              <div className="flex items-center gap-2">
-                <a
-                  href={solicitudDetails.solicitud.archivo}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-lg text-xs font-medium hover:bg-violet-500/30 transition-colors"
-                  title="Ver archivo de solicitud"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  Ver Archivo
-                </a>
-                <a
-                  href={solicitudDetails.solicitud.archivo}
-                  download
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-medium hover:bg-emerald-500/30 transition-colors"
-                  title="Descargar archivo de solicitud"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Descargar
-                </a>
-              </div>
-            )}
+            
             <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:text-white">
               <X className="h-5 w-5" />
             </button>
@@ -3995,7 +4019,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       const isCatorcenaExpanded = expandedCatorcenas.has(periodo);
                       const catorcenaLabel = groupData.catorcenaNum
                         ? `Catorcena #${groupData.catorcenaNum}${groupData.year ? ` - ${groupData.year}` : ''}`
-                        : `Periodo: ${periodo}`;
+                        : `Periodo: ${new Date(periodo).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}`;
 
                       return (
                         <div key={periodo}>

@@ -300,6 +300,13 @@ export const propuestasService = {
     }
     return response.data.data;
   },
+
+  async deleteCara(propuestaId: number, caraId: number): Promise<void> {
+    const response = await api.delete<ApiResponse<void>>(`/propuestas/${propuestaId}/caras/${caraId}`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar cara');
+    }
+  },
 };
 
 export interface CaraUpdateData {

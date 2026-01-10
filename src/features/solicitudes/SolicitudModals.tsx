@@ -484,7 +484,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
             const inversionCara = (Number(c.tarifa_publica) || 0) * (Number(c.caras) || 0);
             return [
               rowNum.toString(),
-              `${c.ciudad || c.estados || '-'}`,
+              c.estados || '-',
+              c.ciudad || '-',
               c.formato || '-',
               (Number(c.caras) || 0).toString(),
               (Number(c.bonificacion) || 0).toString(),
@@ -494,7 +495,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
 
           autoTable(doc, {
             startY: yPos,
-            head: [['#', 'Plaza', 'Formato', 'Caras', 'Bonif.', 'Inversión']],
+            head: [['#', 'Estado', 'Ciudad', 'Formato', 'Caras', 'Bonif.', 'Inversión']],
             body: tableData,
             theme: 'plain',
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -514,12 +515,13 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
             },
             alternateRowStyles: { fillColor: [252, 253, 255] },
             columnStyles: {
-              0: { cellWidth: 10, halign: 'center' },  // #
-              1: { cellWidth: 45 },                     // Plaza
-              2: { cellWidth: 40 },                     // Formato
-              3: { cellWidth: 18, halign: 'center' },  // Caras
-              4: { cellWidth: 18, halign: 'center' },  // Bonif.
-              5: { cellWidth: 28, halign: 'right' },   // Inversión
+              0: { cellWidth: 8, halign: 'center' },   // #
+              1: { cellWidth: 30 },                     // Estado
+              2: { cellWidth: 30 },                     // Ciudad
+              3: { cellWidth: 35 },                     // Formato
+              4: { cellWidth: 15, halign: 'center' },  // Caras
+              5: { cellWidth: 15, halign: 'center' },  // Bonif.
+              6: { cellWidth: 25, halign: 'right' },   // Inversión
             },
           });
 
@@ -651,12 +653,12 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Inicio</span>
-                      <span className="text-white text-sm">{data.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : '-'}</span>
+                      <span className="text-zinc-500 text-sm">Catorcena Inicio</span>
+                      <span className="text-white text-sm">{data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas) : '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Fin</span>
-                      <span className="text-white text-sm">{data.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : '-'}</span>
+                      <span className="text-zinc-500 text-sm">Catorcena Fin</span>
+                      <span className="text-white text-sm">{data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas) : '-'}</span>
                     </div>
                     {data.solicitud.descripcion && (
                       <div className="pt-2 border-t border-zinc-700/50">
@@ -986,11 +988,30 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange }: Stat
   const [selectedStatus, setSelectedStatus] = useState('');
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
+  // Block body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   const { data: comments, refetch: refetchComments } = useQuery({
     queryKey: ['solicitud-comments', solicitud?.id],
     queryFn: () => solicitudesService.getComments(solicitud!.id),
     enabled: isOpen && !!solicitud,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
+
+  // Refetch comments when modal opens
+  useEffect(() => {
+    if (isOpen && solicitud) {
+      refetchComments();
+    }
+  }, [isOpen, solicitud, refetchComments]);
 
   const addCommentMutation = useMutation({
     mutationFn: ({ id, comentario }: { id: number; comentario: string }) =>
@@ -1158,6 +1179,16 @@ interface AtenderModalProps {
 }
 
 export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderModalProps) {
+  // Block body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   const queryClient = useQueryClient();
 
   const atenderMutation = useMutation({
