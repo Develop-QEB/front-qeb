@@ -5223,10 +5223,10 @@ export function TareaSeguimientoPage() {
     return values;
   }, [inventoryTestigosData]);
 
-  // Transform tareas from API to TaskRow format
+  // Transform tareas from API to TaskRow format (excluye "Seguimiento Campaña" que pertenece a otra pantalla)
   const tasks = useMemo((): TaskRow[] => {
     return tareasAPI
-      .filter((t) => t.estatus !== 'Atendido' && t.estatus !== 'Completado')
+      .filter((t) => t.estatus !== 'Atendido' && t.estatus !== 'Completado' && t.tipo !== 'Seguimiento Campaña')
       .sort((a, b) => b.id - a.id) // Más recientes primero
       .map((t) => ({
         id: t.id.toString(),
@@ -5246,7 +5246,7 @@ export function TareaSeguimientoPage() {
 
   const completedTasks = useMemo((): TaskRow[] => {
     return tareasAPI
-      .filter((t) => t.estatus === 'Atendido' || t.estatus === 'Completado')
+      .filter((t) => (t.estatus === 'Atendido' || t.estatus === 'Completado') && t.tipo !== 'Seguimiento Campaña')
       .sort((a, b) => b.id - a.id) // Más recientes primero
       .map((t) => ({
         id: t.id.toString(),
