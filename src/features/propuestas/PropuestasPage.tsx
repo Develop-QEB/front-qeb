@@ -1287,10 +1287,10 @@ export function PropuestasPage() {
           <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl -mr-5 -mb-5 pointer-events-none group-hover:bg-amber-500/20 transition-all duration-500" />
             <div>
-              <p className="text-zinc-400 text-sm font-medium mb-1">Por Aprobar / Pendiente</p>
+              <p className="text-zinc-400 text-sm font-medium mb-1">Sin Aprobar</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-bold text-amber-400">
-                  {((stats?.byStatus['Por aprobar'] || 0) + (stats?.byStatus['Pendiente'] || 0)).toLocaleString()}
+                  {((stats?.total || 0) - (stats?.byStatus['Por aprobar'] || 0)).toLocaleString()}
                 </h3>
                 <span className="text-xs text-amber-500/80 font-medium">Atención requerida</span>
               </div>
@@ -1300,7 +1300,7 @@ export function PropuestasPage() {
             <div className="mt-4 w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-amber-500 to-orange-500"
-                style={{ width: `${Math.min(100, (((stats?.byStatus['Por aprobar'] || 0) + (stats?.byStatus['Pendiente'] || 0)) / (stats?.total || 1)) * 100)}%` }}
+                style={{ width: `${Math.min(100, (((stats?.total || 0) - (stats?.byStatus['Por aprobar'] || 0)) / (stats?.total || 1)) * 100)}%` }}
               />
             </div>
           </div>
