@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { GoogleMap, useLoadScript, Circle, InfoWindow } from '@react-google-maps/api';
 import { usePrefetch } from '../../hooks/usePrefetch';
-import { MarkerClusterer } from '@googlemaps/markerclusterer';
+import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer';
 import {
   Package,
   CheckCircle2,
@@ -205,8 +205,14 @@ function GoogleMapsChart({
   const mapRef = useRef<google.maps.Map | null>(null);
   const clustererRef = useRef<MarkerClusterer | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const [mapReady, setMapReady] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(5);
 
-  const validPlazas = useMemo(() => plazaData.filter(d => d.lat && d.lng), [plazaData]);
+  // Umbral de zoom para ocultar círculos de densidad (cuando zoom > 7, ocultar círculos)
+  const ZOOM_THRESHOLD_HIDE_CIRCLES = 7;
+
+  // Filtrar plazas que tengan coordenadas válidas Y count > 0
+  const validPlazas = useMemo(() => plazaData.filter(d => d.lat && d.lng && d.count > 0), [plazaData]);
   const maxCount = Math.max(...validPlazas.map(d => d.count), 1);
 
   // Color para cada ciudad segun densidad
@@ -219,11 +225,11 @@ function GoogleMapsChart({
     return { fill: '#8b5cf6', stroke: '#7c3aed', opacity: 0.3 };
   }, [maxCount]);
 
-  // Radio del círculo según cantidad
+  // Radio del círculo según cantidad (reducido para mejor visualización)
   const getCircleRadius = useCallback((count: number) => {
-    const base = 15000; // 15km base
+    const base = 3000; // 3km base
     const scale = Math.sqrt(count / maxCount);
-    return base + (scale * 50000); // hasta 65km
+    return base + (scale * 8000); // hasta 11km máximo
   }, [maxCount]);
 
   const mapOptions = useMemo(() => ({
@@ -243,8 +249,103 @@ function GoogleMapsChart({
     }
     return allCoords.filter(coord => selectedInventoryIds.has(coord.id));
   }, [allCoords, selectedInventoryIds]);
+// Auto-fit bounds when data changes (allCoords viene filtrado del backend)
+  useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
 
-  // Manejar pines con clustering
+    // Delay para asegurar que el mapa está renderizado
+    const timeoutId = setTimeout(() => {
+      if (!mapRef.current) return;
+
+      const bounds = new google.maps.LatLngBounds();
+      let hasPoints = false;
+
+      // Usar allCoords (ya viene filtrado del backend por ciudad/estado)
+      if (allCoords.length > 0) {
+        // Limitar a primeros 1000 para calcular bounds más rápido
+        const coordsForBounds = allCoords.slice(0, 1000);
+        coordsForBounds.forEach(coord => {
+          bounds.extend({ lat: coord.lat, lng: coord.lng });
+          hasPoints = true;
+        });
+      }
+
+      if (hasPoints) {
+        // Ajustar el mapa a los bounds con padding
+        mapRef.current.fitBounds(bounds, {
+          top: 50,
+          right: 50,
+          bottom: 50,
+          left: 50,
+        });
+
+        // Limitar zoom
+        const listener = google.maps.event.addListenerOnce(mapRef.current, 'idle', () => {
+          const currentZoom = mapRef.current?.getZoom();
+          if (currentZoom) {
+            if (currentZoom > 14) {
+              mapRef.current?.setZoom(14);
+            } else if (currentZoom < 4) {
+              mapRef.current?.setZoom(4);
+            }
+          }
+        });
+
+        return () => {
+          google.maps.event.removeListener(listener);
+        };
+      }
+    }, 200);
+
+    return () => clearTimeout(timeoutId);
+  }, [allCoords, mapReady]);
+
+  // Auto-fit bounds when selection changes (checkboxes in table)
+  useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
+    if (selectedInventoryIds.size === 0) return; // No selection, don't adjust
+
+    // Get coordinates for selected items
+    const selectedCoords = allCoords.filter(coord => selectedInventoryIds.has(coord.id));
+    if (selectedCoords.length === 0) return;
+
+    const timeoutId = setTimeout(() => {
+      if (!mapRef.current) return;
+
+      const bounds = new google.maps.LatLngBounds();
+      selectedCoords.forEach(coord => {
+        bounds.extend({ lat: coord.lat, lng: coord.lng });
+      });
+
+      // Ajustar el mapa a los bounds de los items seleccionados
+      mapRef.current.fitBounds(bounds, {
+        top: 80,
+        right: 80,
+        bottom: 80,
+        left: 80,
+      });
+
+      // Limitar zoom - si hay pocos items, no hacer zoom extremo
+      const listener = google.maps.event.addListenerOnce(mapRef.current, 'idle', () => {
+        const currentZoom = mapRef.current?.getZoom();
+        if (currentZoom) {
+          if (currentZoom > 16) {
+            mapRef.current?.setZoom(16); // Más zoom permitido para selección
+          } else if (currentZoom < 4) {
+            mapRef.current?.setZoom(4);
+          }
+        }
+      });
+
+      return () => {
+        google.maps.event.removeListener(listener);
+      };
+    }, 150);
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedInventoryIds, allCoords, mapReady]);
+
+  // Manejar pines con clustering optimizado para rendimiento
   useEffect(() => {
     if (!mapRef.current || !isLoaded) return;
 
@@ -253,22 +354,23 @@ function GoogleMapsChart({
     markersRef.current = [];
     if (clustererRef.current) {
       clustererRef.current.clearMarkers();
+      clustererRef.current = null;
     }
 
     if (showPins && filteredCoords.length > 0) {
-      // Crear marcadores para cada inventario
+      // Crear marcadores para cada inventario (sin límite)
       const markers = filteredCoords.map(coord => {
         const marker = new google.maps.Marker({
           position: { lat: coord.lat, lng: coord.lng },
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: selectedInventoryIds.size > 0 ? 6 : 4, // Bigger pins when filtered
+            scale: 4,
             fillColor: coord.estatus === 'Reservado' ? '#facc15' :
                        coord.estatus === 'Vendido' ? '#06b6d4' :
                        coord.estatus === 'Bloqueado' ? '#f43f5e' : '#22c55e',
             fillOpacity: 0.9,
             strokeColor: '#fff',
-            strokeWeight: selectedInventoryIds.size > 0 ? 2 : 1,
+            strokeWeight: 1,
           },
           title: `${coord.plaza} - ${coord.estatus}`,
         });
@@ -277,51 +379,70 @@ function GoogleMapsChart({
 
       markersRef.current = markers;
 
-      // Crear clusterer solo si no hay selección específica
-      if (selectedInventoryIds.size === 0) {
-        clustererRef.current = new MarkerClusterer({
-          map: mapRef.current,
-          markers,
-          renderer: {
-            render: ({ count, position }) => {
-              const color = count > 500 ? '#ec4899' : count > 100 ? '#d946ef' : '#8b5cf6';
-              return new google.maps.Marker({
-                position,
-                icon: {
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: Math.min(20, 10 + Math.log(count) * 3),
-                  fillColor: color,
-                  fillOpacity: 0.9,
-                  strokeColor: '#fff',
-                  strokeWeight: 2,
-                },
-                label: {
-                  text: count > 999 ? `${(count/1000).toFixed(1)}k` : String(count),
-                  color: '#fff',
-                  fontSize: '10px',
-                  fontWeight: 'bold',
-                },
-                zIndex: count,
-              });
-            },
+      // Usar SuperClusterAlgorithm - radio 80 para balance entre agrupación y visibilidad
+      clustererRef.current = new MarkerClusterer({
+        map: mapRef.current,
+        markers,
+        algorithm: new SuperClusterAlgorithm({
+          radius: 80,   // Radio moderado para ver más clusters
+          maxZoom: 15,  // Nivel máximo de zoom para clustering
+        }),
+        onClusterClick: (event, cluster, map) => {
+          // Al hacer click en un cluster, hacer zoom para ver los markers que contiene
+          const bounds = new google.maps.LatLngBounds();
+          cluster.markers?.forEach(marker => {
+            const pos = marker.getPosition();
+            if (pos) bounds.extend(pos);
+          });
+          map.fitBounds(bounds);
+        },
+        renderer: {
+          render: ({ count, position }) => {
+            const color = count > 500 ? '#ec4899' : count > 100 ? '#d946ef' : '#8b5cf6';
+            const scale = count > 1000 ? 14 : count > 100 ? 12 : 10;
+            return new google.maps.Marker({
+              position,
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale,
+                fillColor: color,
+                fillOpacity: 0.85,
+                strokeColor: '#fff',
+                strokeWeight: 2,
+              },
+              label: {
+                text: count > 999 ? `${(count/1000).toFixed(1)}k` : String(count),
+                color: '#fff',
+                fontSize: '9px',
+                fontWeight: 'bold',
+              },
+              zIndex: count,
+            });
           },
-        });
-      } else {
-        // Show individual markers without clustering when filtered
-        markers.forEach(marker => marker.setMap(mapRef.current));
-      }
+        },
+      });
     }
 
     return () => {
       markersRef.current.forEach(marker => marker.setMap(null));
       if (clustererRef.current) {
         clustererRef.current.clearMarkers();
+        clustererRef.current = null;
       }
     };
-  }, [showPins, filteredCoords, isLoaded, selectedInventoryIds.size]);
+  }, [showPins, filteredCoords, isLoaded, allCoords.length]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
+    setMapReady(true);
+
+    // Listener para actualizar el nivel de zoom
+    map.addListener('zoom_changed', () => {
+      const currentZoom = map.getZoom();
+      if (currentZoom !== undefined) {
+        setZoomLevel(currentZoom);
+      }
+    });
   }, []);
 
   if (!isLoaded) {
@@ -373,25 +494,7 @@ function GoogleMapsChart({
           options={mapOptions}
           onLoad={onMapLoad}
         >
-          {/* Círculos de densidad por ciudad - siempre visibles */}
-          {validPlazas.map((plaza) => {
-            const colors = getCircleColor(plaza.count);
-            return (
-              <Circle
-                key={plaza.plaza}
-                center={{ lat: plaza.lat!, lng: plaza.lng! }}
-                radius={getCircleRadius(plaza.count)}
-                options={{
-                  fillColor: colors.fill,
-                  fillOpacity: colors.opacity,
-                  strokeColor: colors.stroke,
-                  strokeWeight: 2,
-                  clickable: true,
-                }}
-                onClick={() => onSelectPlaza(plaza.plaza)}
-              />
-            );
-          })}
+          {/* Círculos de densidad removidos - solo se muestran los pines/clusters */}
 
           {/* InfoWindow para plaza seleccionada */}
           {selectedPlaza && validPlazas.find(d => d.plaza === selectedPlaza) && (
@@ -470,7 +573,7 @@ function MunicipioPieChart({ data, title }: { data: ChartData[]; title: string }
         ) : (
           <div className="w-full h-full flex items-center">
             <div className="h-full w-[160px]">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width={160} height={268}>
                 <PieChart>
                   <Pie data={chartData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={3} dataKey="value" stroke="none">
                     {chartData.map((entry, index) => (<Cell key={index} fill={entry.color} />))}
@@ -521,7 +624,7 @@ function TipoPieChart({ data, title }: { data: ChartData[]; title: string }) {
         ) : (
           <div className="w-full h-full flex items-center">
             <div className="h-full w-[160px] relative">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width={160} height={268}>
                 <PieChart>
                   <Pie data={chartData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={4} dataKey="value" stroke="none">
                     {chartData.map((entry, index) => (<Cell key={index} fill={entry.color} />))}
@@ -570,7 +673,7 @@ function HorizontalBarChart({ data, color, title }: { data: ChartData[]; color: 
         {sortedData.length === 0 ? (
           <div className="h-full flex items-center justify-center text-purple-300/40">Sin datos</div>
         ) : (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height={268}>
             <BarChart layout="vertical" data={sortedData} margin={{ top: 5, right: 30, left: 60, bottom: 5 }}>
               <XAxis type="number" hide />
               <YAxis type="category" dataKey="nombre" tick={{ fill: '#c4b5fd', fontSize: 11 }} tickLine={false} axisLine={false} width={80} />
@@ -593,15 +696,19 @@ function SimpleBarChart({ data, title }: { data: ChartData[]; title: string }) {
         <h3 className="text-sm font-medium text-white uppercase tracking-wider">{title}</h3>
       </div>
       <div className="p-4 h-[300px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-            <XAxis dataKey="nombre" tick={{ fill: '#c4b5fd', fontSize: 11 }} axisLine={false} tickLine={false} />
-            <RechartsTooltip cursor={{ fill: 'rgba(139, 92, 246, 0.1)' }} content={<CustomTooltip />} />
-            <Bar dataKey="cantidad" radius={[6, 6, 0, 0]} barSize={40}>
-              {data.map((_, index) => (<Cell key={index} fill={index % 2 === 0 ? '#8b5cf6' : '#d946ef'} />))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        {data.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-purple-300/40">Sin datos</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={268}>
+            <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+              <XAxis dataKey="nombre" tick={{ fill: '#c4b5fd', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <RechartsTooltip cursor={{ fill: 'rgba(139, 92, 246, 0.1)' }} content={<CustomTooltip />} />
+              <Bar dataKey="cantidad" radius={[6, 6, 0, 0]} barSize={40}>
+                {data.map((_, index) => (<Cell key={index} fill={index % 2 === 0 ? '#8b5cf6' : '#d946ef'} />))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </GlassCard>
   );
@@ -987,9 +1094,8 @@ export function DashboardPage() {
           <SimpleBarChart data={graficas?.porNSE || []} title="Por Nivel Socioeconómico" />
         </div>
 
-        {/* Map - key forces remount when filters change */}
+        {/* Map */}
         <GoogleMapsChart
-          key={`map-${filters.ciudad || 'all'}-${filters.estado || 'all'}-${activeEstatus}`}
           plazaData={inventoryData?.byPlaza || []}
           allCoords={inventoryData?.allCoords || []}
           showPins={showPins}

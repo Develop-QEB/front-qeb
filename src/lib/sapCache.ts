@@ -40,8 +40,9 @@ export function setSapCache<T>(key: string, data: T): void {
       timestamp: Date.now(),
     };
     localStorage.setItem(key, JSON.stringify(entry));
-  } catch (e) {
-    console.warn('Failed to cache SAP data:', e);
+  } catch {
+    // Silently fail - quota exceeded or storage unavailable is not critical
+    // Cache will simply not be stored
   }
 }
 
