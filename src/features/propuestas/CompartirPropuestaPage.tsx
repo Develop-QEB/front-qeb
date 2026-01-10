@@ -51,6 +51,69 @@ function getGroupValue(item: InventarioReservado, field: GroupByField): string {
   return String(item[field] || 'Sin asignar');
 }
 
+// Filter types (from CampanaDetailPage)
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
+
+interface FilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: string;
+  label: string;
+  type: 'string' | 'number';
+}
+
+const FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'codigo_unico', label: 'Codigo', type: 'string' },
+  { field: 'plaza', label: 'Plaza', type: 'string' },
+  { field: 'tipo_de_cara', label: 'Tipo', type: 'string' },
+  { field: 'tipo_de_mueble', label: 'Formato', type: 'string' },
+  { field: 'articulo', label: 'Articulo', type: 'string' },
+  { field: 'caras_totales', label: 'Caras', type: 'number' },
+  { field: 'tarifa_publica', label: 'Tarifa', type: 'number' },
+];
+
+const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
+  { value: '=', label: 'Igual a', forTypes: ['string', 'number'] },
+  { value: '!=', label: 'Diferente de', forTypes: ['string', 'number'] },
+  { value: 'contains', label: 'Contiene', forTypes: ['string'] },
+  { value: 'not_contains', label: 'No contiene', forTypes: ['string'] },
+  { value: '>', label: 'Mayor que', forTypes: ['number'] },
+  { value: '<', label: 'Menor que', forTypes: ['number'] },
+  { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
+  { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
+];
+
+function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
+  if (filters.length === 0) return data;
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = (item as Record<string, unknown>)[filter.field];
+      const filterValue = filter.value;
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+      switch (filter.operator) {
+        case '=': return strValue === strFilterValue;
+        case '!=': return strValue !== strFilterValue;
+        case 'contains': return strValue.includes(strFilterValue);
+        case 'not_contains': return !strValue.includes(strFilterValue);
+        case '>': return Number(fieldValue) > Number(filterValue);
+        case '<': return Number(fieldValue) < Number(filterValue);
+        case '>=': return Number(fieldValue) >= Number(filterValue);
+        case '<=': return Number(fieldValue) <= Number(filterValue);
+        default: return true;
+      }
+    });
+  });
+}
+
 export function CompartirPropuestaPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -66,6 +129,10 @@ export function CompartirPropuestaPage() {
   const [sortField, setSortField] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+
+  // Filter states
+  const [filters, setFilters] = useState<FilterCondition[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
 
   // POI states
   const [poiMarkers, setPoiMarkers] = useState<POIMarker[]>([]);
@@ -94,19 +161,17 @@ export function CompartirPropuestaPage() {
 
   // Computed data
   const kpis = useMemo(() => {
-    if (!inventario) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
+    if (!details?.caras) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
 
-    // Ensure numbers to prevent string concatenation ("05040")
-    const total = inventario.reduce((sum, i) => sum + Number(i.caras_totales || 0), 0);
-    const inversion = inventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_totales || 1)), 0);
+    // Calculate from propuesta caras (the source of truth)
+    const renta = details.caras.reduce((sum, c) => sum + Number(c.caras || 0), 0);
+    const bonificadas = details.caras.reduce((sum, c) => sum + Number(c.bonificacion || 0), 0);
+    const total = renta + bonificadas;
 
-    // Sum bonifications
-    const bonificadas = details?.caras?.reduce((sum, c) => sum + Number(c.bonificacion || 0), 0) || 0;
+    // Inversion from inventario tarifa_publica
+    const inversion = inventario?.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_totales || 1)), 0) || 0;
 
-    // Renta is the count from inventory (allocated)
-    const renta = total;
-
-    return { total: total + bonificadas, renta, bonificadas, inversion };
+    return { total, renta, bonificadas, inversion };
   }, [inventario, details]);
 
   // Charts data
@@ -872,6 +937,16 @@ export function CompartirPropuestaPage() {
                 onChange={(e) => setFilterText(e.target.value)}
                 className="px-3 py-1.5 bg-zinc-800/80 border border-purple-500/20 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
               />
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1 ${showFilters || filters.length > 0
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-zinc-800 text-zinc-400 hover:bg-purple-500/20'
+                }`}
+              >
+                <Filter className="h-3 w-3" />
+                Filtros {filters.length > 0 && `(${filters.length})`}
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -931,6 +1006,80 @@ export function CompartirPropuestaPage() {
               )}
             </div>
           </div>
+
+          {/* Advanced Filters Panel */}
+          {showFilters && (
+            <div className="p-4 border-b border-purple-500/10 bg-zinc-800/30">
+              <div className="flex flex-wrap gap-2 mb-3">
+                {filters.map(filter => {
+                  const fieldConfig = FILTER_FIELDS.find(f => f.field === filter.field);
+                  const operatorConfig = FILTER_OPERATORS.find(o => o.value === filter.operator);
+                  return (
+                    <div key={filter.id} className="flex items-center gap-1 px-2 py-1 bg-purple-500/20 rounded-lg text-xs">
+                      <span className="text-purple-300">{fieldConfig?.label || filter.field}</span>
+                      <span className="text-zinc-500">{operatorConfig?.label || filter.operator}</span>
+                      <span className="text-white font-medium">{filter.value}</span>
+                      <button
+                        onClick={() => setFilters(filters.filter(f => f.id !== filter.id))}
+                        className="ml-1 text-zinc-400 hover:text-red-400"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  id="filter-field"
+                  className="px-2 py-1 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white"
+                  defaultValue=""
+                >
+                  <option value="" disabled>Campo</option>
+                  {FILTER_FIELDS.map(f => (
+                    <option key={f.field} value={f.field}>{f.label}</option>
+                  ))}
+                </select>
+                <select
+                  id="filter-operator"
+                  className="px-2 py-1 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white"
+                  defaultValue="="
+                >
+                  {FILTER_OPERATORS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <input
+                  id="filter-value"
+                  type="text"
+                  placeholder="Valor"
+                  className="px-2 py-1 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white w-32"
+                />
+                <button
+                  onClick={() => {
+                    const field = (document.getElementById('filter-field') as HTMLSelectElement).value;
+                    const operator = (document.getElementById('filter-operator') as HTMLSelectElement).value as FilterOperator;
+                    const value = (document.getElementById('filter-value') as HTMLInputElement).value;
+                    if (field && value) {
+                      setFilters([...filters, { id: `filter-${Date.now()}`, field, operator, value }]);
+                      (document.getElementById('filter-value') as HTMLInputElement).value = '';
+                    }
+                  }}
+                  className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs"
+                >
+                  Agregar
+                </button>
+                {filters.length > 0 && (
+                  <button
+                    onClick={() => setFilters([])}
+                    className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded text-xs"
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Selection info and actions */}
           {selectedItems.size > 0 && (
@@ -1094,7 +1243,21 @@ export function CompartirPropuestaPage() {
                 center={mapCenter}
                 zoom={12}
                 options={{ styles: DARK_MAP_STYLES, disableDefaultUI: true, zoomControl: true }}
-                onLoad={(map) => { mapRef.current = map; }}
+                onLoad={(map) => {
+                  mapRef.current = map;
+                  // Fit bounds to all inventory items on load
+                  if (inventario && inventario.length > 0) {
+                    const bounds = new google.maps.LatLngBounds();
+                    inventario.forEach(item => {
+                      if (item.latitud && item.longitud) {
+                        bounds.extend({ lat: item.latitud, lng: item.longitud });
+                      }
+                    });
+                    if (!bounds.isEmpty()) {
+                      map.fitBounds(bounds, 50);
+                    }
+                  }
+                }}
               >
                 {inventario?.map((item) => (
                   item.latitud && item.longitud && (

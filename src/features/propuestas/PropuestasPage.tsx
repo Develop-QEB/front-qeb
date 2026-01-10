@@ -31,7 +31,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }
 
 const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
 
-const STATUS_OPTIONS = ['Por aprobar', 'Compartir', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas', 'Pendiente'];
+const STATUS_OPTIONS = ['Por aprobar', 'Compartir', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas'];
 
 // Chart colors for dynamic status
 const CHART_COLORS = [
