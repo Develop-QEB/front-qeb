@@ -847,9 +847,13 @@ export function CampanasPage() {
     });
   };
 
-  // Agrupar campañas por catorcena para la vista alternativa
+  // Agrupar campañas por catorcena para la vista alternativa (con soporte para subagrupaciones)
   const campanasPorCatorcena = useMemo(() => {
-    const groups: Record<string, { catorcena: { num: number; anio: number }; campanas: Campana[] }> = {};
+    const groups: Record<string, {
+      catorcena: { num: number; anio: number };
+      campanas: Campana[];
+      subgroups?: { name: string; campanas: Campana[] }[];
+    }> = {};
 
     filteredData.forEach(item => {
       if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
@@ -864,11 +868,31 @@ export function CampanasPage() {
       }
     });
 
+    // Obtener segunda agrupación si existe y la primera es catorcena_inicio
+    const secondGrouping = activeGroupings[0] === 'catorcena_inicio' && activeGroupings.length > 1
+      ? activeGroupings[1]
+      : null;
+
     // Ordenar por año desc, luego por catorcena desc
     return Object.entries(groups)
       .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([key, value]) => ({ key, ...value }));
-  }, [filteredData]);
+      .map(([key, value]) => {
+        // Si hay segunda agrupación, crear subgrupos
+        if (secondGrouping) {
+          const subgroupsMap: Record<string, Campana[]> = {};
+          value.campanas.forEach(campana => {
+            const subKey = getGroupValue(campana, secondGrouping);
+            if (!subgroupsMap[subKey]) subgroupsMap[subKey] = [];
+            subgroupsMap[subKey].push(campana);
+          });
+          const subgroups = Object.entries(subgroupsMap)
+            .sort((a, b) => b[1].length - a[1].length)
+            .map(([name, campanas]) => ({ name, campanas }));
+          return { key, ...value, subgroups };
+        }
+        return { key, ...value };
+      });
+  }, [filteredData, activeGroupings]);
 
   // Estadísticas para gráfica de Status
   const statusChartData = useMemo(() => {
@@ -1570,7 +1594,9 @@ export function CampanasPage() {
         {/* Tabs de vista */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setActiveView('tabla')}
+            onClick={() => {
+              setActiveView('tabla');
+            }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeView === 'tabla'
                 ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
@@ -1581,7 +1607,13 @@ export function CampanasPage() {
             Vista Tabla
           </button>
           <button
-            onClick={() => setActiveView('catorcena')}
+            onClick={() => {
+              setActiveView('catorcena');
+              // Al cambiar a vista catorcena, agregar catorcena_inicio como primera agrupación si no está
+              if (!activeGroupings.includes('catorcena_inicio')) {
+                setActiveGroupings(prev => ['catorcena_inicio', ...prev.filter(g => g !== 'catorcena_inicio')].slice(0, 2) as GroupByField[]);
+              }
+            }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeView === 'catorcena'
                 ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
@@ -1786,10 +1818,148 @@ export function CampanasPage() {
               </div>
             ) : (
               <div className="divide-y divide-zinc-800/30">
-                {campanasPorCatorcena.map(({ key, catorcena, campanas }) => {
+                {campanasPorCatorcena.map(({ key, catorcena, campanas, subgroups }) => {
                   const isCurrentCatorcena = currentCatorcena &&
                     currentCatorcena.numero_catorcena === catorcena.num &&
                     currentCatorcena.a_o === catorcena.anio;
+                  const secondGroupingLabel = activeGroupings[0] === 'catorcena_inicio' && activeGroupings.length > 1
+                    ? AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label
+                    : null;
+
+                  // Función para renderizar una campaña
+                  const renderCampana = (campana: Campana, indent: number = 0) => {
+                    const statusColor = getStatusColor(campana.status);
+                    const periodStatus = getPeriodStatus(campana.fecha_inicio, campana.fecha_fin);
+                    const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
+                    const isExpanded = expandedCampanas.has(campana.id);
+                    const inventarios = campanaInventarios[campana.id] || [];
+                    const isLoadingInv = loadingInventarios.has(campana.id);
+                    const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
+
+                    return (
+                      <div key={campana.id} className="border-t border-zinc-800/30">
+                        <button
+                          onClick={() => toggleCampana(campana.id)}
+                          className="w-full flex items-center gap-3 px-6 py-3 hover:bg-zinc-800/30 transition-all"
+                          style={{ paddingLeft: `${24 + indent * 16}px` }}
+                        >
+                          {isLoadingInv ? (
+                            <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
+                          ) : isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-zinc-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-zinc-400" />
+                          )}
+                          <Megaphone className="h-4 w-4 text-zinc-500" />
+                          <span className="font-medium text-white text-sm flex-1 text-left truncate">
+                            {campana.nombre}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
+                            {periodStatus}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+                            {campana.status}
+                          </span>
+                          {campana.has_aps ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                              <Check className="h-3 w-3" /> APS
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-400 border border-zinc-500/30 flex items-center gap-1">
+                              <Minus className="h-3 w-3" /> Sin APS
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => handleOpenCampana(campana.id)}
+                              className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all"
+                              title="Ver campaña"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </button>
+                            <button
+                              onClick={() => handleEditCampana(campana)}
+                              disabled={isEditDisabled(campana)}
+                              className={`p-1.5 rounded-lg border transition-all ${
+                                isEditDisabled(campana)
+                                  ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                                  : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20'
+                              }`}
+                              title={isEditDisabled(campana) ? 'No editable' : 'Editar campaña'}
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </button>
+                        {/* Contenido expandible - inventario */}
+                        {isExpanded && (
+                          <div className="bg-zinc-950/50 px-8 py-3" style={{ marginLeft: `${indent * 16}px` }}>
+                            {isLoadingInv ? (
+                              <div className="flex items-center gap-2 text-zinc-500 text-sm">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Cargando inventario...
+                              </div>
+                            ) : inventarios.length === 0 ? (
+                              <p className="text-sm text-zinc-500">No hay inventario con APS</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {apsAgrupados.map(apsGroup => {
+                                  const apsKey = `${campana.id}-${apsGroup.aps}`;
+                                  const isAPSExpanded = expandedAPS.has(apsKey);
+                                  return (
+                                    <div key={apsGroup.aps} className="border border-zinc-800/50 rounded-lg overflow-hidden">
+                                      <button
+                                        onClick={() => toggleAPS(campana.id, apsGroup.aps)}
+                                        className="w-full flex items-center gap-2 px-3 py-2 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all"
+                                      >
+                                        {isAPSExpanded ? <ChevronDown className="h-3 w-3 text-zinc-400" /> : <ChevronRight className="h-3 w-3 text-zinc-400" />}
+                                        <Package className="h-3 w-3 text-emerald-400" />
+                                        <span className="text-xs text-white font-medium">APS {apsGroup.aps}</span>
+                                        <span className="text-[10px] text-zinc-500">{apsGroup.totalItems} ubicaciones</span>
+                                      </button>
+                                      {isAPSExpanded && (
+                                        <div className="px-3 py-2 space-y-1 bg-zinc-900/50">
+                                          {apsGroup.grupos.map(grupo => {
+                                            const grupoKey = `${apsKey}-${grupo.key}`;
+                                            const isGrupoExpanded = expandedGrupos.has(grupoKey);
+                                            return (
+                                              <div key={grupo.key} className="border-l-2 border-zinc-700 pl-2">
+                                                <button
+                                                  onClick={() => toggleGrupo(campana.id, apsGroup.aps, grupo.key)}
+                                                  className="w-full flex items-center gap-2 py-1 text-left hover:bg-zinc-800/30 rounded px-1"
+                                                >
+                                                  {isGrupoExpanded ? <ChevronDown className="h-3 w-3 text-zinc-500" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
+                                                  <ClipboardList className="h-3 w-3 text-purple-400" />
+                                                  <span className="text-[11px] text-zinc-300">{grupo.key}</span>
+                                                  <span className="text-[10px] text-zinc-600">({grupo.items.length})</span>
+                                                </button>
+                                                {isGrupoExpanded && (
+                                                  <div className="pl-5 py-1 space-y-0.5">
+                                                    {grupo.items.map(inv => (
+                                                      <div key={inv.id} className="flex items-center gap-2 text-[10px] text-zinc-500 py-0.5">
+                                                        <MapPin className="h-2.5 w-2.5 text-zinc-600" />
+                                                        <span className="text-zinc-400 font-mono">{inv.codigo_unico}</span>
+                                                        <span className="text-zinc-600">•</span>
+                                                        <span>{inv.plaza || 'Sin plaza'}</span>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
 
                   return (
                   <div key={key} className="group">
@@ -1814,6 +1984,11 @@ export function CampanasPage() {
                       <span className="px-2.5 py-1 rounded-full text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30">
                         {campanas.length} campañas
                       </span>
+                      {secondGroupingLabel && subgroups && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">
+                          {subgroups.length} {secondGroupingLabel}
+                        </span>
+                      )}
                       {/* Badge de catorcena actual */}
                       {currentCatorcena &&
                        currentCatorcena.numero_catorcena === catorcena.num &&
@@ -1827,226 +2002,43 @@ export function CampanasPage() {
                     {/* Contenido expandible de catorcena */}
                     {expandedCatorcenas.has(key) && (
                       <div className="bg-zinc-900/50">
-                        {campanas.map((campana) => {
-                          const statusColor = getStatusColor(campana.status);
-                          const periodStatus = getPeriodStatus(campana.fecha_inicio, campana.fecha_fin);
-                          const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
-                          const isExpanded = expandedCampanas.has(campana.id);
-                          const inventarios = campanaInventarios[campana.id] || [];
-                          const isLoadingInv = loadingInventarios.has(campana.id);
-                          const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
-
-                          return (
-                            <div key={campana.id} className="border-t border-zinc-800/30">
-                              {/* Header de Campaña */}
-                              <button
-                                onClick={() => toggleCampana(campana.id)}
-                                className="w-full flex items-center gap-3 px-6 py-3 hover:bg-zinc-800/30 transition-all"
-                              >
-                                {isLoadingInv ? (
-                                  <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
-                                ) : isExpanded ? (
-                                  <ChevronDown className="h-4 w-4 text-zinc-400" />
-                                ) : (
-                                  <ChevronRight className="h-4 w-4 text-zinc-400" />
-                                )}
-                                <Megaphone className="h-4 w-4 text-zinc-500" />
-                                <span className="font-medium text-white text-sm flex-1 text-left truncate">
-                                  {campana.nombre}
-                                </span>
-
-                                {/* Badges de info */}
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
-                                  {periodStatus}
-                                </span>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
-                                  {campana.status}
-                                </span>
-                                {campana.has_aps ? (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                                    <Check className="h-3 w-3" /> APS
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-400 border border-zinc-500/30 flex items-center gap-1">
-                                    <Minus className="h-3 w-3" /> Sin APS
-                                  </span>
-                                )}
-
-                                {/* Acciones */}
-                                <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
-                                  <button
-                                    onClick={() => handleOpenCampana(campana.id)}
-                                    className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all"
-                                    title="Ver campaña"
-                                  >
-                                    <Eye className="h-3 w-3" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleEditCampana(campana)}
-                                    disabled={isEditDisabled(campana)}
-                                    className={`p-1.5 rounded-lg border transition-all ${
-                                      isEditDisabled(campana)
-                                        ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                                        : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20'
-                                    }`}
-                                    title={isEditDisabled(campana) ? 'No editable' : 'Editar campaña'}
-                                  >
-                                    <Edit2 className="h-3 w-3" />
-                                  </button>
-                                </div>
-                              </button>
-
-                              {/* Contenido expandible de Campaña - APS → Grupos → Inventarios */}
-                              {isExpanded && (
-                                <div className="bg-zinc-900/30 px-8 py-3">
-                                  {isLoadingInv ? (
-                                    <div className="flex items-center gap-2 text-zinc-500 text-sm py-2">
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                      Cargando grupos e inventarios...
-                                    </div>
-                                  ) : inventarios.length === 0 ? (
-                                    <div className="flex items-center gap-2 text-zinc-500 text-sm py-2">
-                                      <Package className="h-4 w-4" />
-                                      No hay inventarios reservados con APS
-                                    </div>
+                        {/* Si hay subgrupos, mostrar agrupado por la segunda columna */}
+                        {subgroups && subgroups.length > 0 ? (
+                          subgroups.map(subgroup => {
+                            const subgroupKey = `${key}-${subgroup.name}`;
+                            const isSubgroupExpanded = expandedGroups.has(subgroupKey);
+                            const subgroupColor = getTagColor(subgroup.name);
+                            return (
+                              <div key={subgroupKey} className="border-t border-zinc-800/30">
+                                <button
+                                  onClick={() => toggleGroup(subgroupKey)}
+                                  className="w-full flex items-center gap-3 px-6 py-2.5 hover:bg-zinc-800/30 transition-all bg-zinc-800/20"
+                                >
+                                  {isSubgroupExpanded ? (
+                                    <ChevronDown className="h-4 w-4 text-fuchsia-400" />
                                   ) : (
-                                    <div className="space-y-4">
-                                      <div className="text-xs text-zinc-400">
-                                        {inventarios.length} inventarios · {apsAgrupados.length} APS asignados
-                                      </div>
-                                      {apsAgrupados.map((apsGroup) => {
-                                        const apsKey = `${campana.id}-${apsGroup.aps ?? 'sin-aps'}`;
-                                        const isAPSExpanded = expandedAPS.has(apsKey);
-                                        const tieneAPS = apsGroup.aps !== null;
-
-                                        return (
-                                          <div
-                                            key={`aps-${apsGroup.aps ?? 'sin-aps'}`}
-                                            className={`rounded-xl border overflow-hidden ${
-                                              tieneAPS
-                                                ? 'border-emerald-500/30 bg-emerald-500/5'
-                                                : 'border-amber-500/30 bg-amber-500/5'
-                                            }`}
-                                          >
-                                            {/* Header de APS - Clickeable */}
-                                            <button
-                                              onClick={() => toggleAPS(campana.id, apsGroup.aps)}
-                                              className={`w-full flex items-center gap-3 px-4 py-2.5 transition-all ${
-                                                tieneAPS
-                                                  ? 'bg-emerald-500/10 hover:bg-emerald-500/15'
-                                                  : 'bg-amber-500/10 hover:bg-amber-500/15'
-                                              }`}
-                                            >
-                                              {isAPSExpanded ? (
-                                                <ChevronDown className={`h-4 w-4 ${tieneAPS ? 'text-emerald-400' : 'text-amber-400'}`} />
-                                              ) : (
-                                                <ChevronRight className={`h-4 w-4 ${tieneAPS ? 'text-emerald-400' : 'text-amber-400'}`} />
-                                              )}
-                                              {tieneAPS ? (
-                                                <>
-                                                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                                                    <span className="text-emerald-300 font-bold text-xs">{apsGroup.aps}</span>
-                                                  </div>
-                                                  <span className="text-sm font-semibold text-emerald-200">
-                                                    APS {apsGroup.aps}
-                                                  </span>
-                                                </>
-                                              ) : (
-                                                <>
-                                                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                                                    <Minus className="h-4 w-4 text-amber-300" />
-                                                  </div>
-                                                  <span className="text-sm font-semibold text-amber-200">
-                                                    Sin APS asignado
-                                                  </span>
-                                                </>
-                                              )}
-                                              <span className={`px-2 py-0.5 rounded-full text-[10px] border ${
-                                                tieneAPS
-                                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                                                  : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                                              }`}>
-                                                {apsGroup.totalItems} sitios
-                                              </span>
-                                              <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-300 border border-zinc-500/30">
-                                                {apsGroup.grupos.length} grupos
-                                              </span>
-                                            </button>
-
-                                            {/* Grupos dentro de este APS - Colapsable */}
-                                            {isAPSExpanded && (
-                                              <div className={`p-3 space-y-2 border-t ${tieneAPS ? 'border-emerald-500/20' : 'border-amber-500/20'}`}>
-                                                {apsGroup.grupos.map((grupo) => {
-                                                  const grupoExpandKey = `${campana.id}-${apsGroup.aps ?? 'sin-aps'}-${grupo.key}`;
-                                                  const isGrupoExpanded = expandedGrupos.has(grupoExpandKey);
-
-                                                  return (
-                                                    <div
-                                                      key={grupo.key}
-                                                      className="rounded-lg border border-zinc-700/50 bg-zinc-800/40 overflow-hidden"
-                                                    >
-                                                      <button
-                                                        onClick={() => toggleGrupo(campana.id, apsGroup.aps, grupo.key)}
-                                                        className="w-full flex items-center gap-3 px-3 py-2 bg-zinc-800/60 hover:bg-zinc-800/80 transition-colors"
-                                                      >
-                                                        {isGrupoExpanded ? (
-                                                          <ChevronDown className="h-4 w-4 text-cyan-400" />
-                                                        ) : (
-                                                          <ChevronRight className="h-4 w-4 text-cyan-400" />
-                                                        )}
-                                                        <Building2 className="h-4 w-4 text-cyan-400" />
-                                                        <span className="text-sm font-medium text-zinc-200">
-                                                          Grupo #{grupo.grupoId || '?'}
-                                                        </span>
-                                                        {grupo.articulo && (
-                                                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                                                            {grupo.articulo}
-                                                          </span>
-                                                        )}
-                                                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                                                          {grupo.items.length} sitios
-                                                        </span>
-                                                      </button>
-                                                      {isGrupoExpanded && (
-                                                        <div className="divide-y divide-zinc-700/30">
-                                                          {grupo.items.map((inv) => (
-                                                            <div
-                                                              key={inv.id}
-                                                              className="flex items-center gap-3 px-4 py-2 text-xs hover:bg-zinc-800/30 transition-colors"
-                                                            >
-                                                              <MapPin className="h-3 w-3 text-zinc-500" />
-                                                              <span className="text-zinc-300 font-mono">{inv.codigo_unico}</span>
-                                                              <span className="text-zinc-500">{inv.mueble || '-'}</span>
-                                                              <span className="text-zinc-500">{inv.plaza || '-'}</span>
-                                                              {inv.estado && (
-                                                                <span className="px-1.5 py-0.5 rounded text-[9px] bg-zinc-700/50 text-zinc-400">
-                                                                  {inv.estado}
-                                                                </span>
-                                                              )}
-                                                              {inv.tipo_medio && (
-                                                                <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-500/20 text-violet-300">
-                                                                  {inv.tipo_medio}
-                                                                </span>
-                                                              )}
-                                                            </div>
-                                                          ))}
-                                                        </div>
-                                                      )}
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
+                                    <ChevronRight className="h-4 w-4 text-fuchsia-400" />
                                   )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                                  <Layers className="h-4 w-4 text-fuchsia-400" />
+                                  <span className={`px-2 py-0.5 rounded text-xs ${subgroupColor.bg} ${subgroupColor.text} border ${subgroupColor.border}`}>
+                                    {subgroup.name}
+                                  </span>
+                                  <span className="text-xs text-zinc-500">
+                                    {subgroup.campanas.length} campañas
+                                  </span>
+                                </button>
+                                {isSubgroupExpanded && (
+                                  <div className="bg-zinc-900/30">
+                                    {subgroup.campanas.map(campana => renderCampana(campana, 1))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          /* Sin subgrupos - mostrar campañas directamente */
+                          campanas.map(campana => renderCampana(campana, 0))
+                        )}
                       </div>
                     )}
                   </div>
@@ -2054,21 +2046,29 @@ export function CampanasPage() {
                 })}
               </div>
             )}
-
-            {/* Footer info */}
-            <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-800/50 bg-zinc-800/30">
-              <span className="text-xs text-zinc-500">
-                {campanasPorCatorcena.length} catorcenas · {filteredData.length} campañas
-              </span>
-              {currentCatorcena && (
-                <span className="text-xs text-emerald-400 flex items-center gap-1.5">
-                  <Clock className="h-3 w-3" />
-                  Catorcena actual: {currentCatorcena.numero_catorcena}/{currentCatorcena.a_o}
-                </span>
-              )}
-            </div>
           </div>
         )}
+
+        {/* Footer de vista catorcena - información */}
+        {activeView === 'catorcena' && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-800/50 bg-zinc-900/30 text-xs text-zinc-500">
+            <span>
+              {campanasPorCatorcena.length} catorcenas · {filteredData.length} campañas
+              {activeGroupings.length > 1 && (
+                <span className="text-fuchsia-400 ml-2">
+                  · Subagrupado por {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}
+                </span>
+              )}
+            </span>
+            {currentCatorcena && (
+              <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Catorcena actual: {currentCatorcena.numero_catorcena}/{currentCatorcena.a_o}
+              </span>
+            )}
+          </div>
+        )}
+
       </div>
 
       {/* Edit Modal */}
