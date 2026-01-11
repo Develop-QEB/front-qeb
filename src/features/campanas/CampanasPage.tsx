@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Search, Download, Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
+  Search, Download, Filter, ChevronDown, ChevronRight, X, Layers,
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
-  List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2
+  List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
+  ArrowUp, ArrowDown
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -116,97 +117,6 @@ function getPeriodStatus(fechaInicio: string, fechaFin: string): string {
   return 'En curso';
 }
 
-// Filter Chip Component with Search
-function FilterChip({
-  label,
-  options,
-  value,
-  onChange,
-  onClear
-}: {
-  label: string;
-  options: string[];
-  value: string;
-  onChange: (value: string) => void;
-  onClear: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredOptions = useMemo(() => {
-    if (!searchTerm) return options;
-    return options.filter(opt =>
-      opt.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [options, searchTerm]);
-
-  const handleClose = () => {
-    setOpen(false);
-    setSearchTerm('');
-  };
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${value
-          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
-          }`}
-      >
-        <span>{value || label}</span>
-        {value ? (
-          <X className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); onClear(); }} />
-        ) : (
-          <ChevronDown className="h-3 w-3" />
-        )}
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-2 border-b border-zinc-800">
-              <input
-                type="text"
-                placeholder={`Buscar ${label.toLowerCase()}...`}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50"
-                autoFocus
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div className="max-h-52 overflow-auto">
-              {filteredOptions.length === 0 ? (
-                <div className="px-3 py-3 text-xs text-zinc-500 text-center">
-                  {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
-                </div>
-              ) : (
-                filteredOptions.map((option) => (
-                  <button
-                    key={option}
-                    onClick={() => { onChange(option); handleClose(); }}
-                    className={`w-full px-3 py-2 text-left text-xs transition-colors ${value === option
-                      ? 'bg-purple-500/20 text-purple-300'
-                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                      }`}
-                  >
-                    {option}
-                  </button>
-                ))
-              )}
-            </div>
-            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
-              {filteredOptions.length} de {options.length} opciones
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 // Advanced Filter Types and Config
 type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
 
@@ -227,20 +137,38 @@ const CAMPANA_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'id', label: 'ID', type: 'number' },
   { field: 'nombre', label: 'Nombre', type: 'string' },
   { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
-  { field: 'status', label: 'Status', type: 'string' },
+  { field: 'status', label: 'Estatus', type: 'string' },
   { field: 'articulo', label: 'Artículo', type: 'string' },
-  { field: 'ciudad', label: 'Ciudad', type: 'string' },
+  { field: 'creador_nombre', label: 'Creador', type: 'string' },
 ];
 
-const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
-  { value: '=', label: 'Igual a', forTypes: ['string', 'number'] },
-  { value: '!=', label: 'Diferente de', forTypes: ['string', 'number'] },
-  { value: 'contains', label: 'Contiene', forTypes: ['string'] },
-  { value: 'not_contains', label: 'No contiene', forTypes: ['string'] },
-  { value: '>', label: 'Mayor que', forTypes: ['number'] },
-  { value: '<', label: 'Menor que', forTypes: ['number'] },
-  { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
-  { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
+const FILTER_OPERATORS: { value: FilterOperator; label: string }[] = [
+  { value: '=', label: 'Igual a' },
+  { value: '!=', label: 'Diferente de' },
+  { value: 'contains', label: 'Contiene' },
+  { value: 'not_contains', label: 'No contiene' },
+];
+
+// Campos disponibles para agrupar
+type GroupByField = 'status' | 'cliente_nombre' | 'catorcena_inicio';
+
+interface GroupConfig {
+  field: GroupByField;
+  label: string;
+}
+
+const AVAILABLE_GROUPINGS: GroupConfig[] = [
+  { field: 'status', label: 'Estatus' },
+  { field: 'cliente_nombre', label: 'Cliente' },
+  { field: 'catorcena_inicio', label: 'Catorcena Inicio' },
+];
+
+// Campos disponibles para ordenar
+const SORT_FIELDS = [
+  { field: 'fecha_inicio', label: 'Fecha Inicio' },
+  { field: 'nombre', label: 'Nombre' },
+  { field: 'cliente_nombre', label: 'Cliente' },
+  { field: 'status', label: 'Estatus' },
 ];
 
 // Function to apply advanced filters to data
@@ -575,13 +503,17 @@ export function CampanasPage() {
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
-  const [groupBy, setGroupBy] = useState('');
-  const [sortBy, setSortBy] = useState('fecha_inicio');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [showFilters, setShowFilters] = useState(false);
+  // Estados para filtros/ordenamiento/agrupación con popups
+  const [sortField, setSortField] = useState<string | null>('fecha_inicio');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Estados para popups
+  const [showFilterPopup, setShowFilterPopup] = useState(false);
+  const [showGroupPopup, setShowGroupPopup] = useState(false);
+  const [showSortPopup, setShowSortPopup] = useState(false);
   const [selectedCatorcenaInicio, setSelectedCatorcenaInicio] = useState('');
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedCampana, setSelectedCampana] = useState<Campana | null>(null);
@@ -689,12 +621,12 @@ export function CampanasPage() {
     }
 
     // Apply sorting
-    if (sortBy && items.length > 0) {
+    if (sortField && items.length > 0) {
       items = [...items].sort((a, b) => {
         let aVal: string | number | null = null;
         let bVal: string | number | null = null;
 
-        switch (sortBy) {
+        switch (sortField) {
           case 'fecha_inicio':
             aVal = a.fecha_inicio;
             bVal = b.fecha_inicio;
@@ -703,7 +635,7 @@ export function CampanasPage() {
             aVal = a.nombre?.toLowerCase() || '';
             bVal = b.nombre?.toLowerCase() || '';
             break;
-          case 'cliente':
+          case 'cliente_nombre':
             aVal = (a.cliente_nombre || a.cliente_razon_social || '').toLowerCase();
             bVal = (b.cliente_nombre || b.cliente_razon_social || '').toLowerCase();
             break;
@@ -714,38 +646,75 @@ export function CampanasPage() {
         }
 
         if (aVal === null || bVal === null) return 0;
-        if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
         return 0;
       });
     }
 
     return items;
-  }, [data?.data, debouncedSearch, selectedCatorcenaInicio, advancedFilters, sortBy, sortOrder]);
+  }, [data?.data, debouncedSearch, selectedCatorcenaInicio, advancedFilters, sortField, sortDirection]);
 
-  // Group data
-  const groupedData = useMemo(() => {
-    if (!groupBy || !filteredData.length) return null;
+  // Group data - supports up to 2 levels
+  interface GroupedLevel1 {
+    name: string;
+    items: Campana[];
+    subgroups?: { name: string; items: Campana[] }[];
+  }
+
+  const getGroupValue = (item: Campana, field: GroupByField): string => {
+    if (field === 'catorcena_inicio') {
+      return item.catorcena_inicio_num && item.catorcena_inicio_anio
+        ? `Catorcena ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
+        : 'Sin catorcena';
+    } else if (field === 'status') {
+      return item.status || 'Sin status';
+    } else if (field === 'cliente_nombre') {
+      return item.cliente_nombre || item.cliente_razon_social || 'Sin cliente';
+    }
+    return 'Sin asignar';
+  };
+
+  const groupedData = useMemo((): GroupedLevel1[] | null => {
+    if (activeGroupings.length === 0 || !filteredData.length) return null;
+
+    const groupKey1 = activeGroupings[0];
+    const groupKey2 = activeGroupings.length > 1 ? activeGroupings[1] : null;
 
     const groups: Record<string, Campana[]> = {};
 
+    // First level grouping
     filteredData.forEach(item => {
-      let key = 'Sin asignar';
-      if (groupBy === 'catorcena_inicio') {
-        key = item.catorcena_inicio_num && item.catorcena_inicio_anio
-          ? `Catorcena ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
-          : 'Sin catorcena';
-      } else if (groupBy === 'status') {
-        key = item.status || 'Sin status';
-      } else if (groupBy === 'cliente') {
-        key = item.cliente_nombre || item.cliente_razon_social || 'Sin cliente';
-      }
+      const key = getGroupValue(item, groupKey1);
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     });
 
-    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
-  }, [filteredData, groupBy]);
+    // Sort by count (descending)
+    const sortGroups = (entries: [string, Campana[]][]) => {
+      return entries.sort((a, b) => b[1].length - a[1].length);
+    };
+
+    // Convert to array and add second level if needed
+    const result: GroupedLevel1[] = sortGroups(Object.entries(groups))
+      .map(([name, items]) => {
+        if (groupKey2) {
+          // Second level grouping
+          const subgroupsMap: Record<string, Campana[]> = {};
+          items.forEach(item => {
+            const subKey = getGroupValue(item, groupKey2);
+            if (!subgroupsMap[subKey]) subgroupsMap[subKey] = [];
+            subgroupsMap[subKey].push(item);
+          });
+          const subgroups = sortGroups(Object.entries(subgroupsMap))
+            .map(([subName, subItems]) => ({ name: subName, items: subItems }));
+          return { name, items, subgroups };
+        }
+        return { name, items };
+      });
+
+    return result;
+  }, [filteredData, activeGroupings]);
 
   const toggleGroup = (groupName: string) => {
     setExpandedGroups(prev => {
@@ -758,6 +727,42 @@ export function CampanasPage() {
       return next;
     });
   };
+
+  // Funciones para manejar filtros
+  const addFilter = useCallback(() => {
+    const newFilter: AdvancedFilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: CAMPANA_FILTER_FIELDS[0].field,
+      operator: '=',
+      value: '',
+    };
+    setAdvancedFilters(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilter = useCallback((id: string, updates: Partial<AdvancedFilterCondition>) => {
+    setAdvancedFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilter = useCallback((id: string) => {
+    setAdvancedFilters(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setAdvancedFilters([]);
+  }, []);
+
+  // Función para toggle de agrupación
+  const toggleGrouping = useCallback((field: GroupByField) => {
+    setActiveGroupings(prev => {
+      if (prev.includes(field)) {
+        return prev.filter(f => f !== field);
+      }
+      if (prev.length >= 2) {
+        return [prev[1], field];
+      }
+      return [...prev, field];
+    });
+  }, []);
 
   // Funciones para la vista de catorcena
   const toggleCatorcena = (catorcenaKey: string) => {
@@ -976,7 +981,7 @@ export function CampanasPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || debouncedSearch || selectedCatorcenaInicio || advancedFilters.length > 0 || sortBy !== 'fecha_inicio');
+  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || debouncedSearch || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== 'fecha_inicio');
 
   // Get unique values for each field (for advanced filter dropdowns)
   const getUniqueFieldValues = useMemo(() => {
@@ -996,31 +1001,6 @@ export function CampanasPage() {
     return valuesMap;
   }, [data?.data]);
 
-  // Advanced filter functions
-  const addAdvancedFilter = () => {
-    const newFilter: AdvancedFilterCondition = {
-      id: `filter-${Date.now()}`,
-      field: CAMPANA_FILTER_FIELDS[0].field,
-      operator: '=',
-      value: '',
-    };
-    setAdvancedFilters(prev => [...prev, newFilter]);
-  };
-
-  const updateAdvancedFilter = (id: string, updates: Partial<AdvancedFilterCondition>) => {
-    setAdvancedFilters(prev =>
-      prev.map(f => (f.id === id ? { ...f, ...updates } : f))
-    );
-  };
-
-  const removeAdvancedFilter = (id: string) => {
-    setAdvancedFilters(prev => prev.filter(f => f.id !== id));
-  };
-
-  const clearAdvancedFilters = () => {
-    setAdvancedFilters([]);
-  };
-
   const clearAllFilters = () => {
     setSearch('');
     setStatus('');
@@ -1029,9 +1009,9 @@ export function CampanasPage() {
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
     setSelectedCatorcenaInicio('');
-    setSortBy('fecha_inicio');
-    setSortOrder('desc');
-    setGroupBy('');
+    setSortField('fecha_inicio');
+    setSortDirection('desc');
+    setActiveGroupings([]);
     setExpandedGroups(new Set());
     setAdvancedFilters([]);
     setPage(1);
@@ -1343,20 +1323,228 @@ export function CampanasPage() {
                 />
               </div>
 
-              {/* Filter Toggle */}
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
-                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                  : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
-                  }`}
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                Filtros
+              {/* Botones de Acción: Filtrar, Agrupar, Ordenar */}
+              <div className="flex items-center gap-2">
+                {/* Botón de Filtros */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowFilterPopup(!showFilterPopup)}
+                    className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                      advancedFilters.length > 0
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                    }`}
+                    title="Filtrar"
+                  >
+                    <Filter className="h-4 w-4" />
+                    {advancedFilters.length > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white px-1">
+                        {advancedFilters.length}
+                      </span>
+                    )}
+                  </button>
+                  {showFilterPopup && (
+                    <div className="absolute right-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+                        <button onClick={() => setShowFilterPopup(false)} className="text-zinc-400 hover:text-white">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                        {advancedFilters.map((filter, index) => (
+                          <div key={filter.id} className="flex items-center gap-2">
+                            {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
+                            {index === 0 && <span className="w-8"></span>}
+                            <select
+                              value={filter.field}
+                              onChange={(e) => updateFilter(filter.id, { field: e.target.value })}
+                              className="w-[130px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                            >
+                              {CAMPANA_FILTER_FIELDS.map((f) => (
+                                <option key={f.field} value={f.field}>{f.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={filter.operator}
+                              onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
+                              className="w-[110px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                            >
+                              {FILTER_OPERATORS.map((op) => (
+                                <option key={op.value} value={op.value}>{op.label}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              list={`datalist-campana-${filter.id}`}
+                              value={filter.value}
+                              onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                              placeholder="Escribe o selecciona..."
+                              className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
+                            />
+                            <datalist id={`datalist-campana-${filter.id}`}>
+                              {getUniqueFieldValues[filter.field]?.map((val) => (
+                                <option key={val} value={val} />
+                              ))}
+                            </datalist>
+                            <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                        {advancedFilters.length === 0 && (
+                          <p className="text-[11px] text-zinc-500 text-center py-3">Sin filtros. Haz clic en "Añadir".</p>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-purple-900/30">
+                        <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
+                          <Plus className="h-3 w-3" /> Añadir
+                        </button>
+                        <button onClick={clearFilters} disabled={advancedFilters.length === 0} className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                          Limpiar
+                        </button>
+                      </div>
+                      {advancedFilters.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-purple-900/30">
+                          <span className="text-[10px] text-zinc-500">{filteredData.length} de {data?.data?.length || 0} registros</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Botón de Agrupar */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowGroupPopup(!showGroupPopup)}
+                    className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                      activeGroupings.length > 0
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                    }`}
+                    title="Agrupar"
+                  >
+                    <Layers className="h-4 w-4" />
+                    {activeGroupings.length > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white px-1">
+                        {activeGroupings.length}
+                      </span>
+                    )}
+                  </button>
+                  {showGroupPopup && (
+                    <div className="absolute right-0 top-full mt-1 z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 2)</p>
+                      {AVAILABLE_GROUPINGS.map(({ field, label }) => (
+                        <button
+                          key={field}
+                          onClick={() => toggleGrouping(field)}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
+                            activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                            activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
+                          }`}>
+                            {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
+                          </div>
+                          {label}
+                          {activeGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
+                          {activeGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+                        </button>
+                      ))}
+                      <div className="border-t border-purple-900/30 mt-2 pt-2">
+                        <button onClick={() => setActiveGroupings([])} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                          Quitar agrupación
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Botón de Ordenar */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSortPopup(!showSortPopup)}
+                    className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                      sortField && sortField !== 'fecha_inicio'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                    }`}
+                    title="Ordenar"
+                  >
+                    <ArrowUpDown className="h-4 w-4" />
+                  </button>
+                  {showSortPopup && (
+                    <div className="absolute right-0 top-full mt-1 z-[60] w-[300px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-purple-300">Ordenar por</span>
+                        <button onClick={() => setShowSortPopup(false)} className="text-zinc-400 hover:text-white">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="space-y-1">
+                        {SORT_FIELDS.map((field) => (
+                          <div
+                            key={field.field}
+                            className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
+                              sortField === field.field ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-purple-900/20'
+                            }`}
+                          >
+                            <span className={sortField === field.field ? 'text-purple-300 font-medium' : 'text-zinc-300'}>
+                              {field.label}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => { setSortField(field.field); setSortDirection('asc'); }}
+                                className={`p-1.5 rounded transition-colors ${
+                                  sortField === field.field && sortDirection === 'asc'
+                                    ? 'bg-purple-600 text-white'
+                                    : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                                }`}
+                                title="Ascendente (A-Z)"
+                              >
+                                <ArrowUp className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => { setSortField(field.field); setSortDirection('desc'); }}
+                                className={`p-1.5 rounded transition-colors ${
+                                  sortField === field.field && sortDirection === 'desc'
+                                    ? 'bg-purple-600 text-white'
+                                    : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                                }`}
+                                title="Descendente (Z-A)"
+                              >
+                                <ArrowDown className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {sortField && sortField !== 'fecha_inicio' && (
+                        <div className="mt-3 pt-3 border-t border-purple-900/30">
+                          <button
+                            onClick={() => { setSortField('fecha_inicio'); setSortDirection('desc'); }}
+                            className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors"
+                          >
+                            Quitar ordenamiento
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Botón Limpiar Todo */}
                 {hasActiveFilters && (
-                  <span className="w-2 h-2 rounded-full bg-purple-400" />
+                  <button
+                    onClick={clearAllFilters}
+                    className="flex items-center justify-center w-9 h-9 text-zinc-400 hover:text-white bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/50 transition-colors"
+                    title="Limpiar filtros"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 )}
-              </button>
+              </div>
 
               {/* Export CSV */}
               <button
@@ -1376,216 +1564,6 @@ export function CampanasPage() {
                 Órdenes de Montaje
               </button>
             </div>
-
-            {/* Filters Row (Expandable) */}
-            {showFilters && (
-              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-zinc-800/50 relative z-50">
-                {/* Advanced Filter Button with Dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                      advancedFilters.length > 0
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
-                    }`}
-                    title="Filtros avanzados"
-                  >
-                    <Filter className="h-3.5 w-3.5" />
-                    <span>Filtrar</span>
-                    {advancedFilters.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-purple-800 text-[10px]">
-                        {advancedFilters.length}
-                      </span>
-                    )}
-                  </button>
-                  {showAdvancedFilters && (
-                    <div className="absolute left-0 top-full mt-1 z-[100] w-[520px] bg-zinc-900 border border-purple-500/30 rounded-xl shadow-2xl p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-medium text-purple-300">Filtros avanzados</span>
-                        <button
-                          onClick={() => setShowAdvancedFilters(false)}
-                          className="text-zinc-500 hover:text-white"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                        {advancedFilters.map((filter, index) => (
-                          <div key={filter.id} className="flex items-center gap-2">
-                            {index > 0 && (
-                              <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>
-                            )}
-                            {index === 0 && <span className="w-8"></span>}
-                            <select
-                              value={filter.field}
-                              onChange={(e) => updateAdvancedFilter(filter.id, { field: e.target.value })}
-                              className="w-[120px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
-                            >
-                              {CAMPANA_FILTER_FIELDS.map((f) => (
-                                <option key={f.field} value={f.field}>{f.label}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={filter.operator}
-                              onChange={(e) => updateAdvancedFilter(filter.id, { operator: e.target.value as FilterOperator })}
-                              className="w-[100px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
-                            >
-                              {FILTER_OPERATORS.filter(op => {
-                                const fieldConfig = CAMPANA_FILTER_FIELDS.find(f => f.field === filter.field);
-                                return fieldConfig && op.forTypes.includes(fieldConfig.type);
-                              }).map((op) => (
-                                <option key={op.value} value={op.value}>{op.label}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={filter.value}
-                              onChange={(e) => updateAdvancedFilter(filter.id, { value: e.target.value })}
-                              className="flex-1 text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
-                            >
-                              <option value="">Seleccionar...</option>
-                              {getUniqueFieldValues[filter.field]?.map((val) => (
-                                <option key={val} value={val}>{val}</option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={() => removeAdvancedFilter(filter.id)}
-                              className="text-red-400 hover:text-red-300 p-1"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                        {advancedFilters.length === 0 && (
-                          <p className="text-xs text-zinc-500 text-center py-4">
-                            Sin filtros avanzados. Haz clic en "Añadir" para crear uno.
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
-                        <button
-                          onClick={addAdvancedFilter}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
-                        >
-                          <Plus className="h-3 w-3" />
-                          Añadir
-                        </button>
-                        <button
-                          onClick={clearAdvancedFilters}
-                          disabled={advancedFilters.length === 0}
-                          className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        >
-                          Limpiar
-                        </button>
-                      </div>
-                      {advancedFilters.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-zinc-800">
-                          <span className="text-[10px] text-zinc-500">
-                            {filteredData.length} de {data?.data?.length || 0} registros
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
-
-                {/* Status Filter */}
-                <span className="text-xs text-zinc-500 mr-1">Estatus:</span>
-                <FilterChip
-                  label="Estatus"
-                  options={STATUS_OPTIONS}
-                  value={status}
-                  onChange={(val) => { setStatus(val); setPage(1); }}
-                  onClear={() => { setStatus(''); setPage(1); }}
-                />
-
-                {/* Current Catorcena Indicator */}
-                {currentCatorcena && (
-                  <>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs">
-                      <Clock className="h-3 w-3" />
-                      <span>Actual: Cat. {currentCatorcena.numero_catorcena} / {currentCatorcena.a_o}</span>
-                    </div>
-                    <div className="h-4 w-px bg-zinc-700 mx-1" />
-                  </>
-                )}
-
-                {/* Period Filter */}
-                <PeriodFilterPopover
-                  catorcenasData={catorcenasData}
-                  yearInicio={yearInicio}
-                  yearFin={yearFin}
-                  catorcenaInicio={catorcenaInicio}
-                  catorcenaFin={catorcenaFin}
-                  onApply={(yi, yf, ci, cf) => {
-                    setYearInicio(yi);
-                    setYearFin(yf);
-                    setCatorcenaInicio(ci);
-                    setCatorcenaFin(cf);
-                    setPage(1);
-                  }}
-                  onClear={() => {
-                    setYearInicio(undefined);
-                    setYearFin(undefined);
-                    setCatorcenaInicio(undefined);
-                    setCatorcenaFin(undefined);
-                    setPage(1);
-                  }}
-                />
-
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
-
-                {/* Sort */}
-                <span className="text-xs text-zinc-500 mr-1">
-                  <ArrowUpDown className="h-3 w-3 inline mr-1" />
-                  Ordenar:
-                </span>
-                <FilterChip
-                  label="Campo"
-                  options={['fecha_inicio', 'nombre', 'cliente', 'status']}
-                  value={sortBy}
-                  onChange={(val) => { setSortBy(val); setPage(1); }}
-                  onClear={() => { setSortBy('fecha_inicio'); setPage(1); }}
-                />
-                <button
-                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                  className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 transition-all"
-                >
-                  {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
-                </button>
-
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
-
-                {/* Group By */}
-                <span className="text-xs text-zinc-500 mr-1">
-                  <Layers className="h-3 w-3 inline mr-1" />
-                  Agrupar:
-                </span>
-                <FilterChip
-                  label="Sin agrupar"
-                  options={['status', 'cliente', 'catorcena_inicio']}
-                  value={groupBy}
-                  onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); setPage(1); }}
-                  onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); setPage(1); }}
-                />
-
-                {/* Clear All Filters Button */}
-                {hasActiveFilters && (
-                  <>
-                    <div className="h-4 w-px bg-zinc-700 mx-1" />
-                    <button
-                      onClick={clearAllFilters}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
-                    >
-                      <X className="h-3 w-3" />
-                      Limpiar filtros
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
@@ -1621,7 +1599,14 @@ export function CampanasPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs">
               <Filter className="h-3.5 w-3.5" />
               {filteredData.length} resultados
-              {groupBy && <span className="text-zinc-500">| Agrupado por {groupBy}</span>}
+              {activeGroupings.length > 0 && (
+                <span className="text-zinc-500">
+                  | Agrupado por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
+                </span>
+              )}
+              {sortField && sortField !== 'fecha_inicio' && (
+                <span className="text-zinc-500">| Ordenado por {SORT_FIELDS.find(f => f.field === sortField)?.label} ({sortDirection === 'asc' ? '↑' : '↓'})</span>
+              )}
             </div>
           </div>
         )}
@@ -1653,16 +1638,52 @@ export function CampanasPage() {
                   </thead>
                   <tbody>
                     {groupedData ? (
-                      groupedData.map(([groupName, items]) => (
-                        <React.Fragment key={`group-${groupName}`}>
+                      groupedData.map((group) => (
+                        <React.Fragment key={`group-${group.name}`}>
+                          {/* Level 1 Header */}
                           <GroupHeader
-                            groupName={groupName}
-                            count={items.length}
-                            expanded={expandedGroups.has(groupName)}
-                            onToggle={() => toggleGroup(groupName)}
+                            groupName={group.name}
+                            count={group.items.length}
+                            expanded={expandedGroups.has(group.name)}
+                            onToggle={() => toggleGroup(group.name)}
                             colSpan={10}
                           />
-                          {expandedGroups.has(groupName) && items.map((item, idx) => renderCampanaRow(item, idx))}
+                          {/* Level 1 Content */}
+                          {expandedGroups.has(group.name) && (
+                            group.subgroups ? (
+                              // Has subgroups (2 level grouping)
+                              group.subgroups.map((subgroup) => (
+                                <React.Fragment key={`subgroup-${group.name}-${subgroup.name}`}>
+                                  {/* Level 2 Header */}
+                                  <tr
+                                    onClick={() => toggleGroup(`${group.name}|${subgroup.name}`)}
+                                    className="bg-fuchsia-500/5 border-b border-fuchsia-500/10 cursor-pointer hover:bg-fuchsia-500/10 transition-colors"
+                                  >
+                                    <td colSpan={10} className="px-4 py-2.5 pl-10">
+                                      <div className="flex items-center gap-2">
+                                        {expandedGroups.has(`${group.name}|${subgroup.name}`) ? (
+                                          <ChevronDown className="h-4 w-4 text-fuchsia-400" />
+                                        ) : (
+                                          <ChevronRight className="h-4 w-4 text-fuchsia-400" />
+                                        )}
+                                        <span className="font-semibold text-zinc-200 text-sm">{subgroup.name || 'Sin asignar'}</span>
+                                        <span className="px-2 py-0.5 rounded-full text-xs bg-fuchsia-500/20 text-fuchsia-300">
+                                          {subgroup.items.length} campañas
+                                        </span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {/* Level 2 Content */}
+                                  {expandedGroups.has(`${group.name}|${subgroup.name}`) &&
+                                    subgroup.items.map((item, idx) => renderCampanaRow(item, idx))
+                                  }
+                                </React.Fragment>
+                              ))
+                            ) : (
+                              // No subgroups (1 level grouping)
+                              group.items.map((item, idx) => renderCampanaRow(item, idx))
+                            )
+                          )}
                         </React.Fragment>
                       ))
                     ) : (
@@ -1685,7 +1706,7 @@ export function CampanasPage() {
               </div>
 
               {/* Pagination */}
-              {!groupBy && data?.pagination && totalPages > 1 && (
+              {activeGroupings.length === 0 && data?.pagination && totalPages > 1 && (
                 <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
                   <span className="text-sm text-purple-300/70">
                     Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{totalPages}</span>
@@ -1711,10 +1732,10 @@ export function CampanasPage() {
               )}
 
               {/* Grouped data info */}
-              {groupBy && (
+              {activeGroupings.length > 0 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
                   <span className="text-xs text-zinc-500">
-                    Mostrando {filteredData.length} campañas agrupadas por {groupBy}
+                    Mostrando {filteredData.length} campañas agrupadas por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
                   </span>
                 </div>
               )}

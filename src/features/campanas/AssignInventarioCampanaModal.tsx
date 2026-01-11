@@ -363,7 +363,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       // Agregar inventario sin APS (editable)
       if (inventarioReservado) {
         inventarioReservado.forEach((inv, idx) => {
-          const matchingCara = caras.find(c => c.articulo === inv.articulo);
+          // Matchear por solicitud_caras_id (ID de la cara) para asociación correcta
+          const matchingCara = caras.find(c => c.id === inv.solicitud_caras_id);
           if (matchingCara) {
             reservasFromInventario.push({
               id: `${matchingCara.localId}-${inv.id}-${idx}`,
@@ -385,7 +386,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       // Agregar inventario con APS (bloqueado)
       if (inventarioConAPS) {
         inventarioConAPS.forEach((inv, idx) => {
-          const matchingCara = caras.find(c => c.articulo === inv.articulo);
+          // Matchear por solicitud_caras_id (ID de la cara) para asociación correcta
+          const matchingCara = caras.find(c => c.id === inv.solicitud_caras_id);
           if (matchingCara) {
             reservasFromInventario.push({
               id: `${matchingCara.localId}-aps-${inv.id}-${idx}`,
@@ -1108,10 +1110,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </div>
 
                       {/* KPIs */}
-                      <div className="grid grid-cols-5 gap-4">
+                      <div className="grid grid-cols-6 gap-4">
                         <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30">
                           <p className="text-xs text-purple-300 uppercase">Caras Renta</p>
                           <p className="text-2xl font-bold text-white">{carasKPIs.totalRenta}</p>
+                        </div>
+                        <div className="p-4 rounded-xl bg-pink-500/10 border border-pink-500/30">
+                          <p className="text-xs text-pink-300 uppercase flex items-center gap-1">
+                            <Gift className="h-3 w-3" /> Caras Bonificadas
+                          </p>
+                          <p className="text-2xl font-bold text-white">{carasKPIs.totalBonificacion}</p>
                         </div>
                         <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
                           <p className="text-xs text-emerald-300 uppercase flex items-center gap-1">
