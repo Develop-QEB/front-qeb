@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
@@ -788,7 +788,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       setDescripcion(descripcionVal);
 
       // Set archivo if exists
-      setArchivoPropuesta((solicitudDetails.propuesta as any)?.archivo || null);
+      setArchivoPropuesta(solicitudDetails.solicitud?.archivo || null);
 
       // Set period from cotizacion dates
       const cot = solicitudDetails.cotizacion;
@@ -3684,36 +3684,70 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       onChange={handleArchivoUpload}
                     />
                     {archivoPropuesta ? (
-                      <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-                        <FileText className="h-5 w-5 text-emerald-400" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-emerald-300 truncate">
-                            {archivoPropuesta.split('/').pop()}
-                          </p>
+                      <div className="flex items-center gap-3 p-3 bg-zinc-800 border border-emerald-500/30 rounded-xl">
+                        {/* Preview - image or file icon */}
+                        {/\.(jpg|jpeg|png|gif|webp)$/i.test(archivoPropuesta) ? (
                           <a
-                            href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}${archivoPropuesta}`}
+                            href={`${STATIC_URL}${archivoPropuesta}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-emerald-400 hover:text-emerald-300 underline"
+                            className="block"
                           >
-                            Ver archivo
+                            <img
+                              src={`${STATIC_URL}${archivoPropuesta}`}
+                              alt="Preview"
+                              className="w-16 h-16 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                            />
                           </a>
+                        ) : (
+                          <a
+                            href={`${STATIC_URL}${archivoPropuesta}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-16 h-16 flex items-center justify-center bg-zinc-700 rounded-lg hover:bg-zinc-600 transition-colors"
+                          >
+                            <FileText className="h-6 w-6 text-zinc-400" />
+                          </a>
+                        )}
+                        {/* File info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-emerald-400 font-medium">Archivo adjunto</div>
+                          <div className="text-xs text-zinc-500 truncate">{archivoPropuesta.split('/').pop()}</div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => archivoInputRef.current?.click()}
-                          className="px-3 py-1.5 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
-                        >
-                          Cambiar
-                        </button>
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`${STATIC_URL}${archivoPropuesta}`}
+                            download
+                            className="p-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
+                            title="Descargar"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => archivoInputRef.current?.click()}
+                            className="px-3 py-2 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
+                          >
+                            Cambiar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setArchivoPropuesta(null)}
+                            className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <button
                         type="button"
                         onClick={() => archivoInputRef.current?.click()}
-                        className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-zinc-700 hover:border-violet-500/50 rounded-lg text-zinc-400 hover:text-violet-300 transition-colors"
+                        className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-zinc-700 hover:border-violet-500/50 rounded-xl text-zinc-400 hover:text-violet-300 transition-colors"
                       >
-                        <Download className="h-4 w-4" />
+                        <Upload className="h-5 w-5" />
                         <span className="text-sm">Seleccionar archivo</span>
                       </button>
                     )}
