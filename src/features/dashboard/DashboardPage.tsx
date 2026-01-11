@@ -391,7 +391,10 @@ function GoogleMapsChart({
           // Al hacer click en un cluster, hacer zoom para ver los markers que contiene
           const bounds = new google.maps.LatLngBounds();
           cluster.markers?.forEach(marker => {
-            const pos = marker.getPosition();
+            // Handle both legacy Marker (getPosition) and AdvancedMarkerElement (position)
+            const pos = 'getPosition' in marker && typeof marker.getPosition === 'function'
+              ? marker.getPosition()
+              : (marker as any).position;
             if (pos) bounds.extend(pos);
           });
           map.fitBounds(bounds);

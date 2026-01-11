@@ -3621,12 +3621,12 @@ function CreateTaskModal({
     return now.toISOString().slice(0, 16);
   });
   // Campos específicos para Impresión - número de impresiones por inventario
-  const [impresiones, setImpresiones] = useState<Record<number, number>>({});
+  const [impresiones, setImpresiones] = useState<Record<string, number>>({});
 
   // Inicializar impresiones cuando cambia el inventario seleccionado
   useEffect(() => {
     if (isOpen && selectedInventory.length > 0 && tipo === 'Impresión') {
-      const initial: Record<number, number> = {};
+      const initial: Record<string, number> = {};
       selectedInventory.forEach(item => {
         initial[item.id] = impresiones[item.id] || 1;
       });
@@ -4862,6 +4862,7 @@ export function TareaSeguimientoPage() {
       contenido?: string;
       catorcena_entrega?: string;
       listado_inventario?: string;
+      impresiones?: Record<string, number>;
     }) => campanasService.createTarea(campanaId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
@@ -5624,7 +5625,7 @@ export function TareaSeguimientoPage() {
 
     setIsCheckingExistingTasks(true);
     try {
-      const reservaIds = Array.from(selectedInventoryIds);
+      const reservaIds = Array.from(selectedInventoryIds).map(id => parseInt(id)).filter(id => !isNaN(id));
       const result = await campanasService.checkReservasTareas(campanaId, reservaIds);
 
       if (result.hasTareas && result.tareas.length > 0) {
@@ -5644,7 +5645,7 @@ export function TareaSeguimientoPage() {
     }
   }, [selectedInventoryIds, campanaId, calculateTaskTiposConfig]);
 
-  const handleCreateTask = useCallback((task: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<number, number> }) => {
+  const handleCreateTask = useCallback((task: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<string, number> }) => {
     // Get reserva IDs from selected inventory items
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => id.trim()).filter(id => id)
