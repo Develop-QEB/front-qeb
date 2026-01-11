@@ -6,7 +6,8 @@ import {
   Calendar, User, FileText, X, List, LayoutGrid, CalendarDays,
   PanelRight, FolderOpen, Clock, CheckCircle, AlertCircle, Circle,
   MessageSquare, Send, Plus, Pencil, Trash2, StickyNote,
-  Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList
+  Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList,
+  Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { notificacionesService } from '../../services/notificaciones.service';
@@ -24,6 +25,86 @@ type ViewType = 'tablero' | 'lista' | 'calendario' | 'notas';
 type GroupByType = 'estatus' | 'tipo' | 'fecha' | 'responsable' | 'asignado';
 type OrderByType = 'fecha_fin' | 'fecha_inicio' | 'titulo' | 'estatus';
 type DateFilterType = 'all' | 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month';
+
+// Tipos para filtros avanzados (estilo Proveedores)
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
+
+interface FilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: keyof Notificacion;
+  label: string;
+  type: 'string' | 'number';
+}
+
+// Campos disponibles para filtrar/ordenar
+const FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'titulo', label: 'Título', type: 'string' },
+  { field: 'tipo', label: 'Tipo', type: 'string' },
+  { field: 'estatus', label: 'Estado', type: 'string' },
+  { field: 'asignado', label: 'Asignado', type: 'string' },
+  { field: 'responsable', label: 'Responsable', type: 'string' },
+];
+
+// Campos disponibles para agrupar
+type GroupByField = 'estatus' | 'tipo' | 'asignado' | 'responsable' | 'fecha';
+
+interface GroupConfig {
+  field: GroupByField;
+  label: string;
+}
+
+const AVAILABLE_GROUPINGS: GroupConfig[] = [
+  { field: 'estatus', label: 'Estado' },
+  { field: 'tipo', label: 'Tipo' },
+  { field: 'asignado', label: 'Asignado' },
+  { field: 'responsable', label: 'Responsable' },
+  { field: 'fecha', label: 'Fecha' },
+];
+
+const OPERATORS: { value: FilterOperator; label: string }[] = [
+  { value: '=', label: 'Igual a' },
+  { value: '!=', label: 'Diferente de' },
+  { value: 'contains', label: 'Contiene' },
+  { value: 'not_contains', label: 'No contiene' },
+];
+
+// Función para aplicar filtros a los datos
+function applyFilters(data: Notificacion[], filters: FilterCondition[]): Notificacion[] {
+  if (filters.length === 0) return data;
+
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = item[filter.field as keyof Notificacion];
+      const filterValue = filter.value;
+
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+
+      switch (filter.operator) {
+        case '=':
+          return strValue === strFilterValue;
+        case '!=':
+          return strValue !== strFilterValue;
+        case 'contains':
+          return strValue.includes(strFilterValue);
+        case 'not_contains':
+          return !strValue.includes(strFilterValue);
+        default:
+          return true;
+      }
+    });
+  });
+}
 
 interface NestedGroup {
   key: string;
@@ -151,171 +232,6 @@ function groupTareasRecursive(
 }
 
 // ============ COMPONENTES AUXILIARES ============
-
-// Botón de agrupación múltiple
-function MultiGroupButton({
-  selected,
-  onChange,
-}: {
-  selected: GroupByType[];
-  onChange: (groups: GroupByType[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const availableOptions = GROUP_BY_OPTIONS.filter(opt => !selected.includes(opt.value));
-
-  const addGroup = (value: GroupByType) => {
-    onChange([...selected, value]);
-  };
-
-  const removeGroup = (value: GroupByType) => {
-    onChange(selected.filter(g => g !== value));
-  };
-
-  const clearAll = () => {
-    onChange([]);
-    setOpen(false);
-  };
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-          selected.length > 0
-            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-            : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 hover:text-zinc-300'
-        }`}
-      >
-        <Users className="h-3 w-3" />
-        <span>Agrupar</span>
-        {selected.length > 0 && (
-          <span className="ml-1 px-1.5 py-0.5 rounded-full bg-purple-500 text-white text-[10px] font-bold">
-            {selected.length}
-          </span>
-        )}
-        <ChevronDown className="h-3 w-3" />
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 min-w-[220px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            {/* Agrupaciones activas */}
-            {selected.length > 0 && (
-              <div className="p-2 border-b border-zinc-800">
-                <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2 px-1">
-                  Agrupaciones activas
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {selected.map((value, index) => {
-                    const opt = GROUP_BY_OPTIONS.find(o => o.value === value);
-                    if (!opt) return null;
-                    return (
-                      <div
-                        key={value}
-                        className="flex items-center gap-1 px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 text-xs"
-                      >
-                        <span className="text-[10px] text-purple-400">{index + 1}.</span>
-                        <opt.icon className="h-3 w-3" />
-                        <span>{opt.label}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); removeGroup(value); }}
-                          className="ml-0.5 hover:text-white"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button
-                  onClick={clearAll}
-                  className="mt-2 text-[10px] text-red-400 hover:text-red-300 px-1"
-                >
-                  Quitar todas
-                </button>
-              </div>
-            )}
-
-            {/* Opciones disponibles */}
-            {availableOptions.length > 0 ? (
-              <div className="p-1">
-                <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 px-2 pt-1">
-                  {selected.length > 0 ? 'Agregar agrupación' : 'Agrupar por'}
-                </div>
-                {availableOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => addGroup(option.value)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
-                  >
-                    <option.icon className="h-3.5 w-3.5" />
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="p-3 text-xs text-zinc-500 text-center">
-                Todas las agrupaciones aplicadas
-              </div>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// Dropdown selector
-function Dropdown({
-  label,
-  options,
-  value,
-  onChange,
-  icon: Icon,
-}: {
-  label: string;
-  options: { value: string; label: string }[];
-  value: string;
-  onChange: (value: string) => void;
-  icon?: typeof Circle;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find(o => o.value === value);
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 hover:text-zinc-300 transition-all"
-      >
-        {Icon && <Icon className="h-3 w-3" />}
-        <span>{selected?.label || label}</span>
-        <ChevronDown className="h-3 w-3" />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 min-w-[160px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            {options.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => { onChange(option.value); setOpen(false); }}
-                className={`w-full px-3 py-2 text-left text-xs transition-colors ${
-                  value === option.value
-                    ? 'bg-purple-500/20 text-purple-300'
-                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 // Fila de tarea mejorada (solo lectura)
 function TareaRow({
@@ -1487,11 +1403,19 @@ export function NotificacionesPage() {
   const [view, setView] = useState<ViewType>('lista');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [groupBy, setGroupBy] = useState<GroupByType[]>([]);
   const [orderBy, setOrderBy] = useState<OrderByType>('fecha_inicio');
   const [orderDir, setOrderDir] = useState<'asc' | 'desc'>('desc');
   const [filterEstatus, setFilterEstatus] = useState<string>('');
   const [filterFecha, setFilterFecha] = useState<DateFilterType>('all');
+
+  // Estados para filtros avanzados (estilo Proveedores)
+  const [filters, setFilters] = useState<FilterCondition[]>([]);
+  const [showFilterPopup, setShowFilterPopup] = useState(false);
+  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
+  const [showGroupPopup, setShowGroupPopup] = useState(false);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [showSortPopup, setShowSortPopup] = useState(false);
 
   // Obtener usuario actual
   const user = useAuthStore((state) => state.user);
@@ -1590,14 +1514,31 @@ export function NotificacionesPage() {
       });
     }
 
+    // Aplicar filtros avanzados
+    items = applyFilters(items, filters);
+
+    // Aplicar ordenamiento
+    if (sortField) {
+      items = [...items].sort((a, b) => {
+        const aVal = a[sortField as keyof Notificacion];
+        const bVal = b[sortField as keyof Notificacion];
+
+        if (aVal === null || aVal === undefined) return sortDirection === 'asc' ? 1 : -1;
+        if (bVal === null || bVal === undefined) return sortDirection === 'asc' ? -1 : 1;
+
+        const comparison = String(aVal).localeCompare(String(bVal));
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+    }
+
     return items;
-  }, [data?.data, filterFecha, user?.id, contentType]);
+  }, [data?.data, filterFecha, user?.id, contentType, filters, sortField, sortDirection]);
 
   // Agrupar tareas (soporta múltiples agrupaciones anidadas)
   const nestedGroups = useMemo<NestedGroup[]>(() => {
     if (!filteredTareas.length) return [];
-    return groupTareasRecursive(filteredTareas, groupBy);
-  }, [filteredTareas, groupBy]);
+    return groupTareasRecursive(filteredTareas, activeGroupings);
+  }, [filteredTareas, activeGroupings]);
 
   // Obtener opciones de filtro desde stats
   const estatusOptions = useMemo(() => {
@@ -1605,20 +1546,77 @@ export function NotificacionesPage() {
     return Object.keys(stats.por_estatus).map(e => ({ value: e, label: e }));
   }, [stats]);
 
+  // Obtener valores únicos para autocompletado de filtros
+  const getUniqueValues = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    FILTER_FIELDS.forEach(fieldConfig => {
+      const values = new Set<string>();
+      (data?.data || []).forEach(item => {
+        const val = item[fieldConfig.field];
+        if (val !== null && val !== undefined && val !== '') {
+          values.add(String(val));
+        }
+      });
+      valuesMap[fieldConfig.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [data?.data]);
+
+  // Funciones para manejar filtros avanzados
+  const addFilter = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFilters(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilter = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilter = useCallback((id: string) => {
+    setFilters(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearAdvancedFilters = useCallback(() => {
+    setFilters([]);
+  }, []);
+
+  // Toggle de agrupación (max 2)
+  const toggleGrouping = useCallback((field: GroupByField) => {
+    setActiveGroupings(prev => {
+      if (prev.includes(field)) {
+        return prev.filter(f => f !== field);
+      }
+      if (prev.length >= 2) {
+        return [prev[1], field];
+      }
+      return [...prev, field];
+    });
+  }, []);
+
+  // Verificar si hay filtros activos
+  const hasActiveFilters = filters.length > 0 || activeGroupings.length > 0 || sortField !== null || filterFecha !== 'all' || search;
+
+  // Limpiar todos los filtros
+  const clearAllFilters = useCallback(() => {
+    setFilters([]);
+    setActiveGroupings([]);
+    setSortField(null);
+    setSortDirection('asc');
+    setFilterFecha('all');
+    setSearch('');
+    setFilterEstatus('');
+  }, []);
+
   // Handlers
   const handleSelectTarea = useCallback(async (tarea: Notificacion) => {
     const full = await notificacionesService.getById(tarea.id);
     setSelectedTarea(full);
   }, []);
-
-  const clearFilters = () => {
-    setFilterEstatus('');
-    setFilterFecha('all');
-    setSearch('');
-    setGroupBy([]);
-  };
-
-  const hasActiveFilters = !!(filterEstatus || filterFecha !== 'all' || search || groupBy.length > 0);
 
   // Vista de tabs
   const viewTabs = [
@@ -1733,41 +1731,227 @@ export function NotificacionesPage() {
               />
             </div>
 
-            {/* Filtros como chips */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Agrupar - solo en vista Lista */}
-              {view === 'lista' && (
-                <MultiGroupButton
-                  selected={groupBy}
-                  onChange={setGroupBy}
-                />
-              )}
-
-              <Dropdown
-                label="Fecha"
-                icon={Calendar}
-                options={DATE_FILTER_OPTIONS}
-                value={filterFecha}
-                onChange={(v) => setFilterFecha(v as DateFilterType)}
-              />
-
-              {estatusOptions.length > 0 && (
-                <Dropdown
-                  label="Estado"
-                  icon={Circle}
-                  options={[{ value: '', label: 'Todos' }, ...estatusOptions]}
-                  value={filterEstatus}
-                  onChange={setFilterEstatus}
-                />
-              )}
-
-              {(groupBy.length > 0 || filterEstatus || filterFecha !== 'all' || search) && (
+            {/* Filter/Group/Sort Buttons - Estilo Proveedores */}
+            <div className="flex items-center gap-2">
+              {/* Botón de Filtros */}
+              <div className="relative">
                 <button
-                  onClick={clearFilters}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+                  onClick={() => setShowFilterPopup(!showFilterPopup)}
+                  className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                    filters.length > 0
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                  }`}
+                  title="Filtrar"
                 >
-                  <X className="h-3 w-3" />
-                  Limpiar
+                  <Filter className="h-4 w-4" />
+                  {filters.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white px-1">
+                      {filters.length}
+                    </span>
+                  )}
+                </button>
+                {showFilterPopup && (
+                  <div className="absolute right-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+                      <button onClick={() => setShowFilterPopup(false)} className="text-zinc-400 hover:text-white">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                      {filters.map((filter, index) => (
+                        <div key={filter.id} className="flex items-center gap-2">
+                          {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
+                          {index === 0 && <span className="w-8"></span>}
+                          <select
+                            value={filter.field}
+                            onChange={(e) => updateFilter(filter.id, { field: e.target.value })}
+                            className="w-[130px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                          >
+                            {FILTER_FIELDS.map((f) => (
+                              <option key={f.field} value={f.field}>{f.label}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={filter.operator}
+                            onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
+                            className="w-[110px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                          >
+                            {OPERATORS.map((op) => (
+                              <option key={op.value} value={op.value}>{op.label}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            list={`datalist-${filter.id}`}
+                            value={filter.value}
+                            onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                            placeholder="Escribe o selecciona..."
+                            className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
+                          />
+                          <datalist id={`datalist-${filter.id}`}>
+                            {getUniqueValues[filter.field]?.map((val) => (
+                              <option key={val} value={val} />
+                            ))}
+                          </datalist>
+                          <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {filters.length === 0 && (
+                        <p className="text-[11px] text-zinc-500 text-center py-3">Sin filtros. Haz clic en "Añadir".</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-purple-900/30">
+                      <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
+                        <Plus className="h-3 w-3" /> Añadir
+                      </button>
+                      <button onClick={clearAdvancedFilters} disabled={filters.length === 0} className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        Limpiar
+                      </button>
+                    </div>
+                    {filters.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-purple-900/30">
+                        <span className="text-[10px] text-zinc-500">{filteredTareas.length} de {data?.data?.length || 0} registros</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Botón de Agrupar - solo en vista Lista */}
+              {view === 'lista' && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowGroupPopup(!showGroupPopup)}
+                    className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                      activeGroupings.length > 0
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                    }`}
+                    title="Agrupar"
+                  >
+                    <Layers className="h-4 w-4" />
+                    {activeGroupings.length > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white px-1">
+                        {activeGroupings.length}
+                      </span>
+                    )}
+                  </button>
+                  {showGroupPopup && (
+                    <div className="absolute right-0 top-full mt-1 z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 2)</p>
+                      {AVAILABLE_GROUPINGS.map(({ field, label }) => (
+                        <button
+                          key={field}
+                          onClick={() => toggleGrouping(field)}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
+                            activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                            activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
+                          }`}>
+                            {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
+                          </div>
+                          {label}
+                          {activeGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
+                          {activeGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+                        </button>
+                      ))}
+                      <div className="border-t border-purple-900/30 mt-2 pt-2">
+                        <button onClick={() => setActiveGroupings([])} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                          Quitar agrupación
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Botón de Ordenar */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowSortPopup(!showSortPopup)}
+                  className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                    sortField
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                  }`}
+                  title="Ordenar"
+                >
+                  <ArrowUpDown className="h-4 w-4" />
+                </button>
+                {showSortPopup && (
+                  <div className="absolute right-0 top-full mt-1 z-[60] w-[300px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-purple-300">Ordenar por</span>
+                      <button onClick={() => setShowSortPopup(false)} className="text-zinc-400 hover:text-white">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-1">
+                      {FILTER_FIELDS.map((field) => (
+                        <div
+                          key={field.field}
+                          className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
+                            sortField === field.field ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-purple-900/20'
+                          }`}
+                        >
+                          <span className={sortField === field.field ? 'text-purple-300 font-medium' : 'text-zinc-300'}>
+                            {field.label}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => { setSortField(field.field); setSortDirection('asc'); }}
+                              className={`p-1.5 rounded transition-colors ${
+                                sortField === field.field && sortDirection === 'asc'
+                                  ? 'bg-purple-600 text-white'
+                                  : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                              }`}
+                              title="Ascendente (A-Z)"
+                            >
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => { setSortField(field.field); setSortDirection('desc'); }}
+                              className={`p-1.5 rounded transition-colors ${
+                                sortField === field.field && sortDirection === 'desc'
+                                  ? 'bg-purple-600 text-white'
+                                  : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                              }`}
+                              title="Descendente (Z-A)"
+                            >
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {sortField && (
+                      <div className="mt-3 pt-3 border-t border-purple-900/30">
+                        <button
+                          onClick={() => { setSortField(null); setSortDirection('asc'); }}
+                          className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors"
+                        >
+                          Quitar ordenamiento
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Botón Limpiar Todo */}
+              {hasActiveFilters && (
+                <button
+                  onClick={clearAllFilters}
+                  className="flex items-center justify-center w-9 h-9 text-zinc-400 hover:text-white bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/50 transition-colors"
+                  title="Limpiar filtros"
+                >
+                  <X className="h-4 w-4" />
                 </button>
               )}
             </div>
@@ -1800,18 +1984,18 @@ export function NotificacionesPage() {
             <div className="flex items-center justify-between">
               <span className="text-sm text-zinc-500">
                 {filteredTareas.length} {contentType === 'notificaciones' ? 'notificación' : 'tarea'}{filteredTareas.length !== 1 ? (contentType === 'notificaciones' ? 'es' : 's') : ''}
-                {groupBy.length > 0 && <span className="text-zinc-600"> · {groupBy.length} agrupación{groupBy.length > 1 ? 'es' : ''}</span>}
+                {activeGroupings.length > 0 && <span className="text-zinc-600"> · {activeGroupings.length} agrupación{activeGroupings.length > 1 ? 'es' : ''}</span>}
               </span>
             </div>
 
-            {groupBy.length > 0 ? (
+            {activeGroupings.length > 0 ? (
               /* Vista con agrupaciones */
               <div className="space-y-3">
                 {nestedGroups.map((group) => (
                   <NestedSection
                     key={group.key}
                     group={group}
-                    groupByList={groupBy}
+                    groupByList={activeGroupings}
                     onSelectTarea={handleSelectTarea}
                   />
                 ))}
