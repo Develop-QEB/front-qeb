@@ -1293,7 +1293,7 @@ function TaskDrawer({
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full max-w-md bg-zinc-900/95 backdrop-blur-xl border-l border-zinc-800 shadow-2xl z-50 flex flex-col">
+    <div className="fixed inset-y-0 right-0 w-full max-w-md bg-zinc-900/95 backdrop-blur-xl border-l border-zinc-800 shadow-2xl z-50 flex flex-col animate-slide-in-right">
       {/* Header con gradiente */}
       <div className="relative">
         <div className={`absolute inset-0 ${statusConfig.bg} opacity-30`} />
@@ -1950,7 +1950,7 @@ export function NotificacionesPage() {
       {selectedTarea && (
         <>
           <div
-            className="fixed inset-0 bg-black/50 z-40"
+            className="fixed inset-0 bg-black/50 z-40 animate-fade-in"
             onClick={() => setSelectedTarea(null)}
           />
           <TaskDrawer
