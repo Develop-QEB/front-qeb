@@ -6,7 +6,7 @@ import {
   Calendar, User, FileText, X, List, LayoutGrid, CalendarDays,
   PanelRight, FolderOpen, Clock, CheckCircle, AlertCircle, Circle,
   MessageSquare, Send, Plus, Pencil, Trash2, StickyNote,
-  Users, Tag, Building2, Download, Table2, ExternalLink
+  Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { notificacionesService } from '../../services/notificaciones.service';
@@ -19,6 +19,7 @@ import { TableroView } from './KanbanView';
 import { UserAvatar } from '../../components/ui/user-avatar';
 
 // ============ TIPOS ============
+type ContentType = 'notificaciones' | 'tareas';
 type ViewType = 'tablero' | 'lista' | 'calendario' | 'notas';
 type GroupByType = 'estatus' | 'tipo' | 'fecha' | 'responsable' | 'asignado';
 type OrderByType = 'fecha_fin' | 'fecha_inicio' | 'titulo' | 'estatus';
@@ -1477,6 +1478,9 @@ export function NotificacionesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
+  // Estado de contenido (notificaciones vs tareas)
+  const [contentType, setContentType] = useState<ContentType>('notificaciones');
+
   // Estado de vista y filtros
   const [view, setView] = useState<ViewType>('lista');
   const [search, setSearch] = useState('');
@@ -1506,14 +1510,14 @@ export function NotificacionesPage() {
     refetchInterval: 30000,
   });
 
-  // Fetch notificaciones (solo tipo Notificación)
+  // Fetch notificaciones o tareas según contentType
   const { data, isLoading } = useQuery({
-    queryKey: ['notificaciones', filterEstatus, debouncedSearch, orderBy, orderDir],
+    queryKey: ['notificaciones', contentType, filterEstatus, debouncedSearch, orderBy, orderDir],
     queryFn: () =>
       notificacionesService.getAll({
         limit: 200,
         estatus: filterEstatus || undefined,
-        tipo: 'Notificación', // Solo notificaciones, no tareas
+        tipo: contentType === 'notificaciones' ? 'Notificación' : undefined, // Solo notificaciones o todas
         search: debouncedSearch || undefined,
         orderBy,
         orderDir,
@@ -1532,38 +1536,50 @@ export function NotificacionesPage() {
     },
   });
 
-  // Filtrar notificaciones por fecha y SIEMPRE por usuario actual
+  // Filtrar por fecha y usuario según el tipo de contenido
   const filteredTareas = useMemo(() => {
     if (!data?.data || !user) return [];
-    let notificaciones = data.data;
+    let items = data.data;
     const userId = String(user.id);
 
-    // SIEMPRE filtrar por usuario actual - solo mostrar notificaciones donde soy el responsable (destinatario)
-    notificaciones = notificaciones.filter(notif => {
-      // Verificar por id_responsable (el destinatario de la notificación)
-      if (notif.id_responsable !== undefined && notif.id_responsable !== null) {
-        return String(notif.id_responsable) === userId;
-      }
-      // También verificar por id_asignado como fallback
-      if (notif.id_asignado !== undefined && notif.id_asignado !== null) {
-        const idAsignadoStr = String(notif.id_asignado);
-        const idsAsignados = idAsignadoStr.split(',').map(id => id.trim());
-        return idsAsignados.includes(userId);
-      }
-      return false;
-    });
+    if (contentType === 'notificaciones') {
+      // Para notificaciones: filtrar donde soy el destinatario (id_responsable)
+      items = items.filter(item => {
+        if (item.id_responsable !== undefined && item.id_responsable !== null) {
+          return String(item.id_responsable) === userId;
+        }
+        return false;
+      });
+    } else {
+      // Para tareas: excluir notificaciones y filtrar donde estoy asignado
+      items = items.filter(item => {
+        // Excluir notificaciones
+        if (item.tipo === 'Notificación') return false;
+        // Filtrar donde estoy asignado
+        if (item.id_asignado !== undefined && item.id_asignado !== null) {
+          const idAsignadoStr = String(item.id_asignado);
+          const idsAsignados = idAsignadoStr.split(',').map(id => id.trim());
+          return idsAsignados.includes(userId);
+        }
+        // También incluir donde soy responsable
+        if (item.id_responsable !== undefined && item.id_responsable !== null) {
+          return String(item.id_responsable) === userId;
+        }
+        return false;
+      });
+    }
 
     // Filtrar por fecha (solo si no es 'all')
     if (filterFecha !== 'all') {
-      notificaciones = notificaciones.filter(notif => {
-        if (!notif.fecha_creacion && !notif.fecha_inicio) return false;
-        const fechaToCheck = notif.fecha_inicio || notif.fecha_creacion;
+      items = items.filter(item => {
+        if (!item.fecha_creacion && !item.fecha_inicio) return false;
+        const fechaToCheck = item.fecha_inicio || item.fecha_creacion;
         return isDateInRange(fechaToCheck, filterFecha);
       });
     }
 
-    return notificaciones;
-  }, [data?.data, filterFecha, user?.id]);
+    return items;
+  }, [data?.data, filterFecha, user?.id, contentType]);
 
   // Agrupar tareas (soporta múltiples agrupaciones anidadas)
   const nestedGroups = useMemo<NestedGroup[]>(() => {
@@ -1602,10 +1618,41 @@ export function NotificacionesPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header title="Notificaciones" />
+      <Header title={contentType === 'notificaciones' ? 'Notificaciones' : 'Mis Tareas'} />
 
       {/* Barra superior fija */}
       <div className="sticky top-16 z-20 bg-[#1a1025]/95 backdrop-blur-sm border-b border-zinc-800/80">
+        {/* Tabs: Notificaciones / Tareas */}
+        <div className="flex items-center gap-1 px-6 py-2 border-b border-zinc-800/50">
+          <button
+            onClick={() => setContentType('notificaciones')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              contentType === 'notificaciones'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+            }`}
+          >
+            <Bell className="h-4 w-4" />
+            Notificaciones
+            {stats?.total && contentType !== 'notificaciones' && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-purple-500/30 text-[10px]">
+                {stats.total}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setContentType('tareas')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              contentType === 'tareas'
+                ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
+                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+            }`}
+          >
+            <ClipboardList className="h-4 w-4" />
+            Mis Tareas
+          </button>
+        </div>
+
         {/* Navegación de vistas */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-800/50">
           <div className="flex items-center gap-1">
@@ -1740,7 +1787,7 @@ export function NotificacionesPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-zinc-500">
-                {filteredTareas.length} notificación{filteredTareas.length !== 1 ? 'es' : ''}
+                {filteredTareas.length} {contentType === 'notificaciones' ? 'notificación' : 'tarea'}{filteredTareas.length !== 1 ? (contentType === 'notificaciones' ? 'es' : 's') : ''}
                 {groupBy.length > 0 && <span className="text-zinc-600"> · {groupBy.length} agrupación{groupBy.length > 1 ? 'es' : ''}</span>}
               </span>
             </div>
@@ -1876,9 +1923,19 @@ export function NotificacionesPage() {
               </div>
             ) : (
               <div className="rounded-xl border border-zinc-800 p-12 text-center bg-zinc-900/30">
-                <Circle className="h-10 w-10 text-zinc-700 mx-auto mb-3" />
-                <p className="text-zinc-500">No tienes notificaciones</p>
-                <p className="text-xs text-zinc-600 mt-1">Las notificaciones aparecerán aquí cuando haya actividad</p>
+                {contentType === 'notificaciones' ? (
+                  <Bell className="h-10 w-10 text-zinc-700 mx-auto mb-3" />
+                ) : (
+                  <ClipboardList className="h-10 w-10 text-zinc-700 mx-auto mb-3" />
+                )}
+                <p className="text-zinc-500">
+                  {contentType === 'notificaciones' ? 'No tienes notificaciones' : 'No tienes tareas asignadas'}
+                </p>
+                <p className="text-xs text-zinc-600 mt-1">
+                  {contentType === 'notificaciones'
+                    ? 'Las notificaciones aparecerán aquí cuando haya actividad'
+                    : 'Las tareas aparecerán aquí cuando te asignen alguna'}
+                </p>
               </div>
             )}
           </div>
