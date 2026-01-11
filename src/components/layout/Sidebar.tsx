@@ -21,14 +21,17 @@ interface SidebarProps {
 
 type PrefetchKey = 'prefetchClientes' | 'prefetchProveedores' | 'prefetchSolicitudes' | 'prefetchPropuestas' | 'prefetchCampanas' | 'prefetchInventarios';
 
-const navigation: { name: string; href: string; icon: React.ElementType; prefetchKey?: PrefetchKey }[] = [
+// IDs de usuarios con acceso a Inventarios (Mario, Jos, Akary)
+const INVENTARIOS_ALLOWED_USER_IDS = [1057460, 1057462, 1057581];
+
+const navigation: { name: string; href: string; icon: React.ElementType; prefetchKey?: PrefetchKey; restricted?: boolean }[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Clientes', href: '/clientes', icon: Users, prefetchKey: 'prefetchClientes' },
   { name: 'Proveedores', href: '/proveedores', icon: Building2, prefetchKey: 'prefetchProveedores' },
   { name: 'Solicitudes', href: '/solicitudes', icon: FileText, prefetchKey: 'prefetchSolicitudes' },
   { name: 'Propuestas', href: '/propuestas', icon: Send, prefetchKey: 'prefetchPropuestas' },
   { name: 'Campañas', href: '/campanas', icon: Megaphone, prefetchKey: 'prefetchCampanas' },
-  { name: 'Inventarios', href: '/inventarios', icon: MapPin, prefetchKey: 'prefetchInventarios' },
+  { name: 'Inventarios', href: '/inventarios', icon: MapPin, prefetchKey: 'prefetchInventarios', restricted: true },
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
@@ -46,6 +49,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       prefetch[prefetchKey]();
     }
   };
+
+  // Filtrar navegación basado en permisos de usuario
+  const filteredNavigation = navigation.filter(item => {
+    if (item.restricted && item.href === '/inventarios') {
+      return user && INVENTARIOS_ALLOWED_USER_IDS.includes(user.id);
+    }
+    return true;
+  });
 
   return (
     <aside
@@ -98,7 +109,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
           <ul className="space-y-1">
-            {navigation.map((item) => (
+            {filteredNavigation.map((item) => (
               <li key={item.name}>
                 <NavLink
                   to={item.href}

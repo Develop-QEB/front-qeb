@@ -18,6 +18,19 @@ import { TareaSeguimientoPage } from './features/campanas/TareaSeguimientoPage';
 import { NotificacionesPage } from './features/notificaciones/NotificacionesPage';
 import { CorreosPage } from './features/correos/CorreosPage';
 import { PerfilPage } from './features/perfil/PerfilPage';
+import { useAuthStore } from './store/authStore';
+
+// IDs de usuarios con acceso a Inventarios (Mario, Jos, Akary)
+const INVENTARIOS_ALLOWED_USER_IDS = [1057460, 1057462, 1057581];
+
+// Componente para proteger ruta de Inventarios
+function InventariosRoute() {
+  const user = useAuthStore((state) => state.user);
+  if (!user || !INVENTARIOS_ALLOWED_USER_IDS.includes(user.id)) {
+    return <Navigate to="/" replace />;
+  }
+  return <InventariosPage />;
+}
  
 function App() {
   return (
@@ -36,7 +49,7 @@ function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/clientes" element={<ClientesPage />} />
             <Route path="/proveedores" element={<ProveedoresPage />} />
-            <Route path="/inventarios" element={<InventariosPage />} />
+            <Route path="/inventarios" element={<InventariosRoute />} />
             <Route path="/solicitudes" element={<SolicitudesPage />} />
             <Route path="/propuestas" element={<PropuestasPage />} />
             <Route path="/propuestas/compartir/:id" element={<CompartirPropuestaPage />} />
