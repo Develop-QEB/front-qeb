@@ -5,6 +5,8 @@ import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, C
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioReservado, InventarioConAPS, buildDeliveryNote, postDeliveryNoteToSAP, HistorialItem } from '../../services/campanas.service';
+import { solicitudesService } from '../../services/solicitudes.service';
+import { Catorcena } from '../../types';
 import { Badge } from '../../components/ui/badge';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { formatDate } from '../../lib/utils';
@@ -49,6 +51,30 @@ function formatAsCatorcena(dateStr: string): string {
   } catch {
     return dateStr;
   }
+}
+
+
+// Helper to find catorcena from date using API data
+function dateToCatorcena(dateStr: string, catorcenas: Catorcena[]): { catorcena: string; year: number } | null {
+  if (!dateStr || !catorcenas.length) return null;
+  const date = new Date(dateStr);
+  const found = catorcenas.find(c => {
+    const inicio = new Date(c.fecha_inicio);
+    const fin = new Date(c.fecha_fin);
+    return date >= inicio && date <= fin;
+  });
+  if (found) {
+    return { catorcena: `Catorcena ${found.numero_catorcena}`, year: found.a_o };
+  }
+  return null;
+}
+
+function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[]): string {
+  const result = dateToCatorcena(dateStr, catorcenas);
+  if (result) {
+    return `${result.catorcena}, ${result.year}`;
+  }
+  return dateStr;
 }
 
 function InfoItem({ label, value, type = 'default' }: InfoItemProps) {
@@ -599,6 +625,14 @@ export function CampanaDetailPage() {
     enabled: !!campana,
   });
 
+  // Fetch catorcenas for proper date display
+  const { data: catorcenasData } = useQuery({
+    queryKey: ['catorcenas'],
+    queryFn: () => solicitudesService.getCatorcenas(),
+  });
+  const catorcenas = catorcenasData?.data || [];
+
+
   // Calcular centro del mapa basado en inventario
   const mapCenter = useMemo(() => {
     if (inventarioReservado.length > 0) {
@@ -852,7 +886,9 @@ export function CampanaDetailPage() {
     try {
       // Construir el payload
       const deliveryNote = buildDeliveryNote(campana, inventarioConAPS);
-      console.log('Payload para SAP:', deliveryNote);
+      console.log('========== DELIVERY NOTE JSON ==========');
+      console.log(JSON.stringify(deliveryNote, null, 2));
+      console.log('==========================================');
 
       // Hacer POST a SAP
       const result = await postDeliveryNoteToSAP(deliveryNote);
@@ -1298,16 +1334,30 @@ export function CampanaDetailPage() {
             <h3 className="text-xs md:text-sm font-semibold mb-2 md:mb-3 text-purple-300 uppercase tracking-wide">Campaña</h3>
             <div className="space-y-0">
               <InfoItem label="Articulo" value={campana.articulo} type="category" />
-              <InfoItem label="Inicio" value={campana.fecha_inicio} type="catorcena" />
-              <InfoItem label="Fin" value={campana.fecha_fin} type="catorcena" />
+              {campana.fecha_inicio && (
+                <div className="flex justify-between items-center py-1.5 border-b border-border/50">
+                  <span className="text-xs text-muted-foreground">Inicio</span>
+                  <span className="text-xs px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                    {getCatorcenaDisplay(campana.fecha_inicio, catorcenas)}
+                  </span>
+                </div>
+              )}
+              {campana.fecha_fin && (
+                <div className="flex justify-between items-center py-1.5 border-b border-border/50">
+                  <span className="text-xs text-muted-foreground">Fin</span>
+                  <span className="text-xs px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                    {getCatorcenaDisplay(campana.fecha_fin, catorcenas)}
+                  </span>
+                </div>
+              )}
               <InfoItem label="Total Caras" value={campana.total_caras} type="default" />
               <InfoItem label="Frontal" value={campana.frontal} type="default" />
               <InfoItem label="Cruzada" value={campana.cruzada} type="default" />
-              <InfoItem label="NSE" value={campana.nivel_socioeconomico} type="category" />
-              <InfoItem label="Bonificacion" value={campana.bonificacion ? `${campana.bonificacion}%` : null} type="percent" />
+              <InfoItem label="NSE" value={campana.nivel_socioeconomico ? [...new Set(campana.nivel_socioeconomico.split(",").map(s => s.trim()))].join(", ") : null} type="category" />
+              <InfoItem label="Bonificacion" value={campana.bonificacion} type="default" />
               <InfoItem label="Descuento" value={campana.descuento ? `${campana.descuento}%` : null} type="percent" />
-              <InfoItem label="Inversion" value={campana.inversion} type="amount" />
-              <InfoItem label="Precio" value={campana.precio} type="amount" />
+              <InfoItem label="Inversion" value={typeof campana.inversion === "string" ? parseFloat(campana.inversion) : campana.inversion} type="amount" />
+              <InfoItem label="Precio" value={typeof campana.precio === "string" ? parseFloat(campana.precio) : campana.precio} type="amount" />
             </div>
           </div>
 
