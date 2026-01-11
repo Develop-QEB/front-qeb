@@ -5,7 +5,7 @@ import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, Layers,
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
-  ArrowUp, ArrowDown
+  ArrowUp, ArrowDown, Lock
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -754,15 +754,26 @@ export function CampanasPage() {
   // Función para toggle de agrupación
   const toggleGrouping = useCallback((field: GroupByField) => {
     setActiveGroupings(prev => {
+      // En vista catorcena, catorcena_inicio no puede ser removida
+      if (activeView === 'catorcena' && field === 'catorcena_inicio') {
+        return prev;
+      }
       if (prev.includes(field)) {
         return prev.filter(f => f !== field);
+      }
+      // En vista catorcena, catorcena_inicio siempre es primera, solo se puede agregar segunda
+      if (activeView === 'catorcena') {
+        if (prev.length >= 2) {
+          return ['catorcena_inicio', field] as GroupByField[];
+        }
+        return ['catorcena_inicio', field] as GroupByField[];
       }
       if (prev.length >= 2) {
         return [prev[1], field];
       }
       return [...prev, field];
     });
-  }, []);
+  }, [activeView]);
 
   // Funciones para la vista de catorcena
   const toggleCatorcena = (catorcenaKey: string) => {
@@ -1457,28 +1468,58 @@ export function CampanasPage() {
                   </button>
                   {showGroupPopup && (
                     <div className="absolute right-0 top-full mt-1 z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
-                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 2)</p>
-                      {AVAILABLE_GROUPINGS.map(({ field, label }) => (
-                        <button
-                          key={field}
-                          onClick={() => toggleGrouping(field)}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
-                            activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'
-                          }`}
-                        >
-                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                            activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
-                          }`}>
-                            {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
-                          </div>
-                          {label}
-                          {activeGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
-                          {activeGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
-                        </button>
-                      ))}
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">
+                        {activeView === 'catorcena' ? 'Agrupación adicional' : 'Agrupar por (max 2)'}
+                      </p>
+                      {AVAILABLE_GROUPINGS.map(({ field, label }) => {
+                        const isLocked = activeView === 'catorcena' && field === 'catorcena_inicio';
+                        const isActive = activeGroupings.includes(field);
+                        return (
+                          <button
+                            key={field}
+                            onClick={() => !isLocked && toggleGrouping(field)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded transition-colors ${
+                              isLocked
+                                ? 'text-purple-400 cursor-not-allowed opacity-70'
+                                : isActive
+                                  ? 'text-purple-300 hover:bg-purple-900/30'
+                                  : 'text-zinc-400 hover:bg-purple-900/30'
+                            }`}
+                            disabled={isLocked}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                              isLocked
+                                ? 'bg-purple-800 border-purple-700'
+                                : isActive
+                                  ? 'bg-purple-600 border-purple-600'
+                                  : 'border-purple-500/50'
+                            }`}>
+                              {isLocked ? (
+                                <Lock className="h-2.5 w-2.5 text-purple-300" />
+                              ) : isActive ? (
+                                <Check className="h-3 w-3 text-white" />
+                              ) : null}
+                            </div>
+                            {label}
+                            {isLocked && <span className="ml-auto text-[10px] text-purple-500">Fija</span>}
+                            {!isLocked && activeGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
+                            {!isLocked && activeGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+                          </button>
+                        );
+                      })}
                       <div className="border-t border-purple-900/30 mt-2 pt-2">
-                        <button onClick={() => setActiveGroupings([])} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
-                          Quitar agrupación
+                        <button
+                          onClick={() => {
+                            if (activeView === 'catorcena') {
+                              // Solo quitar la segunda agrupación, mantener catorcena_inicio
+                              setActiveGroupings(['catorcena_inicio']);
+                            } else {
+                              setActiveGroupings([]);
+                            }
+                          }}
+                          className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1"
+                        >
+                          {activeView === 'catorcena' ? 'Quitar agrupación adicional' : 'Quitar agrupación'}
                         </button>
                       </div>
                     </div>
