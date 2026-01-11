@@ -490,7 +490,7 @@ function TareasTable({
       </div>
       {tareas.length === 0 && (
         <div className="p-8 text-center">
-          <p className="text-zinc-500">No hay tareas que mostrar</p>
+          <p className="text-zinc-500">No hay notificaciones que mostrar</p>
         </div>
       )}
     </div>
@@ -839,7 +839,7 @@ function CalendarView({
       {/* Resumen */}
       <div className="flex items-center justify-between text-sm text-zinc-500">
         <span>
-          {tareas.length} tarea{tareas.length !== 1 ? 's' : ''} en total
+          {tareas.length} notificación{tareas.length !== 1 ? 'es' : ''} en total
         </span>
         <span>
           {tareas.filter(t => {
@@ -1485,9 +1485,7 @@ export function NotificacionesPage() {
   const [orderBy, setOrderBy] = useState<OrderByType>('fecha_inicio');
   const [orderDir, setOrderDir] = useState<'asc' | 'desc'>('desc');
   const [filterEstatus, setFilterEstatus] = useState<string>('');
-  const [filterTipo, setFilterTipo] = useState<string>('');
   const [filterFecha, setFilterFecha] = useState<DateFilterType>('all');
-  const [filterParaMi, setFilterParaMi] = useState(false);
 
   // Obtener usuario actual
   const user = useAuthStore((state) => state.user);
@@ -1508,14 +1506,14 @@ export function NotificacionesPage() {
     refetchInterval: 30000,
   });
 
-  // Fetch tareas
+  // Fetch notificaciones (solo tipo Notificación)
   const { data, isLoading } = useQuery({
-    queryKey: ['notificaciones', filterEstatus, filterTipo, debouncedSearch, orderBy, orderDir],
+    queryKey: ['notificaciones', filterEstatus, debouncedSearch, orderBy, orderDir],
     queryFn: () =>
       notificacionesService.getAll({
         limit: 200,
         estatus: filterEstatus || undefined,
-        tipo: filterTipo || undefined,
+        tipo: 'Notificación', // Solo notificaciones, no tareas
         search: debouncedSearch || undefined,
         orderBy,
         orderDir,
@@ -1534,40 +1532,38 @@ export function NotificacionesPage() {
     },
   });
 
-  // Filtrar tareas por fecha y usuario
+  // Filtrar notificaciones por fecha y SIEMPRE por usuario actual
   const filteredTareas = useMemo(() => {
-    if (!data?.data) return [];
-    let tareas = data.data;
+    if (!data?.data || !user) return [];
+    let notificaciones = data.data;
+    const userId = String(user.id);
+
+    // SIEMPRE filtrar por usuario actual - solo mostrar notificaciones donde soy el responsable (destinatario)
+    notificaciones = notificaciones.filter(notif => {
+      // Verificar por id_responsable (el destinatario de la notificación)
+      if (notif.id_responsable !== undefined && notif.id_responsable !== null) {
+        return String(notif.id_responsable) === userId;
+      }
+      // También verificar por id_asignado como fallback
+      if (notif.id_asignado !== undefined && notif.id_asignado !== null) {
+        const idAsignadoStr = String(notif.id_asignado);
+        const idsAsignados = idAsignadoStr.split(',').map(id => id.trim());
+        return idsAsignados.includes(userId);
+      }
+      return false;
+    });
 
     // Filtrar por fecha (solo si no es 'all')
     if (filterFecha !== 'all') {
-      tareas = tareas.filter(tarea => {
-        // Si no tiene fecha, incluir solo en 'all'
-        if (!tarea.fecha_creacion && !tarea.fecha_inicio) return false;
-        // Usar fecha_inicio o fecha_creacion
-        const fechaToCheck = tarea.fecha_inicio || tarea.fecha_creacion;
+      notificaciones = notificaciones.filter(notif => {
+        if (!notif.fecha_creacion && !notif.fecha_inicio) return false;
+        const fechaToCheck = notif.fecha_inicio || notif.fecha_creacion;
         return isDateInRange(fechaToCheck, filterFecha);
       });
     }
 
-    // Filtrar por usuario actual (Para mí) - Solo donde soy ASIGNADO
-    if (filterParaMi && user) {
-      const userId = String(user.id);
-
-      tareas = tareas.filter(tarea => {
-        // Solo verificar por id_asignado (lista separada por comas)
-        if (tarea.id_asignado !== undefined && tarea.id_asignado !== null) {
-          const idAsignadoStr = String(tarea.id_asignado);
-          const idsAsignados = idAsignadoStr.split(',').map(id => id.trim());
-          return idsAsignados.includes(userId);
-        }
-        // Si no hay id_asignado, no mostrar
-        return false;
-      });
-    }
-
-    return tareas;
-  }, [data?.data, filterFecha, filterParaMi, user?.nombre, user?.id]);
+    return notificaciones;
+  }, [data?.data, filterFecha, user?.id]);
 
   // Agrupar tareas (soporta múltiples agrupaciones anidadas)
   const nestedGroups = useMemo<NestedGroup[]>(() => {
@@ -1576,11 +1572,6 @@ export function NotificacionesPage() {
   }, [filteredTareas, groupBy]);
 
   // Obtener opciones de filtro desde stats
-  const tipoOptions = useMemo(() => {
-    if (!stats?.por_tipo) return [];
-    return Object.keys(stats.por_tipo).map(t => ({ value: t, label: t }));
-  }, [stats]);
-
   const estatusOptions = useMemo(() => {
     if (!stats?.por_estatus) return [];
     return Object.keys(stats.por_estatus).map(e => ({ value: e, label: e }));
@@ -1594,14 +1585,12 @@ export function NotificacionesPage() {
 
   const clearFilters = () => {
     setFilterEstatus('');
-    setFilterTipo('');
     setFilterFecha('all');
-    setFilterParaMi(false);
     setSearch('');
     setGroupBy([]);
   };
 
-  const hasActiveFilters = !!(filterEstatus || filterTipo || filterFecha !== 'all' || filterParaMi || search || groupBy.length > 0);
+  const hasActiveFilters = !!(filterEstatus || filterFecha !== 'all' || search || groupBy.length > 0);
 
   // Vista de tabs
   const viewTabs = [
@@ -1613,7 +1602,7 @@ export function NotificacionesPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header title="Mis Tareas" />
+      <Header title="Notificaciones" />
 
       {/* Barra superior fija */}
       <div className="sticky top-16 z-20 bg-[#1a1025]/95 backdrop-blur-sm border-b border-zinc-800/80">
@@ -1695,19 +1684,6 @@ export function NotificacionesPage() {
                 />
               )}
 
-              {/* Botón Para mí */}
-              <button
-                onClick={() => setFilterParaMi(!filterParaMi)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  filterParaMi
-                    ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
-                    : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 hover:text-zinc-300'
-                }`}
-              >
-                <User className="h-3 w-3" />
-                <span>Para mí</span>
-              </button>
-
               <Dropdown
                 label="Fecha"
                 icon={Calendar}
@@ -1716,17 +1692,17 @@ export function NotificacionesPage() {
                 onChange={(v) => setFilterFecha(v as DateFilterType)}
               />
 
-              {tipoOptions.length > 0 && (
+              {estatusOptions.length > 0 && (
                 <Dropdown
-                  label="Tipo"
-                  icon={Tag}
-                  options={[{ value: '', label: 'Todos' }, ...tipoOptions]}
-                  value={filterTipo}
-                  onChange={setFilterTipo}
+                  label="Estado"
+                  icon={Circle}
+                  options={[{ value: '', label: 'Todos' }, ...estatusOptions]}
+                  value={filterEstatus}
+                  onChange={setFilterEstatus}
                 />
               )}
 
-              {(groupBy.length > 0 || filterTipo || filterFecha !== 'all' || filterParaMi || search) && (
+              {(groupBy.length > 0 || filterEstatus || filterFecha !== 'all' || search) && (
                 <button
                   onClick={clearFilters}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
@@ -1764,7 +1740,7 @@ export function NotificacionesPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-zinc-500">
-                {filteredTareas.length} tarea{filteredTareas.length !== 1 ? 's' : ''}
+                {filteredTareas.length} notificación{filteredTareas.length !== 1 ? 'es' : ''}
                 {groupBy.length > 0 && <span className="text-zinc-600"> · {groupBy.length} agrupación{groupBy.length > 1 ? 'es' : ''}</span>}
               </span>
             </div>
@@ -1901,8 +1877,8 @@ export function NotificacionesPage() {
             ) : (
               <div className="rounded-xl border border-zinc-800 p-12 text-center bg-zinc-900/30">
                 <Circle className="h-10 w-10 text-zinc-700 mx-auto mb-3" />
-                <p className="text-zinc-500">No hay tareas que mostrar</p>
-                <p className="text-xs text-zinc-600 mt-1">Ajusta los filtros o crea una nueva tarea</p>
+                <p className="text-zinc-500">No tienes notificaciones</p>
+                <p className="text-xs text-zinc-600 mt-1">Las notificaciones aparecerán aquí cuando haya actividad</p>
               </div>
             )}
           </div>
