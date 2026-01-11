@@ -1264,11 +1264,13 @@ function TaskDrawer({
   onClose,
   onAddComment,
   onNavigate,
+  isClosing = false,
 }: {
   tarea: Notificacion & { comentarios?: ComentarioTarea[] };
   onClose: () => void;
   onAddComment: (contenido: string) => void;
   onNavigate?: (path: string) => void;
+  isClosing?: boolean;
 }) {
   const [comment, setComment] = useState('');
   const user = useAuthStore((state) => state.user);
@@ -1293,7 +1295,7 @@ function TaskDrawer({
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full max-w-md bg-zinc-900/95 backdrop-blur-xl border-l border-zinc-800 shadow-2xl z-50 flex flex-col animate-slide-in-right">
+    <div className={`fixed inset-y-0 right-0 w-full max-w-md bg-zinc-900/95 backdrop-blur-xl border-l border-zinc-800 shadow-2xl z-50 flex flex-col ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`}>
       {/* Header con gradiente */}
       <div className="relative">
         <div className={`absolute inset-0 ${statusConfig.bg} opacity-30`} />
@@ -1496,6 +1498,16 @@ export function NotificacionesPage() {
 
   // Estado de selección y drawer
   const [selectedTarea, setSelectedTarea] = useState<(Notificacion & { comentarios?: ComentarioTarea[] }) | null>(null);
+  const [isDrawerClosing, setIsDrawerClosing] = useState(false);
+
+  // Handler para cerrar el drawer con animación
+  const handleCloseDrawer = useCallback(() => {
+    setIsDrawerClosing(true);
+    setTimeout(() => {
+      setSelectedTarea(null);
+      setIsDrawerClosing(false);
+    }, 250); // Duración de la animación
+  }, []);
 
   // Debounce search
   useEffect(() => {
@@ -1950,17 +1962,18 @@ export function NotificacionesPage() {
       {selectedTarea && (
         <>
           <div
-            className="fixed inset-0 bg-black/50 z-40 animate-fade-in"
-            onClick={() => setSelectedTarea(null)}
+            className={`fixed inset-0 bg-black/50 z-40 ${isDrawerClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            onClick={handleCloseDrawer}
           />
           <TaskDrawer
             tarea={selectedTarea}
-            onClose={() => setSelectedTarea(null)}
+            onClose={handleCloseDrawer}
             onAddComment={(contenido) => addCommentMutation.mutate({ id: selectedTarea.id, contenido })}
             onNavigate={(path) => {
-              setSelectedTarea(null); // Cerrar drawer antes de navegar
-              navigate(path);
+              handleCloseDrawer();
+              setTimeout(() => navigate(path), 250);
             }}
+            isClosing={isDrawerClosing}
           />
         </>
       )}
