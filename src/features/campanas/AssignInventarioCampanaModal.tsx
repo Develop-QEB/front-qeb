@@ -849,18 +849,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     Compartir
                   </button>
                 )}
-                <button
-                  onClick={handleSave}
-                  disabled={updateMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-xl text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50"
-                >
-                  {updateMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4" />
-                  )}
-                  Guardar
-                </button>
                 <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:text-white">
                   <X className="h-5 w-5" />
                 </button>
