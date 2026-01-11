@@ -251,7 +251,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
 
     // Apply advanced filters
     if (catFilters.length > 0) {
-      items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], catFilters) as OrdenMontajeCAT[];
+      items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], catFilters) as unknown as OrdenMontajeCAT[];
     }
 
     // Apply sorting
@@ -296,7 +296,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
 
     // Apply advanced filters
     if (invianFilters.length > 0) {
-      items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], invianFilters) as OrdenMontajeINVIAN[];
+      items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], invianFilters) as unknown as OrdenMontajeINVIAN[];
     }
 
     // Apply sorting
