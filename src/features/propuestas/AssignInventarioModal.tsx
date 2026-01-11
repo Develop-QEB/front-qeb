@@ -514,6 +514,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>();
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
   const [archivoPropuesta, setArchivoPropuesta] = useState<string | null>(null);
+  const [tipoArchivoPropuesta, setTipoArchivoPropuesta] = useState<string | null>(null);
 
   // Initial values for change detection
   const [initialValues, setInitialValues] = useState({
@@ -789,6 +790,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
       // Set archivo if exists
       setArchivoPropuesta(solicitudDetails.solicitud?.archivo || null);
+      setTipoArchivoPropuesta(solicitudDetails.solicitud?.tipo_archivo || null);
 
       // Set period from cotizacion dates
       const cot = solicitudDetails.cotizacion;
@@ -3686,22 +3688,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     {archivoPropuesta ? (
                       <div className="flex items-center gap-3 p-3 bg-zinc-800 border border-emerald-500/30 rounded-xl">
                         {/* Preview - image or file icon */}
-                        {/\.(jpg|jpeg|png|gif|webp)$/i.test(archivoPropuesta) ? (
+                        {tipoArchivoPropuesta?.startsWith('image/') ? (
                           <a
-                            href={`${STATIC_URL}${archivoPropuesta}`}
+                            href={archivoPropuesta}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="block"
                           >
                             <img
-                              src={`${STATIC_URL}${archivoPropuesta}`}
+                              src={archivoPropuesta}
                               alt="Preview"
                               className="w-16 h-16 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
                             />
                           </a>
                         ) : (
                           <a
-                            href={`${STATIC_URL}${archivoPropuesta}`}
+                            href={archivoPropuesta}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="w-16 h-16 flex items-center justify-center bg-zinc-700 rounded-lg hover:bg-zinc-600 transition-colors"
@@ -3712,12 +3714,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         {/* File info */}
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-emerald-400 font-medium">Archivo adjunto</div>
-                          <div className="text-xs text-zinc-500 truncate">{archivoPropuesta.split('/').pop()}</div>
+                          <div className="text-xs text-zinc-500 truncate">{tipoArchivoPropuesta || 'Archivo'}</div>
                         </div>
                         {/* Action buttons */}
                         <div className="flex items-center gap-2">
                           <a
-                            href={`${STATIC_URL}${archivoPropuesta}`}
+                            href={archivoPropuesta}
                             download
                             className="p-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
                             title="Descargar"
@@ -3733,7 +3735,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setArchivoPropuesta(null)}
+                            onClick={() => { setArchivoPropuesta(null); setTipoArchivoPropuesta(null); }}
                             className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
                             title="Eliminar"
                           >
