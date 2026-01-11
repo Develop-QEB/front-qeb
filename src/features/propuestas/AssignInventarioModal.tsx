@@ -12,6 +12,7 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
 import { propuestasService, ReservaModalItem } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
+import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
@@ -673,7 +674,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     queryKey: ['sap-articulos'],
     queryFn: async () => {
       try {
-        const response = await fetch('https://binding-convinced-ride-foto.trycloudflare.com/articulos');
+        const response = await fetch(getEndpoints(useEnvironmentStore.getState().environment).articulos);
         if (!response.ok) throw new Error('Error fetching articulos');
         const data = await response.json();
         return (data.value || data) as SAPArticulo[];

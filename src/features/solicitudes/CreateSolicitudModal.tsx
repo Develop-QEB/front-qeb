@@ -7,6 +7,7 @@ import {
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { formatCurrency } from '../../lib/utils';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS, getCacheTimestamp, clearSapCache } from '../../lib/sapCache';
+import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 
 // Tarifa publica lookup map based on ItemCode (full SAP codes with tarifa_publica values)
 const TARIFA_PUBLICA_MAP: Record<string, number> = {
@@ -347,6 +348,7 @@ interface SAPCuicItem {
   T2_U_IDCategoria: number;
   T2_U_Categoria: string;
   ACA_U_SAPCode: string;
+  ASESOR_U_SAPCode_Original?: number;
 }
 
 interface SAPArticulo {
@@ -707,6 +709,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // State for forcing SAP refresh
   const [forceRefreshSap, setForceRefreshSap] = useState(0);
 
+  // Environment for SAP endpoints
+  const environment = useEnvironmentStore((state) => state.environment);
+  const endpoints = getEndpoints(environment);
+  const isTestMode = environment === 'test';
+
   // Fetch ALL CUIC data from SAP with cache
   const { data: cuicData, isLoading: cuicLoading, refetch: refetchCuic, isFetching: cuicFetching } = useQuery({
     queryKey: ['sap-cuic-all', forceRefreshSap],
@@ -720,7 +727,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
       // Fetch from SAP
       try {
-        const response = await fetch('https://binding-convinced-ride-foto.trycloudflare.com/cuic');
+        const response = await fetch(endpoints.cuic);
         if (!response.ok) throw new Error('Error fetching CUIC data');
         const data = await response.json();
         const items = (data.value || data) as SAPCuicItem[];
@@ -757,7 +764,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
       // Fetch from SAP
       try {
-        const response = await fetch('https://binding-convinced-ride-foto.trycloudflare.com/articulos');
+        const response = await fetch(endpoints.articulos);
         if (!response.ok) throw new Error('Error fetching articulos data');
         const data = await response.json();
         const items = (data.value || data) as SAPArticulo[];
@@ -1124,6 +1131,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       categoria_id: selectedCuic.T2_U_IDCategoria,
       categoria_nombre: selectedCuic.T2_U_Categoria,
       card_code: selectedCuic.ACA_U_SAPCode,
+      salesperson_code: selectedCuic.ASESOR_U_SAPCode_Original,
       nombre_campania: nombreCampania,
       descripcion,
       notas,

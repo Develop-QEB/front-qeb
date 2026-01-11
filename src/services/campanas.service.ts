@@ -1,6 +1,7 @@
 import api from '../lib/api';
 import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea, CampanaWithComments } from '../types';
 
+import { useEnvironmentStore, getEndpoints } from '../store/environmentStore';
 export type { CampanaWithComments };
 
 // SAP Configuration
@@ -324,14 +325,14 @@ export function buildDeliveryNote(
     Comments: campana.comentario_cambio_status || '',
     DocDueDate: (campana.fecha_fin || new Date().toISOString()).split('T')[0],
     SalesPersonCode: campana.salesperson_code || campana.T0_U_IDAsesor || '',
-    U_CIC: campana.cuic || '',
+    U_CIC: String(campana.cuic || ''),
     U_CRM_Asesor: campana.T0_U_Asesor || '',
     U_CRM_Producto: campana.T2_U_Producto || '',
     U_CRM_Marca: campana.T2_U_Marca || '',
     U_CRM_Categoria: campana.T2_U_Categoria || '',
     U_CRM_Cliente: campana.T0_U_Cliente || '',
     U_CRM_Agencia: campana.T0_U_Agencia || '',
-    U_CRM_SAP: uniqueAPS.length > 0 ? uniqueAPS[0] : '',
+    U_CRM_SAP: uniqueAPS.length > 0 ? String(uniqueAPS[0]) : '',
     U_CRM_R_S: campana.T0_U_RazonSocial || '',
     U_CRM_Camp: campana.nombre || campana.nombre_campania || '',
     U_TIPO_VENTA: 'Comercial',
@@ -353,11 +354,30 @@ export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote): Prom
     });
 
     const data = await response.json();
+    const environment = useEnvironmentStore.getState().environment;
+    const envLabel = environment === 'test' ? 'pruebas' : 'producción';
 
-    if (!response.ok) {
+    // Extraer mensaje de error detallado de SAP
+    
+    const getDetailedError = () => {
+      if (data.details?.error?.message?.value) {
+        const sapError = data.details.error.message.value;
+        if (sapError.includes('Invalid BP code')) {
+          const cardCode = sapError.match(/'([^']+)'/)?.[1] || '';
+          return `El CardCode '${cardCode}' no existe en el ambiente de ${envLabel} de SAP`;
+        }
+        if (sapError.includes('is inactive')) {
+          return `Error SAP: ${sapError}`;
+        }
+        return sapError;
+      }
+      return data.message || data.error || `Error ${response.status}: ${response.statusText}`;
+    };
+
+    if (!response.ok || data.success === false) {
       return {
         success: false,
-        error: data.message || data.error || `Error ${response.status}: ${response.statusText}`,
+        error: getDetailedError(),
       };
     }
 
