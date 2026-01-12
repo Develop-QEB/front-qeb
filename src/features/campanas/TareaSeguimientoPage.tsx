@@ -5232,13 +5232,20 @@ export function TareaSeguimientoPage() {
       evidencia?: string;
     }) => campanasService.createTarea(campanaId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      // Cerrar modal y limpiar estado PRIMERO (antes de invalidar queries)
       setIsCreateModalOpen(false);
       setSelectedInventoryIds(new Set());
       setCreateTaskError(null);
+      // Invalidar queries en background (no bloquea)
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId] });
     },
     onError: (error) => {
       setCreateTaskError(error instanceof Error ? error.message : 'Error al crear tarea');
+    },
+    onSettled: () => {
+      // Asegurar que el modal se cierre siempre (éxito o error manejado)
+      // Esto es un fallback por si onSuccess no se ejecuta por algún motivo
     },
   });
 
