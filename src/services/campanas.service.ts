@@ -212,6 +212,7 @@ export interface CreateTareaData {
   ids_reservas?: string;
   proveedores_id?: number;
   nombre_proveedores?: string;
+  evidencia?: string;
 }
 
 export interface ArteExistente {
