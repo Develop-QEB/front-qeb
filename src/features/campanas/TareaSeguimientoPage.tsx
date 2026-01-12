@@ -5229,6 +5229,7 @@ export function TareaSeguimientoPage() {
       catorcena_entrega?: string;
       listado_inventario?: string;
       impresiones?: Record<string, number>;
+      evidencia?: string;
     }) => campanasService.createTarea(campanaId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
