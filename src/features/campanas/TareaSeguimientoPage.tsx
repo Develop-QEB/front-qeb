@@ -6164,7 +6164,10 @@ export function TareaSeguimientoPage() {
 
     setIsCheckingExistingTasks(true);
     try {
-      const reservaIds = Array.from(selectedInventoryIds).map(id => parseInt(id)).filter(id => !isNaN(id));
+      // Obtener los rsv_ids de los items seleccionados (no los IDs de inventario)
+      const reservaIds = selectedInventoryItems.flatMap(item =>
+        item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+      );
       const result = await campanasService.checkReservasTareas(campanaId, reservaIds);
 
       if (result.hasTareas && result.tareas.length > 0) {
@@ -6182,7 +6185,7 @@ export function TareaSeguimientoPage() {
     } finally {
       setIsCheckingExistingTasks(false);
     }
-  }, [selectedInventoryIds, campanaId, calculateTaskTiposConfig]);
+  }, [selectedInventoryIds, selectedInventoryItems, campanaId, calculateTaskTiposConfig]);
 
   const handleCreateTask = useCallback((task: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<string, number> }) => {
     // Get reserva IDs from selected inventory items
