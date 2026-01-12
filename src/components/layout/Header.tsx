@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Bell } from 'lucide-react';
+import { Bell, FlaskConical, Building2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { useEnvironmentStore } from '../../store/environmentStore';
 import { notificacionesService } from '../../services/notificaciones.service';
 import { UserAvatar } from '../ui/user-avatar';
 
@@ -11,6 +12,8 @@ interface HeaderProps {
 
 export function Header({ title }: HeaderProps) {
   const user = useAuthStore((state) => state.user);
+  const { environment, toggleEnvironment } = useEnvironmentStore();
+  const isTestMode = environment === 'test';
 
   // Fetch notification stats for the badge
   const { data: stats } = useQuery({
@@ -27,6 +30,29 @@ export function Header({ title }: HeaderProps) {
       <h1 className="text-lg font-light text-purple-200 tracking-wide uppercase">{title}</h1>
 
       <div className="ml-auto flex items-center gap-4">
+        {/* Environment Toggle */}
+        <button
+          onClick={toggleEnvironment}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+            isTestMode
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30'
+              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30'
+          }`}
+          title={isTestMode ? 'Cambiar a Producción' : 'Cambiar a Pruebas'}
+        >
+          {isTestMode ? (
+            <>
+              <FlaskConical className="h-3.5 w-3.5" />
+              <span>PRUEBAS</span>
+            </>
+          ) : (
+            <>
+              <Building2 className="h-3.5 w-3.5" />
+              <span>PRODUCCIÓN</span>
+            </>
+          )}
+        </button>
+
         {/* Notificaciones */}
         <Link
           to="/notificaciones"

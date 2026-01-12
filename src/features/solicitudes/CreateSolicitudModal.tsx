@@ -1330,7 +1330,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold text-white">{isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud'}</h2>
+            <h2 className="text-xl font-bold text-white flex items-center gap-3">
+              {isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud'}
+              {isTestMode && (
+                <span className="text-xs px-2 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">🧪 PRUEBAS</span>
+              )}
+            </h2>
             {/* SAP Status & Refresh */}
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-800 rounded-lg text-[10px]">
