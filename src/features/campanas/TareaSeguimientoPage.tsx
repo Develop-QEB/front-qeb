@@ -5231,22 +5231,7 @@ export function TareaSeguimientoPage() {
       impresiones?: Record<string, number>;
       evidencia?: string;
     }) => campanasService.createTarea(campanaId, data),
-    onSuccess: () => {
-      // Cerrar modal y limpiar estado PRIMERO (antes de invalidar queries)
-      setIsCreateModalOpen(false);
-      setSelectedInventoryIds(new Set());
-      setCreateTaskError(null);
-      // Invalidar queries en background (no bloquea)
-      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
-      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId] });
-    },
-    onError: (error) => {
-      setCreateTaskError(error instanceof Error ? error.message : 'Error al crear tarea');
-    },
-    onSettled: () => {
-      // Asegurar que el modal se cierre siempre (éxito o error manejado)
-      // Esto es un fallback por si onSuccess no se ejecuta por algún motivo
-    },
+    // El manejo de éxito/error ahora está en handleCreateTask con mutateAsync
   });
 
   // Mutación para actualizar tarea (marcar como completada)
@@ -6194,29 +6179,40 @@ export function TareaSeguimientoPage() {
     }
   }, [selectedInventoryIds, selectedInventoryItems, campanaId, calculateTaskTiposConfig]);
 
-  const handleCreateTask = useCallback((task: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<string, number> }) => {
+  const handleCreateTask = useCallback(async (task: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<string, number> }) => {
     // Get reserva IDs from selected inventory items
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => id.trim()).filter(id => id)
     );
 
-    createTareaMutation.mutate({
-      titulo: task.titulo || 'Nueva tarea',
-      descripcion: task.descripcion,
-      tipo: task.tipo || 'Produccion',
-      ids_reservas: reservaIds.join(','),
-      proveedores_id: task.proveedores_id,
-      nombre_proveedores: task.nombre_proveedores,
-      // Campos para Revisión de artes e Impresión
-      asignado: (task as any).asignado,
-      id_asignado: (task as any).id_asignado,
-      contenido: (task as any).contenido,
-      catorcena_entrega: (task as any).catorcena_entrega,
-      listado_inventario: (task as any).listado_inventario,
-      // Campos para Impresión
-      impresiones: task.impresiones,
-    });
-  }, [selectedInventoryItems, createTareaMutation]);
+    try {
+      await createTareaMutation.mutateAsync({
+        titulo: task.titulo || 'Nueva tarea',
+        descripcion: task.descripcion,
+        tipo: task.tipo || 'Produccion',
+        ids_reservas: reservaIds.join(','),
+        proveedores_id: task.proveedores_id,
+        nombre_proveedores: task.nombre_proveedores,
+        // Campos para Revisión de artes e Impresión
+        asignado: (task as any).asignado,
+        id_asignado: (task as any).id_asignado,
+        contenido: (task as any).contenido,
+        catorcena_entrega: (task as any).catorcena_entrega,
+        listado_inventario: (task as any).listado_inventario,
+        // Campos para Impresión
+        impresiones: task.impresiones,
+      });
+      // Éxito - cerrar modal y actualizar
+      setIsCreateModalOpen(false);
+      setSelectedInventoryIds(new Set());
+      setCreateTaskError(null);
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId] });
+    } catch (error) {
+      console.error('Error al crear tarea:', error);
+      setCreateTaskError(error instanceof Error ? error.message : 'Error al crear tarea');
+    }
+  }, [selectedInventoryItems, createTareaMutation, campanaId, queryClient]);
 
   const handleUploadArt = useCallback(async (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => {
     // Get reserva IDs from selected inventory items
