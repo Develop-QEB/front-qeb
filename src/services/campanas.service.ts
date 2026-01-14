@@ -216,6 +216,11 @@ export interface CreateTareaData {
   proveedores_id?: number;
   nombre_proveedores?: string;
   evidencia?: string;
+  // Campos para Impresión y Revisión de artes
+  catorcena_entrega?: string;
+  contenido?: string;
+  listado_inventario?: string;
+  impresiones?: Record<number, number>;
 }
 
 export interface ArteExistente {
@@ -660,6 +665,13 @@ export const campanasService = {
       throw new Error(response.data.error || 'Error al actualizar tarea');
     }
     return response.data.data;
+  },
+
+  async deleteTarea(id: number, tareaId: number): Promise<void> {
+    const response = await api.delete<ApiResponse<void>>(`/campanas/${id}/tareas/${tareaId}`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar tarea');
+    }
   },
 
   async getArtesExistentes(id: number): Promise<ArteExistente[]> {

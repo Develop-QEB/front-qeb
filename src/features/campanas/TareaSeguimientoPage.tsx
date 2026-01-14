@@ -1501,6 +1501,28 @@ function TaskDetailModal({
   const [selectedArteIds, setSelectedArteIds] = useState<Set<string>>(new Set());
   const [groupBy, setGroupBy] = useState<GroupByArte>('inventario');
 
+  // Query para catorcenas (para convertir fecha_fin a catorcena)
+  const { data: catorcenasData } = useQuery({
+    queryKey: ['catorcenas-detail'],
+    queryFn: () => solicitudesService.getCatorcenas(),
+    enabled: isOpen && (task?.tipo === 'Impresión' || task?.tipo === 'Recepción'),
+  });
+
+  // Función para obtener texto de catorcena desde fecha_fin
+  const getCatorcenaFromFechaFin = useMemo(() => {
+    if (!task?.fecha_fin || !catorcenasData?.data) return null;
+    const fechaFin = new Date(task.fecha_fin);
+    const catorcena = catorcenasData.data.find((c: { fecha_inicio: string; fecha_fin: string; numero_catorcena: number; a_o: number }) => {
+      const inicio = new Date(c.fecha_inicio);
+      const fin = new Date(c.fecha_fin);
+      return fechaFin >= inicio && fechaFin <= fin;
+    });
+    if (catorcena) {
+      return `Catorcena ${catorcena.numero_catorcena}, ${catorcena.a_o}`;
+    }
+    return null;
+  }, [task?.fecha_fin, catorcenasData?.data]);
+
   // Estados para el sistema de decisiones de revisión
   const [decisiones, setDecisiones] = useState<DecisionesState>({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -2274,7 +2296,7 @@ function TaskDetailModal({
       doc.line(50, posY, pageWidth - 50, posY);
 
       // Guardar PDF
-      doc.save(`orden_impresion_${task.identificador || 'pedido'}.pdf`);
+      doc.save(`orden_impresion_${task.titulo || 'pedido'}.pdf`);
     } catch (error) {
       console.error('Error al generar PDF:', error);
     }
@@ -2411,10 +2433,10 @@ function TaskDetailModal({
             <div>
               <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                 <ClipboardList className="h-5 w-5 text-purple-400" />
-                Tarea: {task.identificador}
+                {task.titulo || task.identificador}
               </h3>
               <p className="text-sm text-zinc-400 mt-1">
-                {task.tipo} - {task.titulo}
+                {task.tipo}
               </p>
             </div>
             <button
@@ -2457,10 +2479,6 @@ function TaskDetailModal({
                 <h4 className="text-sm font-medium text-purple-300 mb-3">Información del Pedido de Impresión</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                   <div>
-                    <span className="text-zinc-500">Identificador:</span>
-                    <p className="text-white font-medium">{task.identificador || '-'}</p>
-                  </div>
-                  <div>
                     <span className="text-zinc-500">Título:</span>
                     <p className="text-white font-medium">{task.titulo || '-'}</p>
                   </div>
@@ -2480,7 +2498,7 @@ function TaskDetailModal({
                   </div>
                   <div>
                     <span className="text-zinc-500">Catorcena de entrega:</span>
-                    <p className="text-white font-medium">{impresionesData?.catorcena_entrega || '-'}</p>
+                    <p className="text-white font-medium">{impresionesData?.catorcena_entrega || getCatorcenaFromFechaFin || '-'}</p>
                   </div>
                   <div className="md:col-span-3">
                     <span className="text-zinc-500">Descripción:</span>
@@ -2506,19 +2524,13 @@ function TaskDetailModal({
                 </div>
                 <div className="max-h-[300px] overflow-y-auto">
                   {(() => {
-                    // Agrupar items por archivo_arte
-                    const artesAgrupados = taskInventory.reduce((acc, item) => {
-                      const key = item.archivo_arte || 'sin_arte';
-                      if (!acc[key]) {
-                        acc[key] = { items: [], archivo: item.archivo_arte };
-                      }
-                      acc[key].items.push(item);
-                      return acc;
-                    }, {} as Record<string, { items: typeof taskInventory; archivo: string | undefined }>);
+                    // Si tenemos datos de impresiones guardados, usarlos como fuente principal
+                    // ya que el inventario puede no tener archivo_arte actualizado
+                    // Usar num_impresiones de la tarea directamente
+                    const numImpresiones = (task as any).num_impresiones || taskInventory.length;
+                    const primerItem = taskInventory[0];
 
-                    const grupos = Object.entries(artesAgrupados);
-
-                    if (grupos.length === 0) {
+                    if (taskInventory.length === 0) {
                       return (
                         <div className="p-8 text-center text-zinc-500">
                           No hay items asociados a esta tarea
@@ -2526,63 +2538,51 @@ function TaskDetailModal({
                       );
                     }
 
-                    return grupos.map(([arteKey, grupo]) => {
-                      // Obtener cantidad total de impresiones para este arte
-                      const cantidadTotal = impresionesData?.impresiones?.[arteKey] || grupo.items.length;
-                      const primerItem = grupo.items[0];
-
-                      return (
-                        <div key={arteKey} className="flex items-center gap-4 p-3 border-b border-border/50 last:border-0 hover:bg-zinc-800/30">
-                          {/* Preview de imagen */}
-                          <div className="w-24 h-20 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
-                            {grupo.archivo ? (
-                              <img
-                                src={getImageUrl(grupo.archivo) || ''}
-                                alt="Arte"
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Image className="h-6 w-6 text-zinc-600" />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Info */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white">
-                              {grupo.items.length} {grupo.items.length === 1 ? 'ubicación' : 'ubicaciones'}
-                            </p>
-                            <p className="text-xs text-zinc-400 truncate">
-                              {primerItem.mueble} - {primerItem.ciudad}
-                            </p>
-                            {grupo.items.length > 1 && (
-                              <p className="text-[10px] text-zinc-500 mt-1">
-                                {grupo.items.map(i => i.codigo_unico).slice(0, 3).join(', ')}
-                                {grupo.items.length > 3 && ` +${grupo.items.length - 3} más`}
-                              </p>
-                            )}
-                          </div>
-
-                          {/* Cantidad */}
-                          <div className="flex-shrink-0 text-center px-4">
-                            <p className="text-3xl font-bold text-purple-400">{cantidadTotal}</p>
-                            <p className="text-[10px] text-zinc-500">impresiones</p>
-                          </div>
-
-                          {/* Botón descargar */}
-                          {grupo.archivo && (
-                            <button
-                              onClick={() => downloadImage(getImageUrl(grupo.archivo)!, `arte_${arteKey.substring(0, 10)}.jpg`)}
-                              className="p-2 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded-lg transition-colors"
-                              title="Descargar imagen"
-                            >
-                              <Download className="h-5 w-5" />
-                            </button>
+                    return (
+                      <div className="flex items-center gap-4 p-3 border-b border-border/50 last:border-0 hover:bg-zinc-800/30">
+                        {/* Preview de imagen */}
+                        <div className="w-24 h-20 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
+                          {primerItem?.archivo_arte ? (
+                            <img
+                              src={getImageUrl(primerItem.archivo_arte) || ''}
+                              alt="Arte"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Image className="h-6 w-6 text-zinc-600" />
+                            </div>
                           )}
                         </div>
-                      );
-                    });
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white">
+                            {taskInventory.length} {taskInventory.length === 1 ? 'ubicación' : 'ubicaciones'}
+                          </p>
+                          <p className="text-xs text-zinc-400 truncate">
+                            {primerItem?.mueble || 'Mueble'} - {primerItem?.ciudad || 'Ciudad'}
+                          </p>
+                        </div>
+
+                        {/* Cantidad de impresiones - desde num_impresiones */}
+                        <div className="flex-shrink-0 text-center px-4">
+                          <p className="text-3xl font-bold text-purple-400">{numImpresiones}</p>
+                          <p className="text-[10px] text-zinc-500">impresiones</p>
+                        </div>
+
+                        {/* Botón descargar */}
+                        {primerItem?.archivo_arte && (
+                          <button
+                            onClick={() => downloadImage(getImageUrl(primerItem.archivo_arte)!, `arte.jpg`)}
+                            className="p-2 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded-lg transition-colors"
+                            title="Descargar imagen"
+                          >
+                            <Download className="h-5 w-5" />
+                          </button>
+                        )}
+                      </div>
+                    );
                   })()}
                 </div>
               </div>
@@ -2626,10 +2626,6 @@ function TaskDetailModal({
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
                 <h4 className="text-sm font-medium text-purple-300 mb-3">Recepción de Impresiones</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <span className="text-zinc-500">Identificador:</span>
-                    <p className="text-white font-medium">{task.identificador || '-'}</p>
-                  </div>
                   <div>
                     <span className="text-zinc-500">Título:</span>
                     <p className="text-white font-medium">{task.titulo || '-'}</p>
@@ -3978,7 +3974,7 @@ function CreateTaskModal({
       inventario_ids: selectedIds,
       campana_id: campanaId,
       creador: user ? `${user.id}, ${user.nombre}` : 'Usuario no identificado',
-      identificador: tipo === 'Revisión de artes' || tipo === 'Impresión' ? identificador : `TASK-${Date.now()}`,
+      identificador: tipo === 'Revisión de artes' ? identificador : `TASK-${Date.now()}`,
     };
 
     // Campos adicionales para Revisión de artes
@@ -4480,19 +4476,6 @@ function CreateTaskModal({
                       ))}
                     </select>
                   )}
-                </div>
-
-                {/* Identificador */}
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Identificador *</label>
-                  <input
-                    type="text"
-                    value={identificador}
-                    onChange={(e) => setIdentificador(e.target.value)}
-                    disabled={isSubmitting}
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                    placeholder="Identificador único"
-                  />
                 </div>
 
                 {/* Título */}
@@ -5000,7 +4983,7 @@ export function TareaSeguimientoPage() {
   const [hasAutoSelectedEstadoArteTab, setHasAutoSelectedEstadoArteTab] = useState(false);
 
   // --- Impresiones ---
-  const [activeEstadoImpresionTab, setActiveEstadoImpresionTab] = useState<'en_impresion' | 'en_produccion' | 'pendiente_recepcion' | 'recibido'>('en_impresion');
+  const [activeEstadoImpresionTab, setActiveEstadoImpresionTab] = useState<'en_impresion' | 'pendiente_recepcion' | 'recibido'>('en_impresion');
 
   // --- Validar Instalación (testigo) ---
   const [filtersTestigo, setFiltersTestigo] = useState<FilterCondition[]>([]);
@@ -5243,6 +5226,19 @@ export function TareaSeguimientoPage() {
     },
   });
 
+  // Mutación para eliminar tarea
+  const deleteTareaMutation = useMutation({
+    mutationFn: (tareaId: number) => campanasService.deleteTarea(campanaId, tareaId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId] });
+      alert('Tarea eliminada correctamente');
+    },
+    onError: (error) => {
+      alert(error instanceof Error ? error.message : 'Error al eliminar tarea');
+    },
+  });
+
   // ========== FUNCIONES HELPER PARA FILTROS AVANZADOS ==========
 
   // --- Funciones para Subir Artes (versionario) ---
@@ -5457,7 +5453,7 @@ export function TareaSeguimientoPage() {
 
   // Transform inventario para items en tareas de Impresión (tab "Impresiones")
   // Agrupa items por tarea de impresión con info de estado del flujo
-  type EstadoImpresion = 'en_impresion' | 'en_produccion' | 'pendiente_recepcion' | 'recibido';
+  type EstadoImpresion = 'en_impresion' | 'pendiente_recepcion' | 'recibido';
 
   const inventoryImpresionesData = useMemo((): (InventoryRow & {
     tarea_id?: number;
@@ -5542,10 +5538,9 @@ export function TareaSeguimientoPage() {
       if (tareaRecepcion) {
         if (tareaRecepcion.estatus === 'Atendido' || tareaRecepcion.estatus === 'Completado') {
           estadoImpresion = 'recibido';
-        } else if (tareaRecepcion.estatus === 'Pendiente') {
-          estadoImpresion = 'pendiente_recepcion';
         } else {
-          estadoImpresion = 'en_produccion';
+          // Pendiente, Activo u otro = pendiente de recepción
+          estadoImpresion = 'pendiente_recepcion';
         }
       }
 
@@ -5598,6 +5593,50 @@ export function TareaSeguimientoPage() {
       return true;
     });
   }, [tareasAPI, inventarioArteAPI, transformInventarioToRow]);
+
+  // Mapa de rsv_id -> estado de impresión (para mostrar en tab Aprobado)
+  const impresionStatusMap = useMemo(() => {
+    const map = new Map<string, { estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido'; titulo: string }>();
+
+    const tareasImpresion = tareasAPI.filter(t => t.tipo === 'Impresión');
+    const tareasRecepcion = tareasAPI.filter(t => t.tipo === 'Recepción');
+
+    if (tareasImpresion.length === 0) return map;
+
+    // Crear mapa de tarea impresión -> tarea recepción
+    const impresionToRecepcion = new Map<number, typeof tareasRecepcion[0]>();
+    tareasRecepcion.forEach(recepcion => {
+      const recepcionIds = new Set((recepcion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
+      tareasImpresion.forEach(impresion => {
+        const impresionIds = new Set((impresion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
+        const hasCommon = [...impresionIds].some(id => recepcionIds.has(id));
+        if (hasCommon) {
+          impresionToRecepcion.set(impresion.id, recepcion);
+        }
+      });
+    });
+
+    // Procesar cada tarea de impresión
+    tareasImpresion.forEach(tarea => {
+      const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
+      const tareaRecepcion = impresionToRecepcion.get(tarea.id);
+
+      let estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido' = 'en_impresion';
+      if (tareaRecepcion) {
+        if (tareaRecepcion.estatus === 'Atendido' || tareaRecepcion.estatus === 'Completado') {
+          estado = 'recibido';
+        } else {
+          estado = 'pendiente_recepcion';
+        }
+      }
+
+      ids.forEach(id => {
+        map.set(id, { estado, titulo: tarea.titulo || `Impresión #${tarea.id}` });
+      });
+    });
+
+    return map;
+  }, [tareasAPI]);
 
   // Conteo de elementos por formato (Tradicional/Digital) para la tab activa
   const formatCounts = useMemo(() => {
@@ -6368,6 +6407,24 @@ export function TareaSeguimientoPage() {
           <span className="text-zinc-500">-</span>
         )}
       </td>
+      <td className="p-2">
+        {(() => {
+          const rsvIds = item.rsv_id?.split(',').map(id => id.trim()) || [];
+          const impresionInfo = rsvIds.map(id => impresionStatusMap.get(id)).find(info => info);
+          if (!impresionInfo) return <span className="text-zinc-500 text-xs">-</span>;
+          const estadoLabels: Record<string, { label: string; color: string }> = {
+            'en_impresion': { label: 'En Impresión', color: 'bg-blue-500/20 text-blue-400' },
+            'pendiente_recepcion': { label: 'Pend. Recepción', color: 'bg-yellow-500/20 text-yellow-400' },
+            'recibido': { label: 'Recibido', color: 'bg-green-500/20 text-green-400' },
+          };
+          const { label, color } = estadoLabels[impresionInfo.estado] || { label: '-', color: '' };
+          return (
+            <span className={`px-2 py-0.5 rounded text-[10px] whitespace-nowrap ${color}`} title={impresionInfo.titulo}>
+              {label}
+            </span>
+          );
+        })()}
+      </td>
     </tr>
   );
 
@@ -6864,7 +6921,6 @@ export function TareaSeguimientoPage() {
               <div className="flex items-center gap-1">
                 {[
                   { key: 'en_impresion' as const, label: 'En Impresion', count: inventoryImpresionesData.filter(i => i.estado_impresion === 'en_impresion').length },
-                  { key: 'en_produccion' as const, label: 'En Produccion', count: inventoryImpresionesData.filter(i => i.estado_impresion === 'en_produccion').length },
                   { key: 'pendiente_recepcion' as const, label: 'Pend. Recepcion', count: inventoryImpresionesData.filter(i => i.estado_impresion === 'pendiente_recepcion').length },
                   { key: 'recibido' as const, label: 'Recibido', count: inventoryImpresionesData.filter(i => i.estado_impresion === 'recibido').length },
                 ].map(tab => (
@@ -7346,6 +7402,7 @@ export function TareaSeguimientoPage() {
                                                     <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                                     <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
                                                     <th className="p-2 font-medium text-purple-300">Instalado</th>
+                                                    <th className="p-2 font-medium text-purple-300">Estado Impresión</th>
                                                   </tr>
                                                 </thead>
                                                 <tbody>
@@ -7796,7 +7853,7 @@ export function TareaSeguimientoPage() {
                           <tr key={task.id} className="border-b border-border/50 hover:bg-purple-900/20 transition-colors">
                             <td className="p-2 text-zinc-300">{task.tipo}</td>
                             <td className="p-2"><StatusBadge status={task.estatus} /></td>
-                            <td className="p-2 font-medium text-white">{task.identificador}</td>
+                            <td className="p-2 font-medium text-white">{task.titulo || task.identificador}</td>
                             <td className="p-2 text-zinc-300">{task.fecha_inicio}</td>
                             <td className="p-2 text-zinc-300">{task.fecha_fin}</td>
                             <td className="p-2 text-zinc-300">{task.creador}</td>
@@ -7862,7 +7919,7 @@ export function TareaSeguimientoPage() {
                       <tbody>
                         {filteredCompletedTasks.map((task) => (
                           <tr key={task.id} className="border-b border-border/50 hover:bg-purple-900/20 transition-colors">
-                            <td className="p-2 font-medium text-white">{task.identificador}</td>
+                            <td className="p-2 font-medium text-white">{task.titulo || task.identificador}</td>
                             <td className="p-2 text-zinc-300">{task.tipo}</td>
                             <td className="p-2"><StatusBadge status={task.estatus} /></td>
                             <td className="p-2 text-zinc-300">{task.titulo}</td>

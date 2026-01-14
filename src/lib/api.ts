@@ -23,42 +23,11 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      const refreshToken = localStorage.getItem('refreshToken');
-
-      if (refreshToken) {
-        try {
-          const response = await axios.post(`${API_URL}/auth/refresh`, {
-            refreshToken,
-          });
-
-          const { accessToken, refreshToken: newRefreshToken } = response.data.data;
-
-          localStorage.setItem('accessToken', accessToken);
-          localStorage.setItem('refreshToken', newRefreshToken);
-
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-          }
-
-          return api(originalRequest);
-        } catch {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          localStorage.removeItem('user');
-          window.location.href = '/login';
-          return Promise.reject(error);
-        }
-      } else {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-      }
+    // Si el token expiró (401), limpiar sesión y redirigir a login
+    if (error.response?.status === 401) {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
     }
 
     return Promise.reject(error);
