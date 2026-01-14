@@ -43,6 +43,8 @@ export interface SAPDeliveryNote {
   U_CRM_R_S: string;
   U_CRM_Camp: string;
   U_TIPO_VENTA: string;
+  U_Imu_ART_APS: string;
+  U_IMU_CotNum: string;
   DocumentLines: SAPDocumentLine[];
 }
 
@@ -305,7 +307,7 @@ export function buildDeliveryNote(
       ItemCode: firstItem.articulo || '',
       Quantity: itemsWithThisAPS.length.toString(),
       TaxCode: 'A4',
-      UnitPrice: totalPrice.toString(),
+      UnitPrice: (itemsWithThisAPS.length > 0 ? Math.round(totalPrice / itemsWithThisAPS.length) : 0).toString(),
       CostingCode: '02-03-04',
       CostingCode2: '1',
       U_Cod_Sitio: 11,
@@ -333,10 +335,12 @@ export function buildDeliveryNote(
     U_CRM_Categoria: campana.T2_U_Categoria || '',
     U_CRM_Cliente: campana.T0_U_Cliente || '',
     U_CRM_Agencia: campana.T0_U_Agencia || '',
-    U_CRM_SAP: uniqueAPS.length > 0 ? String(uniqueAPS[0]) : '',
+    U_CRM_SAP: campana.card_code || 'IMU00351',
     U_CRM_R_S: campana.T0_U_RazonSocial || '',
     U_CRM_Camp: campana.nombre || campana.nombre_campania || '',
     U_TIPO_VENTA: 'Comercial',
+    U_Imu_ART_APS: campana.id?.toString() || '',
+    U_IMU_CotNum: uniqueAPS.length > 0 ? String(uniqueAPS[0]) : '',
     DocumentLines: documentLines,
   };
 
