@@ -27,6 +27,7 @@ export interface SAPDocumentLine {
 }
 
 export interface SAPDeliveryNote {
+  Series: number;
   CardCode: string;
   NumAtCard: string;
   Comments: string;
@@ -307,7 +308,7 @@ export function buildDeliveryNote(
       ItemCode: firstItem.articulo || '',
       Quantity: itemsWithThisAPS.length.toString(),
       TaxCode: 'A4',
-      UnitPrice: (itemsWithThisAPS.length > 0 ? Math.round(totalPrice / itemsWithThisAPS.length) : 0).toString(),
+      UnitPrice: String(campana.precio || 0),
       CostingCode: '02-03-04',
       CostingCode2: '1',
       U_Cod_Sitio: 11,
@@ -323,6 +324,7 @@ export function buildDeliveryNote(
 
   // Construir el objeto DeliveryNote completo
   const deliveryNote: SAPDeliveryNote = {
+    Series: 162,
     CardCode: campana.card_code || 'IMU00351',
     NumAtCard: campana.id?.toString() || '',
     Comments: campana.comentario_cambio_status || '',
