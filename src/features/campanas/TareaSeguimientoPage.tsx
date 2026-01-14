@@ -3995,6 +3995,8 @@ function CreateTaskModal({
       (payload as any).contenido = identificador;
       (payload as any).listado_inventario = selectedIds.join(',');
       payload.impresiones = impresiones; // Número de impresiones por inventario
+      // Calcular y enviar el total de impresiones
+      (payload as any).num_impresiones = Object.values(impresiones).reduce((sum, val) => sum + (val || 0), 0);
       // Proveedor
       if (proveedorId && selectedProveedor) {
         payload.proveedores_id = proveedorId;
