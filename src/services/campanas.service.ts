@@ -244,6 +244,8 @@ export interface OrdenMontajeCAT {
   campania_id: number | null;
   grupo_id: number | null;
   tipo_fila: string | null;
+  catorcena_numero: number | null;
+  catorcena_year: number | null;
 }
 
 export interface OrdenMontajeINVIAN {
@@ -268,6 +270,8 @@ export interface OrdenMontajeINVIAN {
   fecha_inicio: string | null;
   fecha_fin: string | null;
   status_campania: string | null;
+  catorcena_numero: number | null;
+  catorcena_year: number | null;
 }
 
 export interface ComentarioRevisionArte {

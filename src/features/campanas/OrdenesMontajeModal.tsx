@@ -161,6 +161,10 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
 
+  // Multiselect catorcena filter
+  const [selectedCatorcenas, setSelectedCatorcenas] = useState<string[]>([]);
+  const [showCatorcenaPopup, setShowCatorcenaPopup] = useState(false);
+
   // CAT filters/sort/group
   const [catFilters, setCatFilters] = useState<AdvancedFilterCondition[]>([]);
   const [catGroupings, setCatGroupings] = useState<CATGroupByField[]>([]);
@@ -244,10 +248,61 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
     return catorcenas;
   }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
 
-  // Filtered and sorted CAT data
+  // Catorcena multiselect options - generated from actual data
+  const catorcenaOptions = useMemo(() => {
+    const catorcenasSet = new Map<string, { numero: number; year: number }>();
+
+    // Get catorcenas from CAT data
+    if (catData) {
+      catData.forEach(item => {
+        if (item.catorcena_numero && item.catorcena_year && item.aps_especifico && item.aps_especifico > 0) {
+          const id = `${item.catorcena_numero}-${item.catorcena_year}`;
+          if (!catorcenasSet.has(id)) {
+            catorcenasSet.set(id, { numero: item.catorcena_numero, year: item.catorcena_year });
+          }
+        }
+      });
+    }
+
+    // Get catorcenas from INVIAN data
+    if (invianData) {
+      invianData.forEach(item => {
+        if (item.catorcena_numero && item.catorcena_year) {
+          const id = `${item.catorcena_numero}-${item.catorcena_year}`;
+          if (!catorcenasSet.has(id)) {
+            catorcenasSet.set(id, { numero: item.catorcena_numero, year: item.catorcena_year });
+          }
+        }
+      });
+    }
+
+    return Array.from(catorcenasSet.entries()).map(([id, data]) => ({
+      id,
+      label: `Catorcena ${data.numero} del ${data.year}`,
+      numero: data.numero,
+      year: data.year,
+    })).sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.numero - a.numero;
+    });
+  }, [catData, invianData]);
+
+    // Filtered and sorted CAT data
   const filteredCATData = useMemo(() => {
     if (!catData) return [];
     let items = [...catData];
+
+    // Filter only items with APS > 0
+    items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== undefined && item.aps_especifico > 0);
+
+    // Filter by selected catorcenas if any
+    if (selectedCatorcenas.length > 0) {
+      items = items.filter(item => {
+        if (!item.catorcena_numero || !item.catorcena_year) return false;
+        const catorcenaId = `${item.catorcena_numero}-${item.catorcena_year}`;
+        return selectedCatorcenas.includes(catorcenaId);
+      });
+    }
 
     // Apply advanced filters
     if (catFilters.length > 0) {
@@ -268,7 +323,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
     }
 
     return items;
-  }, [catData, catFilters, catSortField, catSortDirection]);
+  }, [catData, selectedCatorcenas, catFilters, catSortField, catSortDirection]);
 
   // Group CAT data
   const getCATGroupValue = (item: OrdenMontajeCAT, field: CATGroupByField): string => {
@@ -294,6 +349,15 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
     if (!invianData) return [];
     let items = [...invianData];
 
+    // Filter by selected catorcenas if any
+    if (selectedCatorcenas.length > 0) {
+      items = items.filter(item => {
+        if (!item.catorcena_numero || !item.catorcena_year) return false;
+        const catorcenaId = `${item.catorcena_numero}-${item.catorcena_year}`;
+        return selectedCatorcenas.includes(catorcenaId);
+      });
+    }
+
     // Apply advanced filters
     if (invianFilters.length > 0) {
       items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], invianFilters) as unknown as OrdenMontajeINVIAN[];
@@ -313,7 +377,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
     }
 
     return items;
-  }, [invianData, invianFilters, invianSortField, invianSortDirection]);
+  }, [invianData, selectedCatorcenas, invianFilters, invianSortField, invianSortDirection]);
 
   // Group INVIAN data
   const getINVIANGroupValue = (item: OrdenMontajeINVIAN, field: INVIANGroupByField): string => {
@@ -346,8 +410,8 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
 
   // Export to XLSX
   const handleExportXLSX = () => {
-    if (activeTab === 'cat' && catData) {
-      const wsData = catData.map(item => ({
+    if (activeTab === 'cat' && filteredCATData.length > 0) {
+      const wsData = filteredCATData.map(item => ({
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
         'Asesor': item.asesor || '',
@@ -368,8 +432,8 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Orden Montaje CAT');
       XLSX.writeFile(wb, `orden_montaje_cat_${new Date().toISOString().split('T')[0]}.xlsx`);
-    } else if (activeTab === 'invian' && invianData) {
-      const wsData = invianData.map(item => ({
+    } else if (activeTab === 'invian' && filteredINVIANData.length > 0) {
+      const wsData = filteredINVIANData.map(item => ({
         'Campaña': item.Campania || '',
         'Anunciante': item.Anunciante || '',
         'Operación': item.Operacion || '',
@@ -511,6 +575,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
+    setSelectedCatorcenas([]);
     setCatFilters([]);
     setCatGroupings([]);
     setCatSortField(null);
@@ -529,7 +594,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
   const currentSortOptions = activeTab === 'cat' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
   const currentUniqueValues = activeTab === 'cat' ? getCATUniqueValues : getINVIANUniqueValues;
 
-  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null;
+  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0;
 
   if (!isOpen) return null;
 
@@ -593,7 +658,77 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
             </button>
           </div>
 
+{/* Catorcena Multiselect Filter */}
+          <div className="relative">
+            <button
+              onClick={() => { setShowCatorcenaPopup(!showCatorcenaPopup); setShowFilterPopup(false); setShowGroupPopup(false); setShowSortPopup(false); }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                selectedCatorcenas.length > 0
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+              }`}
+            >
+              <Calendar className="h-4 w-4" />
+              Catorcenas
+              {selectedCatorcenas.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-pink-500 text-[10px] font-bold text-white">
+                  {selectedCatorcenas.length}
+                </span>
+              )}
+              <ChevronDown className="h-3 w-3" />
+            </button>
+            {showCatorcenaPopup && (
+              <div className="absolute left-0 top-full mt-1 z-[60] w-[280px] max-h-[400px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl overflow-hidden">
+                <div className="sticky top-0 bg-[#1a1025] p-3 border-b border-purple-900/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-purple-300">Filtrar por Catorcena</span>
+                    <button onClick={() => setShowCatorcenaPopup(false)} className="text-zinc-400 hover:text-white">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {selectedCatorcenas.length > 0 && (
+                    <button
+                      onClick={() => setSelectedCatorcenas([])}
+                      className="mt-2 text-xs text-red-400 hover:text-red-300"
+                    >
+                      Limpiar selección ({selectedCatorcenas.length})
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-[300px] overflow-y-auto p-2">
+                  {catorcenaOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      onClick={() => {
+                        setSelectedCatorcenas(prev =>
+                          prev.includes(option.id)
+                            ? prev.filter(id => id !== option.id)
+                            : [...prev, option.id]
+                        );
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-purple-900/30 transition-colors ${
+                        selectedCatorcenas.includes(option.id) ? 'text-purple-300 bg-purple-900/20' : 'text-zinc-400'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                        selectedCatorcenas.includes(option.id) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
+                      }`}>
+                        {selectedCatorcenas.includes(option.id) && <Check className="h-3 w-3 text-white" />}
+                      </div>
+                      {option.label}
+                    </button>
+                  ))}
+                  {catorcenaOptions.length === 0 && (
+                    <p className="text-xs text-zinc-500 text-center py-4">No hay catorcenas disponibles</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex-1" />
+
+          
 
           {/* Popup Buttons: Filter, Group, Sort */}
           <div className="flex items-center gap-2">
