@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query';
 import {
   X, Download, Filter, ChevronDown, ChevronRight, Calendar, Loader2, FileSpreadsheet,
+  Monitor,
   Building2, ClipboardList, Layers, ArrowUpDown, ArrowUp, ArrowDown, Plus, Trash2, Check
 } from 'lucide-react';
 import { campanasService, OrdenMontajeCAT, OrdenMontajeINVIAN } from '../../services/campanas.service';
@@ -14,7 +15,7 @@ interface OrdenesMontajeModalProps {
   onClose: () => void;
 }
 
-type TabType = 'cat' | 'invian';
+type TabType = 'cat' | 'digital' | 'invian';
 
 // Status options for filter
 const STATUS_OPTIONS = ['activa', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
@@ -163,6 +164,8 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
 
   // Multiselect catorcena filter
   const [selectedCatorcenas, setSelectedCatorcenas] = useState<string[]>([]);
+  const [fechaInicio, setFechaInicio] = useState<string>('');
+  const [fechaFin, setFechaFin] = useState<string>('');
   const [showCatorcenaPopup, setShowCatorcenaPopup] = useState(false);
 
   // CAT filters/sort/group
@@ -295,6 +298,21 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
     // Filter only items with APS > 0
     items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== undefined && item.aps_especifico > 0);
 
+    // Filter by date range if set
+    if (fechaInicio || fechaFin) {
+      const startDate = fechaInicio ? new Date(fechaInicio) : null;
+      const endDate = fechaFin ? new Date(fechaFin) : null;
+      // Ajustar endDate al final del día
+      if (endDate) endDate.setHours(23, 59, 59, 999);
+      items = items.filter(item => {
+        if (!item.fecha_inicio_periodo) return false;
+        const itemDate = new Date(item.fecha_inicio_periodo);
+        if (startDate && itemDate < startDate) return false;
+        if (endDate && itemDate > endDate) return false;
+        return true;
+      });
+    }
+
     // Filter by selected catorcenas if any
     if (selectedCatorcenas.length > 0) {
       items = items.filter(item => {
@@ -323,7 +341,69 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
     }
 
     return items;
-  }, [catData, selectedCatorcenas, catFilters, catSortField, catSortDirection]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection]);
+
+  // Filter Digital data (CAT without VIA PUBLICA)
+  const filteredDigitalData = useMemo(() => {
+    if (!catData) return [];
+    let items = [...catData];
+
+    // Filter by APS > 0
+    items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== undefined && item.aps_especifico > 0);
+
+    // Exclude VIA PUBLICA
+    items = items.filter(item => {
+      const unidad = (item.unidad_negocio || '').toUpperCase();
+      return !unidad.includes('VIA PUBLICA') && !unidad.includes('VÍA PÚBLICA');
+    });
+
+    // Filter by date range if set
+    if (fechaInicio || fechaFin) {
+      const startDate = fechaInicio ? new Date(fechaInicio) : null;
+      const endDate = fechaFin ? new Date(fechaFin) : null;
+      // Ajustar endDate al final del día
+      if (endDate) endDate.setHours(23, 59, 59, 999);
+      items = items.filter(item => {
+        if (!item.fecha_inicio_periodo) return false;
+        const itemDate = new Date(item.fecha_inicio_periodo);
+        if (startDate && itemDate < startDate) return false;
+        if (endDate && itemDate > endDate) return false;
+        return true;
+      });
+    }
+
+    // Filter by selected catorcenas if any
+    if (selectedCatorcenas.length > 0) {
+      items = items.filter(item => {
+        if (!item.catorcena_numero || !item.catorcena_year) return false;
+        const catorcenaId = `${item.catorcena_numero}-${item.catorcena_year}`;
+        return selectedCatorcenas.includes(catorcenaId);
+      });
+    }
+
+    // Apply advanced filters (reuse cat filters for digital)
+    if (catFilters.length > 0) {
+      items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], catFilters) as unknown as OrdenMontajeCAT[];
+    }
+
+    // Sort
+    if (catSortField) {
+      items.sort((a, b) => {
+        const aVal = a[catSortField as keyof OrdenMontajeCAT];
+        const bVal = b[catSortField as keyof OrdenMontajeCAT];
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return catSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        const strA = String(aVal).toLowerCase();
+        const strB = String(bVal).toLowerCase();
+        return catSortDirection === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+      });
+    }
+
+    return items;
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection]);
 
   // Group CAT data
   const getCATGroupValue = (item: OrdenMontajeCAT, field: CATGroupByField): string => {
@@ -348,6 +428,21 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
   const filteredINVIANData = useMemo(() => {
     if (!invianData) return [];
     let items = [...invianData];
+
+    // Filter by date range if set
+    if (fechaInicio || fechaFin) {
+      const startDate = fechaInicio ? new Date(fechaInicio) : null;
+      const endDate = fechaFin ? new Date(fechaFin) : null;
+      // Ajustar endDate al final del día
+      if (endDate) endDate.setHours(23, 59, 59, 999);
+      items = items.filter(item => {
+        if (!item.fecha_inicio) return false;
+        const itemDate = new Date(item.fecha_inicio);
+        if (startDate && itemDate < startDate) return false;
+        if (endDate && itemDate > endDate) return false;
+        return true;
+      });
+    }
 
     // Filter by selected catorcenas if any
     if (selectedCatorcenas.length > 0) {
@@ -377,7 +472,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, invianFilters, invianSortField, invianSortDirection]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection]);
 
   // Group INVIAN data
   const getINVIANGroupValue = (item: OrdenMontajeINVIAN, field: INVIANGroupByField): string => {
@@ -420,6 +515,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
         'Fecha Fin': item.fecha_fin_periodo ? formatDate(item.fecha_fin_periodo) : '',
         'Cliente': item.cliente || '',
         'Marca': item.marca || '',
+        'Unidad de Negocio': item.unidad_negocio || '',
         'Campaña': item.campania || '',
         'Artículo': item.numero_articulo || '',
         'Negociación': item.negociacion || '',
@@ -432,6 +528,28 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Orden Montaje CAT');
       XLSX.writeFile(wb, `orden_montaje_cat_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } else if (activeTab === 'digital' && filteredDigitalData.length > 0) {
+      const wsData = filteredDigitalData.map(item => ({
+        'Plaza': item.plaza || '',
+        'Tipo': item.tipo || '',
+        'Asesor': item.asesor || '',
+        'APS': item.aps_especifico || '',
+        'Fecha Inicio': item.fecha_inicio_periodo ? new Date(item.fecha_inicio_periodo).toLocaleDateString() : '',
+        'Fecha Fin': item.fecha_fin_periodo ? new Date(item.fecha_fin_periodo).toLocaleDateString() : '',
+        'Cliente': item.cliente || '',
+        'Marca': item.marca || '',
+        'Unidad de Negocio': item.unidad_negocio || '',
+        'Campaña': item.campania || '',
+        'No. Artículo': item.numero_articulo || '',
+        'Negociación': item.negociacion || '',
+        'Caras': item.caras || 0,
+        'Tarifa': Number(item.tarifa) || 0,
+        'Monto Total': Number(item.monto_total) || 0,
+      }));
+      const ws = XLSX.utils.json_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Digital');
+      XLSX.writeFile(wb, `orden_montaje_digital_${new Date().toISOString().split('T')[0]}.xlsx`);
     } else if (activeTab === 'invian' && filteredINVIANData.length > 0) {
       const wsData = filteredINVIANData.map(item => ({
         'Campaña': item.Campania || '',
@@ -492,14 +610,14 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
 
   // Filter management callbacks
   const addFilter = useCallback(() => {
-    const fields = activeTab === 'cat' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
+    const fields = activeTab === 'cat' || activeTab === 'digital' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
     const newFilter: AdvancedFilterCondition = {
       id: `filter-${Date.now()}`,
       field: fields[0].field,
       operator: '=',
       value: '',
     };
-    if (activeTab === 'cat') {
+    if (activeTab === 'cat' || activeTab === 'digital') {
       setCatFilters(prev => [...prev, newFilter]);
     } else {
       setInvianFilters(prev => [...prev, newFilter]);
@@ -507,7 +625,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
   }, [activeTab]);
 
   const updateFilter = useCallback((id: string, updates: Partial<AdvancedFilterCondition>) => {
-    if (activeTab === 'cat') {
+    if (activeTab === 'cat' || activeTab === 'digital') {
       setCatFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
     } else {
       setInvianFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
@@ -515,7 +633,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
   }, [activeTab]);
 
   const removeFilter = useCallback((id: string) => {
-    if (activeTab === 'cat') {
+    if (activeTab === 'cat' || activeTab === 'digital') {
       setCatFilters(prev => prev.filter(f => f.id !== id));
     } else {
       setInvianFilters(prev => prev.filter(f => f.id !== id));
@@ -523,7 +641,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
   }, [activeTab]);
 
   const clearCurrentFilters = useCallback(() => {
-    if (activeTab === 'cat') {
+    if (activeTab === 'cat' || activeTab === 'digital') {
       setCatFilters([]);
     } else {
       setInvianFilters([]);
@@ -532,7 +650,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
 
   // Grouping toggle
   const toggleGrouping = useCallback((field: string) => {
-    if (activeTab === 'cat') {
+    if (activeTab === 'cat' || activeTab === 'digital') {
       setCatGroupings(prev => {
         if (prev.includes(field as CATGroupByField)) {
           return prev.filter(f => f !== field);
@@ -551,7 +669,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
 
   // Toggle expanded groups
   const toggleGroup = useCallback((groupName: string) => {
-    if (activeTab === 'cat') {
+    if (activeTab === 'cat' || activeTab === 'digital') {
       setCatExpandedGroups(prev => {
         const next = new Set(prev);
         if (next.has(groupName)) next.delete(groupName);
@@ -576,6 +694,8 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
     setSelectedCatorcenas([]);
+    setFechaInicio('');
+    setFechaFin('');
     setCatFilters([]);
     setCatGroupings([]);
     setCatSortField(null);
@@ -585,22 +705,22 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
   }, []);
 
   // Current tab data
-  const currentFilters = activeTab === 'cat' ? catFilters : invianFilters;
-  const currentGroupings = activeTab === 'cat' ? catGroupings : invianGroupings;
-  const currentSortField = activeTab === 'cat' ? catSortField : invianSortField;
-  const currentSortDirection = activeTab === 'cat' ? catSortDirection : invianSortDirection;
-  const currentFilterFields = activeTab === 'cat' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
-  const currentGroupOptions = activeTab === 'cat' ? CAT_GROUPINGS : INVIAN_GROUPINGS;
-  const currentSortOptions = activeTab === 'cat' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
-  const currentUniqueValues = activeTab === 'cat' ? getCATUniqueValues : getINVIANUniqueValues;
+  const currentFilters = activeTab === 'cat' || activeTab === 'digital' ? catFilters : invianFilters;
+  const currentGroupings = activeTab === 'cat' || activeTab === 'digital' ? catGroupings : invianGroupings;
+  const currentSortField = activeTab === 'cat' || activeTab === 'digital' ? catSortField : invianSortField;
+  const currentSortDirection = activeTab === 'cat' || activeTab === 'digital' ? catSortDirection : invianSortDirection;
+  const currentFilterFields = activeTab === 'cat' || activeTab === 'digital' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
+  const currentGroupOptions = activeTab === 'cat' || activeTab === 'digital' ? CAT_GROUPINGS : INVIAN_GROUPINGS;
+  const currentSortOptions = activeTab === 'cat' || activeTab === 'digital' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
+  const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' ? getCATUniqueValues : getINVIANUniqueValues;
 
-  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0;
+  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin;
 
   if (!isOpen) return null;
 
-  const isLoading = activeTab === 'cat' ? isLoadingCAT : isLoadingINVIAN;
-  const dataCount = activeTab === 'cat' ? filteredCATData.length : filteredINVIANData.length;
-  const totalCount = activeTab === 'cat' ? (catData?.length || 0) : (invianData?.length || 0);
+  const isLoading = activeTab === 'cat' || activeTab === 'digital' ? isLoadingCAT : isLoadingINVIAN;
+  const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'digital' ? filteredDigitalData.length : filteredINVIANData.length;
+  const totalCount = activeTab === 'cat' ? (catData?.length || 0) : activeTab === 'digital' ? filteredDigitalData.length : (invianData?.length || 0);
 
   return (
     <div
@@ -631,8 +751,9 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
           </button>
         </div>
 
-        {/* Tabs - Redesigned */}
-        <div className="flex items-center gap-4 px-6 py-3 border-b border-zinc-800/50 bg-zinc-900/80">
+        {/* Tabs and Controls */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-800/50 bg-zinc-900/80">
+          {/* Tabs */}
           <div className="flex p-1 bg-zinc-800/80 rounded-xl border border-zinc-700/50">
             <button
               onClick={() => setActiveTab('cat')}
@@ -643,7 +764,18 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
               }`}
             >
               <Building2 className="h-4 w-4" />
-              CAT - Ocupación
+              CAT
+            </button>
+            <button
+              onClick={() => setActiveTab('digital')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'digital'
+                  ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/25'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Monitor className="h-4 w-4" />
+              Digital
             </button>
             <button
               onClick={() => setActiveTab('invian')}
@@ -654,326 +786,220 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
               }`}
             >
               <FileSpreadsheet className="h-4 w-4" />
-              INVIAN QEB
+              INVIAN
             </button>
           </div>
 
-{/* Catorcena Multiselect Filter */}
-          <div className="relative">
-            <button
-              onClick={() => { setShowCatorcenaPopup(!showCatorcenaPopup); setShowFilterPopup(false); setShowGroupPopup(false); setShowSortPopup(false); }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                selectedCatorcenas.length > 0
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
-              }`}
-            >
-              <Calendar className="h-4 w-4" />
-              Catorcenas
-              {selectedCatorcenas.length > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-pink-500 text-[10px] font-bold text-white">
-                  {selectedCatorcenas.length}
-                </span>
-              )}
-              <ChevronDown className="h-3 w-3" />
-            </button>
-            {showCatorcenaPopup && (
-              <div className="absolute left-0 top-full mt-1 z-[60] w-[280px] max-h-[400px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl overflow-hidden">
-                <div className="sticky top-0 bg-[#1a1025] p-3 border-b border-purple-900/30">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-purple-300">Filtrar por Catorcena</span>
-                    <button onClick={() => setShowCatorcenaPopup(false)} className="text-zinc-400 hover:text-white">
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                  {selectedCatorcenas.length > 0 && (
-                    <button
-                      onClick={() => setSelectedCatorcenas([])}
-                      className="mt-2 text-xs text-red-400 hover:text-red-300"
-                    >
-                      Limpiar selección ({selectedCatorcenas.length})
-                    </button>
-                  )}
-                </div>
-                <div className="max-h-[300px] overflow-y-auto p-2">
-                  {catorcenaOptions.map((option) => (
-                    <button
-                      key={option.id}
-                      onClick={() => {
-                        setSelectedCatorcenas(prev =>
-                          prev.includes(option.id)
-                            ? prev.filter(id => id !== option.id)
-                            : [...prev, option.id]
-                        );
-                      }}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-purple-900/30 transition-colors ${
-                        selectedCatorcenas.includes(option.id) ? 'text-purple-300 bg-purple-900/20' : 'text-zinc-400'
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                        selectedCatorcenas.includes(option.id) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
-                      }`}>
-                        {selectedCatorcenas.includes(option.id) && <Check className="h-3 w-3 text-white" />}
-                      </div>
-                      {option.label}
-                    </button>
-                  ))}
-                  {catorcenaOptions.length === 0 && (
-                    <p className="text-xs text-zinc-500 text-center py-4">No hay catorcenas disponibles</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex-1" />
-
-          
-
-          {/* Popup Buttons: Filter, Group, Sort */}
-          <div className="flex items-center gap-2">
-            {/* Filter Button */}
+          {/* Right side controls */}
+          <div className="flex items-center gap-3">
+            {/* Filters Button */}
             <div className="relative">
               <button
-                onClick={() => { setShowFilterPopup(!showFilterPopup); setShowGroupPopup(false); setShowSortPopup(false); }}
-                className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
-                  currentFilters.length > 0
+                onClick={() => setShowFilterPopup(!showFilterPopup)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  hasActiveFilters
                     ? 'bg-purple-600 text-white'
-                    : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                    : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700'
                 }`}
-                title="Filtrar"
               >
                 <Filter className="h-4 w-4" />
-                {currentFilters.length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white px-1">
-                    {currentFilters.length}
+                Filtros
+                {hasActiveFilters && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">
+                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
                   </span>
                 )}
               </button>
+
               {showFilterPopup && (
-                <div className="absolute right-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+                <div className="absolute right-0 top-full mt-2 z-[60] w-[480px] bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl">
+                  <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-white">Filtros y Opciones</span>
                     <button onClick={() => setShowFilterPopup(false)} className="text-zinc-400 hover:text-white">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-                    {currentFilters.map((filter, index) => (
-                      <div key={filter.id} className="flex items-center gap-2">
-                        {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
-                        {index === 0 && <span className="w-8"></span>}
-                        <select
-                          value={filter.field}
-                          onChange={(e) => updateFilter(filter.id, { field: e.target.value })}
-                          className="w-[130px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
-                        >
-                          {currentFilterFields.map((f) => (
-                            <option key={f.field} value={f.field}>{f.label}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={filter.operator}
-                          onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
-                          className="w-[110px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
-                        >
-                          {FILTER_OPERATORS.map((op) => (
-                            <option key={op.value} value={op.value}>{op.label}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="text"
-                          list={`datalist-orden-${filter.id}`}
-                          value={filter.value}
-                          onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-                          placeholder="Escribe o selecciona..."
-                          className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
-                        />
-                        <datalist id={`datalist-orden-${filter.id}`}>
-                          {currentUniqueValues[filter.field]?.map((val) => (
-                            <option key={val} value={val} />
-                          ))}
-                        </datalist>
-                        <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                    {currentFilters.length === 0 && (
-                      <p className="text-[11px] text-zinc-500 text-center py-3">Sin filtros. Haz clic en "Añadir".</p>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-purple-900/30">
-                    <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
-                      <Plus className="h-3 w-3" /> Añadir
-                    </button>
-                    <button onClick={clearCurrentFilters} disabled={currentFilters.length === 0} className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                      Limpiar
-                    </button>
-                  </div>
-                  {currentFilters.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-purple-900/30">
-                      <span className="text-[10px] text-zinc-500">{dataCount} de {totalCount} registros</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
 
-            {/* Group Button */}
-            <div className="relative">
-              <button
-                onClick={() => { setShowGroupPopup(!showGroupPopup); setShowFilterPopup(false); setShowSortPopup(false); }}
-                className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
-                  currentGroupings.length > 0
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
-                }`}
-                title="Agrupar"
-              >
-                <Layers className="h-4 w-4" />
-                {currentGroupings.length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white px-1">
-                    {currentGroupings.length}
-                  </span>
-                )}
-              </button>
-              {showGroupPopup && (
-                <div className="absolute right-0 top-full mt-1 z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
-                  <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por</p>
-                  {currentGroupOptions.map(({ field, label }) => (
-                    <button
-                      key={field}
-                      onClick={() => toggleGrouping(field)}
-                      className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
-                        currentGroupings.includes(field as CATGroupByField & INVIANGroupByField) ? 'text-purple-300' : 'text-zinc-400'
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                        currentGroupings.includes(field as CATGroupByField & INVIANGroupByField) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
-                      }`}>
-                        {currentGroupings.includes(field as CATGroupByField & INVIANGroupByField) && <Check className="h-3 w-3 text-white" />}
+                  <div className="p-4 space-y-4 max-h-[50vh] overflow-y-auto">
+                    {/* Date Range */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-medium text-zinc-400">Periodo de Fechas</label>
+                        {(fechaInicio || fechaFin) && (
+                          <button
+                            onClick={() => { setFechaInicio(''); setFechaFin(''); }}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Limpiar
+                          </button>
+                        )}
                       </div>
-                      {label}
-                    </button>
-                  ))}
-                  <div className="border-t border-purple-900/30 mt-2 pt-2">
-                    <button
-                      onClick={() => activeTab === 'cat' ? setCatGroupings([]) : setInvianGroupings([])}
-                      className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1"
-                    >
-                      Quitar agrupación
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Sort Button */}
-            <div className="relative">
-              <button
-                onClick={() => { setShowSortPopup(!showSortPopup); setShowFilterPopup(false); setShowGroupPopup(false); }}
-                className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
-                  currentSortField
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
-                }`}
-                title="Ordenar"
-              >
-                <ArrowUpDown className="h-4 w-4" />
-              </button>
-              {showSortPopup && (
-                <div className="absolute right-0 top-full mt-1 z-[60] w-[300px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-purple-300">Ordenar por</span>
-                    <button onClick={() => setShowSortPopup(false)} className="text-zinc-400 hover:text-white">
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="space-y-1">
-                    {currentSortOptions.map((field) => (
-                      <div
-                        key={field.field}
-                        className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
-                          currentSortField === field.field ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-purple-900/20'
-                        }`}
-                      >
-                        <span className={currentSortField === field.field ? 'text-purple-300 font-medium' : 'text-zinc-300'}>
-                          {field.label}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => {
-                              if (activeTab === 'cat') { setCatSortField(field.field); setCatSortDirection('asc'); }
-                              else { setInvianSortField(field.field); setInvianSortDirection('asc'); }
-                            }}
-                            className={`p-1.5 rounded transition-colors ${
-                              currentSortField === field.field && currentSortDirection === 'asc'
-                                ? 'bg-purple-600 text-white'
-                                : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <label className="text-[10px] text-zinc-500 mb-1 block">Desde</label>
+                          <input
+                            type="date"
+                            value={fechaInicio}
+                            onChange={(e) => setFechaInicio(e.target.value)}
+                            className={`w-full px-3 py-2 rounded-lg text-sm border text-white focus:outline-none ${
+                              fechaInicio
+                                ? 'bg-purple-900/30 border-purple-500/50 focus:border-purple-400'
+                                : 'bg-zinc-800 border-zinc-700 focus:border-purple-500'
                             }`}
-                            title="Ascendente"
-                          >
-                            <ArrowUp className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (activeTab === 'cat') { setCatSortField(field.field); setCatSortDirection('desc'); }
-                              else { setInvianSortField(field.field); setInvianSortDirection('desc'); }
-                            }}
-                            className={`p-1.5 rounded transition-colors ${
-                              currentSortField === field.field && currentSortDirection === 'desc'
-                                ? 'bg-purple-600 text-white'
-                                : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                          />
+                        </div>
+                        <div className="flex flex-col items-center justify-center pt-4">
+                          <div className="w-8 h-0.5 bg-gradient-to-r from-purple-500 to-purple-400 rounded"></div>
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[10px] text-zinc-500 mb-1 block">Hasta</label>
+                          <input
+                            type="date"
+                            value={fechaFin}
+                            onChange={(e) => setFechaFin(e.target.value)}
+                            className={`w-full px-3 py-2 rounded-lg text-sm border text-white focus:outline-none ${
+                              fechaFin
+                                ? 'bg-purple-900/30 border-purple-500/50 focus:border-purple-400'
+                                : 'bg-zinc-800 border-zinc-700 focus:border-purple-500'
                             }`}
-                            title="Descendente"
-                          >
-                            <ArrowDown className="h-3.5 w-3.5" />
-                          </button>
+                          />
                         </div>
                       </div>
-                    ))}
-                  </div>
-                  {currentSortField && (
-                    <div className="mt-3 pt-3 border-t border-purple-900/30">
-                      <button
-                        onClick={() => activeTab === 'cat' ? setCatSortField(null) : setInvianSortField(null)}
-                        className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors"
-                      >
-                        Quitar ordenamiento
-                      </button>
+                      {(fechaInicio && fechaFin) && (
+                        <div className="mt-2 px-3 py-2 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-purple-300">Rango seleccionado:</span>
+                            <span className="text-white font-medium">
+                              {new Date(fechaInicio).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              {' → '}
+                              {new Date(fechaFin).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
+
+                    {/* Catorcenas */}
+                    <div>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">Catorcenas ({selectedCatorcenas.length} seleccionadas)</label>
+                      <div className="flex flex-wrap gap-1.5 max-h-[100px] overflow-y-auto p-2 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                        {catorcenaOptions.map((option) => (
+                          <button
+                            key={option.id}
+                            onClick={() => {
+                              setSelectedCatorcenas(prev =>
+                                prev.includes(option.id)
+                                  ? prev.filter(id => id !== option.id)
+                                  : [...prev, option.id]
+                              );
+                            }}
+                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                              selectedCatorcenas.includes(option.id)
+                                ? 'bg-purple-600 text-white'
+                                : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                        {catorcenaOptions.length === 0 && (
+                          <span className="text-xs text-zinc-500">No hay catorcenas</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Sort */}
+                    <div>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">Ordenar por</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={currentSortField || ''}
+                          onChange={(e) => {
+                            const val = e.target.value || null;
+                            if (activeTab === 'cat' || activeTab === 'digital') {
+                              setCatSortField(val);
+                            } else {
+                              setInvianSortField(val);
+                            }
+                          }}
+                          className="flex-1 px-3 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-white focus:border-purple-500 focus:outline-none"
+                        >
+                          <option value="">Sin ordenar</option>
+                          {currentSortOptions.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => {
+                            if (activeTab === 'cat' || activeTab === 'digital') {
+                              setCatSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                            } else {
+                              setInvianSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                            }
+                          }}
+                          className="px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white hover:bg-zinc-700 text-sm"
+                        >
+                          {currentSortDirection === 'asc' ? '↑ Asc' : '↓ Desc'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Group */}
+                    <div>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">Agrupar por</label>
+                      <select
+                        value={currentGroupings[0] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (activeTab === 'cat' || activeTab === 'digital') {
+                            setCatGroupings(val ? [val] : []);
+                          } else {
+                            setInvianGroupings(val ? [val] : []);
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-white focus:border-purple-500 focus:outline-none"
+                      >
+                        <option value="">Sin agrupar</option>
+                        {currentGroupOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="p-4 border-t border-zinc-800 flex justify-between">
+                    <button
+                      onClick={clearAllFilters}
+                      className="px-4 py-2 text-sm text-red-400 hover:text-red-300"
+                    >
+                      Limpiar todo
+                    </button>
+                    <button
+                      onClick={() => setShowFilterPopup(false)}
+                      className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-500"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Clear All */}
-            {hasActiveFilters && (
-              <button
-                onClick={clearAllFilters}
-                className="flex items-center justify-center w-9 h-9 text-zinc-400 hover:text-white bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/50 transition-colors"
-                title="Limpiar filtros"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+            {/* Count */}
+            <span className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-700">
+              {dataCount}{dataCount !== totalCount && ` / ${totalCount}`}
+            </span>
+
+            {/* Export */}
+            <button
+              onClick={handleExportXLSX}
+              disabled={isLoading || dataCount === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-green-600 hover:bg-green-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="h-4 w-4" />
+              Exportar
+            </button>
           </div>
-
-          {/* Data count */}
-          <span className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 text-xs font-medium border border-purple-500/30">
-            {dataCount}{dataCount !== totalCount && ` / ${totalCount}`} registros
-          </span>
-
-          {/* Export button */}
-          <button
-            onClick={handleExportXLSX}
-            disabled={isLoading || dataCount === 0}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-green-500/20 text-green-300 border border-green-500/40 hover:bg-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
-            <Download className="h-4 w-4" />
-            Exportar XLSX
-          </button>
         </div>
 
         {/* Content */}
@@ -999,6 +1025,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Fin</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">U. Negocio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Artículo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Negociación</th>
@@ -1015,7 +1042,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                           onClick={() => toggleGroup(groupName)}
                           className="bg-purple-500/10 border-b border-purple-500/20 cursor-pointer hover:bg-purple-500/15 transition-colors"
                         >
-                          <td colSpan={14} className="px-4 py-2">
+                          <td colSpan={13} className="px-4 py-2">
                             <div className="flex items-center gap-2">
                               {catExpandedGroups.has(groupName) ? (
                                 <ChevronDown className="h-4 w-4 text-purple-400" />
@@ -1047,7 +1074,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                   )}
                   {filteredCATData.length === 0 && (
                     <tr>
-                      <td colSpan={14} className="px-4 py-12 text-center">
+                      <td colSpan={13} className="px-4 py-12 text-center">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
                           <ClipboardList className="w-8 h-8 text-purple-400" />
                         </div>
@@ -1076,6 +1103,45 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                 )}
               </table>
             </div>
+          ) : activeTab === 'digital' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1400px]">
+                <thead className="sticky top-0 z-10">
+                  <tr className="border-b border-orange-500/20 bg-gradient-to-r from-orange-900/40 via-amber-900/30 to-orange-900/40 backdrop-blur-sm">
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Plaza</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Tipo</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Asesor</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">APS</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">F. Inicio</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">F. Fin</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Cliente</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Marca</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">U. Negocio</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Campaña</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Artículo</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Negociación</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Caras</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Tarifa</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Monto Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDigitalData.map((item, idx) => (
+                    <CATRow key={idx} item={item} />
+                  ))}
+                  {filteredDigitalData.length === 0 && (
+                    <tr>
+                      <td colSpan={15} className="px-4 py-12 text-center">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-orange-500/10 mb-4">
+                          <Monitor className="w-8 h-8 text-orange-400" />
+                        </div>
+                        <p className="text-zinc-500">No se encontraron registros digitales</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1600px]">
@@ -1089,7 +1155,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Vendedor</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Inicio/Periodo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Fin/Segmento</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Arte</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Archivo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Unidad</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cara</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Ciudad</th>
@@ -1175,6 +1241,7 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
       <td className="px-3 py-2 text-xs text-zinc-400">{formatDate(item.fecha_fin_periodo)}</td>
       <td className="px-3 py-2 text-xs text-zinc-300 max-w-[120px] truncate" title={item.cliente || ''}>{item.cliente || '-'}</td>
       <td className="px-3 py-2 text-xs text-zinc-300">{item.marca || '-'}</td>
+      <td className="px-3 py-2 text-xs text-orange-300">{item.unidad_negocio || '-'}</td>
       <td className="px-3 py-2 text-xs text-white font-medium max-w-[150px] truncate" title={item.campania || ''}>{item.campania || '-'}</td>
       <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.numero_articulo || '-'}</td>
       <td className="px-3 py-2">
@@ -1219,7 +1286,21 @@ function INVIANRow({ item }: { item: OrdenMontajeINVIAN }) {
       </td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.InicioPeriodo || '-'}</td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.FinSegmento || '-'}</td>
-      <td className="px-3 py-2 text-xs text-cyan-300">{item.Arte || '-'}</td>
+      <td className="px-3 py-2 text-xs">
+        {item.ArteUrl ? (
+          <a
+            href={item.ArteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:text-blue-300 hover:underline truncate max-w-[150px] block"
+            title={item.ArteUrl}
+          >
+            {item.ArteUrl.split('/').pop() || 'Ver archivo'}
+          </a>
+        ) : (
+          <span className="text-zinc-500">-</span>
+        )}
+      </td>
       <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.Unidad || '-'}</td>
       <td className="px-3 py-2 text-xs text-zinc-300">{item.Cara || '-'}</td>
       <td className="px-3 py-2 text-xs text-zinc-300">{item.Ciudad || '-'}</td>

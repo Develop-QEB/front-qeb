@@ -275,6 +275,7 @@ const CIUDAD_ESTADO_MAP: Record<string, string> = {
   'SANTA CATARINA': 'Nuevo León',
   'CIUDAD DE MEXICO': 'Ciudad de México',
   'CDMX': 'Ciudad de México',
+  'ESTADO DE MEXICO': 'Estado de México',
   'MEXICO': 'Ciudad de México',
   'DF': 'Ciudad de México',
   'TIJUANA': 'Baja California',
@@ -319,13 +320,20 @@ const CIUDAD_ESTADO_MAP: Record<string, string> = {
   'LOS CABOS': 'Baja California Sur',
 };
 
+// Some entries are state-level (no specific ciudad should be set)
+const STATE_LEVEL_ENTRIES = ['CDMX', 'CIUDAD DE MEXICO', 'DF', 'ESTADO DE MEXICO', 'MEXICO'];
+
 // Extract city from article name and return estado/ciudad
-const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string } | null => {
+const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string | null } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
   for (const [ciudad, estado] of Object.entries(CIUDAD_ESTADO_MAP)) {
     if (name.includes(ciudad)) {
+      // If this is a state-level entry, don't return a ciudad
+      if (STATE_LEVEL_ENTRIES.includes(ciudad)) {
+        return { estado, ciudad: null };
+      }
       return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
     }
   }
@@ -711,7 +719,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Environment for SAP endpoints
   const environment = useEnvironmentStore((state) => state.environment);
-  const endpoints = getEndpoints(environment);
+  const endpoints = getEndpoints('test'); // Forzar test por ahora
   const isTestMode = environment === 'test';
 
   // Fetch ALL CUIC data from SAP with cache
@@ -1690,7 +1698,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         articulo: item,
                         tarifaPublica: tarifa.tarifa_publica,
                         estado: ciudadEstado?.estado || newCara.estado,
-                        ciudades: ciudadEstado ? [ciudadEstado.ciudad] : newCara.ciudades,
+                        ciudades: ciudadEstado?.ciudad ? [ciudadEstado.ciudad] : newCara.ciudades,
                         formato: formato || newCara.formato,
                         tipo: tipo || newCara.tipo,
                       });

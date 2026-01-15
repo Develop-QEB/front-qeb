@@ -240,6 +240,7 @@ export interface OrdenMontajeCAT {
   fecha_fin_periodo: string | null;
   cliente: string | null;
   marca: string | null;
+  unidad_negocio: string | null;
   campania: string | null;
   numero_articulo: string | null;
   negociacion: 'BONIFICACION' | 'RENTA';
