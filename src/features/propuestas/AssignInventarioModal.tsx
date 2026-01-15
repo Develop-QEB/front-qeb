@@ -173,6 +173,7 @@ interface ReservaItem {
   solicitudCaraId?: number; // For linking to cara
   reservaId?: number; // For existing reservas from DB
   grupo_completo_id?: number | null; // For grouping complete groups
+  articulo?: string; // Artículo SAP de la cara
 }
 
 // ============ ADVANCED FILTERS SYSTEM (copied from CampanaDetailPage) ============
@@ -214,7 +215,7 @@ const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('stri
 ];
 
 // Opciones de agrupación (soporta múltiples niveles)
-type GroupByFieldReservas = 'catorcena' | 'tipo' | 'plaza' | 'formato' | 'grupo';
+type GroupByFieldReservas = 'catorcena' | 'tipo' | 'plaza' | 'formato' | 'grupo' | 'articulo';
 interface GroupConfigReservas {
   field: GroupByFieldReservas;
   label: string;
@@ -222,10 +223,11 @@ interface GroupConfigReservas {
 
 const AVAILABLE_GROUPINGS_RESERVAS: GroupConfigReservas[] = [
   { field: 'catorcena', label: 'Catorcena' },
-  { field: 'tipo', label: 'Tipo' },
+  { field: 'grupo', label: 'Grupo Completo' },
+  { field: 'articulo', label: 'Artículo' },
   { field: 'plaza', label: 'Plaza' },
   { field: 'formato', label: 'Formato' },
-  { field: 'grupo', label: 'Grupo Completo' },
+  { field: 'tipo', label: 'Tipo' },
 ];
 
 // Función para aplicar filtros a los datos
@@ -718,6 +720,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
           solicitudCaraId: r.solicitud_cara_id,
           reservaId: r.reserva_id,
           grupo_completo_id: r.grupo_completo_id,
+          articulo: matchingCara?.articulo || '',
         };
       });
 
@@ -4194,6 +4197,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     case 'plaza': return r.plaza || 'Sin Plaza';
                     case 'formato': return r.formato || 'Sin Formato';
                     case 'grupo': return r.grupo_completo_id ? `Grupo ${r.grupo_completo_id}` : 'Sin Grupo';
+                    case 'articulo': return r.articulo || 'Sin Artículo';
                     default: return 'Otros';
                   }
                 };
@@ -4283,6 +4287,41 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     return Object.values(data).flatMap(v => flattenItems(v));
                   }
                   return [];
+                };
+
+                // Get type breakdown for a group of items
+                const getTypeBreakdown = (items: ReservaItem[]) => {
+                  const flujo = items.filter(r => r.tipo === 'Flujo').length;
+                  const contraflujo = items.filter(r => r.tipo === 'Contraflujo').length;
+                  const bonificacion = items.filter(r => r.tipo === 'Bonificacion').length;
+                  return { flujo, contraflujo, bonificacion, total: items.length };
+                };
+
+                // Render type breakdown badges
+                const TypeBreakdownBadges = ({ items }: { items: ReservaItem[] }) => {
+                  const breakdown = getTypeBreakdown(items);
+                  return (
+                    <div className="flex items-center gap-1">
+                      {breakdown.flujo > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                          F:{breakdown.flujo}
+                        </span>
+                      )}
+                      {breakdown.contraflujo > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          C:{breakdown.contraflujo}
+                        </span>
+                      )}
+                      {breakdown.bonificacion > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          B:{breakdown.bonificacion}
+                        </span>
+                      )}
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-zinc-700/50 text-zinc-300">
+                        {breakdown.total}
+                      </span>
+                    </div>
+                  );
                 };
 
                 return (
@@ -4549,7 +4588,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                     {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[0])?.label}:
                                   </span>
                                   <span className="text-sm font-medium text-white flex-1 text-left truncate">{groupKey}</span>
-                                  <span className="px-2 py-0.5 rounded-full text-xs bg-zinc-700/50 text-zinc-300">{totalItems}</span>
+                                  <TypeBreakdownBadges items={level1Items} />
                                 </button>
                                 {isExpanded && (
                                   <div className="bg-zinc-900/40 border-l-2 border-purple-500/30 ml-3">
@@ -4601,7 +4640,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                                 {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[1])?.label}:
                                               </span>
                                               <span className="text-[11px] text-white flex-1 text-left truncate">{subKey}</span>
-                                              <span className="text-[10px] text-zinc-500">{countItems(subData)}</span>
+                                              <TypeBreakdownBadges items={subItems} />
                                             </button>
                                             {isSubExpanded && (
                                               <div className="ml-2 border-l border-cyan-500/20">
@@ -4637,7 +4676,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                                             {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[2])?.label}:
                                                           </span>
                                                           <span className="text-[11px] text-white flex-1 text-left truncate">{thirdKey}</span>
-                                                          <span className="text-[10px] text-zinc-500">{thirdItems.length}</span>
+                                                          <TypeBreakdownBadges items={thirdItems} />
                                                         </button>
                                                         {isThirdExpanded && thirdItems.map(reserva => (
                                                           <label
