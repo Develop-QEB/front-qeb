@@ -2524,10 +2524,8 @@ function TaskDetailModal({
                 </div>
                 <div className="max-h-[300px] overflow-y-auto">
                   {(() => {
-                    // Si tenemos datos de impresiones guardados, usarlos como fuente principal
-                    // ya que el inventario puede no tener archivo_arte actualizado
                     // Usar num_impresiones de la tarea directamente
-                    const numImpresiones = (task as any).num_impresiones || taskInventory.length;
+                    const numImpresiones = task.num_impresiones || taskInventory.length;
                     const primerItem = taskInventory[0];
 
                     if (taskInventory.length === 0) {

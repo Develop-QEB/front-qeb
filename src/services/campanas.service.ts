@@ -196,6 +196,7 @@ export interface TareaCampana {
   listado_inventario: string | null;
   proveedores_id: number | null;
   nombre_proveedores: string | null;
+  num_impresiones: number | null;
   // Campos adicionales de la query con JOINs
   inventario_id?: string | null;
   APS?: string | null;
