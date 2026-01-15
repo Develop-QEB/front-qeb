@@ -563,7 +563,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   // Reservas summary states - Advanced Filter System
   const [filtersReservas, setFiltersReservas] = useState<FilterCondition[]>([]);
   const [showFiltersReservas, setShowFiltersReservas] = useState(false);
-  const [activeGroupingsReservas, setActiveGroupingsReservas] = useState<GroupByFieldReservas[]>(['catorcena']);
+  const [activeGroupingsReservas, setActiveGroupingsReservas] = useState<GroupByFieldReservas[]>(['catorcena', 'grupo', 'articulo']);
   const [showGroupingConfigReservas, setShowGroupingConfigReservas] = useState(false);
   const [sortFieldReservas, setSortFieldReservas] = useState<string | null>(null);
   const [sortDirectionReservas, setSortDirectionReservas] = useState<'asc' | 'desc'>('asc');
@@ -710,8 +710,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
           inventario_id: r.inventario_id,
           codigo_unico: r.codigo_unico || `INV-${r.inventario_id}`,
           tipo: tipo as 'Flujo' | 'Contraflujo' | 'Bonificacion',
-          catorcena: catorcenaInicio || 1,
-          anio: yearInicio || new Date().getFullYear(),
+          catorcena: matchingCara?.catorcena_inicio || catorcenaInicio || 1,
+          anio: matchingCara?.anio_inicio || yearInicio || new Date().getFullYear(),
           latitud: Number(r.latitud) || 0,
           longitud: Number(r.longitud) || 0,
           plaza: r.plaza || '',
@@ -847,26 +847,46 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
       // Set caras from solicitud
       if (solicitudDetails.caras) {
-        const carasWithIds: CaraItem[] = solicitudDetails.caras.map((cara, idx) => ({
-          localId: `cara-${cara.id || idx}-${Date.now()}`,
-          id: cara.id,
-          ciudad: cara.ciudad || '',
-          estados: cara.estados || '',
-          tipo: cara.tipo || '',
-          flujo: cara.flujo || '',
-          bonificacion: Number(cara.bonificacion) || 0,
-          caras: Number(cara.caras) || 0,
-          nivel_socioeconomico: cara.nivel_socioeconomico || '',
-          formato: cara.formato || '',
-          costo: Number(cara.costo) || 0,
-          tarifa_publica: Number(cara.tarifa_publica) || 0,
-          inicio_periodo: cara.inicio_periodo || '',
-          fin_periodo: cara.fin_periodo || '',
-          caras_flujo: Number(cara.caras_flujo) || 0,
-          caras_contraflujo: Number(cara.caras_contraflujo) || 0,
-          articulo: cara.articulo || '',
-          descuento: Number(cara.descuento) || 0,
-        }));
+        const carasWithIds: CaraItem[] = solicitudDetails.caras.map((cara, idx) => {
+          // Calculate catorcena from inicio_periodo
+          let catorcenaInicioCara: number | undefined;
+          let anioInicioCara: number | undefined;
+          if (cara.inicio_periodo && catorcenasData?.data) {
+            const inicioPeriodoDate = new Date(cara.inicio_periodo);
+            const catInicio = catorcenasData.data.find(c => {
+              const cInicioDate = new Date(c.fecha_inicio);
+              const cFinDate = new Date(c.fecha_fin);
+              return inicioPeriodoDate >= cInicioDate && inicioPeriodoDate <= cFinDate;
+            });
+            if (catInicio) {
+              catorcenaInicioCara = catInicio.numero_catorcena;
+              anioInicioCara = catInicio.a_o;
+            }
+          }
+
+          return {
+            localId: `cara-${cara.id || idx}-${Date.now()}`,
+            id: cara.id,
+            ciudad: cara.ciudad || '',
+            estados: cara.estados || '',
+            tipo: cara.tipo || '',
+            flujo: cara.flujo || '',
+            bonificacion: Number(cara.bonificacion) || 0,
+            caras: Number(cara.caras) || 0,
+            nivel_socioeconomico: cara.nivel_socioeconomico || '',
+            formato: cara.formato || '',
+            costo: Number(cara.costo) || 0,
+            tarifa_publica: Number(cara.tarifa_publica) || 0,
+            inicio_periodo: cara.inicio_periodo || '',
+            fin_periodo: cara.fin_periodo || '',
+            caras_flujo: Number(cara.caras_flujo) || 0,
+            caras_contraflujo: Number(cara.caras_contraflujo) || 0,
+            articulo: cara.articulo || '',
+            descuento: Number(cara.descuento) || 0,
+            catorcena_inicio: catorcenaInicioCara,
+            anio_inicio: anioInicioCara,
+          };
+        });
         setCaras(carasWithIds);
       }
     }
