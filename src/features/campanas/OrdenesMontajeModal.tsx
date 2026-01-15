@@ -10,6 +10,38 @@ import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import * as XLSX from 'xlsx';
 
+// URL base para archivos estáticos
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const STATIC_URL = API_URL.replace(/\/api$/, '');
+
+// Helper para normalizar URLs de archivos
+const getFileUrl = (url: string | undefined | null): string | null => {
+  if (!url) return null;
+
+  // Si ya es una URL completa (http/https), usarla tal cual
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    // Si es localhost, convertirla a la URL del entorno actual
+    if (url.includes('localhost')) {
+      try {
+        const urlObj = new URL(url);
+        return `${STATIC_URL}${urlObj.pathname}`;
+      } catch {
+        const match = url.match(/localhost:\d+(.+)/);
+        if (match) return `${STATIC_URL}${match[1]}`;
+      }
+    }
+    return url;
+  }
+
+  // Si es una ruta relativa, agregar la URL base
+  if (url.startsWith('/')) {
+    return `${STATIC_URL}${url}`;
+  }
+
+  // Si no tiene slash al inicio, agregarlo
+  return `${STATIC_URL}/${url}`;
+};
+
 interface OrdenesMontajeModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -563,7 +595,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
         'Fin o Segmento': item.FinSegmento || '',
         'Arte': item.Arte || '',
         'Código de arte (Opcional)': item.CodigoArte || '',
-        'Arte Url (Opcional)': item.ArteUrl || '',
+        'Arte Url (Opcional)': getFileUrl(item.ArteUrl) || '',
         'Origen del arte (Opcional)': item.OrigenArte || '',
         'Unidad': item.Unidad || '',
         'Cara': item.Cara || '',
@@ -926,7 +958,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                         >
                           <option value="">Sin ordenar</option>
                           {currentSortOptions.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            <option key={opt.field} value={opt.field}>{opt.label}</option>
                           ))}
                         </select>
                         <button
@@ -952,16 +984,16 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                         onChange={(e) => {
                           const val = e.target.value;
                           if (activeTab === 'cat' || activeTab === 'digital') {
-                            setCatGroupings(val ? [val] : []);
+                            setCatGroupings(val ? [val as CATGroupByField] : []);
                           } else {
-                            setInvianGroupings(val ? [val] : []);
+                            setInvianGroupings(val ? [val as INVIANGroupByField] : []);
                           }
                         }}
                         className="w-full px-3 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-white focus:border-purple-500 focus:outline-none"
                       >
                         <option value="">Sin agrupar</option>
                         {currentGroupOptions.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          <option key={opt.field} value={opt.field}>{opt.label}</option>
                         ))}
                       </select>
                     </div>
@@ -1287,19 +1319,22 @@ function INVIANRow({ item }: { item: OrdenMontajeINVIAN }) {
       <td className="px-3 py-2 text-xs text-purple-300">{item.InicioPeriodo || '-'}</td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.FinSegmento || '-'}</td>
       <td className="px-3 py-2 text-xs">
-        {item.ArteUrl ? (
-          <a
-            href={item.ArteUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-400 hover:text-blue-300 hover:underline truncate max-w-[150px] block"
-            title={item.ArteUrl}
-          >
-            {item.ArteUrl.split('/').pop() || 'Ver archivo'}
-          </a>
-        ) : (
-          <span className="text-zinc-500">-</span>
-        )}
+        {(() => {
+          const arteUrl = getFileUrl(item.ArteUrl);
+          return arteUrl ? (
+            <a
+              href={arteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:text-blue-300 hover:underline truncate max-w-[150px] block"
+              title={arteUrl}
+            >
+              {arteUrl.split('/').pop() || 'Ver archivo'}
+            </a>
+          ) : (
+            <span className="text-zinc-500">-</span>
+          );
+        })()}
       </td>
       <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.Unidad || '-'}</td>
       <td className="px-3 py-2 text-xs text-zinc-300">{item.Cara || '-'}</td>

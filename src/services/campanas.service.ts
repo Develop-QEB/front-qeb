@@ -757,4 +757,111 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
       throw new Error(response.data.error || 'Error al eliminar comentario');
     }
   },
+
+  // ============================================================================
+  // MÉTODOS PARA GESTIÓN DE RESERVAS (copiados de propuestas)
+  // ============================================================================
+
+  async getReservasForModal(campanaId: number): Promise<ReservaModalItem[]> {
+    const response = await api.get<ApiResponse<ReservaModalItem[]>>(`/campanas/${campanaId}/reservas-modal`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener reservas');
+    }
+    return response.data.data;
+  },
+
+  async createReservas(
+    campanaId: number,
+    data: {
+      reservas: Array<{
+        inventario_id: number;
+        tipo: string;
+        latitud: number;
+        longitud: number;
+      }>;
+      solicitudCaraId: number;
+      clienteId: number;
+      fechaInicio: string;
+      fechaFin: string;
+      agruparComoCompleto?: boolean;
+    }
+  ): Promise<{ calendarioId: number; reservasCreadas: number }> {
+    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number }>>(
+      `/campanas/${campanaId}/reservas`,
+      data
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear reservas');
+    }
+    return response.data.data;
+  },
+
+  async deleteReservas(campanaId: number, reservaIds: number[]): Promise<void> {
+    const response = await api.delete<ApiResponse<void>>(`/campanas/${campanaId}/reservas`, {
+      data: { reservaIds },
+    });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar reservas');
+    }
+  },
+
+  async updateCara(campanaId: number, caraId: number, data: CaraUpdateData): Promise<SolicitudCara> {
+    const response = await api.patch<ApiResponse<SolicitudCara>>(`/campanas/${campanaId}/caras/${caraId}`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar cara');
+    }
+    return response.data.data;
+  },
+
+  async createCara(campanaId: number, data: CaraUpdateData): Promise<SolicitudCara> {
+    const response = await api.post<ApiResponse<SolicitudCara>>(`/campanas/${campanaId}/caras`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear cara');
+    }
+    return response.data.data;
+  },
+
+  async deleteCara(campanaId: number, caraId: number): Promise<void> {
+    const response = await api.delete<ApiResponse<void>>(`/campanas/${campanaId}/caras/${caraId}`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar cara');
+    }
+  },
 };
+
+// Interfaces adicionales para reservas
+export interface ReservaModalItem {
+  reserva_id: number;
+  espacio_id: number;
+  inventario_id: number;
+  codigo_unico: string;
+  tipo_de_cara: string;
+  latitud: number;
+  longitud: number;
+  plaza: string;
+  formato: string;
+  ubicacion: string | null;
+  estatus: string;
+  grupo_completo_id: number | null;
+  solicitud_cara_id: number;
+  aps: number | null;
+}
+
+export interface CaraUpdateData {
+  ciudad?: string;
+  estados?: string;
+  tipo?: string;
+  flujo?: string;
+  bonificacion?: number;
+  caras?: number;
+  nivel_socioeconomico?: string;
+  formato?: string;
+  costo?: number;
+  tarifa_publica?: number;
+  inicio_periodo?: string;
+  fin_periodo?: string;
+  caras_flujo?: number;
+  caras_contraflujo?: number;
+  articulo?: string;
+  descuento?: number;
+}
