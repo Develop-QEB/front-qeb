@@ -192,6 +192,7 @@ interface TaskRow {
   evidencia?: string; // JSON con datos de impresiones
   nombre_proveedores?: string;
   proveedores_id?: number;
+  num_impresiones?: number;
 }
 
 interface CalendarEvent {
@@ -7153,6 +7154,7 @@ export function TareaSeguimientoPage() {
                                   campana_id: campanaId,
                                   nombre_proveedores: tarea.nombre_proveedores || undefined,
                                   proveedores_id: tarea.proveedores_id || undefined,
+                                  num_impresiones: tarea.num_impresiones || undefined,
                                 };
                                 setSelectedTask(taskRow);
                                 setIsTaskDetailModalOpen(true);
