@@ -221,6 +221,7 @@ export interface CreateTareaData {
   contenido?: string;
   listado_inventario?: string;
   impresiones?: Record<number, number>;
+  num_impresiones?: number;
 }
 
 export interface ArteExistente {

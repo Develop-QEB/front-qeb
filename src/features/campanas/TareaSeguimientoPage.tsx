@@ -5215,6 +5215,7 @@ export function TareaSeguimientoPage() {
       listado_inventario?: string;
       impresiones?: Record<string, number>;
       evidencia?: string;
+      num_impresiones?: number;
     }) => campanasService.createTarea(campanaId, data),
     // El manejo de éxito/error ahora está en handleCreateTask con mutateAsync
   });
@@ -6242,6 +6243,7 @@ export function TareaSeguimientoPage() {
         listado_inventario: (task as any).listado_inventario,
         // Campos para Impresión
         impresiones: task.impresiones,
+        num_impresiones: (task as any).num_impresiones,
       });
       // Éxito - cerrar modal y actualizar
       setIsCreateModalOpen(false);
