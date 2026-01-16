@@ -1596,11 +1596,14 @@ function TaskDetailModal({
   }, [task, inventoryData]);
 
   // Extraer total de impresiones pedidas (para Recepción)
-  // Primero intenta desde la evidencia (para faltantes), luego desde la descripción, luego usa el conteo de items
+  // Usa num_impresiones directamente, con fallbacks para tareas antiguas
   const impresionesOrdenadas = useMemo(() => {
     if (task?.tipo !== 'Recepción') return 0;
 
-    // Si es tarea de faltantes, leer de la evidencia
+    // Usar num_impresiones directamente si existe
+    if (task.num_impresiones) return task.num_impresiones;
+
+    // Fallback: Si es tarea de faltantes, leer de la evidencia
     if (task.evidencia) {
       try {
         const evidenciaObj = JSON.parse(task.evidencia);
@@ -1610,11 +1613,11 @@ function TaskDetailModal({
       } catch (e) {}
     }
 
-    // Intentar desde la descripción (ambos formatos)
+    // Fallback: Intentar desde la descripción (ambos formatos)
     const match = task.descripcion?.match(/(?:Total de )?[Ii]mpresiones solicitadas:\s*(\d+)/);
     if (match) return parseInt(match[1]);
 
-    // Si no, usar el número de items en la tarea
+    // Fallback final: usar el número de items en la tarea
     return taskInventory.length;
   }, [task, taskInventory]);
 
@@ -2359,7 +2362,8 @@ function TaskDetailModal({
           }
         });
       } else {
-        // Comportamiento normal: agrupar items por arte
+        // Comportamiento normal: usar num_impresiones de la tarea
+        // Agrupar items por arte para obtener las keys
         const artesAgrupados = taskInventory.reduce((acc, item) => {
           const key = item.archivo_arte || 'sin_arte';
           if (!acc[key]) {
@@ -2369,8 +2373,13 @@ function TaskDetailModal({
           return acc;
         }, {} as Record<string, { items: typeof taskInventory; archivo: string | undefined }>);
 
+        const numGrupos = Object.keys(artesAgrupados).length;
+
+        // Si hay un solo grupo de arte, usar impresionesOrdenadas (que viene de num_impresiones)
+        // Si hay múltiples grupos, distribuir proporcionalmente o usar items.length como fallback
         Object.entries(artesAgrupados).forEach(([key, grupo]) => {
-          const solicitadas = grupo.items.length;
+          // Usar num_impresiones total si hay un solo grupo, sino usar items.length
+          const solicitadas = numGrupos === 1 ? impresionesOrdenadas : grupo.items.length;
           const recibidas = cantidadesRecibidas[key] || 0;
           const faltantes = solicitadas - recibidas;
 
@@ -2519,71 +2528,73 @@ function TaskDetailModal({
               {/* Lista de artes agrupadas con cantidades */}
               <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
                 <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
-                  <h4 className="text-sm font-medium text-purple-300">
+                  <h4 onClick={()=>console.log(JSON.parse(task.evidencia).impresiones)} className="text-sm font-medium text-purple-300">
                     Artes a imprimir ({taskInventory.length} ubicaciones)
                   </h4>
                 </div>
-                <div className="max-h-[300px] overflow-y-auto">
-                  {(() => {
-                    // Usar num_impresiones de la tarea directamente
-                    const numImpresiones = task.num_impresiones || taskInventory.length;
-                    const primerItem = taskInventory[0];
+                {
+                  <div className="max-h-[300px] overflow-y-auto">
+                    {(() => {
+                      // Usar num_impresiones de la tarea directamente
+                      const numImpresiones = task.num_impresiones || taskInventory.length;
+                      const primerItem = taskInventory[0];
 
-                    if (taskInventory.length === 0) {
+                      if (taskInventory.length === 0) {
+                        return (
+                          <div className="p-8 text-center text-zinc-500">
+                            No hay items asociados a esta tarea
+                          </div>
+                        );
+                      }
+
                       return (
-                        <div className="p-8 text-center text-zinc-500">
-                          No hay items asociados a esta tarea
-                        </div>
-                      );
-                    }
+                        <div className="flex items-center gap-4 p-3 border-b border-border/50 last:border-0 hover:bg-zinc-800/30">
+                          {/* Preview de imagen */}
+                          <div className="w-24 h-20 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
+                            {primerItem?.archivo_arte ? (
+                              <img
+                                src={getImageUrl(primerItem.archivo_arte) || ''}
+                                alt="Arte"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Image className="h-6 w-6 text-zinc-600" />
+                              </div>
+                            )}
+                          </div>
 
-                    return (
-                      <div className="flex items-center gap-4 p-3 border-b border-border/50 last:border-0 hover:bg-zinc-800/30">
-                        {/* Preview de imagen */}
-                        <div className="w-24 h-20 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
-                          {primerItem?.archivo_arte ? (
-                            <img
-                              src={getImageUrl(primerItem.archivo_arte) || ''}
-                              alt="Arte"
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Image className="h-6 w-6 text-zinc-600" />
-                            </div>
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white">
+                              {taskInventory.length} {taskInventory.length === 1 ? 'ubicación' : 'ubicaciones'}
+                            </p>
+                            <p className="text-xs text-zinc-400 truncate">
+                              {primerItem?.mueble || 'Mueble'} - {primerItem?.ciudad || 'Ciudad'}
+                            </p>
+                          </div>
+
+                          {/* Cantidad de impresiones - desde num_impresiones */}
+                          <div className="flex-shrink-0 text-center px-4">
+                            <p className="text-3xl font-bold text-purple-400">{numImpresiones}</p>
+                            <p className="text-[10px] text-zinc-500">impresiones</p>
+                          </div>
+
+                          {/* Botón descargar */}
+                          {primerItem?.archivo_arte && (
+                            <button
+                              onClick={() => downloadImage(getImageUrl(primerItem.archivo_arte)!, `arte.jpg`)}
+                              className="p-2 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded-lg transition-colors"
+                              title="Descargar imagen"
+                            >
+                              <Download className="h-5 w-5" />
+                            </button>
                           )}
                         </div>
-
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white">
-                            {taskInventory.length} {taskInventory.length === 1 ? 'ubicación' : 'ubicaciones'}
-                          </p>
-                          <p className="text-xs text-zinc-400 truncate">
-                            {primerItem?.mueble || 'Mueble'} - {primerItem?.ciudad || 'Ciudad'}
-                          </p>
-                        </div>
-
-                        {/* Cantidad de impresiones - desde num_impresiones */}
-                        <div className="flex-shrink-0 text-center px-4">
-                          <p className="text-3xl font-bold text-purple-400">{numImpresiones}</p>
-                          <p className="text-[10px] text-zinc-500">impresiones</p>
-                        </div>
-
-                        {/* Botón descargar */}
-                        {primerItem?.archivo_arte && (
-                          <button
-                            onClick={() => downloadImage(getImageUrl(primerItem.archivo_arte)!, `arte.jpg`)}
-                            className="p-2 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded-lg transition-colors"
-                            title="Descargar imagen"
-                          >
-                            <Download className="h-5 w-5" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
+                      );
+                    })()}
+                  </div>
+                  }
               </div>
 
               {/* Botones de acción */}
@@ -2751,6 +2762,17 @@ function TaskDetailModal({
                           return acc;
                         }, {} as Record<string, { items: typeof taskInventory; archivo: string | undefined }>);
 
+                        // Intentar obtener el desglose de impresiones desde evidencia
+                        let impresionesDesglose: Record<string, number> = {};
+                        if (task.evidencia) {
+                          try {
+                            const evidenciaObj = JSON.parse(task.evidencia);
+                            if (evidenciaObj.impresiones && typeof evidenciaObj.impresiones === 'object') {
+                              impresionesDesglose = evidenciaObj.impresiones;
+                            }
+                          } catch (e) {}
+                        }
+
                         const artesArray = Object.entries(artesAgrupados);
 
                         if (artesArray.length === 0) {
@@ -2761,7 +2783,15 @@ function TaskDetailModal({
                           );
                         }
 
-                        return artesArray.map(([key, grupo]) => (
+                        return artesArray.map(([key, grupo]) => {
+                          // Buscar en el desglose de impresiones por la URL del arte
+                          const impresionesArte = grupo.archivo ? impresionesDesglose[grupo.archivo] : undefined;
+                          // Si hay desglose, mostrar impresiones solicitadas, sino mostrar ubicaciones
+                          const cantidad = impresionesArte ?? grupo.items.length;
+                          const etiqueta = impresionesArte !== undefined ? 'solicitada' : 'ubicacion';
+                          const etiquetaPlural = impresionesArte !== undefined ? 'solicitadas' : 'ubicaciones';
+
+                          return (
                           <div key={key} className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
                             {/* Preview de imagen */}
                             <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
@@ -2781,7 +2811,7 @@ function TaskDetailModal({
                             {/* Info del grupo */}
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-white">
-                                {grupo.items.length} ubicacion{grupo.items.length !== 1 ? 'es' : ''}
+                                {cantidad} {cantidad !== 1 ? etiquetaPlural : etiqueta}
                               </p>
                               <p className="text-xs text-zinc-500 truncate">
                                 {grupo.archivo ? grupo.archivo.split('/').pop() : 'Sin arte asignado'}
@@ -2820,7 +2850,8 @@ function TaskDetailModal({
                               />
                             </div>
                           </div>
-                        ));
+                          )
+                        })
                       })()}
                     </div>
 
@@ -4375,7 +4406,7 @@ function CreateTaskModal({
                     return (
                       <>
                         <div className="flex items-center justify-between mb-2">
-                          <label className="block text-xs font-medium text-zinc-400">
+                          <label onClick={() => console.log(grupos)} className="block text-xs font-medium text-zinc-400">
                             Artes a imprimir ({grupos.length} {grupos.length === 1 ? 'arte' : 'artes diferentes'} - {selectedInventory.length} ubicaciones)
                           </label>
                           <span className="text-xs text-purple-400">
@@ -5807,6 +5838,8 @@ export function TareaSeguimientoPage() {
         campana_id: campanaId,
         nombre_proveedores: t.nombre_proveedores || undefined,
         proveedores_id: t.proveedores_id || undefined,
+        num_impresiones: t.num_impresiones || undefined,
+        evidencia: t.evidencia || undefined,
       }));
   }, [tareasAPI, campanaId]);
 
@@ -5829,6 +5862,8 @@ export function TareaSeguimientoPage() {
         campana_id: campanaId,
         nombre_proveedores: t.nombre_proveedores || undefined,
         proveedores_id: t.proveedores_id || undefined,
+        num_impresiones: t.num_impresiones || undefined,
+        evidencia: t.evidencia || undefined,
       }));
   }, [tareasAPI, campanaId]);
 
@@ -7155,6 +7190,7 @@ export function TareaSeguimientoPage() {
                                   nombre_proveedores: tarea.nombre_proveedores || undefined,
                                   proveedores_id: tarea.proveedores_id || undefined,
                                   num_impresiones: tarea.num_impresiones || undefined,
+                                  evidencia: tarea.evidencia || undefined,
                                 };
                                 setSelectedTask(taskRow);
                                 setIsTaskDetailModalOpen(true);
@@ -8207,32 +8243,37 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
             data: { estatus: 'Atendido' }
           });
 
-          // 2. Crear nueva tarea de Recepción
-          // Obtener las impresiones desde la tarea original
-          let impresionesInfo = '';
-          try {
-            const evidencia = (selectedTask as any).evidencia;
-            if (evidencia) {
-              const data = JSON.parse(evidencia);
-              if (data.impresiones) {
-                const totalImpresiones = Object.values(data.impresiones).reduce((sum: number, val: any) => sum + (parseInt(val) || 0), 0);
-                impresionesInfo = `Total de impresiones solicitadas: ${totalImpresiones}`;
-              }
+          // 2. Crear nueva tarea de Recepción con el num_impresiones y evidencia de la tarea original
+          const numImpresiones = selectedTask.num_impresiones || selectedTask.inventario_ids?.length || 0;
+
+          // Crear evidencia para la recepción con el desglose por arte de la tarea de impresión
+          let evidenciaRecepcion = selectedTask.evidencia;
+          if (evidenciaRecepcion) {
+            try {
+              const evidenciaObj = JSON.parse(evidenciaRecepcion);
+              // Agregar tipo para identificar que es recepción normal (no faltantes)
+              evidenciaObj.tipo = 'recepcion_normal';
+              evidenciaRecepcion = JSON.stringify(evidenciaObj);
+            } catch (e) {
+              // Si no es JSON válido, mantener como está
             }
-          } catch (e) {
-            console.error('Error parsing evidencia:', e);
           }
 
           await createTareaMutation.mutateAsync({
             titulo: `Recepción - ${selectedTask.titulo || selectedTask.identificador}`,
             descripcion: `Tarea de recepción de impresiones.
-${impresionesInfo}
+Total de impresiones solicitadas: ${numImpresiones}
 
 Por favor registra la cantidad de impresiones recibidas.`,
             tipo: 'Recepción',
             asignado: selectedTask.asignado || selectedTask.creador || '',
             ids_reservas: selectedTask.inventario_ids?.join(',') || '',
+            num_impresiones: numImpresiones,
+            evidencia: evidenciaRecepcion,
           });
+
+          // Refrescar lista de tareas
+          queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
         }}
         onCreateRecepcionFaltante={async (faltantes, observaciones) => {
           if (!selectedTask) return;
@@ -8275,7 +8316,11 @@ Por favor registra la cantidad de impresiones recibidas.`,
             asignado: selectedTask.asignado || selectedTask.creador || '',
             ids_reservas: selectedTask.inventario_ids?.join(',') || '',
             evidencia: evidenciaFaltantes,
+            num_impresiones: totalFaltantes,
           });
+
+          // Refrescar lista de tareas
+          queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
         }}
         isUpdating={updateArteStatusMutation.isPending || assignArteMutation.isPending}
         campanaId={campanaId}
