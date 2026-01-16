@@ -7,6 +7,7 @@ import {
   ChevronDown, ChevronRight, Layers, Tag, TrendingUp, BarChart3
 } from 'lucide-react';
 import { solicitudesService, SolicitudFullDetails, Comentario, SolicitudCara } from '../../services/solicitudes.service';
+import { notificacionesService, ResumenAutorizacion } from '../../services/notificaciones.service';
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { UserAvatar } from '../../components/ui/user-avatar';
@@ -834,11 +835,27 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                                               <th className="px-3 py-2 text-center text-xs font-semibold text-white">Total</th>
                                               <th className="px-3 py-2 text-right text-xs font-semibold text-amber-300">Tarifa</th>
                                               <th className="px-3 py-2 text-right text-xs font-semibold text-emerald-300">Inversión</th>
+                                              <th className="px-3 py-2 text-center text-xs font-semibold text-violet-200">Autorización</th>
                                             </tr>
                                           </thead>
                                           <tbody className="divide-y divide-violet-500/10">
                                             {articuloGroup.caras.map((cara, idx) => {
                                               const inversion = (cara.tarifa_publica || 0) * (Number(cara.caras) || 0);
+                                              const estadoAuth = cara.estado_autorizacion || 'aprobado';
+                                              const authBadgeColors: Record<string, { bg: string; text: string; border: string }> = {
+                                                'aprobado': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+                                                'pendiente_dcm': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+                                                'pendiente_dg': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
+                                                'rechazado': { bg: 'bg-zinc-500/20', text: 'text-zinc-400', border: 'border-zinc-500/30' },
+                                              };
+                                              const authLabels: Record<string, string> = {
+                                                'aprobado': 'Aprobado',
+                                                'pendiente_dcm': 'Pend. DCM',
+                                                'pendiente_dg': 'Pend. DG',
+                                                'rechazado': 'Rechazado',
+                                              };
+                                              const authColor = authBadgeColors[estadoAuth] || authBadgeColors['aprobado'];
+                                              const authLabel = authLabels[estadoAuth] || estadoAuth;
                                               return (
                                                 <tr key={idx} className="hover:bg-violet-600/10 transition-colors">
                                                   <td className="px-3 py-2 text-zinc-200">{cara.ciudad || '-'}</td>
@@ -850,6 +867,11 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                                                   <td className="px-3 py-2 text-center text-white font-bold">{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
                                                   <td className="px-3 py-2 text-right text-amber-300 font-medium">{formatCurrency(cara.tarifa_publica || 0)}</td>
                                                   <td className="px-3 py-2 text-right text-emerald-300 font-medium">{formatCurrency(inversion)}</td>
+                                                  <td className="px-3 py-2 text-center">
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${authColor.bg} ${authColor.text} border ${authColor.border}`}>
+                                                      {authLabel}
+                                                    </span>
+                                                  </td>
                                                 </tr>
                                               );
                                             })}
@@ -998,6 +1020,26 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange }: Stat
     };
   }, [isOpen]);
 
+  // Query para obtener detalles completos (incluye caras con idquote)
+  const { data: solicitudDetails } = useQuery({
+    queryKey: ['solicitud-details', solicitud?.id],
+    queryFn: () => solicitudesService.getFullDetails(solicitud!.id),
+    enabled: isOpen && !!solicitud?.id,
+  });
+
+  // Obtener idquote de las caras (todas las caras de una solicitud tienen el mismo idquote)
+  const idquote = solicitudDetails?.caras?.[0]?.idquote;
+
+  // Query para verificar autorización pendiente
+  const { data: autorizacionResumen } = useQuery({
+    queryKey: ['autorizacion-resumen', idquote],
+    queryFn: () => notificacionesService.getResumenAutorizacion(idquote!),
+    enabled: isOpen && !!idquote,
+  });
+
+  // Verificar si hay caras pendientes de autorización
+  const tienePendientes = autorizacionResumen && (autorizacionResumen.pendientesDg > 0 || autorizacionResumen.pendientesDcm > 0);
+
   const { data: comments, refetch: refetchComments } = useQuery({
     queryKey: ['solicitud-comments', solicitud?.id],
     queryFn: () => solicitudesService.getComments(solicitud!.id),
@@ -1076,6 +1118,21 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange }: Stat
 
         {/* Status Selector */}
         <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-800/30">
+          {/* Alerta de autorización pendiente */}
+          {tienePendientes && (
+            <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-amber-200 font-medium">Autorización pendiente</p>
+                <p className="text-xs text-amber-300/70 mt-1">
+                  Esta solicitud tiene {(autorizacionResumen?.pendientesDg || 0) + (autorizacionResumen?.pendientesDcm || 0)} cara(s) pendientes de autorización.
+                  {autorizacionResumen?.pendientesDg ? ` DG: ${autorizacionResumen.pendientesDg}.` : ''}
+                  {autorizacionResumen?.pendientesDcm ? ` DCM: ${autorizacionResumen.pendientesDcm}.` : ''}
+                  {' '}No se puede aprobar hasta que todas las caras sean autorizadas.
+                </p>
+              </div>
+            </div>
+          )}
           <label className="block text-sm text-zinc-400 mb-2">Cambiar estado a:</label>
           <div className="flex items-center gap-3">
             <select
@@ -1084,12 +1141,18 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange }: Stat
               className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             >
               {statusOptions.map(s => (
-                <option key={s} value={s}>{s}</option>
+                <option
+                  key={s}
+                  value={s}
+                  disabled={s === 'Aprobada' && tienePendientes}
+                >
+                  {s}{s === 'Aprobada' && tienePendientes ? ' (Requiere autorización)' : ''}
+                </option>
               ))}
             </select>
             <button
               onClick={handleChangeStatus}
-              disabled={selectedStatus === solicitud.status || updateStatusMutation.isPending}
+              disabled={selectedStatus === solicitud.status || updateStatusMutation.isPending || (selectedStatus === 'Aprobada' && tienePendientes)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
             >
               {updateStatusMutation.isPending ? (

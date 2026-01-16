@@ -380,6 +380,8 @@ export interface Notificacion {
   asignado?: string;
   id_asignado?: number;
   estatus?: string;
+  id_solicitud?: string;
+  id_propuesta?: string;
 }
 
 export interface NotificacionStats {

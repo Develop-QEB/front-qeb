@@ -10,7 +10,7 @@ import {
   Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
-import { notificacionesService } from '../../services/notificaciones.service';
+import { notificacionesService, CaraAutorizacion, ResumenAutorizacion } from '../../services/notificaciones.service';
 import { notasService, NotaPersonal } from '../../services/notas.service';
 import { Notificacion, ComentarioTarea } from '../../types';
 import { formatDate } from '../../lib/utils';
@@ -1181,16 +1181,80 @@ function TaskDrawer({
   onAddComment,
   onNavigate,
   isClosing = false,
+  onAutorizacionAction,
 }: {
   tarea: Notificacion & { comentarios?: ComentarioTarea[] };
   onClose: () => void;
   onAddComment: (contenido: string) => void;
   onNavigate?: (path: string) => void;
   isClosing?: boolean;
+  onAutorizacionAction?: () => void;
 }) {
   const [comment, setComment] = useState('');
+  const [rechazoMotivo, setRechazoMotivo] = useState('');
+  const [showRechazoInput, setShowRechazoInput] = useState(false);
   const user = useAuthStore((state) => state.user);
   const canNavigate = hasNavigationRoute(tarea);
+
+  // Detectar si es tarea de autorización
+  const isAutorizacionTask = tarea.tipo?.includes('Autorización');
+  const tipoAutorizacion = tarea.tipo?.includes('DG') ? 'dg' : tarea.tipo?.includes('DCM') ? 'dcm' : null;
+
+  // Obtener idquote de la solicitud
+  const idSolicitud = tarea.id_solicitud;
+
+  // Query para obtener caras pendientes si es tarea de autorización
+  const { data: carasData, refetch: refetchCaras } = useQuery({
+    queryKey: ['autorizacion-caras', idSolicitud],
+    queryFn: () => notificacionesService.getCarasAutorizacion(idSolicitud || ''),
+    enabled: isAutorizacionTask && !!idSolicitud,
+  });
+
+  // Query para resumen de autorización
+  const { data: resumenData, refetch: refetchResumen } = useQuery({
+    queryKey: ['autorizacion-resumen', idSolicitud],
+    queryFn: () => notificacionesService.getResumenAutorizacion(idSolicitud || ''),
+    enabled: isAutorizacionTask && !!idSolicitud,
+  });
+
+  // Mutation para aprobar
+  const aprobarMutation = useMutation({
+    mutationFn: () => notificacionesService.aprobarAutorizacion(idSolicitud || '', tipoAutorizacion as 'dg' | 'dcm'),
+    onSuccess: () => {
+      refetchCaras();
+      refetchResumen();
+      onAutorizacionAction?.();
+    },
+  });
+
+  // Mutation para rechazar
+  const rechazarMutation = useMutation({
+    mutationFn: (motivo: string) => notificacionesService.rechazarAutorizacion(idSolicitud || '', motivo),
+    onSuccess: () => {
+      refetchCaras();
+      refetchResumen();
+      setShowRechazoInput(false);
+      setRechazoMotivo('');
+      onAutorizacionAction?.();
+    },
+  });
+
+  const handleAprobar = () => {
+    if (!tipoAutorizacion) return;
+    aprobarMutation.mutate();
+  };
+
+  const handleRechazar = () => {
+    if (!rechazoMotivo.trim()) return;
+    rechazarMutation.mutate(rechazoMotivo);
+  };
+
+  // Filtrar caras según tipo de autorización
+  const carasPendientes = useMemo(() => {
+    if (!carasData || !tipoAutorizacion) return [];
+    const estadoFiltro = tipoAutorizacion === 'dg' ? 'pendiente_dg' : 'pendiente_dcm';
+    return carasData.filter(c => c.estado_autorizacion === estadoFiltro);
+  }, [carasData, tipoAutorizacion]);
 
   const handleNavigate = () => {
     if (!tarea.referencia_tipo || !tarea.referencia_id || !onNavigate) return;
@@ -1323,6 +1387,107 @@ function TaskDrawer({
             </div>
           )}
         </div>
+
+        {/* Panel de Autorización (solo si es tarea de autorización) */}
+        {isAutorizacionTask && carasPendientes.length > 0 && (
+          <div className="p-5 border-t border-zinc-800/50">
+            <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Caras Pendientes de Autorización ({carasPendientes.length})
+            </h3>
+
+            {/* Resumen */}
+            {resumenData && (
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
+                  <div className="text-lg font-bold text-emerald-400">{resumenData.aprobadas}</div>
+                  <div className="text-[10px] text-zinc-500">Aprobadas</div>
+                </div>
+                <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center">
+                  <div className="text-lg font-bold text-amber-400">{resumenData.pendientesDcm}</div>
+                  <div className="text-[10px] text-zinc-500">Pend. DCM</div>
+                </div>
+                <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
+                  <div className="text-lg font-bold text-red-400">{resumenData.pendientesDg}</div>
+                  <div className="text-[10px] text-zinc-500">Pend. DG</div>
+                </div>
+              </div>
+            )}
+
+            {/* Lista de caras */}
+            <div className="space-y-2 max-h-48 overflow-y-auto mb-4 scrollbar-purple">
+              {carasPendientes.map((cara) => (
+                <div key={cara.id} className="p-3 rounded-lg bg-zinc-800/30 border border-zinc-700/50">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm text-white font-medium">{cara.ciudad || 'Sin ciudad'}</span>
+                    <span className="text-xs text-zinc-500">{cara.formato}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-400">
+                      {cara.total_caras} cara{cara.total_caras !== 1 ? 's' : ''} (Renta: {cara.caras}, Bonif: {cara.bonificacion})
+                    </span>
+                    <span className="text-amber-400 font-medium">
+                      Tarifa: ${cara.tarifa_efectiva?.toFixed(2) || '0.00'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Botones de acción */}
+            {!showRechazoInput ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleAprobar}
+                  disabled={aprobarMutation.isPending || carasPendientes.length === 0}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {aprobarMutation.isPending ? (
+                    <span className="animate-spin">⏳</span>
+                  ) : (
+                    <CheckCircle className="h-4 w-4" />
+                  )}
+                  Aprobar {carasPendientes.length} cara{carasPendientes.length !== 1 ? 's' : ''}
+                </button>
+                <button
+                  onClick={() => setShowRechazoInput(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 transition-all"
+                >
+                  <X className="h-4 w-4" />
+                  Rechazar
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <textarea
+                  value={rechazoMotivo}
+                  onChange={(e) => setRechazoMotivo(e.target.value)}
+                  placeholder="Escribe el motivo del rechazo..."
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-lg bg-zinc-800/50 border border-red-500/30 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-red-500/50 resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleRechazar}
+                    disabled={rechazarMutation.isPending || !rechazoMotivo.trim()}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {rechazarMutation.isPending ? 'Rechazando...' : 'Confirmar Rechazo'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowRechazoInput(false);
+                      setRechazoMotivo('');
+                    }}
+                    className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Comentarios */}
         <div className="p-5 border-t border-zinc-800/50">
@@ -2158,6 +2323,10 @@ export function NotificacionesPage() {
               setTimeout(() => navigate(path), 250);
             }}
             isClosing={isDrawerClosing}
+            onAutorizacionAction={() => {
+              queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+              queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+            }}
           />
         </>
       )}

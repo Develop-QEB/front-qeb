@@ -111,4 +111,62 @@ export const notificacionesService = {
     }
     return response.data.data;
   },
+
+  // ==================== AUTORIZACIÓN ====================
+
+  async getResumenAutorizacion(idquote: string): Promise<ResumenAutorizacion> {
+    const response = await api.get<ApiResponse<ResumenAutorizacion>>(`/notificaciones/autorizacion/${idquote}/resumen`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener resumen de autorización');
+    }
+    return response.data.data;
+  },
+
+  async getCarasAutorizacion(idquote: string): Promise<CaraAutorizacion[]> {
+    const response = await api.get<ApiResponse<CaraAutorizacion[]>>(`/notificaciones/autorizacion/${idquote}/caras`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener caras de autorización');
+    }
+    return response.data.data;
+  },
+
+  async aprobarAutorizacion(idquote: string, tipo: 'dg' | 'dcm'): Promise<{ carasAprobadas: number }> {
+    const response = await api.post<ApiResponse<{ carasAprobadas: number }>>(`/notificaciones/autorizacion/${idquote}/aprobar/${tipo}`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al aprobar autorización');
+    }
+    return response.data.data;
+  },
+
+  async rechazarAutorizacion(idquote: string, comentario: string): Promise<void> {
+    const response = await api.post<ApiResponse<null>>(`/notificaciones/autorizacion/${idquote}/rechazar`, { comentario });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al rechazar solicitud');
+    }
+  },
 };
+
+// Tipos de autorización
+export interface ResumenAutorizacion {
+  totalCaras: number;
+  aprobadas: number;
+  pendientesDg: number;
+  pendientesDcm: number;
+  rechazadas: number;
+  puedeContinuar: boolean;
+}
+
+export interface CaraAutorizacion {
+  id: number;
+  clave: string;
+  ciudad: string;
+  formato: string;
+  tipo: string;
+  caras: number;
+  bonificacion: number;
+  costo: number;
+  tarifa_publica: number;
+  estado_autorizacion: string;
+  total_caras: number;
+  tarifa_efectiva: number;
+}
