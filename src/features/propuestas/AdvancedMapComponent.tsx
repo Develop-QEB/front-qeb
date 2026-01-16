@@ -341,29 +341,41 @@ export function AdvancedMapComponent({
     return colors[type];
   };
 
-  // Get inventory marker color based on Flujo/Contraflujo
-  // Flujo = Rojo (#ef4444), Contraflujo = Azul (#3b82f6), Ambos = Morado (#a855f7)
-  const getInventoryColor = (inv: InventarioDisponible) => {
-    if (selectedInventory.has(inv.id)) return '#facc15'; // Amarillo - seleccionado
-    if (inv.ya_reservado_para_cara) return '#22c55e'; // Verde - ya reservado
+  // Color constants for consistency
+  const COLORS = {
+    // Traffic direction
+    flujo: '#3b82f6',        // Blue - Flujo (a favor)
+    contraflujo: '#f59e0b',  // Amber - Contraflujo (en contra)
+    ambos: '#a855f7',        // Purple - Ambos (F+C juntos)
+    // Status
+    seleccionado: '#facc15', // Yellow - Seleccionado
+    yaReservado: '#22c55e',  // Green - Ya reservado para otra cara
+    fueraRango: '#6b7280',   // Gray - Fuera de rango de POI
+  };
 
+  // Get inventory marker color based on Flujo/Contraflujo
+  const getInventoryColor = (inv: InventarioDisponible) => {
+    // Priority 1: Selection status
+    if (selectedInventory.has(inv.id)) return COLORS.seleccionado;
+    if (inv.ya_reservado_para_cara) return COLORS.yaReservado;
+
+    // Priority 2: POI range filter
     if (poiMarkers.length > 0) {
-      if (inRangeSet.has(inv.id)) return '#a855f7'; // Morado - en rango de POI
-      return '#6b7280'; // Gris - fuera de rango
+      if (!inRangeSet.has(inv.id)) return COLORS.fueraRango;
     }
 
-    // Check if this location has both Flujo and Contraflujo
+    // Priority 3: Traffic direction
     if (inv.latitud && inv.longitud) {
       const key = `${inv.latitud.toFixed(5)},${inv.longitud.toFixed(5)}`;
       const locationInfo = locationFlowMap.get(key);
 
       if (locationInfo?.hasFlujo && locationInfo?.hasContraflujo) {
-        return '#a855f7'; // Morado - ambos en la misma ubicación
+        return COLORS.ambos;
       }
     }
 
     // Single type at location
-    return inv.tipo_de_cara === 'Flujo' ? '#ef4444' : '#3b82f6'; // Rojo / Azul
+    return inv.tipo_de_cara === 'Flujo' ? COLORS.flujo : COLORS.contraflujo;
   };
 
   // Center map on inventory bounds
@@ -688,14 +700,14 @@ export function AdvancedMapComponent({
             <div className="space-y-1.5 mb-2">
               <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Dirección del tráfico</div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500 ring-1 ring-red-400/30" />
+                <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
                 <div>
                   <span className="text-zinc-300">Flujo</span>
                   <span className="text-zinc-500 text-[10px] ml-1">(a favor)</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
+                <div className="w-3 h-3 rounded-full bg-amber-500 ring-1 ring-amber-400/30" />
                 <div>
                   <span className="text-zinc-300">Contraflujo</span>
                   <span className="text-zinc-500 text-[10px] ml-1">(en contra)</span>

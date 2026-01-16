@@ -363,4 +363,5 @@ export interface ReservaModalItem {
   estatus: string;
   grupo_completo_id: number | null;
   solicitud_cara_id: number;
+  articulo: string | null;
 }

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
-  FileText, MapPin, Layers, Pencil, Map as MapIcon, Package,
+  FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
   Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
@@ -720,7 +720,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
           solicitudCaraId: r.solicitud_cara_id,
           reservaId: r.reserva_id,
           grupo_completo_id: r.grupo_completo_id,
-          articulo: matchingCara?.articulo || '',
+          articulo: matchingCara?.articulo || r.articulo || '',
         };
       });
 
@@ -998,13 +998,55 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     return { totalRenta, totalBonificacion, totalInversion };
   }, [caras]);
 
-  // Calculate KPIs for reservas
+  // Merge all reservas by grupo_completo_id (for display)
+  const reservasMerged = useMemo(() => {
+    const result: ReservaItem[] = [];
+    const processedGrupos = new Set<number>();
+
+    reservas.forEach(r => {
+      if (r.grupo_completo_id && !processedGrupos.has(r.grupo_completo_id)) {
+        const groupReservas = reservas.filter(res => res.grupo_completo_id === r.grupo_completo_id);
+        if (groupReservas.length >= 2) {
+          const baseCode = r.codigo_unico?.replace(/_Flujo|_Contraflujo/gi, '') || '';
+          result.push({
+            ...r,
+            id: `completo-${r.grupo_completo_id}`,
+            codigo_unico: `${baseCode}_Completo`,
+            tipo: 'Flujo' as const,
+          });
+          processedGrupos.add(r.grupo_completo_id);
+        } else {
+          result.push(r);
+          processedGrupos.add(r.grupo_completo_id);
+        }
+      } else if (!r.grupo_completo_id) {
+        result.push(r);
+      }
+    });
+
+    return result;
+  }, [reservas]);
+
+  // Calculate KPIs for reservas (including completo count)
   const reservasKPIs = useMemo(() => {
     const flujo = reservas.filter(r => r.tipo === 'Flujo').length;
     const contraflujo = reservas.filter(r => r.tipo === 'Contraflujo').length;
     const bonificadas = reservas.filter(r => r.tipo === 'Bonificacion').length;
     const renta = flujo + contraflujo; // Non-bonificadas
     const total = reservas.length;
+
+    // Count completo items (merged pairs)
+    const processedGrupos = new Set<number>();
+    let completos = 0;
+    reservas.forEach(r => {
+      if (r.grupo_completo_id && !processedGrupos.has(r.grupo_completo_id)) {
+        const groupReservas = reservas.filter(res => res.grupo_completo_id === r.grupo_completo_id);
+        if (groupReservas.length >= 2) {
+          completos++;
+        }
+        processedGrupos.add(r.grupo_completo_id);
+      }
+    });
 
     // Calculate money: sum tarifa_publica for each non-bonificada reserva
     let dineroTotal = 0;
@@ -1024,7 +1066,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       }
     });
 
-    return { flujo, contraflujo, bonificadas, renta, total, dineroTotal, digitales };
+    return { flujo, contraflujo, bonificadas, renta, total, dineroTotal, digitales, completos };
   }, [reservas, caras]);
 
   // ============ ADVANCED FILTER FUNCTIONS FOR RESERVAS ============
@@ -1081,9 +1123,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
   };
 
-  // Filtrar y ordenar reservas
+  // Filtrar y ordenar reservas (uses merged version for display)
   const filteredReservasData = useMemo(() => {
-    let data = applyFiltersReservas(reservas, filtersReservas);
+    let data = applyFiltersReservas(reservasMerged, filtersReservas);
 
     // Aplicar ordenamiento
     if (sortFieldReservas) {
@@ -1098,7 +1140,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     }
 
     return data;
-  }, [reservas, filtersReservas, sortFieldReservas, sortDirectionReservas]);
+  }, [reservasMerged, filtersReservas, sortFieldReservas, sortDirectionReservas]);
   // ============ END ADVANCED FILTER FUNCTIONS ============
 
   // Calculate remaining to assign for selected cara
@@ -2115,8 +2157,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       }
     };
 
-    // Prompt logic - siempre mostrar modal con opción de agrupar si hay pares
-    if (potentialPairs.size > 0) {
+    // Prompt logic - solo mostrar modal de agrupar cuando el filtro COMPLETOS está activo
+    if (potentialPairs.size > 0 && showOnlyCompletos) {
       // Count how many "completo" items are selected (each reserves 2 caras)
       const completoCount = selectedItems.filter(i => i.isCompleto).length;
       const regularCount = selectedItems.filter(i => !i.isCompleto).length;
@@ -2135,6 +2177,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         onConfirm: () => runReservation(true),
         onCancel: () => runReservation(false)
       });
+    } else if (potentialPairs.size > 0 && !showOnlyCompletos) {
+      // Hay pares pero NO está activo el filtro completos - reservar sin agrupar directamente
+      runReservation(false);
     } else {
       // Sin pares, confirmar reservación normal
       setConfirmModal({
@@ -2256,9 +2301,48 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     );
   }, [reservas, selectedCaraForSearch]);
 
-  // Filter reservados by search term and type
+  // Group reservas by grupo_completo_id - shows pairs as single "Completo" item
+  const currentCaraReservasMerged = useMemo(() => {
+    const result: ReservaItem[] = [];
+    const processedGrupos = new Set<number>();
+
+    currentCaraReservas.forEach(r => {
+      // If has grupo_completo_id and not yet processed
+      if (r.grupo_completo_id && !processedGrupos.has(r.grupo_completo_id)) {
+        // Find all reservas in this group
+        const groupReservas = currentCaraReservas.filter(
+          res => res.grupo_completo_id === r.grupo_completo_id
+        );
+
+        if (groupReservas.length >= 2) {
+          // Create merged "Completo" item
+          const baseCode = r.codigo_unico?.replace(/_Flujo|_Contraflujo/gi, '') || '';
+          result.push({
+            ...r,
+            id: `completo-${r.grupo_completo_id}`,
+            codigo_unico: `${baseCode}_Completo`,
+            tipo: 'Flujo' as const, // Use Flujo for color (will show as purple in legend)
+            // Store original items count for reference
+          });
+          processedGrupos.add(r.grupo_completo_id);
+        } else {
+          // Single item in group, show as-is
+          result.push(r);
+          processedGrupos.add(r.grupo_completo_id);
+        }
+      } else if (!r.grupo_completo_id) {
+        // No group, show as-is
+        result.push(r);
+      }
+      // If grupo_completo_id already processed, skip (it's the pair)
+    });
+
+    return result;
+  }, [currentCaraReservas]);
+
+  // Filter reservados by search term and type (uses merged version for display)
   const filteredReservados = useMemo(() => {
-    let data = [...currentCaraReservas];
+    let data = [...currentCaraReservasMerged];
 
     // Filter by type
     if (reservadosTipoFilter !== 'Todos') {
@@ -2291,9 +2375,56 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
 
     return data;
-  }, [currentCaraReservas, reservadosSearchTerm, reservadosTipoFilter, reservadosSortColumn, reservadosSortDirection]);
+  }, [currentCaraReservasMerged, reservadosSearchTerm, reservadosTipoFilter, reservadosSortColumn, reservadosSortDirection]);
 
-  // Group reservados by ciudad (plaza)
+  // Group reservados by Catorcena > Artículo > Plaza > Formato (hierarchical)
+  const groupedReservadosHierarchy = useMemo(() => {
+    type Level4 = ReservaItem[];
+    type Level3 = Record<string, Level4>; // Formato -> items
+    type Level2 = Record<string, Level3>; // Plaza -> Formato
+    type Level1 = Record<string, Level2>; // Artículo -> Plaza
+    type Level0 = Record<string, Level1>; // Catorcena -> Artículo
+
+    const hierarchy: Level0 = {};
+
+    filteredReservados.forEach(r => {
+      const catorcenaKey = `Cat ${r.catorcena}/${r.anio}`;
+      const articuloKey = r.articulo || 'Sin Artículo';
+      const plazaKey = r.plaza || 'Sin Plaza';
+      const formatoKey = r.formato || 'Sin Formato';
+
+      if (!hierarchy[catorcenaKey]) hierarchy[catorcenaKey] = {};
+      if (!hierarchy[catorcenaKey][articuloKey]) hierarchy[catorcenaKey][articuloKey] = {};
+      if (!hierarchy[catorcenaKey][articuloKey][plazaKey]) hierarchy[catorcenaKey][articuloKey][plazaKey] = {};
+      if (!hierarchy[catorcenaKey][articuloKey][plazaKey][formatoKey]) hierarchy[catorcenaKey][articuloKey][plazaKey][formatoKey] = [];
+
+      hierarchy[catorcenaKey][articuloKey][plazaKey][formatoKey].push(r);
+    });
+
+    return hierarchy;
+  }, [filteredReservados]);
+
+  // Helper to get type breakdown for reservados tab
+  const getReservadosBreakdown = (items: ReservaItem[]) => {
+    const flujo = items.filter(r => r.tipo === 'Flujo').length;
+    const contraflujo = items.filter(r => r.tipo === 'Contraflujo').length;
+    const bonificacion = items.filter(r => r.tipo === 'Bonificacion').length;
+    return { flujo, contraflujo, bonificacion, total: items.length };
+  };
+
+  // Flatten hierarchy to get all items for a level
+  const flattenHierarchy = (data: unknown): ReservaItem[] => {
+    if (Array.isArray(data)) return data;
+    if (typeof data === 'object' && data !== null) {
+      return Object.values(data).flatMap(v => flattenHierarchy(v));
+    }
+    return [];
+  };
+
+  // Get catorcena keys for iteration
+  const catorcenaKeys = useMemo(() => Object.keys(groupedReservadosHierarchy).sort(), [groupedReservadosHierarchy]);
+
+  // Legacy groupedReservados for compatibility (used by toggleAllCiudadGroups)
   const groupedReservados = useMemo(() => {
     const groups: Record<string, ReservaItem[]> = {};
     filteredReservados.forEach(r => {
@@ -2325,6 +2456,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
   // State for expanded ciudad groups in reservados
   const [expandedCiudadGroups, setExpandedCiudadGroups] = useState<Set<string>>(new Set());
+  // Hierarchical expansion state for reservados (uses compound keys: "catorcena|articulo|plaza|formato")
+  const [expandedReservadosHierarchy, setExpandedReservadosHierarchy] = useState<Set<string>>(new Set());
 
   // Toggle ciudad group expansion
   const toggleCiudadGroupExpansion = (ciudad: string) => {
@@ -2334,6 +2467,40 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       else next.add(ciudad);
       return next;
     });
+  };
+
+  // Toggle hierarchical expansion for reservados
+  const toggleReservadosHierarchy = (key: string) => {
+    setExpandedReservadosHierarchy(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Toggle all hierarchical groups
+  const toggleAllReservadosHierarchy = () => {
+    // Collect all possible keys
+    const allKeys: string[] = [];
+    Object.entries(groupedReservadosHierarchy).forEach(([catKey, articulos]) => {
+      allKeys.push(catKey);
+      Object.entries(articulos).forEach(([artKey, plazas]) => {
+        allKeys.push(`${catKey}|${artKey}`);
+        Object.entries(plazas).forEach(([plzKey, formatos]) => {
+          allKeys.push(`${catKey}|${artKey}|${plzKey}`);
+          Object.keys(formatos).forEach(fmtKey => {
+            allKeys.push(`${catKey}|${artKey}|${plzKey}|${fmtKey}`);
+          });
+        });
+      });
+    });
+
+    if (expandedReservadosHierarchy.size >= allKeys.length) {
+      setExpandedReservadosHierarchy(new Set());
+    } else {
+      setExpandedReservadosHierarchy(new Set(allKeys));
+    }
   };
 
   // Toggle select all reservados
@@ -3215,10 +3382,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
                     {/* Expand/Collapse All */}
                     <button
-                      onClick={toggleAllCiudadGroups}
+                      onClick={toggleAllReservadosHierarchy}
                       className="flex items-center gap-1 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-400 hover:text-white transition-colors"
                     >
-                      {expandedCiudadGroups.size === groupedReservados.length ? (
+                      {expandedReservadosHierarchy.size > 0 ? (
                         <>
                           <ChevronUp className="h-3 w-3" />
                           Colapsar
@@ -3265,81 +3432,257 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         </tr>
                       </thead>
                       <tbody>
-                        {/* Grouped by Ciudad */}
-                        {groupedReservados.map(([ciudad, items]) => (
-                          <React.Fragment key={ciudad}>
-                            {/* Ciudad Group Header */}
-                            <tr
-                              className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
-                              onClick={() => toggleCiudadGroupExpansion(ciudad)}
-                            >
-                              <td colSpan={6} className="px-3 py-2">
-                                <div className="flex items-center gap-3">
-                                  {expandedCiudadGroups.has(ciudad) ? (
-                                    <ChevronDown className="h-4 w-4 text-purple-400" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4 text-purple-400" />
-                                  )}
-                                  <MapPin className="h-4 w-4 text-zinc-500" />
-                                  <span className="text-sm font-medium text-white">{ciudad}</span>
-                                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
-                                    {items.length} reservas
-                                  </span>
-                                </div>
-                              </td>
-                            </tr>
-                            {/* Ciudad Items */}
-                            {expandedCiudadGroups.has(ciudad) && items.map((reserva) => (
+                        {/* Hierarchical: Catorcena > Artículo > Plaza > Formato */}
+                        {catorcenaKeys.map((catKey) => {
+                          const catItems = flattenHierarchy(groupedReservadosHierarchy[catKey]);
+                          const catBreakdown = getReservadosBreakdown(catItems);
+                          const catExpanded = expandedReservadosHierarchy.has(catKey);
+
+                          return (
+                            <React.Fragment key={catKey}>
+                              {/* Level 0: Catorcena Header */}
                               <tr
-                                key={reserva.id}
-                                onClick={() => handleToggleReservadoSelection(reserva.id)}
-                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'}`}
+                                className="bg-zinc-800/90 cursor-pointer hover:bg-zinc-800"
+                                onClick={() => toggleReservadosHierarchy(catKey)}
                               >
-                                <td className="px-3 py-3 pl-8 text-center" onClick={(e) => e.stopPropagation()}>
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedReservados.has(reserva.id)}
-                                    onChange={() => handleToggleReservadoSelection(reserva.id)}
-                                    className="checkbox-purple"
-                                  />
-                                </td>
-                                <td className="px-4 py-3 text-zinc-300 font-mono text-sm">{reserva.codigo_unico}</td>
-                                <td className="px-4 py-3">
-                                  <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
-                                    ? 'bg-blue-500/20 text-blue-300'
-                                    : reserva.tipo === 'Bonificacion'
-                                      ? 'bg-emerald-500/20 text-emerald-300'
-                                      : 'bg-amber-500/20 text-amber-300'
-                                    }`}>
-                                    {reserva.tipo}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-zinc-300">{reserva.formato || '-'}</td>
-                                <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
-                                  {reserva.ubicacion || '-'}
-                                </td>
-                                <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center justify-center gap-1">
-                                    <button
-                                      onClick={() => handleEditReserva(reserva)}
-                                      className="p-1.5 text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
-                                      title="Editar formato"
-                                    >
-                                      <Pencil className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleRemoveReserva(reserva.id)}
-                                      className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                      title="Quitar reserva"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
+                                <td colSpan={6} className="px-3 py-2">
+                                  <div className="flex items-center gap-3">
+                                    {catExpanded ? (
+                                      <ChevronDown className="h-4 w-4 text-purple-400" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-purple-400" />
+                                    )}
+                                    <Calendar className="h-4 w-4 text-purple-400" />
+                                    <span className="text-sm font-semibold text-white">{catKey}</span>
+                                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                                      {catBreakdown.total} caras
+                                    </span>
+                                    <div className="flex gap-1 ml-2">
+                                      {catBreakdown.flujo > 0 && (
+                                        <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                          F:{catBreakdown.flujo}
+                                        </span>
+                                      )}
+                                      {catBreakdown.contraflujo > 0 && (
+                                        <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                          C:{catBreakdown.contraflujo}
+                                        </span>
+                                      )}
+                                      {catBreakdown.bonificacion > 0 && (
+                                        <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                          B:{catBreakdown.bonificacion}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </td>
                               </tr>
-                            ))}
-                          </React.Fragment>
-                        ))}
+
+                              {/* Level 1: Artículos */}
+                              {catExpanded && Object.entries(groupedReservadosHierarchy[catKey]).map(([artKey, plazas]) => {
+                                const artKeyFull = `${catKey}|${artKey}`;
+                                const artItems = flattenHierarchy(plazas);
+                                const artBreakdown = getReservadosBreakdown(artItems);
+                                const artExpanded = expandedReservadosHierarchy.has(artKeyFull);
+
+                                return (
+                                  <React.Fragment key={artKeyFull}>
+                                    <tr
+                                      className="bg-zinc-800/60 cursor-pointer hover:bg-zinc-800/80"
+                                      onClick={() => toggleReservadosHierarchy(artKeyFull)}
+                                    >
+                                      <td colSpan={6} className="px-3 py-2 pl-8">
+                                        <div className="flex items-center gap-3">
+                                          {artExpanded ? (
+                                            <ChevronDown className="h-4 w-4 text-indigo-400" />
+                                          ) : (
+                                            <ChevronRight className="h-4 w-4 text-indigo-400" />
+                                          )}
+                                          <Package className="h-4 w-4 text-indigo-400" />
+                                          <span className="text-sm font-medium text-zinc-200">{artKey}</span>
+                                          <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-full text-xs">
+                                            {artBreakdown.total}
+                                          </span>
+                                          <div className="flex gap-1 ml-1">
+                                            {artBreakdown.flujo > 0 && (
+                                              <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                                F:{artBreakdown.flujo}
+                                              </span>
+                                            )}
+                                            {artBreakdown.contraflujo > 0 && (
+                                              <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                                C:{artBreakdown.contraflujo}
+                                              </span>
+                                            )}
+                                            {artBreakdown.bonificacion > 0 && (
+                                              <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                                B:{artBreakdown.bonificacion}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+
+                                    {/* Level 2: Plazas */}
+                                    {artExpanded && Object.entries(plazas).map(([plzKey, formatos]) => {
+                                      const plzKeyFull = `${artKeyFull}|${plzKey}`;
+                                      const plzItems = flattenHierarchy(formatos);
+                                      const plzBreakdown = getReservadosBreakdown(plzItems);
+                                      const plzExpanded = expandedReservadosHierarchy.has(plzKeyFull);
+
+                                      return (
+                                        <React.Fragment key={plzKeyFull}>
+                                          <tr
+                                            className="bg-zinc-800/40 cursor-pointer hover:bg-zinc-800/60"
+                                            onClick={() => toggleReservadosHierarchy(plzKeyFull)}
+                                          >
+                                            <td colSpan={6} className="px-3 py-2 pl-14">
+                                              <div className="flex items-center gap-3">
+                                                {plzExpanded ? (
+                                                  <ChevronDown className="h-4 w-4 text-cyan-400" />
+                                                ) : (
+                                                  <ChevronRight className="h-4 w-4 text-cyan-400" />
+                                                )}
+                                                <MapPin className="h-4 w-4 text-cyan-400" />
+                                                <span className="text-sm text-zinc-300">{plzKey}</span>
+                                                <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded-full text-xs">
+                                                  {plzBreakdown.total}
+                                                </span>
+                                                <div className="flex gap-1 ml-1">
+                                                  {plzBreakdown.flujo > 0 && (
+                                                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                                      F:{plzBreakdown.flujo}
+                                                    </span>
+                                                  )}
+                                                  {plzBreakdown.contraflujo > 0 && (
+                                                    <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                                      C:{plzBreakdown.contraflujo}
+                                                    </span>
+                                                  )}
+                                                  {plzBreakdown.bonificacion > 0 && (
+                                                    <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                                      B:{plzBreakdown.bonificacion}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </td>
+                                          </tr>
+
+                                          {/* Level 3: Formatos */}
+                                          {plzExpanded && Object.entries(formatos).map(([fmtKey, items]) => {
+                                            const fmtKeyFull = `${plzKeyFull}|${fmtKey}`;
+                                            const fmtBreakdown = getReservadosBreakdown(items);
+                                            const fmtExpanded = expandedReservadosHierarchy.has(fmtKeyFull);
+
+                                            return (
+                                              <React.Fragment key={fmtKeyFull}>
+                                                <tr
+                                                  className="bg-zinc-800/20 cursor-pointer hover:bg-zinc-800/40"
+                                                  onClick={() => toggleReservadosHierarchy(fmtKeyFull)}
+                                                >
+                                                  <td colSpan={6} className="px-3 py-2 pl-20">
+                                                    <div className="flex items-center gap-3">
+                                                      {fmtExpanded ? (
+                                                        <ChevronDown className="h-4 w-4 text-zinc-500" />
+                                                      ) : (
+                                                        <ChevronRight className="h-4 w-4 text-zinc-500" />
+                                                      )}
+                                                      <LayoutGrid className="h-4 w-4 text-zinc-500" />
+                                                      <span className="text-sm text-zinc-400">{fmtKey}</span>
+                                                      <span className="px-2 py-0.5 bg-zinc-700 text-zinc-300 rounded-full text-xs">
+                                                        {fmtBreakdown.total}
+                                                      </span>
+                                                      <div className="flex gap-1 ml-1">
+                                                        {fmtBreakdown.flujo > 0 && (
+                                                          <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                                            F:{fmtBreakdown.flujo}
+                                                          </span>
+                                                        )}
+                                                        {fmtBreakdown.contraflujo > 0 && (
+                                                          <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                                            C:{fmtBreakdown.contraflujo}
+                                                          </span>
+                                                        )}
+                                                        {fmtBreakdown.bonificacion > 0 && (
+                                                          <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                                            B:{fmtBreakdown.bonificacion}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  </td>
+                                                </tr>
+
+                                                {/* Individual items */}
+                                                {fmtExpanded && items.map((reserva) => (
+                                                  <tr
+                                                    key={reserva.id}
+                                                    onClick={() => handleToggleReservadoSelection(reserva.id)}
+                                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'}`}
+                                                  >
+                                                    <td className="px-3 py-3 pl-24 text-center" onClick={(e) => e.stopPropagation()}>
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={selectedReservados.has(reserva.id)}
+                                                        onChange={() => handleToggleReservadoSelection(reserva.id)}
+                                                        className="checkbox-purple"
+                                                      />
+                                                    </td>
+                                                    <td className="px-4 py-3 text-zinc-300 font-mono text-sm">{reserva.codigo_unico}</td>
+                                                    <td className="px-4 py-3">
+                                                      {reserva.codigo_unico?.includes('_Completo') ? (
+                                                        <span className="px-2 py-1 rounded-full text-xs bg-purple-500/20 text-purple-300">
+                                                          Completo
+                                                        </span>
+                                                      ) : (
+                                                        <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
+                                                          ? 'bg-blue-500/20 text-blue-300'
+                                                          : reserva.tipo === 'Bonificacion'
+                                                            ? 'bg-emerald-500/20 text-emerald-300'
+                                                            : 'bg-amber-500/20 text-amber-300'
+                                                          }`}>
+                                                          {reserva.tipo}
+                                                        </span>
+                                                      )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-zinc-300">{reserva.formato || '-'}</td>
+                                                    <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
+                                                      {reserva.ubicacion || '-'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                                      <div className="flex items-center justify-center gap-1">
+                                                        <button
+                                                          onClick={() => handleEditReserva(reserva)}
+                                                          className="p-1.5 text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
+                                                          title="Editar formato"
+                                                        >
+                                                          <Pencil className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                          onClick={() => handleRemoveReserva(reserva.id)}
+                                                          className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                          title="Quitar reserva"
+                                                        >
+                                                          <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                      </div>
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              </React.Fragment>
+                                            );
+                                          })}
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -3435,7 +3778,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         </span>
                       </div>
                       <span className="text-zinc-400">
-                        Total: <span className="text-white font-medium">{currentCaraReservas.length}</span> reservados
+                        Total: <span className="text-white font-medium">{currentCaraReservasMerged.length}</span> reservados
                       </span>
                     </div>
                   </div>
@@ -3443,51 +3786,100 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
               </div>
 
               {/* Map of Reservados */}
-              <div className="w-1/2">
+              <div className="w-1/2 relative">
                 {mapsLoaded ? (
-                  <GoogleMap
-                    mapContainerStyle={{ width: '100%', height: '100%' }}
-                    center={reservadosMapCenter}
-                    zoom={13}
-                    options={{
-                      styles: DARK_MAP_STYLES,
-                      disableDefaultUI: true,
-                      zoomControl: true,
-                    }}
-                    onLoad={(map) => {
-                      reservadosMapRef.current = map;
-                      // Fit bounds to all reservations
-                      if (currentCaraReservas.length > 0) {
-                        const bounds = new google.maps.LatLngBounds();
-                        currentCaraReservas.forEach(r => {
-                          if (r.latitud && r.longitud) {
-                            bounds.extend({ lat: r.latitud, lng: r.longitud });
+                  <>
+                    <GoogleMap
+                      mapContainerStyle={{ width: '100%', height: '100%' }}
+                      center={reservadosMapCenter}
+                      zoom={13}
+                      options={{
+                        styles: DARK_MAP_STYLES,
+                        disableDefaultUI: true,
+                        zoomControl: true,
+                      }}
+                      onLoad={(map) => {
+                        reservadosMapRef.current = map;
+                        // Fit bounds to all reservations
+                        if (currentCaraReservas.length > 0) {
+                          const bounds = new google.maps.LatLngBounds();
+                          currentCaraReservas.forEach(r => {
+                            if (r.latitud && r.longitud) {
+                              bounds.extend({ lat: r.latitud, lng: r.longitud });
+                            }
+                          });
+                          if (!bounds.isEmpty()) {
+                            map.fitBounds(bounds, 50);
                           }
-                        });
-                        if (!bounds.isEmpty()) {
-                          map.fitBounds(bounds, 50);
                         }
-                      }
-                    }}
-                  >
-                    {currentCaraReservas.map(reserva => (
-                      reserva.latitud && reserva.longitud && (
-                        <Marker
-                          key={reserva.id}
-                          position={{ lat: reserva.latitud, lng: reserva.longitud }}
-                          icon={{
-                            path: google.maps.SymbolPath.CIRCLE,
-                            scale: 10,
-                            fillColor: reserva.tipo === 'Flujo' ? '#3b82f6' : reserva.tipo === 'Bonificacion' ? '#10b981' : '#f59e0b',
-                            fillOpacity: 0.9,
-                            strokeColor: '#fff',
-                            strokeWeight: 2,
-                          }}
-                          title={`${reserva.codigo_unico} - ${reserva.tipo}`}
-                        />
-                      )
-                    ))}
-                  </GoogleMap>
+                      }}
+                    >
+                      {currentCaraReservasMerged.map(reserva => (
+                        reserva.latitud && reserva.longitud && (
+                          <Marker
+                            key={reserva.id}
+                            position={{ lat: reserva.latitud, lng: reserva.longitud }}
+                            icon={{
+                              path: google.maps.SymbolPath.CIRCLE,
+                              scale: 10,
+                              fillColor: reserva.codigo_unico?.includes('_Completo')
+                                ? '#a855f7' // Purple for Completo
+                                : reserva.tipo === 'Flujo' ? '#3b82f6' : reserva.tipo === 'Bonificacion' ? '#10b981' : '#f59e0b',
+                              fillOpacity: 0.9,
+                              strokeColor: '#fff',
+                              strokeWeight: 2,
+                            }}
+                            title={`${reserva.codigo_unico} - ${reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo}`}
+                          />
+                        )
+                      ))}
+                    </GoogleMap>
+
+                    {/* Map Legend */}
+                    <div className="absolute bottom-4 right-3 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-3 text-xs max-w-[200px]">
+                      <div className="text-zinc-300 font-semibold mb-2 flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-purple-400" />
+                        Leyenda del Mapa
+                      </div>
+
+                      {/* Dirección del tráfico */}
+                      <div className="space-y-1.5 mb-2">
+                        <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Dirección del tráfico</div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
+                          <div>
+                            <span className="text-zinc-300">Flujo</span>
+                            <span className="text-zinc-500 text-[10px] ml-1">(a favor)</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-amber-500 ring-1 ring-amber-400/30" />
+                          <div>
+                            <span className="text-zinc-300">Contraflujo</span>
+                            <span className="text-zinc-500 text-[10px] ml-1">(en contra)</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
+                          <div>
+                            <span className="text-zinc-300">Completo</span>
+                            <span className="text-zinc-500 text-[10px] ml-1">(F+C)</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Estado */}
+                      <div className="border-t border-zinc-700/70 pt-2 space-y-1.5">
+                        <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Estado</div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-emerald-500 ring-1 ring-emerald-400/30" />
+                          <div>
+                            <span className="text-zinc-300">Bonificación</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
                 ) : (
                   <div className="flex items-center justify-center h-full bg-zinc-800">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -4351,7 +4743,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         <MapIcon className="h-4 w-4 text-purple-400" />
                         Resumen de Reservas
                         <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
-                          {filteredReservas.length} de {reservas.length}
+                          {filteredReservas.length} de {reservasMerged.length}
                         </span>
                       </h3>
                       <div className="flex items-center gap-2">
@@ -4438,7 +4830,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                               </div>
                               {filtersReservas.length > 0 && (
                                 <div className="mt-2 pt-2 border-t border-purple-900/30">
-                                  <span className="text-[10px] text-zinc-500">{filteredReservas.length} de {reservas.length} registros</span>
+                                  <span className="text-[10px] text-zinc-500">{filteredReservas.length} de {reservasMerged.length} registros</span>
                                 </div>
                               )}
                             </div>
@@ -4626,9 +5018,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                           <span className="text-zinc-500 text-[11px] truncate max-w-[80px]">{reserva.plaza}</span>
                                           <span className="text-zinc-500 text-[11px]">{reserva.formato}</span>
                                           <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
+                                            reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
                                             reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
                                             reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
-                                          }`}>{reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                          }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
                                         </label>
                                       ))
                                     ) : (
@@ -4675,9 +5068,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                                       <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
                                                       <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
                                                       <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
+                                                        reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
                                                         reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
                                                         reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
-                                                      }`}>{reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                                      }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
                                                     </label>
                                                   ))
                                                 ) : (
@@ -4727,7 +5121,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         </div>
                         {/* KPIs Mini Summary */}
                         <div className="p-3 border-t border-zinc-700/50 bg-zinc-800/50">
-                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                          <div className={`grid gap-2 text-center text-xs ${reservasKPIs.completos > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
                             <div>
                               <p className="text-zinc-500">Flujo</p>
                               <p className="text-blue-400 font-bold">{reservasKPIs.flujo}</p>
@@ -4736,6 +5130,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                               <p className="text-zinc-500">Contra</p>
                               <p className="text-amber-400 font-bold">{reservasKPIs.contraflujo}</p>
                             </div>
+                            {reservasKPIs.completos > 0 && (
+                              <div>
+                                <p className="text-zinc-500">Completo</p>
+                                <p className="text-purple-400 font-bold">{reservasKPIs.completos}</p>
+                              </div>
+                            )}
                             <div>
                               <p className="text-zinc-500">Bonif</p>
                               <p className="text-emerald-400 font-bold">{reservasKPIs.bonificadas}</p>
@@ -4745,42 +5145,99 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       </div>
 
                       {/* Map */}
-                      <div className="flex-1">
+                      <div className="flex-1 relative">
                         {mapsLoaded ? (
-                          <GoogleMap
-                            mapContainerStyle={{ width: '100%', height: '100%' }}
-                            center={{ lat: 20.6597, lng: -103.3496 }}
-                            zoom={11}
-                            options={{
-                              styles: DARK_MAP_STYLES,
-                              disableDefaultUI: true,
-                              zoomControl: true,
-                            }}
-                          >
-                            {filteredReservas.map(reserva => {
-                              if (!reserva.latitud || !reserva.longitud) return null;
-                              const isSelected = selectedMapReservas.has(reserva.id);
-                              const hasSelection = selectedMapReservas.size > 0;
+                          <>
+                            <GoogleMap
+                              mapContainerStyle={{ width: '100%', height: '100%' }}
+                              center={{ lat: 20.6597, lng: -103.3496 }}
+                              zoom={11}
+                              options={{
+                                styles: DARK_MAP_STYLES,
+                                disableDefaultUI: true,
+                                zoomControl: true,
+                              }}
+                              onLoad={(map) => {
+                                // Center map on reservas bounds
+                                if (filteredReservas.length > 0) {
+                                  const bounds = new google.maps.LatLngBounds();
+                                  let hasValidCoords = false;
+                                  filteredReservas.forEach(r => {
+                                    if (r.latitud && r.longitud) {
+                                      bounds.extend({ lat: r.latitud, lng: r.longitud });
+                                      hasValidCoords = true;
+                                    }
+                                  });
+                                  if (hasValidCoords && !bounds.isEmpty()) {
+                                    map.fitBounds(bounds, 50);
+                                  }
+                                }
+                              }}
+                            >
+                              {filteredReservas.map(reserva => {
+                                if (!reserva.latitud || !reserva.longitud) return null;
+                                const isSelected = selectedMapReservas.has(reserva.id);
+                                const hasSelection = selectedMapReservas.size > 0;
+                                const isCompleto = reserva.codigo_unico?.includes('_Completo');
 
-                              return (
-                                <Marker
-                                  key={reserva.id}
-                                  position={{ lat: reserva.latitud, lng: reserva.longitud }}
-                                  onClick={() => toggleSingleMapReserva(reserva.id)}
-                                  icon={{
-                                    path: google.maps.SymbolPath.CIRCLE,
-                                    scale: isSelected ? 12 : (hasSelection ? 6 : 8),
-                                    fillColor: reserva.tipo === 'Flujo' ? '#3b82f6' :
-                                      reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
-                                    fillOpacity: isSelected ? 1 : (hasSelection ? 0.3 : 0.9),
-                                    strokeColor: isSelected ? '#fff' : (hasSelection ? 'transparent' : '#fff'),
-                                    strokeWeight: isSelected ? 3 : 2,
-                                  }}
-                                  zIndex={isSelected ? 1000 : 1}
-                                />
-                              );
-                            })}
-                          </GoogleMap>
+                                return (
+                                  <Marker
+                                    key={reserva.id}
+                                    position={{ lat: reserva.latitud, lng: reserva.longitud }}
+                                    onClick={() => toggleSingleMapReserva(reserva.id)}
+                                    icon={{
+                                      path: google.maps.SymbolPath.CIRCLE,
+                                      scale: isSelected ? 12 : (hasSelection ? 6 : 8),
+                                      fillColor: isCompleto ? '#a855f7' :
+                                        reserva.tipo === 'Flujo' ? '#3b82f6' :
+                                        reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
+                                      fillOpacity: isSelected ? 1 : (hasSelection ? 0.3 : 0.9),
+                                      strokeColor: isSelected ? '#fff' : (hasSelection ? 'transparent' : '#fff'),
+                                      strokeWeight: isSelected ? 3 : 2,
+                                    }}
+                                    zIndex={isSelected ? 1000 : 1}
+                                  />
+                                );
+                              })}
+                            </GoogleMap>
+
+                            {/* Map Legend */}
+                            <div className="absolute bottom-3 right-3 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-2.5 text-xs max-w-[180px]">
+                              <div className="text-zinc-300 font-semibold mb-1.5 flex items-center gap-1.5">
+                                <MapPin className="h-3 w-3 text-purple-400" />
+                                Leyenda
+                              </div>
+
+                              {/* Dirección del tráfico */}
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                                  <span className="text-zinc-300">Flujo</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                                  <span className="text-zinc-300">Contraflujo</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+                                  <span className="text-zinc-300">Completo</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                  <span className="text-zinc-300">Bonificación</span>
+                                </div>
+                              </div>
+
+                              {/* Estado de selección */}
+                              <div className="border-t border-zinc-700/70 pt-1.5 mt-1.5 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-white ring-2 ring-white/50" />
+                                  <span className="text-zinc-300">Seleccionado</span>
+                                  <span className="text-zinc-500 text-[10px]">({selectedMapReservas.size})</span>
+                                </div>
+                              </div>
+                            </div>
+                          </>
                         ) : (
                           <div className="flex items-center justify-center h-full bg-zinc-800">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
