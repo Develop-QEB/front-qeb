@@ -44,7 +44,7 @@ export interface SAPDeliveryNote {
   U_CRM_R_S: string;
   U_CRM_Camp: string;
   U_TIPO_VENTA: string;
-  U_Imu_ART_APS: string;
+  U_IMU_ART_APS: string;
   U_IMU_CotNum: string;
   DocumentLines: SAPDocumentLine[];
 }
@@ -353,7 +353,7 @@ export function buildDeliveryNote(
     U_CRM_R_S: campana.T0_U_RazonSocial || '',
     U_CRM_Camp: campana.nombre || campana.nombre_campania || '',
     U_TIPO_VENTA: 'Comercial',
-    U_Imu_ART_APS: campana.id?.toString() || '',
+    U_IMU_ART_APS: campana.id?.toString() || '',
     U_IMU_CotNum: uniqueAPS.length > 0 ? String(uniqueAPS[0]) : '',
     DocumentLines: documentLines,
   };
