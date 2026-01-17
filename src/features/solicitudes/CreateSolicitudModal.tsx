@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, Upload, ChevronDown, ChevronRight, Check, Users, Building2,
-  Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw
+  Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw, AlertTriangle
 } from 'lucide-react';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { formatCurrency } from '../../lib/utils';
@@ -632,6 +632,26 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const queryClient = useQueryClient();
   const isEditMode = !!editSolicitudId;
 
+  // Toast notification state
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'warning' }>({
+    show: false,
+    message: '',
+    type: 'success'
+  });
+
+  // Auto-dismiss toast after 5 seconds
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => setToast(prev => ({ ...prev, show: false })), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
+
+  // Helper to show toast
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToast({ show: true, message, type });
+  };
+
   // Form state
   const [step, setStep] = useState(1);
 
@@ -1080,9 +1100,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Create mutation
   const createMutation = useMutation({
     mutationFn: (data: any) => solicitudesService.create(data),
-    onSuccess: () => {
+    onSuccess: (response: any) => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
+
+      // Check for pending authorizations and show appropriate toast
+      if (response?.autorizacion?.tienePendientes) {
+        const total = (response.autorizacion.pendientesDg || 0) + (response.autorizacion.pendientesDcm || 0);
+        showToast(`Solicitud creada. ${total} cara(s) requieren autorización de DG/DCM.`, 'warning');
+      } else {
+        showToast('Solicitud creada exitosamente', 'success');
+      }
+
       onClose();
       resetForm();
     },
@@ -1091,10 +1120,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Update mutation
   const updateMutation = useMutation({
     mutationFn: (data: any) => solicitudesService.update(editSolicitudId!, data),
-    onSuccess: () => {
+    onSuccess: (response: any) => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
       queryClient.invalidateQueries({ queryKey: ['solicitud-edit', editSolicitudId] });
+
+      // Check for pending authorizations and show appropriate toast
+      if (response?.autorizacion?.tienePendientes) {
+        const total = (response.autorizacion.pendientesDg || 0) + (response.autorizacion.pendientesDcm || 0);
+        showToast(`Solicitud actualizada. ${total} cara(s) requieren autorización de DG/DCM.`, 'warning');
+      } else {
+        showToast('Solicitud actualizada exitosamente', 'success');
+      }
+
       onClose();
       resetForm();
     },
@@ -2275,6 +2313,28 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           )}
         </div>
       </div>
+
+      {/* Toast notification */}
+      {toast.show && (
+        <div className="fixed top-4 right-4 z-[70] animate-in slide-in-from-top fade-in duration-300 max-w-md">
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${
+            toast.type === 'success' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300' :
+            toast.type === 'error' ? 'bg-red-500/20 border-red-500/50 text-red-300' :
+            'bg-amber-500/20 border-amber-500/50 text-amber-300'
+          }`}>
+            {toast.type === 'success' && <Check className="h-5 w-5 flex-shrink-0" />}
+            {toast.type === 'error' && <X className="h-5 w-5 flex-shrink-0" />}
+            {toast.type === 'warning' && <AlertTriangle className="h-5 w-5 flex-shrink-0" />}
+            <span className="text-sm font-medium">{toast.message}</span>
+            <button
+              onClick={() => setToast(prev => ({ ...prev, show: false }))}
+              className="ml-2 p-1 hover:bg-white/10 rounded transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
