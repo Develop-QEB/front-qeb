@@ -2955,7 +2955,9 @@ function TaskDetailModal({
           {/* Tabs - Solo mostrar si NO es tarea de Impresión, Recepción, Instalación ni Testigo */}
           {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && (
             <div className="flex flex-wrap gap-2 mt-4">
-              {tabs.map((tab) => (
+              {tabs
+                .filter(tab => canResolveProduccionTasks || tab.key === 'resumen')
+                .map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
@@ -4096,8 +4098,8 @@ function TaskDetailModal({
             </div>
           )}
 
-          {/* Tab Editar - Solo para tareas que NO son Impresión */}
-          {task?.tipo !== 'Impresión' && activeTab === 'editar' && (
+          {/* Tab Editar - Solo para tareas que NO son Impresión y con permisos */}
+          {task?.tipo !== 'Impresión' && activeTab === 'editar' && canResolveProduccionTasks && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Columna Izquierda - Lista de artes con checkbox */}
               <div className="bg-zinc-900/50 rounded-lg border border-border">
@@ -4388,7 +4390,7 @@ function TaskDetailModal({
           )}
 
           {/* Tab Atender */}
-          {activeTab === 'atender' && task?.tipo === 'Correccion' && (
+          {activeTab === 'atender' && task?.tipo === 'Correccion' && canResolveProduccionTasks && (
             // Vista especial para tareas de Corrección - Solo enviar a revisión
             <div className="space-y-4">
               <div className="bg-amber-900/20 border border-amber-500/30 rounded-lg p-4">
@@ -4471,7 +4473,7 @@ function TaskDetailModal({
           )}
 
           {/* Tab Atender - Vista normal para revisión de artes (no Corrección ni Impresión) */}
-          {activeTab === 'atender' && task?.tipo !== 'Correccion' && task?.tipo !== 'Impresión' && (
+          {activeTab === 'atender' && task?.tipo !== 'Correccion' && task?.tipo !== 'Impresión' && canResolveProduccionTasks && (
             <div className="space-y-4">
               {/* Toolbar de agrupación */}
               <div className="flex flex-wrap items-center justify-between gap-2">
