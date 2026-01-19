@@ -15,6 +15,8 @@ import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { AssignInventarioModal } from './AssignInventarioModal';
 import { UserAvatar } from '../../components/ui/user-avatar';
+import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
 
 // Status badge colors
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -871,6 +873,8 @@ export function PropuestasPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -1162,12 +1166,18 @@ export function PropuestasPage() {
           )}
         </td>
         <td className="px-4 py-3">
-          <button
-            onClick={() => setStatusPropuesta(item)}
-            className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
-          >
-            {item.status}
-          </button>
+          {permissions.canEditPropuestaStatus ? (
+            <button
+              onClick={() => setStatusPropuesta(item)}
+              className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+            >
+              {item.status}
+            </button>
+          ) : (
+            <span className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+              {item.status}
+            </span>
+          )}
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-1">

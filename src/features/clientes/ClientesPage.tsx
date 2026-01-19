@@ -8,6 +8,8 @@ import {
 import { Header } from '../../components/layout/Header';
 import { clientesService } from '../../services/clientes.service';
 import { Cliente } from '../../types';
+import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
 
 // ============ TIPOS Y CONFIGURACIÓN DE FILTROS/ORDENAMIENTO ============
 type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
@@ -494,6 +496,8 @@ function GroupHeader({
 
 export function ClientesPage() {
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
   const [activeTab, setActiveTab] = useState<'db' | 'sap'>('db');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -809,7 +813,7 @@ export function ClientesPage() {
           >
             <Eye className="h-3 w-3" />
           </button>
-          {isDb ? (
+          {isDb && permissions.canDeleteClientes && (
             <button
               onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
               disabled={deleteMutation.isPending}
@@ -818,7 +822,8 @@ export function ClientesPage() {
             >
               <Trash2 className="h-3 w-3" />
             </button>
-          ) : (
+          )}
+          {!isDb && (
             <button
               onClick={(e) => { e.stopPropagation(); handleAddToDatabase(item); }}
               disabled={createMutation.isPending}

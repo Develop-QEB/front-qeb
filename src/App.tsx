@@ -20,15 +20,31 @@ import { CorreosPage } from './features/correos/CorreosPage';
 import { PerfilPage } from './features/perfil/PerfilPage';
 import { UsuariosAdminPage } from './features/admin/UsuariosAdminPage';
 import { useAuthStore } from './store/authStore';
+import { getPermissions } from './lib/permissions';
 
 // IDs de usuarios con acceso a Inventarios (Mario, Jos, Akary)
 const INVENTARIOS_ALLOWED_USER_IDS = [1057460, 1057462, 1057581];
 
+// Componente para la ruta principal - redirige según permisos
+function HomeRoute() {
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  // Si puede ver Dashboard, mostrarlo
+  if (permissions.canSeeDashboard) {
+    return <DashboardPage />;
+  }
+  // Si no, redirigir a Solicitudes
+  return <Navigate to="/solicitudes" replace />;
+}
+
 // Componente para proteger ruta de Inventarios
 function InventariosRoute() {
   const user = useAuthStore((state) => state.user);
-  if (!user || !INVENTARIOS_ALLOWED_USER_IDS.includes(user.id)) {
-    return <Navigate to="/" replace />;
+  const permissions = getPermissions(user?.rol);
+
+  if (!user || !permissions.canSeeInventarios || !INVENTARIOS_ALLOWED_USER_IDS.includes(user.id)) {
+    return <Navigate to="/solicitudes" replace />;
   }
   return <InventariosPage />;
 }
@@ -36,8 +52,10 @@ function InventariosRoute() {
 // Componente para proteger ruta de Admin (solo Administrador)
 function AdminUsuariosRoute() {
   const user = useAuthStore((state) => state.user);
-  if (!user || user.rol !== 'Administrador') {
-    return <Navigate to="/" replace />;
+  const permissions = getPermissions(user?.rol);
+
+  if (!user || !permissions.canSeeAdminUsuarios) {
+    return <Navigate to="/solicitudes" replace />;
   }
   return <UsuariosAdminPage />;
 }
@@ -56,7 +74,7 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<DashboardPage />} />
+            <Route path="/" element={<HomeRoute />} />
             <Route path="/clientes" element={<ClientesPage />} />
             <Route path="/proveedores" element={<ProveedoresPage />} />
             <Route path="/inventarios" element={<InventariosRoute />} />

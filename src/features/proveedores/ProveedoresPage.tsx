@@ -8,6 +8,8 @@ import {
 import { Header } from '../../components/layout/Header';
 import { proveedoresService, ProveedorInput } from '../../services/proveedores.service';
 import { Proveedor } from '../../types';
+import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
 
 // ============ TIPOS Y CONFIGURACIÓN DE FILTROS/ORDENAMIENTO ============
 type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
@@ -641,6 +643,8 @@ function DeleteModal({
 
 export function ProveedoresPage() {
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -1115,13 +1119,15 @@ export function ProveedoresPage() {
               )}
 
               {/* Add Button */}
-              <button
-                onClick={() => { setSelectedProveedor(null); setFormModalOpen(true); }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
-              >
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">Nuevo Proveedor</span>
-              </button>
+              {permissions.canCreateProveedores && (
+                <button
+                  onClick={() => { setSelectedProveedor(null); setFormModalOpen(true); }}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="hidden sm:inline">Nuevo Proveedor</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1229,8 +1235,12 @@ export function ProveedoresPage() {
                                           <div className="flex items-center gap-0.5">
                                             <button onClick={() => setDetailsProveedor(proveedor)} className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all" title="Ver detalles"><Eye className="h-3 w-3" /></button>
                                             <button onClick={() => setHistoryProveedor({ id: proveedor.id, name: proveedor.nombre })} className="p-1.5 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 border border-fuchsia-500/20 transition-all hidden sm:block" title="Historial"><History className="h-3 w-3" /></button>
-                                            <button onClick={() => { setSelectedProveedor(proveedor); setFormModalOpen(true); }} className="p-1.5 rounded-lg bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border border-zinc-500/20 transition-all" title="Editar"><Pencil className="h-3 w-3" /></button>
-                                            <button onClick={() => setDeleteProveedor({ id: proveedor.id, name: proveedor.nombre })} className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all" title="Eliminar"><Trash2 className="h-3 w-3" /></button>
+                                            {permissions.canEditProveedores && (
+                                              <button onClick={() => { setSelectedProveedor(proveedor); setFormModalOpen(true); }} className="p-1.5 rounded-lg bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border border-zinc-500/20 transition-all" title="Editar"><Pencil className="h-3 w-3" /></button>
+                                            )}
+                                            {permissions.canDeleteProveedores && (
+                                              <button onClick={() => setDeleteProveedor({ id: proveedor.id, name: proveedor.nombre })} className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all" title="Eliminar"><Trash2 className="h-3 w-3" /></button>
+                                            )}
                                           </div>
                                         </td>
                                       </tr>
@@ -1272,8 +1282,12 @@ export function ProveedoresPage() {
                                     <div className="flex items-center gap-0.5">
                                       <button onClick={() => setDetailsProveedor(proveedor)} className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all" title="Ver detalles"><Eye className="h-3 w-3" /></button>
                                       <button onClick={() => setHistoryProveedor({ id: proveedor.id, name: proveedor.nombre })} className="p-1.5 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 border border-fuchsia-500/20 transition-all hidden sm:block" title="Historial"><History className="h-3 w-3" /></button>
-                                      <button onClick={() => { setSelectedProveedor(proveedor); setFormModalOpen(true); }} className="p-1.5 rounded-lg bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border border-zinc-500/20 transition-all" title="Editar"><Pencil className="h-3 w-3" /></button>
-                                      <button onClick={() => setDeleteProveedor({ id: proveedor.id, name: proveedor.nombre })} className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all" title="Eliminar"><Trash2 className="h-3 w-3" /></button>
+                                      {permissions.canEditProveedores && (
+                                        <button onClick={() => { setSelectedProveedor(proveedor); setFormModalOpen(true); }} className="p-1.5 rounded-lg bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border border-zinc-500/20 transition-all" title="Editar"><Pencil className="h-3 w-3" /></button>
+                                      )}
+                                      {permissions.canDeleteProveedores && (
+                                        <button onClick={() => setDeleteProveedor({ id: proveedor.id, name: proveedor.nombre })} className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all" title="Eliminar"><Trash2 className="h-3 w-3" /></button>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -1316,8 +1330,12 @@ export function ProveedoresPage() {
                             <div className="flex items-center gap-0.5">
                               <button onClick={() => setDetailsProveedor(proveedor)} className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all" title="Ver detalles"><Eye className="h-3 w-3" /></button>
                               <button onClick={() => setHistoryProveedor({ id: proveedor.id, name: proveedor.nombre })} className="p-1.5 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 border border-fuchsia-500/20 transition-all hidden sm:block" title="Historial"><History className="h-3 w-3" /></button>
-                              <button onClick={() => { setSelectedProveedor(proveedor); setFormModalOpen(true); }} className="p-1.5 rounded-lg bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border border-zinc-500/20 transition-all" title="Editar"><Pencil className="h-3 w-3" /></button>
-                              <button onClick={() => setDeleteProveedor({ id: proveedor.id, name: proveedor.nombre })} className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all" title="Eliminar"><Trash2 className="h-3 w-3" /></button>
+                              {permissions.canEditProveedores && (
+                                <button onClick={() => { setSelectedProveedor(proveedor); setFormModalOpen(true); }} className="p-1.5 rounded-lg bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border border-zinc-500/20 transition-all" title="Editar"><Pencil className="h-3 w-3" /></button>
+                              )}
+                              {permissions.canDeleteProveedores && (
+                                <button onClick={() => setDeleteProveedor({ id: proveedor.id, name: proveedor.nombre })} className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all" title="Eliminar"><Trash2 className="h-3 w-3" /></button>
+                              )}
                             </div>
                           </td>
                         </tr>

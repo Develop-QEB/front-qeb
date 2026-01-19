@@ -50,6 +50,7 @@ import { solicitudesService } from '../../services/solicitudes.service';
 import { Badge } from '../../components/ui/badge';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
 
 // URL base para archivos estáticos
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -5983,6 +5984,8 @@ export function TareaSeguimientoPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const campanaId = id ? parseInt(id, 10) : 0;
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
 
   // ---- State ----
   // Main tabs
@@ -8132,67 +8135,69 @@ export function TareaSeguimientoPage() {
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={async () => {
-                    const reservaIds = selectedInventoryItems.flatMap(item =>
-                      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
-                    );
-                    if (reservaIds.length > 0) {
-                      // Verificar si hay tareas asociadas
-                      setIsCheckingTareas(true);
-                      try {
-                        const result = await campanasService.checkReservasTareas(campanaId, reservaIds);
-                        if (result.hasTareas) {
-                          setTareasAfectadas(result.tareas);
-                          setIsConfirmClearModalOpen(true);
-                        } else {
-                          // No hay tareas, limpiar directamente
+              {permissions.canEditGestionArtes && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      const reservaIds = selectedInventoryItems.flatMap(item =>
+                        item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+                      );
+                      if (reservaIds.length > 0) {
+                        // Verificar si hay tareas asociadas
+                        setIsCheckingTareas(true);
+                        try {
+                          const result = await campanasService.checkReservasTareas(campanaId, reservaIds);
+                          if (result.hasTareas) {
+                            setTareasAfectadas(result.tareas);
+                            setIsConfirmClearModalOpen(true);
+                          } else {
+                            // No hay tareas, limpiar directamente
+                            assignArteMutation.mutate({ reservaIds, archivo: '' });
+                            setSelectedInventoryIds(new Set());
+                          }
+                        } catch (error) {
+                          console.error('Error verificando tareas:', error);
+                          // En caso de error, limpiar directamente
                           assignArteMutation.mutate({ reservaIds, archivo: '' });
                           setSelectedInventoryIds(new Set());
+                        } finally {
+                          setIsCheckingTareas(false);
                         }
-                      } catch (error) {
-                        console.error('Error verificando tareas:', error);
-                        // En caso de error, limpiar directamente
-                        assignArteMutation.mutate({ reservaIds, archivo: '' });
-                        setSelectedInventoryIds(new Set());
-                      } finally {
-                        setIsCheckingTareas(false);
                       }
-                    }
-                  }}
-                  disabled={selectedInventoryIds.size === 0 || assignArteMutation.isPending || isCheckingTareas || hasSelectedItemsWithInstalacion}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                    selectedInventoryIds.size > 0 && !isCheckingTareas && !hasSelectedItemsWithInstalacion
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                  }`}
-                  title={hasSelectedItemsWithInstalacion ? 'No se puede limpiar arte de items con instalación activa' : undefined}
-                >
-                  {isCheckingTareas ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-3.5 w-3.5" />
-                  )}
-                  Limpiar Arte
-                </button>
-                <button
-                  onClick={handleCreateTaskClick}
-                  disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                    selectedInventoryIds.size > 0 && !isCheckingExistingTasks
-                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                  }`}
-                >
-                  {isCheckingExistingTasks ? (
-                    <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <Plus className="h-3.5 w-3.5" />
-                  )}
-                  {isCheckingExistingTasks ? 'Verificando...' : 'Crear Tarea'}
-                </button>
-              </div>
+                    }}
+                    disabled={selectedInventoryIds.size === 0 || assignArteMutation.isPending || isCheckingTareas || hasSelectedItemsWithInstalacion}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      selectedInventoryIds.size > 0 && !isCheckingTareas && !hasSelectedItemsWithInstalacion
+                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                    }`}
+                    title={hasSelectedItemsWithInstalacion ? 'No se puede limpiar arte de items con instalación activa' : undefined}
+                  >
+                    {isCheckingTareas ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                    Limpiar Arte
+                  </button>
+                  <button
+                    onClick={handleCreateTaskClick}
+                    disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      selectedInventoryIds.size > 0 && !isCheckingExistingTasks
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {isCheckingExistingTasks ? (
+                      <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5" />
+                    )}
+                    {isCheckingExistingTasks ? 'Verificando...' : 'Crear Tarea'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -8299,24 +8304,26 @@ export function TareaSeguimientoPage() {
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleCreateTaskClick}
-                  disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                    selectedInventoryIds.size > 0 && !isCheckingExistingTasks
-                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                  }`}
-                >
-                  {isCheckingExistingTasks ? (
-                    <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <Plus className="h-3.5 w-3.5" />
-                  )}
-                  {isCheckingExistingTasks ? 'Verificando...' : 'Crear Tarea'}
-                </button>
-              </div>
+              {permissions.canEditGestionArtes && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCreateTaskClick}
+                    disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      selectedInventoryIds.size > 0 && !isCheckingExistingTasks
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {isCheckingExistingTasks ? (
+                      <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5" />
+                    )}
+                    {isCheckingExistingTasks ? 'Verificando...' : 'Crear Tarea'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -8346,24 +8353,26 @@ export function TareaSeguimientoPage() {
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleCreateTaskClick}
-                  disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                    selectedInventoryIds.size > 0 && !isCheckingExistingTasks
-                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                  }`}
-                >
-                  {isCheckingExistingTasks ? (
-                    <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <Plus className="h-3.5 w-3.5" />
-                  )}
-                  {isCheckingExistingTasks ? 'Verificando...' : 'Crear Tarea'}
-                </button>
-              </div>
+              {permissions.canEditGestionArtes && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCreateTaskClick}
+                    disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      selectedInventoryIds.size > 0 && !isCheckingExistingTasks
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {isCheckingExistingTasks ? (
+                      <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5" />
+                    )}
+                    {isCheckingExistingTasks ? 'Verificando...' : 'Crear Tarea'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

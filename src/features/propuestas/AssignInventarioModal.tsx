@@ -13,6 +13,8 @@ import { inventariosService, InventarioDisponible } from '../../services/inventa
 import { propuestasService, ReservaModalItem } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
+import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
@@ -494,6 +496,8 @@ const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
 export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
 
@@ -4555,16 +4559,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleSearchInventory(cara); }}
-                                      className={`p-2 rounded-lg border transition-colors ${status.isComplete
-                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
-                                        : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
-                                        }`}
-                                      title={status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
-                                    >
-                                      <Search className="h-4 w-4" />
-                                    </button>
+                                    {permissions.canBuscarInventarioEnModal && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleSearchInventory(cara); }}
+                                        className={`p-2 rounded-lg border transition-colors ${status.isComplete
+                                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                                          : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
+                                          }`}
+                                        title={status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
+                                      >
+                                        <Search className="h-4 w-4" />
+                                      </button>
+                                    )}
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
                                       className="p-2 rounded-lg border transition-colors bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"

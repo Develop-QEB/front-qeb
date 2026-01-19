@@ -18,6 +18,8 @@ type ViewType = 'tabla' | 'catorcena';
 import { formatDate } from '../../lib/utils';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { OrdenesMontajeModal } from './OrdenesMontajeModal';
+import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
 
 // Colors for dynamic tags
 const TAG_COLORS = [
@@ -486,6 +488,8 @@ const STATUS_OPTIONS = ['activa', 'inactiva', 'finalizada', 'por iniciar', 'en c
 export function CampanasPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -1204,18 +1208,20 @@ export function CampanasPage() {
             >
               <Eye className="h-3.5 w-3.5" />
             </button>
-            <button
-              onClick={() => handleEditCampana(item)}
-              disabled={isEditDisabled(item)}
-              className={`p-2 rounded-lg border transition-all ${
-                isEditDisabled(item)
-                  ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                  : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
-              }`}
-              title={isEditDisabled(item) ? 'No editable (tiene APS o status no permite edición)' : 'Editar campaña'}
-            >
-              <Edit2 className="h-3.5 w-3.5" />
-            </button>
+            {permissions.canEditCampanas && (
+              <button
+                onClick={() => handleEditCampana(item)}
+                disabled={isEditDisabled(item)}
+                className={`p-2 rounded-lg border transition-all ${
+                  isEditDisabled(item)
+                    ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                    : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
+                }`}
+                title={isEditDisabled(item) ? 'No editable (tiene APS o status no permite edición)' : 'Editar campaña'}
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </td>
       </tr>
@@ -1918,18 +1924,20 @@ export function CampanasPage() {
                             >
                               <Eye className="h-3 w-3" />
                             </button>
-                            <button
-                              onClick={() => handleEditCampana(campana)}
-                              disabled={isEditDisabled(campana)}
-                              className={`p-1.5 rounded-lg border transition-all ${
-                                isEditDisabled(campana)
-                                  ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                                  : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20'
-                              }`}
-                              title={isEditDisabled(campana) ? 'No editable' : 'Editar campaña'}
-                            >
-                              <Edit2 className="h-3 w-3" />
-                            </button>
+                            {permissions.canEditCampanas && (
+                              <button
+                                onClick={() => handleEditCampana(campana)}
+                                disabled={isEditDisabled(campana)}
+                                className={`p-1.5 rounded-lg border transition-all ${
+                                  isEditDisabled(campana)
+                                    ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                                    : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20'
+                                }`}
+                                title={isEditDisabled(campana) ? 'No editable' : 'Editar campaña'}
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                            )}
                           </div>
                         </button>
                         {/* Contenido expandible - inventario */}

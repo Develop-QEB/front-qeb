@@ -11,6 +11,7 @@ import { Badge } from '../../components/ui/badge';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { formatDate } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
 
 const statusVariants: Record<string, 'secondary' | 'success' | 'warning' | 'info'> = {
   activa: 'success',
@@ -542,6 +543,7 @@ export function CampanaDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
   const campanaId = id ? parseInt(id, 10) : 1;
   const [showComments, setShowComments] = useState(false);
   const [comment, setComment] = useState('');
@@ -1460,19 +1462,21 @@ export function CampanaDetailPage() {
               Lista de inventario reservado
             </h3>
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-              <button
-                onClick={handleAssignAPS}
-                disabled={selectedItems.size === 0 || assignAPSMutation.isPending}
-                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-lg transition-colors ${
-                  selectedItems.size === 0
-                    ? 'bg-purple-900/30 text-purple-400/50 cursor-not-allowed'
-                    : 'bg-purple-600 hover:bg-purple-700 text-white'
-                }`}
-              >
-                <FileSpreadsheet className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
-                <span className="hidden sm:inline">{assignAPSMutation.isPending ? 'Asignando...' : `APS${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
-                <span className="sm:hidden">{assignAPSMutation.isPending ? '...' : `APS${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
-              </button>
+              {permissions.canEditDetalleCampana && (
+                <button
+                  onClick={handleAssignAPS}
+                  disabled={selectedItems.size === 0 || assignAPSMutation.isPending}
+                  className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-lg transition-colors ${
+                    selectedItems.size === 0
+                      ? 'bg-purple-900/30 text-purple-400/50 cursor-not-allowed'
+                      : 'bg-purple-600 hover:bg-purple-700 text-white'
+                  }`}
+                >
+                  <FileSpreadsheet className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
+                  <span className="hidden sm:inline">{assignAPSMutation.isPending ? 'Asignando...' : `APS${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
+                  <span className="sm:hidden">{assignAPSMutation.isPending ? '...' : `APS${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
+                </button>
+              )}
               <button
                 onClick={() => navigate(`/campanas/${campanaId}/tareas`)}
                 className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
@@ -2104,19 +2108,21 @@ export function CampanaDetailPage() {
               <span className="text-[10px] sm:text-xs text-muted-foreground">
                 {filteredInventarioAPS.length} registros
               </span>
-              <button
-                onClick={() => setShowRemoveAPSModal(true)}
-                disabled={selectedItemsAPS.size === 0}
-                className={`flex items-center justify-center w-6 sm:w-7 h-6 sm:h-7 rounded-lg border transition-colors ${
-                  selectedItemsAPS.size === 0
-                    ? 'bg-red-900/20 border-red-500/20 cursor-not-allowed'
-                    : 'bg-red-900/50 hover:bg-red-900/70 border-red-500/30'
-                }`}
-                title="Quitar APS"
-              >
-                <Minus className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${selectedItemsAPS.size === 0 ? 'text-red-400/40' : 'text-red-400'}`} />
-              </button>
-              {inventarioConAPS.length > 0 && (
+              {permissions.canEditDetalleCampana && (
+                <button
+                  onClick={() => setShowRemoveAPSModal(true)}
+                  disabled={selectedItemsAPS.size === 0}
+                  className={`flex items-center justify-center w-6 sm:w-7 h-6 sm:h-7 rounded-lg border transition-colors ${
+                    selectedItemsAPS.size === 0
+                      ? 'bg-red-900/20 border-red-500/20 cursor-not-allowed'
+                      : 'bg-red-900/50 hover:bg-red-900/70 border-red-500/30'
+                  }`}
+                  title="Quitar APS"
+                >
+                  <Minus className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${selectedItemsAPS.size === 0 ? 'text-red-400/40' : 'text-red-400'}`} />
+                </button>
+              )}
+              {permissions.canEditDetalleCampana && inventarioConAPS.length > 0 && (
                 <button
                   onClick={() => setShowPostSAPModal(true)}
                   className="flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border bg-cyan-900/50 hover:bg-cyan-900/70 border-cyan-500/30 transition-colors"
