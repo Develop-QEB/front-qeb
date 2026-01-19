@@ -132,6 +132,30 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
   },
+  'Gerente Digital Programático': {
+    canSeeDashboard: false,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    canDeleteClientes: false,
+
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Puede cambiar estatus pero solo a estos valores
+    allowedPropuestaStatuses: ['Por aprobar', 'Pase a ventas', 'Ajuste Cto-Cliente'],
+    canBuscarInventarioEnModal: false,
+
+    canEditCampanas: false,
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
+    canEditGestionArtes: false,
+
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+  },
   'Administrador': {
     // Admin tiene todos los permisos por defecto
   },
