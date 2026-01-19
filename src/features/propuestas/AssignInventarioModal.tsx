@@ -46,6 +46,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   propuesta: Propuesta;
+  readOnly?: boolean;
 }
 
 interface CaraItem {
@@ -494,10 +495,13 @@ function SearchableSelect({
 
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
-export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
+export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = false }: Props) {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
+
+  // Si readOnly es true, sobrescribir permisos para modo visualización
+  const effectiveCanEdit = !readOnly && permissions.canAsignarInventario;
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
 
@@ -3328,7 +3332,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         className="w-full pl-9 pr-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                       />
                     </div>
-                    {selectedReservados.size > 0 && (
+                    {effectiveCanEdit && selectedReservados.size > 0 && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-purple-400 px-2 py-1 bg-purple-500/20 rounded-full">
                           {selectedReservados.size} seleccionados
@@ -3432,7 +3436,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Tipo</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Formato</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Ubicación</th>
-                          <th className="px-4 py-3 text-center text-xs text-zinc-400 font-medium">Acciones</th>
+                          {effectiveCanEdit && <th className="px-4 py-3 text-center text-xs text-zinc-400 font-medium">Acciones</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -3655,24 +3659,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                                     <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
                                                       {reserva.ubicacion || '-'}
                                                     </td>
-                                                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                                      <div className="flex items-center justify-center gap-1">
-                                                        <button
-                                                          onClick={() => handleEditReserva(reserva)}
-                                                          className="p-1.5 text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
-                                                          title="Editar formato"
-                                                        >
-                                                          <Pencil className="h-4 w-4" />
-                                                        </button>
-                                                        <button
-                                                          onClick={() => handleRemoveReserva(reserva.id)}
-                                                          className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                                          title="Quitar reserva"
-                                                        >
-                                                          <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                      </div>
-                                                    </td>
+                                                    {effectiveCanEdit && (
+                                                      <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                                        <div className="flex items-center justify-center gap-1">
+                                                          <button
+                                                            onClick={() => handleEditReserva(reserva)}
+                                                            className="p-1.5 text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
+                                                            title="Editar formato"
+                                                          >
+                                                            <Pencil className="h-4 w-4" />
+                                                          </button>
+                                                          <button
+                                                            onClick={() => handleRemoveReserva(reserva.id)}
+                                                            className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                            title="Quitar reserva"
+                                                          >
+                                                            <Trash2 className="h-4 w-4" />
+                                                          </button>
+                                                        </div>
+                                                      </td>
+                                                    )}
                                                   </tr>
                                                 ))}
                                               </React.Fragment>
@@ -4219,13 +4225,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     <span className="text-zinc-400">
                       Inversión: <span className="text-amber-300 font-medium">{formatCurrency(carasKPIs.totalInversion)}</span>
                     </span>
-                    <button
-                      onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Agregar Cara
-                    </button>
+                    {effectiveCanEdit && (
+                      <button
+                        onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Agregar Cara
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -4463,12 +4471,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     <div className="p-8 text-center text-zinc-500">
                       <Layers className="h-10 w-10 mx-auto mb-3 opacity-30" />
                       <p>No hay formatos/caras en esta propuesta</p>
-                      <button
-                        onClick={() => setShowAddCaraForm(true)}
-                        className="mt-3 text-purple-400 hover:text-purple-300 text-sm"
-                      >
-                        Agregar primera cara
-                      </button>
+                      {effectiveCanEdit && (
+                        <button
+                          onClick={() => setShowAddCaraForm(true)}
+                          className="mt-3 text-purple-400 hover:text-purple-300 text-sm"
+                        >
+                          Agregar primera cara
+                        </button>
+                      )}
                     </div>
                   ) : (
                     carasGroupedByCatorcena.map(([periodo, groupData]) => {
@@ -4559,7 +4569,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    {permissions.canBuscarInventarioEnModal && (
+                                    {effectiveCanEdit && permissions.canBuscarInventarioEnModal && (
                                       <button
                                         onClick={(e) => { e.stopPropagation(); handleSearchInventory(cara); }}
                                         className={`p-2 rounded-lg border transition-colors ${status.isComplete
@@ -4571,24 +4581,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                         <Search className="h-4 w-4" />
                                       </button>
                                     )}
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
-                                      className="p-2 rounded-lg border transition-colors bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
-                                      title="Editar"
-                                    >
-                                      <Pencil className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
-                                      disabled={hasReservas}
-                                      className={`p-2 rounded-lg border transition-colors ${hasReservas
-                                        ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
-                                        : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
-                                        }`}
-                                      title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
+                                    {effectiveCanEdit && (
+                                      <>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
+                                          className="p-2 rounded-lg border transition-colors bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
+                                          title="Editar"
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
+                                          disabled={hasReservas}
+                                          className={`p-2 rounded-lg border transition-colors ${hasReservas
+                                            ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                            : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+                                            }`}
+                                          title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </button>
+                                      </>
+                                    )}
                                   </div>
                                 </div>
 

@@ -1184,17 +1184,19 @@ export function PropuestasPage() {
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setApprovePropuesta(item)}
-              disabled={!['Por aprobar', 'Pase a ventas'].includes(item.status)}
-              className={`p-2 rounded-lg border transition-all ${!['Por aprobar', 'Pase a ventas'].includes(item.status)
-                ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
-                : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40'
-                }`}
-              title={!['Por aprobar', 'Pase a ventas'].includes(item.status) ? 'Solo disponible con estatus Por aprobar o Pase a ventas' : 'Aprobar propuesta'}
-            >
-              <CheckCircle className="h-3.5 w-3.5" />
-            </button>
+            {permissions.canAprobarPropuesta && (
+              <button
+                onClick={() => setApprovePropuesta(item)}
+                disabled={!['Por aprobar', 'Pase a ventas'].includes(item.status)}
+                className={`p-2 rounded-lg border transition-all ${!['Por aprobar', 'Pase a ventas'].includes(item.status)
+                  ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+                  : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40'
+                  }`}
+                title={!['Por aprobar', 'Pase a ventas'].includes(item.status) ? 'Solo disponible con estatus Por aprobar o Pase a ventas' : 'Aprobar propuesta'}
+              >
+                <CheckCircle className="h-3.5 w-3.5" />
+              </button>
+            )}
             <button
               onClick={() => { setSelectedPropuestaForAssign(item); setShowAssignModal(true); }}
               disabled={item.status === 'Activa'}
@@ -1202,21 +1204,23 @@ export function PropuestasPage() {
                 ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
                 : 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
                 }`}
-              title={item.status === 'Activa' ? 'No disponible para propuestas activas' : 'Asignar a Inventario'}
+              title={item.status === 'Activa' ? 'No disponible para propuestas activas' : (permissions.canAsignarInventario ? 'Asignar a Inventario' : 'Ver Inventario')}
             >
-              <MapPinned className="h-3.5 w-3.5" />
+              {permissions.canAsignarInventario ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
-            <button
-              disabled={item.status !== 'Compartir'}
-              onClick={() => item.status === 'Compartir' && navigate(`/propuestas/compartir/${item.id}`)}
-              className={`p-2 rounded-lg border transition-all ${item.status === 'Compartir'
-                ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40'
-                : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
-                }`}
-              title={item.status === 'Compartir' ? 'Compartir propuesta' : 'Solo disponible en status Compartir'}
-            >
-              <Share2 className="h-3.5 w-3.5" />
-            </button>
+            {permissions.canCompartirPropuesta && (
+              <button
+                disabled={item.status !== 'Compartir'}
+                onClick={() => item.status === 'Compartir' && navigate(`/propuestas/compartir/${item.id}`)}
+                className={`p-2 rounded-lg border transition-all ${item.status === 'Compartir'
+                  ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40'
+                  : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+                  }`}
+                title={item.status === 'Compartir' ? 'Compartir propuesta' : 'Solo disponible en status Compartir'}
+              >
+                <Share2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </td>
       </tr>
@@ -1691,6 +1695,7 @@ export function PropuestasPage() {
           isOpen={showAssignModal}
           onClose={() => { setShowAssignModal(false); setSelectedPropuestaForAssign(null); }}
           propuesta={selectedPropuestaForAssign}
+          readOnly={!permissions.canAsignarInventario}
         />
       )}
     </div>

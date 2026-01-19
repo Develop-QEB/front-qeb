@@ -181,12 +181,12 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditSolicitudes: false,
     canDeleteSolicitudes: false,
 
-    // Propuestas: Solo visualización
+    // Propuestas: Solo visualización (excepto compartir)
     canEditPropuestaStatus: false,
     allowedPropuestaStatuses: [],
     canAprobarPropuesta: false,
-    canAsignarInventario: false,
-    canCompartirPropuesta: false,
+    canAsignarInventario: false, // No puede editar inventario, solo ver
+    canCompartirPropuesta: true, // SÍ puede compartir
     canBuscarInventarioEnModal: false,
 
     // Campañas: Ocultar botón editar (pero Detalle Campaña tiene acceso total)
