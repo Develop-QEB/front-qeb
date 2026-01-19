@@ -59,6 +59,7 @@ export interface RolePermissions {
   canEditDetalleCampana: boolean;
   canDeleteDetalleCampana: boolean;
   canEditGestionArtes: boolean;
+  canResolveProduccionTasks: boolean; // Resolver/completar tareas de producción (Impresión, Recepción, Instalación)
 
   // Inventarios
   canCreateInventarios: boolean;
@@ -100,6 +101,7 @@ const defaultPermissions: RolePermissions = {
   canEditDetalleCampana: true,
   canDeleteDetalleCampana: true,
   canEditGestionArtes: true,
+  canResolveProduccionTasks: true,
 
   canCreateInventarios: true,
   canEditInventarios: true,
@@ -152,6 +154,51 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteDetalleCampana: false,
     canEditGestionArtes: false,
 
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+  },
+  'Analista de Servicio al Cliente': {
+    // Dashboard: Oculto
+    canSeeDashboard: false,
+    // Inventarios: Oculto
+    canSeeInventarios: false,
+    // Admin Usuarios: Oculto
+    canSeeAdminUsuarios: false,
+
+    // Clientes: Solo visualización
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores: Solo visualización
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes: Solo visualización
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+
+    // Propuestas: Solo visualización
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas: Ocultar botón editar (pero Detalle Campaña tiene acceso total)
+    canEditCampanas: false,
+    // canEditDetalleCampana: true (por defecto)
+    // canDeleteDetalleCampana: true (por defecto)
+
+    // Gestión de Artes: Puede hacer todo EXCEPTO resolver tareas de producción
+    // canEditGestionArtes: true (por defecto)
+    canResolveProduccionTasks: false,
+
+    // Inventarios: Oculto (ya se oculta con canSeeInventarios: false)
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,

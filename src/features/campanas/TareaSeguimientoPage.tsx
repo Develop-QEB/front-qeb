@@ -1474,6 +1474,7 @@ function TestigoTaskView({
   onClose,
   campanaId,
   getCatorcenaFromFechaFin,
+  canResolveProduccionTasks = true,
 }: {
   task: TaskRow;
   taskInventory: InventoryRow[];
@@ -1481,6 +1482,7 @@ function TestigoTaskView({
   onClose: () => void;
   campanaId: number;
   getCatorcenaFromFechaFin: string | null;
+  canResolveProduccionTasks?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [testigoFile, setTestigoFile] = useState<File | null>(null);
@@ -1859,7 +1861,7 @@ function TestigoTaskView({
             </div>
           )}
         </div>
-      ) : (
+      ) : canResolveProduccionTasks ? (
         // Vista de carga de archivo para tareas pendientes
         <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
           <h4 className="text-sm font-medium text-purple-300 mb-3">Subir Evidencia Fotográfica</h4>
@@ -1927,6 +1929,11 @@ function TestigoTaskView({
             </button>
           </div>
         </div>
+      ) : (
+        // Vista de solo lectura para usuarios sin permiso de resolver tareas
+        <div className="bg-zinc-800/50 border border-border rounded-lg p-4 text-center">
+          <p className="text-sm text-zinc-400">Tarea de testigo pendiente - Solo visualización</p>
+        </div>
       )}
     </div>
   );
@@ -1951,6 +1958,7 @@ function TaskDetailModal({
   onCreateRecepcionFaltante,
   isUpdating,
   campanaId,
+  canResolveProduccionTasks = true,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -1968,6 +1976,7 @@ function TaskDetailModal({
   onCreateRecepcionFaltante: (faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[], observaciones: string) => Promise<void>;
   isUpdating: boolean;
   campanaId: number;
+  canResolveProduccionTasks?: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<TaskDetailTab>('resumen');
   const [selectedArteIds, setSelectedArteIds] = useState<Set<string>>(new Set());
@@ -3149,7 +3158,7 @@ function TaskDetailModal({
                   <Download className="h-4 w-4" />
                   Descargar PDF Proveedor
                 </button>
-                {task.estatus === 'Activo' && (
+                {task.estatus === 'Activo' && canResolveProduccionTasks && (
                   <button
                     onClick={handleCrearRecepcion}
                     disabled={isCreatingRecepcion}
@@ -3169,6 +3178,11 @@ function TaskDetailModal({
                   </button>
                 )}
               </div>
+              {task.estatus === 'Activo' && !canResolveProduccionTasks && (
+                <div className="bg-zinc-800/50 border border-border rounded-lg p-4 text-center mt-4">
+                  <p className="text-sm text-zinc-400">Tarea de impresión activa - Solo visualización</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -3532,7 +3546,7 @@ function TaskDetailModal({
               )}
 
               {/* Botones de acción */}
-              {(task.estatus === 'Activo' || task.estatus === 'Pendiente') && (
+              {(task.estatus === 'Activo' || task.estatus === 'Pendiente') && canResolveProduccionTasks && (
                 <div className="flex flex-wrap gap-3 justify-end">
                   <button
                     onClick={handleFinalizarRecepcion}
@@ -3551,6 +3565,11 @@ function TaskDetailModal({
                       </>
                     )}
                   </button>
+                </div>
+              )}
+              {(task.estatus === 'Activo' || task.estatus === 'Pendiente') && !canResolveProduccionTasks && (
+                <div className="bg-zinc-800/50 border border-border rounded-lg p-4 text-center">
+                  <p className="text-sm text-zinc-400">Tarea de recepción activa - Solo visualización</p>
                 </div>
               )}
             </div>
@@ -3760,7 +3779,7 @@ function TaskDetailModal({
                     <p className="text-sm text-zinc-400 mt-1">El instalador ha marcado como instalado. Pendiente de validar en la pestaña "Validar Instalación".</p>
                   </div>
                 </div>
-              ) : (
+              ) : canResolveProduccionTasks ? (
                 <div className="flex justify-end">
                   <button
                     onClick={async () => {
@@ -3785,6 +3804,10 @@ function TaskDetailModal({
                     )}
                   </button>
                 </div>
+              ) : (
+                <div className="bg-zinc-800/50 border border-border rounded-lg p-4 text-center">
+                  <p className="text-sm text-zinc-400">Tarea de instalación activa - Solo visualización</p>
+                </div>
               )}
             </div>
           )}
@@ -3798,6 +3821,7 @@ function TaskDetailModal({
               onClose={onClose}
               campanaId={campanaId}
               getCatorcenaFromFechaFin={getCatorcenaFromFechaFin}
+              canResolveProduccionTasks={canResolveProduccionTasks}
             />
           )}
 
@@ -9919,6 +9943,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
         }}
         isUpdating={updateArteStatusMutation.isPending || assignArteMutation.isPending}
         campanaId={campanaId}
+        canResolveProduccionTasks={permissions.canResolveProduccionTasks}
       />
     </div>
   );
