@@ -18,6 +18,7 @@ import { TareaSeguimientoPage } from './features/campanas/TareaSeguimientoPage';
 import { NotificacionesPage } from './features/notificaciones/NotificacionesPage';
 import { CorreosPage } from './features/correos/CorreosPage';
 import { PerfilPage } from './features/perfil/PerfilPage';
+import { UsuariosAdminPage } from './features/admin/UsuariosAdminPage';
 import { useAuthStore } from './store/authStore';
 
 // IDs de usuarios con acceso a Inventarios (Mario, Jos, Akary)
@@ -30,6 +31,15 @@ function InventariosRoute() {
     return <Navigate to="/" replace />;
   }
   return <InventariosPage />;
+}
+
+// Componente para proteger ruta de Admin (solo Administrador)
+function AdminUsuariosRoute() {
+  const user = useAuthStore((state) => state.user);
+  if (!user || user.rol !== 'Administrador') {
+    return <Navigate to="/" replace />;
+  }
+  return <UsuariosAdminPage />;
 }
  
 function App() {
@@ -59,6 +69,7 @@ function App() {
             <Route path="/notificaciones" element={<NotificacionesPage />} />
             <Route path="/correos" element={<CorreosPage />} />
             <Route path="/perfil" element={<PerfilPage />} />
+            <Route path="/admin/usuarios" element={<AdminUsuariosRoute />} />
           </Route>
 
           {/* Public route for clients - no auth required */}

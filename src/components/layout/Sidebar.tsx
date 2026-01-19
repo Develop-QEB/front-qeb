@@ -10,6 +10,7 @@ import {
   LogOut,
   ChevronLeft,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import { usePrefetch } from '../../hooks/usePrefetch';
@@ -35,11 +36,13 @@ const navigation: { name: string; href: string; icon: React.ElementType; prefetc
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const queryClient = useQueryClient();
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
   const prefetch = usePrefetch();
 
   const handleLogout = () => {
+    queryClient.clear();
     logout();
   };
 

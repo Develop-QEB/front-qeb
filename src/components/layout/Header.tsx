@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, FlaskConical } from 'lucide-react';
+import { Bell, FlaskConical, Settings } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useEnvironmentStore } from '../../store/environmentStore';
 import { notificacionesService } from '../../services/notificaciones.service';
@@ -36,6 +36,17 @@ export function Header({ title }: HeaderProps) {
             <FlaskConical className="h-3 w-3" />
             PRUEBAS
           </span>
+        )}
+
+        {/* Admin - Configuración de usuarios (solo Administrador) */}
+        {user?.rol === 'Administrador' && (
+          <Link
+            to="/admin/usuarios"
+            className="relative p-2 rounded-full hover:bg-purple-900/30 transition-colors"
+            title="Administrar usuarios"
+          >
+            <Settings className="h-5 w-5 text-purple-400/70 hover:text-purple-300" />
+          </Link>
         )}
 
         {/* Notificaciones */}

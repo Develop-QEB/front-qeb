@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { authService } from '../../services/auth.service';
 import { Button } from '../../components/ui/button';
@@ -19,6 +20,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setAuth = useAuthStore((state) => state.setAuth);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,6 +39,8 @@ export function LoginPage() {
 
     try {
       const response = await authService.login(data.email, data.password);
+      // Limpiar caché de React Query para evitar datos del usuario anterior
+      queryClient.clear();
       setAuth(response.user, response.accessToken, response.refreshToken);
       navigate('/');
     } catch (err) {
