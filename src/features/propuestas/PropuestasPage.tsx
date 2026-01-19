@@ -505,9 +505,12 @@ interface StatusModalProps {
   onClose: () => void;
   propuesta: Propuesta | null;
   onStatusChange: () => void;
+  allowedStatuses?: string[] | null; // null = todos, array = solo esos
 }
 
-function StatusModal({ isOpen, onClose, propuesta, onStatusChange }: StatusModalProps) {
+function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatuses }: StatusModalProps) {
+  // Filtrar opciones de estatus según permisos
+  const availableStatuses = allowedStatuses ? STATUS_OPTIONS.filter(s => allowedStatuses.includes(s)) : STATUS_OPTIONS;
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
@@ -597,7 +600,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange }: StatusModal
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             >
-              {STATUS_OPTIONS.map(s => (
+              {availableStatuses.map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
@@ -1670,6 +1673,7 @@ export function PropuestasPage() {
           queryClient.invalidateQueries({ queryKey: ['propuestas'] });
           queryClient.invalidateQueries({ queryKey: ['propuestas-stats'] });
         }}
+        allowedStatuses={permissions.allowedPropuestaStatuses}
       />
 
       <ApproveModal

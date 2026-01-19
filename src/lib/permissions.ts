@@ -48,6 +48,7 @@ export interface RolePermissions {
 
   // Propuestas
   canEditPropuestaStatus: boolean;
+  allowedPropuestaStatuses: string[] | null; // null = todos, array = solo esos
   canAprobarPropuesta: boolean;
   canAsignarInventario: boolean;
   canCompartirPropuesta: boolean;
@@ -89,6 +90,7 @@ const defaultPermissions: RolePermissions = {
   canDeleteSolicitudes: true,
 
   canEditPropuestaStatus: true,
+  allowedPropuestaStatuses: null, // null = todos los estatus
   canAprobarPropuesta: true,
   canAsignarInventario: true,
   canCompartirPropuesta: true,
@@ -117,7 +119,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditProveedores: false,
     canDeleteProveedores: false,
 
-    canEditPropuestaStatus: false,
+    // Puede cambiar estatus pero solo a estos valores
+    allowedPropuestaStatuses: ['Por aprobar', 'Pase a ventas', 'Ajustar'],
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: false,
