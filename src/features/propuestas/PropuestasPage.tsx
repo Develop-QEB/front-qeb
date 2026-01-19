@@ -1186,12 +1186,12 @@ export function PropuestasPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setApprovePropuesta(item)}
-              disabled={item.status !== 'Por aprobar'}
-              className={`p-2 rounded-lg border transition-all ${item.status !== 'Por aprobar'
+              disabled={!['Por aprobar', 'Pase a ventas'].includes(item.status)}
+              className={`p-2 rounded-lg border transition-all ${!['Por aprobar', 'Pase a ventas'].includes(item.status)
                 ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
                 : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40'
                 }`}
-              title={item.status !== 'Por aprobar' ? 'Solo disponible con estatus Por aprobar' : 'Aprobar propuesta'}
+              title={!['Por aprobar', 'Pase a ventas'].includes(item.status) ? 'Solo disponible con estatus Por aprobar o Pase a ventas' : 'Aprobar propuesta'}
             >
               <CheckCircle className="h-3.5 w-3.5" />
             </button>
