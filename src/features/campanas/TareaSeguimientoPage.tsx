@@ -8011,18 +8011,20 @@ export function TareaSeguimientoPage() {
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => setIsUploadArtModalOpen(true)}
-                disabled={selectedInventoryIds.size === 0}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                  selectedInventoryIds.size > 0
-                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
-                    : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                }`}
-              >
-                <Upload className="h-4 w-4" />
-                Asignar Arte
-              </button>
+              {permissions.canEditGestionArtes && (
+                <button
+                  onClick={() => setIsUploadArtModalOpen(true)}
+                  disabled={selectedInventoryIds.size === 0}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                    selectedInventoryIds.size > 0
+                      ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
+                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                  }`}
+                >
+                  <Upload className="h-4 w-4" />
+                  Asignar Arte
+                </button>
+              )}
             </div>
           )}
 
