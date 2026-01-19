@@ -1002,9 +1002,10 @@ interface StatusModalProps {
   onClose: () => void;
   solicitud: Solicitud | null;
   onStatusChange: () => void;
+  statusReadOnly?: boolean; // Si es true, solo puede ver y comentar, no cambiar estado
 }
 
-export function StatusModal({ isOpen, onClose, solicitud, onStatusChange }: StatusModalProps) {
+export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, statusReadOnly = false }: StatusModalProps) {
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
@@ -1133,38 +1134,49 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange }: Stat
               </div>
             </div>
           )}
-          <label className="block text-sm text-zinc-400 mb-2">Cambiar estado a:</label>
-          <div className="flex items-center gap-3">
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-            >
-              {statusOptions.map(s => (
-                <option
-                  key={s}
-                  value={s}
-                  disabled={s === 'Aprobada' && tienePendientes}
+          {statusReadOnly ? (
+            <>
+              <label className="block text-sm text-zinc-400 mb-2">Estado actual:</label>
+              <div className="px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700 text-white text-sm">
+                {solicitud.status}
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="block text-sm text-zinc-400 mb-2">Cambiar estado a:</label>
+              <div className="flex items-center gap-3">
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                 >
-                  {s}{s === 'Aprobada' && tienePendientes ? ' (Requiere autorización)' : ''}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={handleChangeStatus}
-              disabled={selectedStatus === solicitud.status || updateStatusMutation.isPending || (selectedStatus === 'Aprobada' && tienePendientes)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
-            >
-              {updateStatusMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Actualizando...
-                </>
-              ) : (
-                'Actualizar'
-              )}
-            </button>
-          </div>
+                  {statusOptions.map(s => (
+                    <option
+                      key={s}
+                      value={s}
+                      disabled={s === 'Aprobada' && tienePendientes}
+                    >
+                      {s}{s === 'Aprobada' && tienePendientes ? ' (Requiere autorización)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleChangeStatus}
+                  disabled={selectedStatus === solicitud.status || updateStatusMutation.isPending || (selectedStatus === 'Aprobada' && tienePendientes)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
+                >
+                  {updateStatusMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    'Actualizar'
+                  )}
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Comments List */}

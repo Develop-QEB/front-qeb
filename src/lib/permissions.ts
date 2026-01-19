@@ -45,6 +45,8 @@ export interface RolePermissions {
   canCreateSolicitudes: boolean;
   canEditSolicitudes: boolean;
   canDeleteSolicitudes: boolean;
+  canAtenderSolicitudes: boolean;
+  canChangeEstadoSolicitud: boolean; // Cambiar estado en modal (si es false, solo puede ver y comentar)
 
   // Propuestas
   canEditPropuestaStatus: boolean;
@@ -89,6 +91,8 @@ const defaultPermissions: RolePermissions = {
   canCreateSolicitudes: true,
   canEditSolicitudes: true,
   canDeleteSolicitudes: true,
+  canAtenderSolicitudes: true,
+  canChangeEstadoSolicitud: true,
 
   canEditPropuestaStatus: true,
   allowedPropuestaStatuses: null, // null = todos los estatus
@@ -176,10 +180,12 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditProveedores: false,
     canDeleteProveedores: false,
 
-    // Solicitudes: Solo visualización
+    // Solicitudes: Solo visualización (ver detalles y comentar, pero no cambiar estado)
     canCreateSolicitudes: false,
     canEditSolicitudes: false,
     canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false, // Solo puede ver y comentar, no cambiar estado
 
     // Propuestas: Solo visualización (excepto compartir)
     canEditPropuestaStatus: false,
