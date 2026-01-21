@@ -7100,7 +7100,7 @@ export function TareaSeguimientoPage() {
     FILTER_FIELDS_TAREAS.forEach(f => {
       const uniqueSet = new Set<string>();
       allTasks.forEach(t => {
-        const val = (t as Record<string, unknown>)[f.field];
+        const val = (t as unknown as Record<string, unknown>)[f.field];
         if (val !== null && val !== undefined && String(val).trim() !== '') {
           uniqueSet.add(String(val));
         }
