@@ -6484,47 +6484,6 @@ export function TareaSeguimientoPage() {
     setFiltersTareas([]);
   }, []);
 
-  // Función para descargar tareas como Excel con dos hojas
-  const downloadTareasExcel = useCallback(() => {
-    const formatDate = (dateStr: string | null | undefined) => {
-      if (!dateStr) return '-';
-      try {
-        return new Date(dateStr).toLocaleDateString('es-MX');
-      } catch {
-        return dateStr;
-      }
-    };
-
-    const mapTaskToRow = (task: TaskRow) => ({
-      'Tipo': task.tipo || '-',
-      'Estatus': task.estatus || '-',
-      'Identificador': task.identificador || '-',
-      'Título': task.titulo || '-',
-      'Fecha Inicio': formatDate(task.fecha_inicio),
-      'Fecha Fin': formatDate(task.fecha_fin),
-      'Creador': task.creador || '-',
-      'Asignado': task.asignado || '-',
-      'Descripción': task.descripcion || '-',
-    });
-
-    // Crear workbook
-    const wb = XLSX.utils.book_new();
-
-    // Hoja 1: Tareas Activas
-    const activasData = filteredTasks.map(mapTaskToRow);
-    const wsActivas = XLSX.utils.json_to_sheet(activasData.length > 0 ? activasData : [{ 'Sin datos': 'No hay tareas activas' }]);
-    XLSX.utils.book_append_sheet(wb, wsActivas, 'Activas');
-
-    // Hoja 2: Tareas Completadas
-    const completadasData = filteredCompletedTasks.map(mapTaskToRow);
-    const wsCompletadas = XLSX.utils.json_to_sheet(completadasData.length > 0 ? completadasData : [{ 'Sin datos': 'No hay tareas completadas' }]);
-    XLSX.utils.book_append_sheet(wb, wsCompletadas, 'Completadas');
-
-    // Descargar
-    const filename = `tareas_produccion_${new Date().toISOString().split('T')[0]}.xlsx`;
-    XLSX.writeFile(wb, filename);
-  }, [filteredTasks, filteredCompletedTasks]);
-
   // Helper function to transform InventarioConArte to InventoryRow
   const transformInventarioToRow = useCallback((item: InventarioConArte, defaultArteStatus: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = 'sin_revisar', tareasActivas: number[] = []): InventoryRow => {
     // Mapear arte_aprobado a estado_arte
@@ -7254,6 +7213,47 @@ export function TareaSeguimientoPage() {
     }
     return data;
   }, [completedTasks, tasksSearch, filtersTareas]);
+
+  // Función para descargar tareas como Excel con dos hojas
+  const downloadTareasExcel = useCallback(() => {
+    const formatDate = (dateStr: string | null | undefined) => {
+      if (!dateStr) return '-';
+      try {
+        return new Date(dateStr).toLocaleDateString('es-MX');
+      } catch {
+        return dateStr;
+      }
+    };
+
+    const mapTaskToRow = (task: TaskRow) => ({
+      'Tipo': task.tipo || '-',
+      'Estatus': task.estatus || '-',
+      'Identificador': task.identificador || '-',
+      'Título': task.titulo || '-',
+      'Fecha Inicio': formatDate(task.fecha_inicio),
+      'Fecha Fin': formatDate(task.fecha_fin),
+      'Creador': task.creador || '-',
+      'Asignado': task.asignado || '-',
+      'Descripción': task.descripcion || '-',
+    });
+
+    // Crear workbook
+    const wb = XLSX.utils.book_new();
+
+    // Hoja 1: Tareas Activas
+    const activasData = filteredTasks.map(mapTaskToRow);
+    const wsActivas = XLSX.utils.json_to_sheet(activasData.length > 0 ? activasData : [{ 'Sin datos': 'No hay tareas activas' }]);
+    XLSX.utils.book_append_sheet(wb, wsActivas, 'Activas');
+
+    // Hoja 2: Tareas Completadas
+    const completadasData = filteredCompletedTasks.map(mapTaskToRow);
+    const wsCompletadas = XLSX.utils.json_to_sheet(completadasData.length > 0 ? completadasData : [{ 'Sin datos': 'No hay tareas completadas' }]);
+    XLSX.utils.book_append_sheet(wb, wsCompletadas, 'Completadas');
+
+    // Descargar
+    const filename = `tareas_produccion_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  }, [filteredTasks, filteredCompletedTasks]);
 
   // Agrupación simple para tab "Validar Instalación" basada en activeGroupingsTestigo
   // Solo usa el primer campo de agrupación para mantener compatibilidad con el renderizado existente
