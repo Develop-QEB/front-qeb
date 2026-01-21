@@ -9601,17 +9601,64 @@ export function TareaSeguimientoPage() {
                   </div>
                 </div>
 
-                {/* Filtros avanzados */}
+                {/* Filtros avanzados de tareas */}
                 {showFiltersTareas && (
-                  <FilterToolbar
-                    filters={filtersTareas}
-                    fields={FILTER_FIELDS_TAREAS}
-                    operators={FILTER_OPERATORS}
-                    addFilter={addFilterTareas}
-                    updateFilter={updateFilterTareas}
-                    removeFilter={removeFilterTareas}
-                    clearFilters={clearFiltersTareas}
-                  />
+                  <div className="p-3 bg-zinc-900/50 border border-border rounded-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-zinc-400">Filtros avanzados</span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={addFilterTareas}
+                          className="px-2 py-1 text-[10px] bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                        >
+                          + Agregar filtro
+                        </button>
+                        {filtersTareas.length > 0 && (
+                          <button
+                            onClick={clearFiltersTareas}
+                            className="px-2 py-1 text-[10px] bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded transition-colors"
+                          >
+                            Limpiar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {filtersTareas.map((filter) => (
+                      <div key={filter.id} className="flex items-center gap-2">
+                        <select
+                          value={filter.field}
+                          onChange={(e) => updateFilterTareas(filter.id, { field: e.target.value })}
+                          className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded"
+                        >
+                          {FILTER_FIELDS_TAREAS.map((f) => (
+                            <option key={f.field} value={f.field}>{f.label}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={filter.operator}
+                          onChange={(e) => updateFilterTareas(filter.id, { operator: e.target.value as FilterOperator })}
+                          className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded"
+                        >
+                          {FILTER_OPERATORS.filter(op => op.forTypes.includes('string')).map((op) => (
+                            <option key={op.value} value={op.value}>{op.label}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={filter.value}
+                          onChange={(e) => updateFilterTareas(filter.id, { value: e.target.value })}
+                          placeholder="Valor..."
+                          className="flex-1 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded"
+                        />
+                        <button
+                          onClick={() => removeFilterTareas(filter.id)}
+                          className="p-1 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {/* Tasks Table */}
