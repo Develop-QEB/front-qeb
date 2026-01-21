@@ -3320,70 +3320,35 @@ function TaskDetailModal({
                       Desglose completo ({taskInventory.length} ubicaciones)
                     </h4>
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto max-h-[400px]">
                     <table className="w-full text-xs">
                       <thead className="bg-zinc-800/80 sticky top-0">
                         <tr>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Código</th>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Ciudad</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">ID</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Tipo Formato</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Código Único</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Ubicación</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Tipo Cara</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Formato</th>
                           <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Plaza</th>
                           <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Municipio</th>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Ubicación</th>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Tipo Medio</th>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Formato</th>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Tipo Cara</th>
                           <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">NSE</th>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">APS</th>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Medidas</th>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Trad/Digital</th>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Catorcena</th>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Espacio</th>
-                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Arte</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Rsv ID</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/50">
                         {taskInventory.map((item, idx) => (
                           <tr key={item.id || idx} className="hover:bg-zinc-800/30">
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.id || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_medio || '-'}</td>
                             <td className="px-3 py-2 text-white font-mono whitespace-nowrap">{item.codigo_unico || '-'}</td>
-                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.ciudad || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 max-w-[250px] truncate" title={item.ubicacion || '-'}>{item.ubicacion || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_de_cara || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.mueble || '-'}</td>
                             <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.plaza || '-'}</td>
                             <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.municipio || '-'}</td>
-                            <td className="px-3 py-2 text-zinc-300 max-w-[200px] truncate" title={item.ubicacion || '-'}>{item.ubicacion || '-'}</td>
-                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_medio || '-'}</td>
-                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.mueble || '-'}</td>
-                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_de_cara || '-'}</td>
                             <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.nse || '-'}</td>
-                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.aps ?? '-'}</td>
-                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">
-                              {item.ancho && item.alto ? `${item.ancho}x${item.alto}` : '-'}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                                item.tradicional_digital === 'Digital'
-                                  ? 'bg-blue-900/50 text-blue-300'
-                                  : 'bg-amber-900/50 text-amber-300'
-                              }`}>
-                                {item.tradicional_digital || '-'}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">C{item.catorcena}, {item.anio}</td>
-                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.espacio || '-'}</td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {item.archivo_arte && item.archivo_arte !== 'sin_arte' ? (
-                                <div className="w-12 h-8 bg-zinc-800 rounded overflow-hidden border border-zinc-700">
-                                  <img
-                                    src={getImageUrl(item.archivo_arte) || ''}
-                                    alt="Arte"
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).style.display = 'none';
-                                    }}
-                                  />
-                                </div>
-                              ) : (
-                                <span className="text-zinc-500">-</span>
-                              )}
-                            </td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.rsv_id || '-'}</td>
                           </tr>
                         ))}
                       </tbody>
