@@ -502,6 +502,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Si readOnly es true, sobrescribir permisos para modo visualización
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario;
+  const canEditResumen = !readOnly && permissions.canEditResumenPropuesta;
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
 
@@ -3975,30 +3976,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <input
                         type="text"
                         value={nombreCampania}
-                        onChange={(e) => setNombreCampania(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        onChange={(e) => canEditResumen && setNombreCampania(e.target.value)}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Nombre de la campaña"
                       />
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs text-zinc-500">Asignados</label>
                       {/* Add user button */}
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          const userId = parseInt(e.target.value);
-                          const selectedUser = users?.find((u: UserOption) => u.id === userId);
-                          if (selectedUser && !asignados.find(a => a.id === userId)) {
-                            setAsignados(prev => [...prev, selectedUser]);
-                          }
-                        }}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      >
-                        <option value="">+ Agregar asignado...</option>
-                        {users?.filter((u: UserOption) => !asignados.find(a => a.id === u.id)).map((u: UserOption) => (
-                          <option key={u.id} value={u.id}>{u.nombre} - {u.area}</option>
-                        ))}
-                      </select>
+                      {canEditResumen ? (
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const userId = parseInt(e.target.value);
+                            const selectedUser = users?.find((u: UserOption) => u.id === userId);
+                            if (selectedUser && !asignados.find(a => a.id === userId)) {
+                              setAsignados(prev => [...prev, selectedUser]);
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        >
+                          <option value="">+ Agregar asignado...</option>
+                          {users?.filter((u: UserOption) => !asignados.find(a => a.id === u.id)).map((u: UserOption) => (
+                            <option key={u.id} value={u.id}>{u.nombre} - {u.area}</option>
+                          ))}
+                        </select>
+                      ) : null}
                       {/* Selected users tags */}
                       {asignados.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
@@ -4008,14 +4012,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-xs"
                             >
                               {user.nombre}
-                              <button
-                                onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
-                                className="hover:text-white"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
+                              {canEditResumen && (
+                                <button
+                                  onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
+                                  className="hover:text-white"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
                             </span>
                           ))}
+                        </div>
+                      )}
+                      {!canEditResumen && asignados.length === 0 && (
+                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-400 border border-zinc-700/30">
+                          Sin asignados
                         </div>
                       )}
                     </div>
@@ -4027,8 +4038,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <label className="text-xs text-zinc-500">Año Inicio</label>
                       <select
                         value={yearInicio || ''}
-                        onChange={(e) => { setYearInicio(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaInicio(undefined); }}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        onChange={(e) => canEditResumen && (setYearInicio(e.target.value ? parseInt(e.target.value) : undefined), setCatorcenaInicio(undefined))}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
                         {yearInicioOptions.map(y => (
@@ -4040,9 +4052,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <label className="text-xs text-zinc-500">Cat. Inicio</label>
                       <select
                         value={catorcenaInicio || ''}
-                        onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                        disabled={!yearInicio}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        onChange={(e) => canEditResumen && setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                        disabled={!canEditResumen || !yearInicio}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50 ${!canEditResumen ? 'cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
                         {catorcenasInicioOptions.map(c => (
@@ -4054,8 +4066,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <label className="text-xs text-zinc-500">Año Fin</label>
                       <select
                         value={yearFin || ''}
-                        onChange={(e) => { setYearFin(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaFin(undefined); }}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        onChange={(e) => canEditResumen && (setYearFin(e.target.value ? parseInt(e.target.value) : undefined), setCatorcenaFin(undefined))}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
                         {yearFinOptions.map(y => (
@@ -4067,9 +4080,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <label className="text-xs text-zinc-500">Cat. Fin</label>
                       <select
                         value={catorcenaFin || ''}
-                        onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                        disabled={!yearFin}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        onChange={(e) => canEditResumen && setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                        disabled={!canEditResumen || !yearFin}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50 ${!canEditResumen ? 'cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
                         {catorcenasFinOptions.map(c => (
@@ -4085,8 +4098,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <label className="text-xs text-zinc-500">Notas</label>
                       <textarea
                         value={notas}
-                        onChange={(e) => setNotas(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20"
+                        onChange={(e) => canEditResumen && setNotas(e.target.value)}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Notas adicionales..."
                       />
                     </div>
@@ -4094,8 +4108,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <label className="text-xs text-zinc-500">Descripción</label>
                       <textarea
                         value={descripcion}
-                        onChange={(e) => setDescripcion(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20"
+                        onChange={(e) => canEditResumen && setDescripcion(e.target.value)}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Descripción de la propuesta..."
                       />
                     </div>
@@ -4152,24 +4167,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           >
                             <Download className="h-4 w-4" />
                           </a>
-                          <button
-                            type="button"
-                            onClick={() => archivoInputRef.current?.click()}
-                            className="px-3 py-2 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
-                          >
-                            Cambiar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setArchivoPropuesta(null); setTipoArchivoPropuesta(null); }}
-                            className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {canEditResumen && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => archivoInputRef.current?.click()}
+                                className="px-3 py-2 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
+                              >
+                                Cambiar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setArchivoPropuesta(null); setTipoArchivoPropuesta(null); }}
+                                className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
-                    ) : (
+                    ) : canEditResumen ? (
                       <button
                         type="button"
                         onClick={() => archivoInputRef.current?.click()}
@@ -4178,33 +4197,38 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <Upload className="h-5 w-5" />
                         <span className="text-sm">Seleccionar archivo</span>
                       </button>
+                    ) : (
+                      <div className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-zinc-700/50 rounded-xl text-zinc-500">
+                        <span className="text-sm">Sin archivo adjunto</span>
+                      </div>
                     )}
                   </div>
 
                   {/* Update button */}
-                  <div className="flex justify-end pt-2 border-t border-zinc-700/30">
-
-                    {/* Update button - shows when there are changes */}
-                    {hasChanges && (
-                      <button
-                        onClick={handleUpdatePropuesta}
-                        disabled={isUpdatingPropuesta}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isUpdatingPropuesta ? (
-                          <>
-                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Guardando...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="h-4 w-4" />
-                            Actualizar Propuesta
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
+                  {canEditResumen && (
+                    <div className="flex justify-end pt-2 border-t border-zinc-700/30">
+                      {/* Update button - shows when there are changes */}
+                      {hasChanges && (
+                        <button
+                          onClick={handleUpdatePropuesta}
+                          disabled={isUpdatingPropuesta}
+                          className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isUpdatingPropuesta ? (
+                            <>
+                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              Guardando...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4" />
+                              Actualizar Propuesta
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -4225,7 +4249,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <span className="text-zinc-400">
                       Inversión: <span className="text-amber-300 font-medium">{formatCurrency(carasKPIs.totalInversion)}</span>
                     </span>
-                    {effectiveCanEdit && (
+                    {effectiveCanEdit && canEditResumen && (
                       <button
                         onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
@@ -4247,48 +4271,54 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     {/* Artículo selector */}
                     <div className="mb-4">
                       <label className="text-xs text-zinc-500 mb-1 block">Artículo SAP</label>
-                      <SearchableSelect
-                        label="Seleccionar artículo"
-                        options={articulosData || []}
-                        value={selectedArticulo}
-                        onChange={(item: SAPArticulo) => {
-                          setSelectedArticulo(item);
-                          // Auto-complete all fields from article
-                          const tarifa = getTarifaFromItemCode(item.ItemCode);
-                          const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
-                          const formato = getFormatoFromArticulo(item.ItemName);
-                          const tipo = getTipoFromName(item.ItemName);
-                          setNewCara({
-                            ...newCara,
-                            articulo: item.ItemCode,
-                            tarifa_publica: tarifa,
-                            estados: ciudadEstado?.estado || newCara.estados,
-                            ciudad: ciudadEstado?.ciudad || newCara.ciudad,
-                            formato: formato || newCara.formato,
-                            tipo: tipo || newCara.tipo,
-                          });
-                        }}
-                        onClear={() => {
-                          setSelectedArticulo(null);
-                          setNewCara({ ...newCara, articulo: '', tarifa_publica: 0, estados: '', ciudad: '', formato: '', tipo: '' });
-                        }}
-                        displayKey="ItemName"
-                        valueKey="ItemCode"
-                        searchKeys={['ItemCode', 'ItemName']}
-                        loading={articulosLoading}
-                        renderOption={(item: SAPArticulo) => (
-                          <div>
-                            <div className="font-medium text-white">{item.ItemCode}</div>
-                            <div className="text-xs text-zinc-500">{item.ItemName}</div>
-                          </div>
-                        )}
-                        renderSelected={(item: SAPArticulo) => (
-                          <div className="text-left">
-                            <div className="font-medium text-sm">{item.ItemCode}</div>
-                            <div className="text-[10px] text-zinc-500 truncate">{item.ItemName}</div>
-                          </div>
-                        )}
-                      />
+                      {canEditResumen ? (
+                        <SearchableSelect
+                          label="Seleccionar artículo"
+                          options={articulosData || []}
+                          value={selectedArticulo}
+                          onChange={(item: SAPArticulo) => {
+                            setSelectedArticulo(item);
+                            // Auto-complete all fields from article
+                            const tarifa = getTarifaFromItemCode(item.ItemCode);
+                            const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
+                            const formato = getFormatoFromArticulo(item.ItemName);
+                            const tipo = getTipoFromName(item.ItemName);
+                            setNewCara({
+                              ...newCara,
+                              articulo: item.ItemCode,
+                              tarifa_publica: tarifa,
+                              estados: ciudadEstado?.estado || newCara.estados,
+                              ciudad: ciudadEstado?.ciudad || newCara.ciudad,
+                              formato: formato || newCara.formato,
+                              tipo: tipo || newCara.tipo,
+                            });
+                          }}
+                          onClear={() => {
+                            setSelectedArticulo(null);
+                            setNewCara({ ...newCara, articulo: '', tarifa_publica: 0, estados: '', ciudad: '', formato: '', tipo: '' });
+                          }}
+                          displayKey="ItemName"
+                          valueKey="ItemCode"
+                          searchKeys={['ItemCode', 'ItemName']}
+                          loading={articulosLoading}
+                          renderOption={(item: SAPArticulo) => (
+                            <div>
+                              <div className="font-medium text-white">{item.ItemCode}</div>
+                              <div className="text-xs text-zinc-500">{item.ItemName}</div>
+                            </div>
+                          )}
+                          renderSelected={(item: SAPArticulo) => (
+                            <div className="text-left">
+                              <div className="font-medium text-sm">{item.ItemCode}</div>
+                              <div className="text-[10px] text-zinc-500 truncate">{item.ItemName}</div>
+                            </div>
+                          )}
+                        />
+                      ) : (
+                        <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300">
+                          {selectedArticulo ? `${selectedArticulo.ItemCode} - ${selectedArticulo.ItemName}` : newCara.articulo || 'Sin artículo'}
+                        </div>
+                      )}
                     </div>
 
                     {/* Catorcena - solo una, filtrada por rango de propuesta */}
@@ -4305,6 +4335,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <select
                           value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
                           onChange={(e) => {
+                            if (!canEditResumen) return;
                             if (e.target.value) {
                               const [year, cat] = e.target.value.split('-').map(Number);
                               const period = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
@@ -4329,7 +4360,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               });
                             }
                           }}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar catorcena</option>
                           {catorcenasData?.data
@@ -4355,12 +4387,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">Estados {newCara.estados && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
-                        <MultiSelectDropdown
-                          options={solicitudFilters?.estados || []}
-                          selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
-                          onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
-                          placeholder="Seleccionar estados..."
-                        />
+                        {canEditResumen ? (
+                          <MultiSelectDropdown
+                            options={solicitudFilters?.estados || []}
+                            selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
+                            onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
+                            placeholder="Seleccionar estados..."
+                          />
+                        ) : (
+                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                            {newCara.estados || '-'}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">Ciudades {newCara.ciudad && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
@@ -4392,8 +4430,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <label className="text-xs text-zinc-500">Tipo</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => setNewCara({ ...newCara, tipo: e.target.value })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, tipo: e.target.value })}
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
@@ -4408,13 +4447,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           type="number"
                           value={newCara.caras || ''}
                           onChange={(e) => {
+                            if (!canEditResumen) return;
                             const val = parseInt(e.target.value) || 0;
                             // Auto-calculate flujo and contraflujo (half and half)
                             const flujo = Math.ceil(val / 2);
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
@@ -4424,8 +4465,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
-                          onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -4434,8 +4476,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <input
                           type="number"
                           value={newCara.tarifa_publica || ''}
-                          onChange={(e) => setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -4471,7 +4514,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <div className="p-8 text-center text-zinc-500">
                       <Layers className="h-10 w-10 mx-auto mb-3 opacity-30" />
                       <p>No hay formatos/caras en esta propuesta</p>
-                      {effectiveCanEdit && (
+                      {effectiveCanEdit && canEditResumen && (
                         <button
                           onClick={() => setShowAddCaraForm(true)}
                           className="mt-3 text-purple-400 hover:text-purple-300 text-sm"
@@ -4590,17 +4633,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         >
                                           <Pencil className="h-4 w-4" />
                                         </button>
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
-                                          disabled={hasReservas}
-                                          className={`p-2 rounded-lg border transition-colors ${hasReservas
-                                            ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
-                                            : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
-                                            }`}
-                                          title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </button>
+                                        {canEditResumen && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
+                                            disabled={hasReservas}
+                                            className={`p-2 rounded-lg border transition-colors ${hasReservas
+                                              ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                              : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+                                              }`}
+                                            title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </button>
+                                        )}
                                       </>
                                     )}
                                   </div>

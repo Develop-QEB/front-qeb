@@ -59,6 +59,17 @@ function AdminUsuariosRoute() {
   }
   return <UsuariosAdminPage />;
 }
+
+// Componente para proteger ruta de Gestión de Artes
+function GestionArtesRoute() {
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  if (!user || !permissions.canSeeGestionArtes) {
+    return <Navigate to="/campanas" replace />;
+  }
+  return <TareaSeguimientoPage />;
+}
  
 function App() {
   return (
@@ -83,7 +94,7 @@ function App() {
             <Route path="/propuestas/compartir/:id" element={<CompartirPropuestaPage />} />
             <Route path="/campanas" element={<CampanasPage />} />
             <Route path="/campanas/detail/:id" element={<CampanaDetailPage />} />
-            <Route path="/campanas/:id/tareas" element={<TareaSeguimientoPage />} />
+            <Route path="/campanas/:id/tareas" element={<GestionArtesRoute />} />
             <Route path="/notificaciones" element={<NotificacionesPage />} />
             <Route path="/correos" element={<CorreosPage />} />
             <Route path="/perfil" element={<PerfilPage />} />

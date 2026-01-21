@@ -53,6 +53,7 @@ export interface RolePermissions {
   allowedPropuestaStatuses: string[] | null; // null = todos, array = solo esos
   canAprobarPropuesta: boolean;
   canAsignarInventario: boolean;
+  canEditResumenPropuesta: boolean; // Editar campos en Resumen de Propuesta del modal
   canCompartirPropuesta: boolean;
   canBuscarInventarioEnModal: boolean;
 
@@ -60,6 +61,7 @@ export interface RolePermissions {
   canEditCampanas: boolean;
   canEditDetalleCampana: boolean;
   canDeleteDetalleCampana: boolean;
+  canSeeGestionArtes: boolean; // Ver página de Gestión de Artes
   canEditGestionArtes: boolean;
   canResolveProduccionTasks: boolean; // Resolver/completar tareas de producción (Impresión, Recepción, Instalación)
 
@@ -98,12 +100,14 @@ const defaultPermissions: RolePermissions = {
   allowedPropuestaStatuses: null, // null = todos los estatus
   canAprobarPropuesta: true,
   canAsignarInventario: true,
+  canEditResumenPropuesta: true,
   canCompartirPropuesta: true,
   canBuscarInventarioEnModal: true,
 
   canEditCampanas: true,
   canEditDetalleCampana: true,
   canDeleteDetalleCampana: true,
+  canSeeGestionArtes: true,
   canEditGestionArtes: true,
   canResolveProduccionTasks: true,
 
@@ -211,6 +215,206 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   },
   'Administrador': {
     // Admin tiene todos los permisos por defecto
+  },
+  'Gerente de Tráfico': {
+    // Secciones visibles
+    canSeeDashboard: true,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: true,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: true,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - solo pueden cambiar a Atendido
+    canEditPropuestaStatus: true,
+    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    canAprobarPropuesta: false,
+    canAsignarInventario: true,
+    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canCompartirPropuesta: true, // Puede ver y usar botón compartir
+    canBuscarInventarioEnModal: true,
+
+    // Campañas - pueden hacer todo excepto detalle
+    canEditCampanas: true,
+    canEditDetalleCampana: false, // Solo visualización en detalle
+    canDeleteDetalleCampana: false, // No pueden quitar APs
+    canSeeGestionArtes: false, // Gestión de artes oculto
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+  },
+  'Coordinador de tráfico': {
+    // Secciones visibles
+    canSeeDashboard: true,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: true,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: true,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - solo pueden cambiar a Atendido
+    canEditPropuestaStatus: true,
+    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    canAprobarPropuesta: false,
+    canAsignarInventario: true,
+    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canCompartirPropuesta: true, // Puede ver y usar botón compartir
+    canBuscarInventarioEnModal: true,
+
+    // Campañas - pueden hacer todo excepto detalle
+    canEditCampanas: true,
+    canEditDetalleCampana: false, // Solo visualización en detalle
+    canDeleteDetalleCampana: false, // No pueden quitar APs
+    canSeeGestionArtes: false, // Gestión de artes oculto
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+  },
+  'Especialista de tráfico': {
+    // Secciones visibles
+    canSeeDashboard: true,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: true,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: true,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - solo pueden cambiar a Atendido
+    canEditPropuestaStatus: true,
+    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    canAprobarPropuesta: false,
+    canAsignarInventario: true,
+    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canCompartirPropuesta: true, // Puede ver y usar botón compartir
+    canBuscarInventarioEnModal: true,
+
+    // Campañas - pueden hacer todo excepto detalle
+    canEditCampanas: true,
+    canEditDetalleCampana: false, // Solo visualización en detalle
+    canDeleteDetalleCampana: false, // No pueden quitar APs
+    canSeeGestionArtes: false, // Gestión de artes oculto
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+  },
+  'Auxiliar de tráfico': {
+    // Secciones visibles
+    canSeeDashboard: true,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: true,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: true,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - solo pueden cambiar a Atendido
+    canEditPropuestaStatus: true,
+    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    canAprobarPropuesta: false,
+    canAsignarInventario: true,
+    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canCompartirPropuesta: true, // Puede ver y usar botón compartir
+    canBuscarInventarioEnModal: true,
+
+    // Campañas - pueden hacer todo excepto detalle
+    canEditCampanas: true,
+    canEditDetalleCampana: false, // Solo visualización en detalle
+    canDeleteDetalleCampana: false, // No pueden quitar APs
+    canSeeGestionArtes: false, // Gestión de artes oculto
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
   },
 };
 

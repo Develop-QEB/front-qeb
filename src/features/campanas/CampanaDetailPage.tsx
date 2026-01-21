@@ -1477,14 +1477,16 @@ export function CampanaDetailPage() {
                   <span className="sm:hidden">{assignAPSMutation.isPending ? '...' : `APS${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
                 </button>
               )}
-              <button
-                onClick={() => navigate(`/campanas/${campanaId}/tareas`)}
-                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
-              >
-                <ListTodo className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
-                <span className="hidden md:inline">Gestor de Tareas</span>
-                <span className="md:hidden">Tareas</span>
-              </button>
+              {permissions.canSeeGestionArtes && (
+                <button
+                  onClick={() => navigate(`/campanas/${campanaId}/tareas`)}
+                  className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
+                >
+                  <ListTodo className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
+                  <span className="hidden md:inline">Gestor de Tareas</span>
+                  <span className="md:hidden">Tareas</span>
+                </button>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 p-3 md:p-4">

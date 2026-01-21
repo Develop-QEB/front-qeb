@@ -22,7 +22,7 @@ import { getPermissions } from '../../lib/permissions';
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   'Por aprobar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
   'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Compartir': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+  'Atendido': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
   'Abierto': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
   'Ajuste Cto-Cliente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
   'Pase a ventas': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
@@ -33,7 +33,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }
 
 const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
 
-const STATUS_OPTIONS = ['Por aprobar', 'Compartir', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas'];
+const STATUS_OPTIONS = ['Por aprobar', 'Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas'];
 
 // Chart colors for dynamic status
 const CHART_COLORS = [
@@ -600,6 +600,10 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             >
+              {/* Mostrar estado actual si no está en las opciones permitidas */}
+              {propuesta.status && !availableStatuses.includes(propuesta.status) && (
+                <option value={propuesta.status} disabled>{propuesta.status} (actual)</option>
+              )}
               {availableStatuses.map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
@@ -1210,13 +1214,13 @@ export function PropuestasPage() {
             </button>
             {permissions.canCompartirPropuesta && (
               <button
-                disabled={item.status !== 'Compartir'}
-                onClick={() => item.status === 'Compartir' && navigate(`/propuestas/compartir/${item.id}`)}
-                className={`p-2 rounded-lg border transition-all ${item.status === 'Compartir'
+                disabled={item.status !== 'Atendido'}
+                onClick={() => item.status === 'Atendido' && navigate(`/propuestas/compartir/${item.id}`)}
+                className={`p-2 rounded-lg border transition-all ${item.status === 'Atendido'
                   ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40'
                   : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
                   }`}
-                title={item.status === 'Compartir' ? 'Compartir propuesta' : 'Solo disponible en status Compartir'}
+                title={item.status === 'Atendido' ? 'Compartir propuesta' : 'Solo disponible en status Atendido'}
               >
                 <Share2 className="h-3.5 w-3.5" />
               </button>
