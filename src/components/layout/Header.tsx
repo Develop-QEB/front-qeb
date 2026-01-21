@@ -16,10 +16,12 @@ export function Header({ title }: HeaderProps) {
   const isTestMode = environment === 'test';
 
   // Fetch notification stats for the badge
+  // Refetch cada 5 minutos para evitar exceder límite de conexiones BD (500/hora)
   const { data: stats } = useQuery({
     queryKey: ['notificaciones-stats'],
     queryFn: () => notificacionesService.getStats(),
-    refetchInterval: 30000,
+    refetchInterval: 300000, // 5 minutos
+    staleTime: 60000, // Considerar datos frescos por 1 minuto
     enabled: !!user,
   });
 

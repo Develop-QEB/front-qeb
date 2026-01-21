@@ -6192,12 +6192,13 @@ export function TareaSeguimientoPage() {
   });
 
   // Tareas de la campaña (todas para poder filtrar en activas/completadas)
-  // Se actualiza cada 60 segundos para sincronización entre usuarios
+  // Se actualiza cada 2 minutos para sincronización entre usuarios
   const { data: tareasAPI = [], isLoading: isLoadingTareas } = useQuery({
     queryKey: ['campana-tareas', campanaId],
     queryFn: () => campanasService.getTareas(campanaId, {}),
     enabled: campanaId > 0,
-    refetchInterval: 60000, // Refrescar cada 60 segundos (reducido para evitar exceder límite de conexiones)
+    refetchInterval: 120000, // 2 minutos - evitar exceder límite de conexiones BD (500/hora)
+    staleTime: 30000,
   });
 
   // Artes existentes de la campaña

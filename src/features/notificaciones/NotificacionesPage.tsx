@@ -1604,11 +1604,12 @@ export function NotificacionesPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Fetch stats
+  // Fetch stats - refetch cada 2 minutos para evitar exceder límite de conexiones BD
   const { data: stats } = useQuery({
     queryKey: ['notificaciones-stats'],
     queryFn: () => notificacionesService.getStats(),
-    refetchInterval: 30000,
+    refetchInterval: 120000, // 2 minutos
+    staleTime: 30000,
   });
 
   // Fetch notificaciones o tareas según contentType
