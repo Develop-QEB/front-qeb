@@ -2010,7 +2010,7 @@ function TaskDetailModal({
   onUpdateArte: (reservaIds: number[], archivo: string) => void;
   onTaskComplete: (taskId: string, observaciones?: string) => Promise<void>;
   onSendToReview: (reservaIds: number[], responsableOriginal: string) => Promise<void>;
-  onCreateRecepcion: (tareaImpresionId: string) => Promise<void>;
+  onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string) => Promise<void>;
   onCreateRecepcionFaltante: (faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[], observaciones: string) => Promise<void>;
   isUpdating: boolean;
   campanaId: number;
@@ -2026,6 +2026,14 @@ function TaskDetailModal({
     queryFn: () => solicitudesService.getCatorcenas(),
     enabled: isOpen && (task?.tipo === 'Impresión' || task?.tipo === 'Recepción' || task?.tipo === 'Instalación'),
   });
+
+  // Query para usuarios (para asignar tarea de recepción)
+  const { data: usuariosData } = useQuery({
+    queryKey: ['usuarios-detail-modal'],
+    queryFn: () => campanasService.getUsuarios(),
+    enabled: isOpen && task?.tipo === 'Impresión',
+  });
+  const usuarios = usuariosData || [];
 
   // Función para obtener texto de catorcena desde fecha_fin
   const getCatorcenaFromFechaFin = useMemo(() => {
@@ -2049,6 +2057,21 @@ function TaskDetailModal({
 
   // Estado para crear tarea de recepción (Impresión)
   const [isCreatingRecepcion, setIsCreatingRecepcion] = useState(false);
+  const [recepcionAsignadoNombre, setRecepcionAsignadoNombre] = useState('');
+  const [recepcionAsignadoSearch, setRecepcionAsignadoSearch] = useState('');
+  const [showRecepcionAsignadoDropdown, setShowRecepcionAsignadoDropdown] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+  const recepcionInputRef = useRef<HTMLInputElement>(null);
+
+  // Filtrar usuarios por búsqueda (para asignar recepción)
+  const filteredUsuariosRecepcion = useMemo(() => {
+    if (!recepcionAsignadoSearch.trim()) return usuarios;
+    const search = recepcionAsignadoSearch.toLowerCase();
+    return usuarios.filter(u =>
+      u.nombre.toLowerCase().includes(search) ||
+      String(u.id).includes(search)
+    );
+  }, [usuarios, recepcionAsignadoSearch]);
 
   // Estados para tareas de Recepción
   const [cantidadesRecibidas, setCantidadesRecibidas] = useState<Record<string, number>>({});
@@ -2830,7 +2853,9 @@ function TaskDetailModal({
 
     setIsCreatingRecepcion(true);
     try {
-      await onCreateRecepcion(task.id);
+      await onCreateRecepcion(task.id, recepcionAsignadoNombre || undefined);
+      setRecepcionAsignadoNombre('');
+      setRecepcionAsignadoSearch('');
       onClose();
     } catch (error) {
       console.error('Error al crear tarea de recepción:', error);
@@ -3196,8 +3221,69 @@ function TaskDetailModal({
                   }
               </div>
 
+              {/* Asignar tarea de recepción */}
+              {task.estatus === 'Activo' && canResolveProduccionTasks && (
+                <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                  <h4 className="text-sm font-medium text-purple-300 mb-3">Crear tarea de recepción</h4>
+                  <div className="relative">
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Asignar a *</label>
+                    <input
+                      ref={recepcionInputRef}
+                      type="text"
+                      value={recepcionAsignadoSearch}
+                      onChange={(e) => {
+                        setRecepcionAsignadoSearch(e.target.value);
+                        setShowRecepcionAsignadoDropdown(true);
+                        if (!e.target.value) {
+                          setRecepcionAsignadoNombre('');
+                        }
+                      }}
+                      onFocus={() => {
+                        if (recepcionInputRef.current) {
+                          const rect = recepcionInputRef.current.getBoundingClientRect();
+                          setDropdownPosition({
+                            top: rect.bottom + 4,
+                            left: rect.left,
+                            width: rect.width,
+                          });
+                        }
+                        setShowRecepcionAsignadoDropdown(true);
+                      }}
+                      onBlur={() => setTimeout(() => setShowRecepcionAsignadoDropdown(false), 200)}
+                      placeholder="Buscar usuario..."
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    />
+                    {showRecepcionAsignadoDropdown && filteredUsuariosRecepcion.length > 0 && (
+                      <div
+                        className="fixed z-[9999] bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto"
+                        style={{
+                          top: dropdownPosition.top,
+                          left: dropdownPosition.left,
+                          width: dropdownPosition.width,
+                        }}
+                      >
+                        {filteredUsuariosRecepcion.map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => {
+                              setRecepcionAsignadoNombre(u.nombre);
+                              setRecepcionAsignadoSearch(`${u.id}, ${u.nombre}`);
+                              setShowRecepcionAsignadoDropdown(false);
+                            }}
+                            className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
+                          >
+                            {u.id}, {u.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Botones de acción */}
-              <div className="flex flex-wrap gap-3 justify-end">
+              <div className="flex flex-wrap items-center gap-3 justify-end">
                 <button
                   onClick={generatePDFProveedor}
                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg transition-colors"
@@ -3208,7 +3294,7 @@ function TaskDetailModal({
                 {task.estatus === 'Activo' && canResolveProduccionTasks && (
                   <button
                     onClick={handleCrearRecepcion}
-                    disabled={isCreatingRecepcion}
+                    disabled={isCreatingRecepcion || !recepcionAsignadoNombre}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isCreatingRecepcion ? (
@@ -3219,7 +3305,7 @@ function TaskDetailModal({
                     ) : (
                       <>
                         <Plus className="h-4 w-4" />
-                        Crear tarea de recibido
+                        Crear tarea de recepción
                       </>
                     )}
                   </button>
@@ -10040,7 +10126,7 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
             ids_reservas: reservaIds.join(','),
           });
         }}
-        onCreateRecepcion={async (tareaImpresionId) => {
+        onCreateRecepcion={async (tareaImpresionId, asignadoNombre) => {
           if (!selectedTask) return;
 
           // 1. Marcar la tarea de Impresión como "Atendido"
@@ -10064,6 +10150,9 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
             evidenciaRecepcion = JSON.stringify({ tipo: 'recepcion_normal' });
           }
 
+          // Usar el usuario seleccionado o fallback al asignado/creador original
+          const asignadoFinal = asignadoNombre || selectedTask.asignado || selectedTask.creador || '';
+
           await createTareaMutation.mutateAsync({
             titulo: `Recepción - ${selectedTask.titulo || selectedTask.identificador}`,
             descripcion: `Tarea de recepción de impresiones.
@@ -10071,7 +10160,7 @@ Total de impresiones solicitadas: ${numImpresiones}
 
 Por favor registra la cantidad de impresiones recibidas.`,
             tipo: 'Recepción',
-            asignado: selectedTask.asignado || selectedTask.creador || '',
+            asignado: asignadoFinal,
             ids_reservas: selectedTask.inventario_ids?.join(',') || '',
             num_impresiones: numImpresiones,
             evidencia: evidenciaRecepcion,
