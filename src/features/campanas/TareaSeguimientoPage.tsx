@@ -1137,6 +1137,10 @@ interface FilterToolbarProps {
   filteredCount: number;
   totalCount: number;
   useFixedDropdowns?: boolean; // Para modales - usar position fixed
+  filterFields?: FilterFieldConfig[]; // Campos personalizados para filtros
+  groupingOptions?: { field: GroupByField; label: string }[]; // Opciones de agrupación personalizadas
+  hideGrouping?: boolean; // Ocultar botón de agrupación
+  hideSort?: boolean; // Ocultar botón de ordenamiento
 }
 
 function FilterToolbar({
@@ -1144,6 +1148,8 @@ function FilterToolbar({
   activeGroupings, showGrouping, setShowGrouping, toggleGrouping, clearGroupings,
   sortField, sortDirection, showSort, setShowSort, setSortField, setSortDirection,
   filteredCount, totalCount, useFixedDropdowns = false,
+  filterFields = FILTER_FIELDS_INVENTARIO, groupingOptions = GROUPING_OPTIONS_INVENTARIO,
+  hideGrouping = false, hideSort = false,
 }: FilterToolbarProps) {
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const groupBtnRef = useRef<HTMLButtonElement>(null);
@@ -1215,10 +1221,10 @@ function FilterToolbar({
                   {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
                   {index === 0 && <span className="w-8"></span>}
                   <select value={filter.field} onChange={(e) => updateFilter(filter.id, { field: e.target.value })} className="w-[130px] text-xs bg-background border border-border rounded px-2 py-1.5">
-                    {FILTER_FIELDS_INVENTARIO.map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}
+                    {filterFields.map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}
                   </select>
                   <select value={filter.operator} onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })} className="w-[90px] text-xs bg-background border border-border rounded px-2 py-1.5">
-                    {FILTER_OPERATORS.filter(op => { const fc = FILTER_FIELDS_INVENTARIO.find(f => f.field === filter.field); return fc && op.forTypes.includes(fc.type); }).map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
+                    {FILTER_OPERATORS.filter(op => { const fc = filterFields.find(f => f.field === filter.field); return fc && op.forTypes.includes(fc.type); }).map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
                   </select>
                   <select value={filter.value} onChange={(e) => updateFilter(filter.id, { value: e.target.value })} className="flex-1 text-xs bg-background border border-border rounded px-2 py-1.5">
                     <option value="">Seleccionar...</option>
@@ -1239,85 +1245,89 @@ function FilterToolbar({
       </div>
 
       {/* Botón Agrupar */}
-      <div className="relative">
-        <button
-          ref={groupBtnRef}
-          onClick={() => { closeOtherDropdowns('grouping'); setShowGrouping(!showGrouping); }}
-          className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
-            activeGroupings.length > 0 ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
-          }`}
-          title="Agrupar"
-        >
-          <Layers className="h-3.5 w-3.5" />
-          {activeGroupings.length > 0 && <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">{activeGroupings.length}</span>}
-        </button>
-        {showGrouping && (
-          <div
-            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]`}
-            style={useFixedDropdowns ? getDropdownPosition(groupBtnRef, 200) : undefined}
+      {!hideGrouping && (
+        <div className="relative">
+          <button
+            ref={groupBtnRef}
+            onClick={() => { closeOtherDropdowns('grouping'); setShowGrouping(!showGrouping); }}
+            className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
+              activeGroupings.length > 0 ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+            }`}
+            title="Agrupar"
           >
-            <div className="flex items-center justify-between mb-2 px-2">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Agrupar por (max 3)</p>
-              <button onClick={() => setShowGrouping(false)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
-            </div>
-            {GROUPING_OPTIONS_INVENTARIO.map(({ field, label }) => {
-              const idx = activeGroupings.indexOf(field);
-              const colors = ['text-purple-400', 'text-pink-400', 'text-blue-400', 'text-green-400', 'text-orange-400'];
-              return (
-                <button key={field} onClick={() => toggleGrouping(field)} className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'}`}>
-                  <div className={`w-4 h-4 rounded border flex items-center justify-center ${activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'}`}>
-                    {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
-                  </div>
-                  {label}
-                  {idx >= 0 && <span className={`ml-auto text-[10px] ${colors[idx]}`}>{idx + 1}°</span>}
+            <Layers className="h-3.5 w-3.5" />
+            {activeGroupings.length > 0 && <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">{activeGroupings.length}</span>}
+          </button>
+          {showGrouping && (
+            <div
+              className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]`}
+              style={useFixedDropdowns ? getDropdownPosition(groupBtnRef, 200) : undefined}
+            >
+              <div className="flex items-center justify-between mb-2 px-2">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Agrupar por (max 3)</p>
+                <button onClick={() => setShowGrouping(false)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+              </div>
+              {groupingOptions.map(({ field, label }) => {
+                const idx = activeGroupings.indexOf(field);
+                const colors = ['text-purple-400', 'text-pink-400', 'text-blue-400', 'text-green-400', 'text-orange-400'];
+                return (
+                  <button key={field} onClick={() => toggleGrouping(field)} className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'}`}>
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center ${activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'}`}>
+                      {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
+                    </div>
+                    {label}
+                    {idx >= 0 && <span className={`ml-auto text-[10px] ${colors[idx]}`}>{idx + 1}°</span>}
+                  </button>
+                );
+              })}
+              <div className="border-t border-purple-900/30 mt-2 pt-2">
+                <button onClick={clearGroupings} disabled={activeGroupings.length === 0} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1 disabled:opacity-30 disabled:cursor-not-allowed">
+                  Quitar agrupación
                 </button>
-              );
-            })}
-            <div className="border-t border-purple-900/30 mt-2 pt-2">
-              <button onClick={clearGroupings} disabled={activeGroupings.length === 0} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1 disabled:opacity-30 disabled:cursor-not-allowed">
-                Quitar agrupación
-              </button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Botón Ordenar */}
-      <div className="relative">
-        <button
-          ref={sortBtnRef}
-          onClick={() => { closeOtherDropdowns('sort'); setShowSort(!showSort); }}
-          className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${sortField ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'}`}
-          title="Ordenar"
-        >
-          <ArrowUpDown className="h-3.5 w-3.5" />
-        </button>
-        {showSort && (
-          <div
-            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[240px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3`}
-            style={useFixedDropdowns ? getDropdownPosition(sortBtnRef, 240) : undefined}
+      {!hideSort && (
+        <div className="relative">
+          <button
+            ref={sortBtnRef}
+            onClick={() => { closeOtherDropdowns('sort'); setShowSort(!showSort); }}
+            className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${sortField ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'}`}
+            title="Ordenar"
           >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-purple-300">Ordenar por</span>
-              <button onClick={() => setShowSort(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
-            </div>
-            <div className="space-y-1">
-              {FILTER_FIELDS_INVENTARIO.map((field) => (
-                <button key={field.field} onClick={() => { if (sortField === field.field) { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortField(field.field); setSortDirection('asc'); } }}
-                  className={`w-full flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${sortField === field.field ? 'bg-purple-600 text-white' : 'text-zinc-300 hover:bg-purple-900/30'}`}>
-                  <span>{field.label}</span>
-                  {sortField === field.field && (sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />)}
-                </button>
-              ))}
-            </div>
-            {sortField && (
-              <div className="mt-3 pt-3 border-t border-purple-900/30">
-                <button onClick={() => { setSortField(null); setSortDirection('asc'); }} className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors">Quitar ordenamiento</button>
+            <ArrowUpDown className="h-3.5 w-3.5" />
+          </button>
+          {showSort && (
+            <div
+              className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[240px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3`}
+              style={useFixedDropdowns ? getDropdownPosition(sortBtnRef, 240) : undefined}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-purple-300">Ordenar por</span>
+                <button onClick={() => setShowSort(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
               </div>
-            )}
-          </div>
-        )}
-      </div>
+              <div className="space-y-1">
+                {filterFields.map((field) => (
+                  <button key={field.field} onClick={() => { if (sortField === field.field) { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortField(field.field); setSortDirection('asc'); } }}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${sortField === field.field ? 'bg-purple-600 text-white' : 'text-zinc-300 hover:bg-purple-900/30'}`}>
+                    <span>{field.label}</span>
+                    {sortField === field.field && (sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />)}
+                  </button>
+                ))}
+              </div>
+              {sortField && (
+                <div className="mt-3 pt-3 border-t border-purple-900/30">
+                  <button onClick={() => { setSortField(null); setSortDirection('asc'); }} className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors">Quitar ordenamiento</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -6117,6 +6127,11 @@ export function TareaSeguimientoPage() {
   const [tasksStatusFilter, setTasksStatusFilter] = useState<string>('');
   const [filtersTareas, setFiltersTareas] = useState<FilterCondition[]>([]);
   const [showFiltersTareas, setShowFiltersTareas] = useState(false);
+  const [activeGroupingsTareas, setActiveGroupingsTareas] = useState<GroupByField[]>([]);
+  const [showGroupingTareas, setShowGroupingTareas] = useState(false);
+  const [sortFieldTareas, setSortFieldTareas] = useState<string | null>(null);
+  const [sortDirectionTareas, setSortDirectionTareas] = useState<'asc' | 'desc'>('asc');
+  const [showSortTareas, setShowSortTareas] = useState(false);
 
   // Calendar state
   const [calendarView, setCalendarView] = useState<CalendarView>('month');
@@ -6482,6 +6497,16 @@ export function TareaSeguimientoPage() {
 
   const clearFiltersTareas = useCallback(() => {
     setFiltersTareas([]);
+  }, []);
+
+  const toggleGroupingTareas = useCallback((field: GroupByField) => {
+    setActiveGroupingsTareas(prev =>
+      prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]
+    );
+  }, []);
+
+  const clearGroupingsTareas = useCallback(() => {
+    setActiveGroupingsTareas([]);
   }, []);
 
   // Helper function to transform InventarioConArte to InventoryRow
@@ -6988,12 +7013,8 @@ export function TareaSeguimientoPage() {
     return data;
   }, [inventoryImpresionesData, activeFormat, activeEstadoImpresionTab]);
 
-  // Verificar si hay items pendientes de impresión (no todos recibidos)
-  // Si todos los items de impresiones ya están recibidos, ocultar la tab de Impresiones
-  const shouldShowImpresionesTab = useMemo(() => {
-    // Mostrar la tab si hay al menos un item que NO esté recibido (en_impresion o pendiente_recepcion)
-    return inventoryImpresionesData.some(item => item.estado_impresion !== 'recibido');
-  }, [inventoryImpresionesData]);
+  // Tab de Impresiones siempre visible
+  const shouldShowImpresionesTab = true;
 
   // Obtener valores únicos para los selectores de filtros
   const getUniqueValuesVersionario = useMemo(() => {
@@ -7071,6 +7092,23 @@ export function TareaSeguimientoPage() {
         evidencia: t.evidencia || undefined,
       }));
   }, [tareasAPI, campanaId]);
+
+  // Obtener valores únicos para filtros de tareas
+  const getUniqueValuesTareas = useMemo(() => {
+    const allTasks = [...tasks, ...completedTasks];
+    const values: Record<string, string[]> = {};
+    FILTER_FIELDS_TAREAS.forEach(f => {
+      const uniqueSet = new Set<string>();
+      allTasks.forEach(t => {
+        const val = (t as Record<string, unknown>)[f.field];
+        if (val !== null && val !== undefined && String(val).trim() !== '') {
+          uniqueSet.add(String(val));
+        }
+      });
+      values[f.field] = Array.from(uniqueSet).sort();
+    });
+    return values;
+  }, [tasks, completedTasks]);
 
   // ---- Computed ----
   // Get unique values for filter dropdowns
@@ -9548,118 +9586,70 @@ export function TareaSeguimientoPage() {
               <div className="space-y-4">
                 {/* Tasks Toolbar */}
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
-                  <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-                    <div className="relative flex-1 min-w-[200px]">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-zinc-400">{filteredTasks.length} de {tasks.length} tareas activas</span>
+                    <div className="relative min-w-[200px]">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                       <input
                         type="text"
-                        placeholder="Buscar..."
+                        placeholder="Buscar por título, ID, asignado..."
                         value={tasksSearch}
                         onChange={(e) => setTasksSearch(e.target.value)}
-                        className="w-full pl-8 pr-3 py-1.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                        className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
                       />
+                      {tasksSearch && (
+                        <button
+                          onClick={() => setTasksSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
-                    <select
-                      value={tasksStatusFilter}
-                      onChange={(e) => setTasksStatusFilter(e.target.value)}
-                      className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-                    >
-                      <option value="">Todos los estatus</option>
-                      <option value="pendiente">Pendiente</option>
-                      <option value="en_progreso">En progreso</option>
-                      <option value="completada">Completada</option>
-                      <option value="cancelada">Cancelada</option>
-                    </select>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setShowFiltersTareas(!showFiltersTareas)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border rounded-lg transition-colors ${
-                        filtersTareas.length > 0
-                          ? 'bg-purple-600 border-purple-500 text-white'
-                          : 'bg-purple-900/30 hover:bg-purple-900/50 border-purple-500/30'
-                      }`}
-                      title="Filtros avanzados"
-                    >
-                      <Filter className="h-3.5 w-3.5" />
-                      {filtersTareas.length > 0 && <span>{filtersTareas.length}</span>}
-                    </button>
+                  <div className="flex items-center gap-2">
+                    <FilterToolbar
+                      filters={filtersTareas}
+                      showFilters={showFiltersTareas}
+                      setShowFilters={setShowFiltersTareas}
+                      addFilter={addFilterTareas}
+                      updateFilter={updateFilterTareas}
+                      removeFilter={removeFilterTareas}
+                      clearFilters={clearFiltersTareas}
+                      uniqueValues={getUniqueValuesTareas}
+                      activeGroupings={activeGroupingsTareas}
+                      showGrouping={showGroupingTareas}
+                      setShowGrouping={setShowGroupingTareas}
+                      toggleGrouping={toggleGroupingTareas}
+                      clearGroupings={clearGroupingsTareas}
+                      sortField={sortFieldTareas}
+                      sortDirection={sortDirectionTareas}
+                      showSort={showSortTareas}
+                      setShowSort={setShowSortTareas}
+                      setSortField={setSortFieldTareas}
+                      setSortDirection={setSortDirectionTareas}
+                      filteredCount={filteredTasks.length}
+                      totalCount={tasks.length}
+                      filterFields={FILTER_FIELDS_TAREAS}
+                      hideGrouping
+                      hideSort
+                    />
                     <button
                       onClick={downloadTareasExcel}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-green-900/30 hover:bg-green-900/50 border border-green-500/30 rounded-lg transition-colors"
+                      className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-green-900/50 hover:bg-green-900/70 border border-green-500/30 rounded-lg transition-colors"
                       title="Descargar Excel (Activas + Completadas)"
                     >
                       <Download className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] })}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-purple-900/30 hover:bg-purple-900/50 border border-purple-500/30 rounded-lg transition-colors"
+                      className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
                       title="Refrescar tareas"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
-
-                {/* Filtros avanzados de tareas */}
-                {showFiltersTareas && (
-                  <div className="p-3 bg-zinc-900/50 border border-border rounded-lg space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-zinc-400">Filtros avanzados</span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={addFilterTareas}
-                          className="px-2 py-1 text-[10px] bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-                        >
-                          + Agregar filtro
-                        </button>
-                        {filtersTareas.length > 0 && (
-                          <button
-                            onClick={clearFiltersTareas}
-                            className="px-2 py-1 text-[10px] bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded transition-colors"
-                          >
-                            Limpiar
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {filtersTareas.map((filter) => (
-                      <div key={filter.id} className="flex items-center gap-2">
-                        <select
-                          value={filter.field}
-                          onChange={(e) => updateFilterTareas(filter.id, { field: e.target.value })}
-                          className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded"
-                        >
-                          {FILTER_FIELDS_TAREAS.map((f) => (
-                            <option key={f.field} value={f.field}>{f.label}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={filter.operator}
-                          onChange={(e) => updateFilterTareas(filter.id, { operator: e.target.value as FilterOperator })}
-                          className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded"
-                        >
-                          {FILTER_OPERATORS.filter(op => op.forTypes.includes('string')).map((op) => (
-                            <option key={op.value} value={op.value}>{op.label}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="text"
-                          value={filter.value}
-                          onChange={(e) => updateFilterTareas(filter.id, { value: e.target.value })}
-                          placeholder="Valor..."
-                          className="flex-1 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded"
-                        />
-                        <button
-                          onClick={() => removeFilterTareas(filter.id)}
-                          className="p-1 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
 
                 {/* Tasks Table */}
                 <div className="max-h-[300px] overflow-auto border border-border rounded-lg">
