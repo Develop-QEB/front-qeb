@@ -51,6 +51,7 @@ import { Badge } from '../../components/ui/badge';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
+import * as XLSX from 'xlsx';
 
 // URL base para archivos estáticos
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -257,6 +258,17 @@ const FILTER_FIELDS_INVENTARIO: FilterFieldConfig[] = [
   { field: 'tipo_de_cara', label: 'Tipo Cara', type: 'string' },
   { field: 'catorcena', label: 'Catorcena', type: 'number' },
   { field: 'aps', label: 'APS', type: 'number' },
+];
+
+// Campos disponibles para filtros en tareas de producción
+const FILTER_FIELDS_TAREAS: FilterFieldConfig[] = [
+  { field: 'tipo', label: 'Tipo', type: 'string' },
+  { field: 'estatus', label: 'Estatus', type: 'string' },
+  { field: 'titulo', label: 'Título', type: 'string' },
+  { field: 'identificador', label: 'Identificador', type: 'string' },
+  { field: 'creador', label: 'Creador', type: 'string' },
+  { field: 'asignado', label: 'Asignado', type: 'string' },
+  { field: 'descripcion', label: 'Descripción', type: 'string' },
 ];
 
 // Opciones de agrupación para las tablas
@@ -3049,15 +3061,22 @@ function TaskDetailModal({
                       if (artesEntries.length > 0) {
                         return artesEntries.map(([arteUrl, cantidad]) => {
                           const nombreArchivo = arteUrl.split('/').pop() || 'arte.jpg';
+                          const imageUrl = getImageUrl(arteUrl);
                           return (
                             <div key={arteUrl} className="flex items-center gap-4 p-3 border-b border-border/50 last:border-0 hover:bg-zinc-800/30">
                               {/* Preview de imagen */}
                               <div className="w-24 h-20 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
-                                <img
-                                  src={arteUrl}
-                                  alt="Arte"
-                                  className="w-full h-full object-cover"
-                                />
+                                {imageUrl ? (
+                                  <img
+                                    src={imageUrl}
+                                    alt="Arte"
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <Image className="h-6 w-6 text-zinc-600" />
+                                  </div>
+                                )}
                               </div>
 
                               {/* Info */}
@@ -3078,7 +3097,7 @@ function TaskDetailModal({
 
                               {/* Botón descargar */}
                               <button
-                                onClick={() => downloadImage(arteUrl, nombreArchivo)}
+                                onClick={() => imageUrl && downloadImage(imageUrl, nombreArchivo)}
                                 className="p-2 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded-lg transition-colors"
                                 title="Descargar imagen"
                               >
@@ -3327,15 +3346,22 @@ function TaskDetailModal({
                         if (impresionesEntries.length > 0) {
                           return impresionesEntries.map(([arteUrl, cantidad]) => {
                             const nombreArchivo = arteUrl.split('/').pop() || 'arte';
+                            const imageUrl = getImageUrl(arteUrl);
                             return (
                               <div key={arteUrl} className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
                                 {/* Preview de imagen */}
                                 <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
-                                  <img
-                                    src={arteUrl}
-                                    alt="Arte"
-                                    className="w-full h-full object-cover"
-                                  />
+                                  {imageUrl ? (
+                                    <img
+                                      src={imageUrl}
+                                      alt="Arte"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-6 w-6 text-zinc-600" />
+                                    </div>
+                                  )}
                                 </div>
 
                                 {/* Info del grupo */}
@@ -4359,7 +4385,7 @@ function TaskDetailModal({
                       )}
                       {existingArtUrl && (
                         <div className="mt-3">
-                          <img src={existingArtUrl} alt="Preview" className="max-h-40 rounded-lg" />
+                          <img src={getImageUrl(existingArtUrl) || existingArtUrl} alt="Preview" className="max-h-40 rounded-lg" />
                         </div>
                       )}
                     </div>
@@ -6089,6 +6115,8 @@ export function TareaSeguimientoPage() {
   // Tasks state
   const [tasksSearch, setTasksSearch] = useState('');
   const [tasksStatusFilter, setTasksStatusFilter] = useState<string>('');
+  const [filtersTareas, setFiltersTareas] = useState<FilterCondition[]>([]);
+  const [showFiltersTareas, setShowFiltersTareas] = useState(false);
 
   // Calendar state
   const [calendarView, setCalendarView] = useState<CalendarView>('month');
@@ -6149,10 +6177,12 @@ export function TareaSeguimientoPage() {
   });
 
   // Tareas de la campaña (todas para poder filtrar en activas/completadas)
+  // Se actualiza cada 10 segundos para sincronización entre usuarios
   const { data: tareasAPI = [], isLoading: isLoadingTareas } = useQuery({
     queryKey: ['campana-tareas', campanaId],
     queryFn: () => campanasService.getTareas(campanaId, {}),
     enabled: campanaId > 0,
+    refetchInterval: 10000, // Refrescar cada 10 segundos
   });
 
   // Artes existentes de la campaña
@@ -6430,6 +6460,70 @@ export function TareaSeguimientoPage() {
   const clearGroupingsTestigo = useCallback(() => {
     setActiveGroupingsTestigo([]);
   }, []);
+
+  // --- Funciones para Tareas de Producción ---
+  const addFilterTareas = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS_TAREAS[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFiltersTareas(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilterTareas = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFiltersTareas(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilterTareas = useCallback((id: string) => {
+    setFiltersTareas(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearFiltersTareas = useCallback(() => {
+    setFiltersTareas([]);
+  }, []);
+
+  // Función para descargar tareas como Excel con dos hojas
+  const downloadTareasExcel = useCallback(() => {
+    const formatDate = (dateStr: string | null | undefined) => {
+      if (!dateStr) return '-';
+      try {
+        return new Date(dateStr).toLocaleDateString('es-MX');
+      } catch {
+        return dateStr;
+      }
+    };
+
+    const mapTaskToRow = (task: TaskRow) => ({
+      'Tipo': task.tipo || '-',
+      'Estatus': task.estatus || '-',
+      'Identificador': task.identificador || '-',
+      'Título': task.titulo || '-',
+      'Fecha Inicio': formatDate(task.fecha_inicio),
+      'Fecha Fin': formatDate(task.fecha_fin),
+      'Creador': task.creador || '-',
+      'Asignado': task.asignado || '-',
+      'Descripción': task.descripcion || '-',
+    });
+
+    // Crear workbook
+    const wb = XLSX.utils.book_new();
+
+    // Hoja 1: Tareas Activas
+    const activasData = filteredTasks.map(mapTaskToRow);
+    const wsActivas = XLSX.utils.json_to_sheet(activasData.length > 0 ? activasData : [{ 'Sin datos': 'No hay tareas activas' }]);
+    XLSX.utils.book_append_sheet(wb, wsActivas, 'Activas');
+
+    // Hoja 2: Tareas Completadas
+    const completadasData = filteredCompletedTasks.map(mapTaskToRow);
+    const wsCompletadas = XLSX.utils.json_to_sheet(completadasData.length > 0 ? completadasData : [{ 'Sin datos': 'No hay tareas completadas' }]);
+    XLSX.utils.book_append_sheet(wb, wsCompletadas, 'Completadas');
+
+    // Descargar
+    const filename = `tareas_produccion_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  }, [filteredTasks, filteredCompletedTasks]);
 
   // Helper function to transform InventarioConArte to InventoryRow
   const transformInventarioToRow = useCallback((item: InventarioConArte, defaultArteStatus: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = 'sin_revisar', tareasActivas: number[] = []): InventoryRow => {
@@ -7125,31 +7219,41 @@ export function TareaSeguimientoPage() {
   }, [filteredVersionarioData, filteredAtenderData, filteredTestigoData, inventorySearch, activeFormat, activeMainTab, sortField, sortDirection]);
 
   const filteredTasks = useMemo(() => {
-    let data = tasks;
+    // Primero aplicar filtros avanzados
+    let data = applyFilters(tasks, filtersTareas);
+    // Luego búsqueda por texto
     if (tasksSearch) {
       const search = tasksSearch.toLowerCase();
       data = data.filter(
         (t) =>
           t.titulo.toLowerCase().includes(search) ||
           t.identificador.toLowerCase().includes(search) ||
-          t.asignado.toLowerCase().includes(search)
+          t.asignado.toLowerCase().includes(search) ||
+          t.tipo.toLowerCase().includes(search) ||
+          t.creador.toLowerCase().includes(search)
       );
     }
     if (tasksStatusFilter) {
       data = data.filter((t) => t.estatus === tasksStatusFilter);
     }
     return data;
-  }, [tasks, tasksSearch, tasksStatusFilter]);
+  }, [tasks, tasksSearch, tasksStatusFilter, filtersTareas]);
 
   const filteredCompletedTasks = useMemo(() => {
-    if (!tasksSearch) return completedTasks;
-    const search = tasksSearch.toLowerCase();
-    return completedTasks.filter(
-      (t) =>
-        t.titulo.toLowerCase().includes(search) ||
-        t.identificador.toLowerCase().includes(search)
-    );
-  }, [completedTasks, tasksSearch]);
+    // Primero aplicar filtros avanzados
+    let data = applyFilters(completedTasks, filtersTareas);
+    // Luego búsqueda por texto
+    if (tasksSearch) {
+      const search = tasksSearch.toLowerCase();
+      data = data.filter(
+        (t) =>
+          t.titulo.toLowerCase().includes(search) ||
+          t.identificador.toLowerCase().includes(search) ||
+          t.tipo.toLowerCase().includes(search)
+      );
+    }
+    return data;
+  }, [completedTasks, tasksSearch, filtersTareas]);
 
   // Agrupación simple para tab "Validar Instalación" basada en activeGroupingsTestigo
   // Solo usa el primer campo de agrupación para mantener compatibilidad con el renderizado existente
@@ -9460,7 +9564,7 @@ export function TareaSeguimientoPage() {
                       onChange={(e) => setTasksStatusFilter(e.target.value)}
                       className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
                     >
-                      <option value="">Selecciona un estatus</option>
+                      <option value="">Todos los estatus</option>
                       <option value="pendiente">Pendiente</option>
                       <option value="en_progreso">En progreso</option>
                       <option value="completada">Completada</option>
@@ -9468,23 +9572,47 @@ export function TareaSeguimientoPage() {
                     </select>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <button className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-purple-900/30 hover:bg-purple-900/50 border border-purple-500/30 rounded-lg transition-colors">
+                    <button
+                      onClick={() => setShowFiltersTareas(!showFiltersTareas)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border rounded-lg transition-colors ${
+                        filtersTareas.length > 0
+                          ? 'bg-purple-600 border-purple-500 text-white'
+                          : 'bg-purple-900/30 hover:bg-purple-900/50 border-purple-500/30'
+                      }`}
+                      title="Filtros avanzados"
+                    >
                       <Filter className="h-3.5 w-3.5" />
+                      {filtersTareas.length > 0 && <span>{filtersTareas.length}</span>}
                     </button>
-                    <button className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-purple-900/30 hover:bg-purple-900/50 border border-purple-500/30 rounded-lg transition-colors">
+                    <button
+                      onClick={downloadTareasExcel}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-green-900/30 hover:bg-green-900/50 border border-green-500/30 rounded-lg transition-colors"
+                      title="Descargar Excel (Activas + Completadas)"
+                    >
                       <Download className="h-3.5 w-3.5" />
                     </button>
-                    <button className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-purple-900/30 hover:bg-purple-900/50 border border-purple-500/30 rounded-lg transition-colors">
+                    <button
+                      onClick={() => queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] })}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-purple-900/30 hover:bg-purple-900/50 border border-purple-500/30 rounded-lg transition-colors"
+                      title="Refrescar tareas"
+                    >
                       <RefreshCw className="h-3.5 w-3.5" />
-                    </button>
-                    <button className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-purple-900/30 hover:bg-purple-900/50 border border-purple-500/30 rounded-lg transition-colors">
-                      <Layers className="h-3.5 w-3.5" />
-                    </button>
-                    <button className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-purple-900/30 hover:bg-purple-900/50 border border-purple-500/30 rounded-lg transition-colors">
-                      <ArrowUpDown className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
+
+                {/* Filtros avanzados */}
+                {showFiltersTareas && (
+                  <FilterToolbar
+                    filters={filtersTareas}
+                    fields={FILTER_FIELDS_TAREAS}
+                    operators={FILTER_OPERATORS}
+                    addFilter={addFilterTareas}
+                    updateFilter={updateFilterTareas}
+                    removeFilter={removeFilterTareas}
+                    clearFilters={clearFiltersTareas}
+                  />
+                )}
 
                 {/* Tasks Table */}
                 <div className="max-h-[300px] overflow-auto border border-border rounded-lg">
