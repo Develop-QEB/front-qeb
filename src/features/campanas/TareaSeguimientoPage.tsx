@@ -3026,7 +3026,7 @@ function TaskDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
-      <div className="bg-card border border-border rounded-xl w-full max-w-6xl max-h-[95vh] shadow-2xl flex flex-col">
+      <div className="bg-card border border-border rounded-xl w-full max-w-[95vw] max-h-[95vh] shadow-2xl flex flex-col">
         {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-border bg-gradient-to-r from-purple-900/30 to-transparent flex-shrink-0">
           <div className="flex items-start sm:items-center justify-between gap-2">
@@ -3421,7 +3421,7 @@ function TaskDetailModal({
                                                 <span className="px-2 py-0.5 rounded text-[10px] bg-amber-600/20 text-amber-300">{items.length}</span>
                                               </button>
                                               {level3Expanded && (
-                                                <div className="bg-card/50 ml-4 overflow-x-auto">
+                                                <div className="bg-card/50 ml-4">
                                                   <table className="w-full text-xs">
                                                     <thead className="bg-purple-900/20">
                                                       <tr className="text-left">
@@ -3634,7 +3634,7 @@ function TaskDetailModal({
                                                 <span className="px-2 py-0.5 rounded text-[10px] bg-amber-600/20 text-amber-300">{items.length}</span>
                                               </button>
                                               {level3Expanded && (
-                                                <div className="bg-card/50 ml-4 overflow-x-auto">
+                                                <div className="bg-card/50 ml-4">
                                                   <table className="w-full text-xs">
                                                     <thead className="bg-purple-900/20">
                                                       <tr className="text-left">
