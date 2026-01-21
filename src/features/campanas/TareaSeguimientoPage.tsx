@@ -2062,6 +2062,7 @@ function TaskDetailModal({
   const [showRecepcionAsignadoDropdown, setShowRecepcionAsignadoDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const recepcionInputRef = useRef<HTMLInputElement>(null);
+  const [impresionTab, setImpresionTab] = useState<'resumen' | 'tabla'>('resumen');
 
   // Filtrar usuarios por búsqueda (para asignar recepción)
   const filteredUsuariosRecepcion = useMemo(() => {
@@ -3044,6 +3045,33 @@ function TaskDetailModal({
           {/* === VISTA ESPECIAL PARA TAREAS DE IMPRESIÓN === */}
           {task.tipo === 'Impresión' && (
             <div className="space-y-6">
+              {/* Tabs */}
+              <div className="flex gap-2 border-b border-border pb-2">
+                <button
+                  onClick={() => setImpresionTab('resumen')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    impresionTab === 'resumen'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Resumen
+                </button>
+                <button
+                  onClick={() => setImpresionTab('tabla')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    impresionTab === 'tabla'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Ver tabla ({taskInventory.length})
+                </button>
+              </div>
+
+              {/* Tab Resumen */}
+              {impresionTab === 'resumen' && (
+                <>
               {/* Info de la tarea de Impresión */}
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
                 <h4 className="text-sm font-medium text-purple-300 mb-3">Información del Pedido de Impresión</h4>
@@ -3278,6 +3306,88 @@ function TaskDetailModal({
                         ))}
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+                </>
+              )}
+
+              {/* Tab Tabla */}
+              {impresionTab === 'tabla' && (
+                <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
+                    <h4 className="text-sm font-medium text-purple-300">
+                      Desglose completo ({taskInventory.length} ubicaciones)
+                    </h4>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-zinc-800/80 sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Código</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Ciudad</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Plaza</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Municipio</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Ubicación</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Tipo Medio</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Formato</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Tipo Cara</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">NSE</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">APS</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Medidas</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Trad/Digital</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Catorcena</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Espacio</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Arte</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/50">
+                        {taskInventory.map((item, idx) => (
+                          <tr key={item.id || idx} className="hover:bg-zinc-800/30">
+                            <td className="px-3 py-2 text-white font-mono whitespace-nowrap">{item.codigo_unico || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.ciudad || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.plaza || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.municipio || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 max-w-[200px] truncate" title={item.ubicacion || '-'}>{item.ubicacion || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_medio || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.mueble || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_de_cara || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.nse || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.aps ?? '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">
+                              {item.ancho && item.alto ? `${item.ancho}x${item.alto}` : '-'}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                                item.tradicional_digital === 'Digital'
+                                  ? 'bg-blue-900/50 text-blue-300'
+                                  : 'bg-amber-900/50 text-amber-300'
+                              }`}>
+                                {item.tradicional_digital || '-'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">C{item.catorcena}, {item.anio}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.espacio || '-'}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {item.archivo_arte && item.archivo_arte !== 'sin_arte' ? (
+                                <div className="w-12 h-8 bg-zinc-800 rounded overflow-hidden border border-zinc-700">
+                                  <img
+                                    src={getImageUrl(item.archivo_arte) || ''}
+                                    alt="Arte"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-zinc-500">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
