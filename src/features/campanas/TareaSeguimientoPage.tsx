@@ -51,6 +51,7 @@ import { Badge } from '../../components/ui/badge';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
+import { useSocketCampana } from '../../hooks/useSocket';
 import * as XLSX from 'xlsx';
 
 // URL base para archivos estáticos
@@ -6049,6 +6050,9 @@ export function TareaSeguimientoPage() {
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
 
+  // WebSocket para sincronización en tiempo real
+  useSocketCampana(campanaId);
+
   // ---- State ----
   // Main tabs
   const [activeMainTab, setActiveMainTab] = useState<MainTab>('versionario');
@@ -6192,13 +6196,12 @@ export function TareaSeguimientoPage() {
   });
 
   // Tareas de la campaña (todas para poder filtrar en activas/completadas)
-  // Se actualiza cada 2 minutos para sincronización entre usuarios
+  // Sincronización en tiempo real via WebSockets (sin polling)
   const { data: tareasAPI = [], isLoading: isLoadingTareas } = useQuery({
     queryKey: ['campana-tareas', campanaId],
     queryFn: () => campanasService.getTareas(campanaId, {}),
     enabled: campanaId > 0,
-    refetchInterval: 120000, // 2 minutos - evitar exceder límite de conexiones BD (500/hora)
-    staleTime: 30000,
+    staleTime: 30000, // Considerar frescos por 30s para evitar refetch innecesario
   });
 
   // Artes existentes de la campaña
