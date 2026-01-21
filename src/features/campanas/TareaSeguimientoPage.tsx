@@ -59,40 +59,55 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 const STATIC_URL = API_URL.replace(/\/api$/, '');
 
 // Helper para normalizar URLs de imágenes
+// Siempre extrae el path y usa STATIC_URL para evitar problemas de CORS y URLs hardcodeadas
 const getImageUrl = (url: string | undefined | null): string | null => {
   if (!url) return null;
+
+  // Ignorar placeholder "sin_arte"
+  if (url === 'sin_arte') return null;
 
   // Si es un data URL (base64), usarlo directamente
   if (url.startsWith('data:')) {
     return url;
   }
 
-  // Si es una URL completa con localhost, convertirla a la URL del entorno actual
-  if (url.includes('localhost')) {
+  // Si ya es una ruta relativa que empieza con /uploads, usar directamente con STATIC_URL
+  if (url.startsWith('/uploads')) {
+    return `${STATIC_URL}${url}`;
+  }
+
+  // Si es una URL completa (http:// o https://), extraer solo el path
+  if (url.startsWith('http://') || url.startsWith('https://')) {
     try {
       const urlObj = new URL(url);
       const path = urlObj.pathname;
-      return `${STATIC_URL}${path}`;
+      // Asegurarse de que el path empiece con /uploads
+      if (path.includes('/uploads')) {
+        return `${STATIC_URL}${path}`;
+      }
+      // Si no tiene /uploads, podría ser una URL externa válida
+      return url;
     } catch {
-      // Si falla el parseo, extraer el path manualmente
-      const match = url.match(/localhost:\d+(.+)/);
+      // Si falla el parseo, intentar extraer el path manualmente
+      const match = url.match(/https?:\/\/[^/]+(\/uploads\/.+)/);
       if (match) {
         return `${STATIC_URL}${match[1]}`;
       }
+      return url;
     }
   }
 
-  // Si ya es una URL completa (no localhost), usarla tal cual
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
-  }
-
-  // Si es una ruta relativa, agregar la URL base
+  // Si es una ruta relativa sin /uploads, agregar el path base
   if (url.startsWith('/')) {
     return `${STATIC_URL}${url}`;
   }
 
-  // Si no tiene slash al inicio, agregarlo
+  // Si parece ser solo el nombre del archivo, construir la ruta completa
+  if (url.includes('.') && !url.includes('/')) {
+    return `${STATIC_URL}/uploads/artes/${url}`;
+  }
+
+  // Fallback: agregar slash al inicio
   return `${STATIC_URL}/${url}`;
 };
 
