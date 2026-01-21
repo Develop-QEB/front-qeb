@@ -1415,24 +1415,47 @@ function TaskDrawer({
               </div>
             )}
 
-            {/* Lista de caras */}
-            <div className="space-y-2 max-h-48 overflow-y-auto mb-4 scrollbar-purple">
-              {carasPendientes.map((cara) => (
-                <div key={cara.id} className="p-3 rounded-lg bg-zinc-800/30 border border-zinc-700/50">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-white font-medium">{cara.ciudad || 'Sin ciudad'}</span>
-                    <span className="text-xs text-zinc-500">{cara.formato}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-zinc-400">
-                      {cara.total_caras} cara{cara.total_caras !== 1 ? 's' : ''} (Renta: {cara.caras}, Bonif: {cara.bonificacion})
-                    </span>
-                    <span className="text-amber-400 font-medium">
-                      Tarifa: ${cara.tarifa_efectiva?.toFixed(2) || '0.00'}
-                    </span>
-                  </div>
-                </div>
-              ))}
+            {/* Tabla de caras estilo solicitudes */}
+            <div className="max-h-64 overflow-y-auto mb-4 scrollbar-purple rounded-lg border border-zinc-700/50">
+              <table className="w-full">
+                <thead className="sticky top-0 bg-zinc-800/90 backdrop-blur-sm">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[10px] font-semibold text-zinc-500 uppercase">Tipo</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Caras</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Bonif.</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Total</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {carasPendientes.map((cara) => (
+                    <tr key={cara.id} className="hover:bg-zinc-800/30">
+                      <td className="px-3 py-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                          {cara.tipo}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-center text-white">{cara.caras}</td>
+                      <td className="px-3 py-2 text-xs text-center text-emerald-400">{cara.bonificacion}</td>
+                      <td className="px-3 py-2 text-xs text-center text-white font-medium">{cara.total_caras}</td>
+                      <td className="px-3 py-2 text-center">
+                        {cara.estado_autorizacion === 'aprobado' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Aprobado</span>
+                        )}
+                        {cara.estado_autorizacion === 'pendiente_dcm' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. DCM</span>
+                        )}
+                        {cara.estado_autorizacion === 'pendiente_dg' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
+                        )}
+                        {cara.estado_autorizacion === 'rechazado' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rechazado</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
             {/* Botones de acción */}
