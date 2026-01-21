@@ -520,8 +520,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
     queryKey: ['propuesta-comments', propuesta?.id],
     queryFn: () => propuestasService.getComments(propuesta!.id),
     enabled: isOpen && !!propuesta,
-    staleTime: 0,
-    gcTime: 0,
+    staleTime: 60000, // 1 minuto - evita refetches innecesarios
   });
 
   // Reset comments when propuesta changes

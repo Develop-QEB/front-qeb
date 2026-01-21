@@ -18,6 +18,7 @@ import { STATUS_CONFIG, getTipoConfig, getStatusConfig } from '../../lib/taskCon
 import { useAuthStore } from '../../store/authStore';
 import { TableroView } from './KanbanView';
 import { UserAvatar } from '../../components/ui/user-avatar';
+import { useSocketNotificaciones } from '../../hooks/useSocket';
 
 // ============ TIPOS ============
 type ContentType = 'notificaciones' | 'tareas';
@@ -1561,6 +1562,9 @@ export function NotificacionesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
+  // Suscribirse a WebSocket para actualizaciones en tiempo real
+  useSocketNotificaciones();
+
   // Estado de contenido (notificaciones vs tareas)
   const [contentType, setContentType] = useState<ContentType>('notificaciones');
 
@@ -1604,12 +1608,11 @@ export function NotificacionesPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Fetch stats - refetch cada 2 minutos para evitar exceder límite de conexiones BD
+  // Fetch stats - sin polling, actualizaciones via WebSocket
   const { data: stats } = useQuery({
     queryKey: ['notificaciones-stats'],
     queryFn: () => notificacionesService.getStats(),
-    refetchInterval: 120000, // 2 minutos
-    staleTime: 30000,
+    staleTime: 5 * 60 * 1000, // 5 minutos
   });
 
   // Fetch notificaciones o tareas según contentType

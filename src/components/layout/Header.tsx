@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useEnvironmentStore } from '../../store/environmentStore';
 import { notificacionesService } from '../../services/notificaciones.service';
 import { UserAvatar } from '../ui/user-avatar';
+import { useSocketNotificaciones } from '../../hooks/useSocket';
 
 interface HeaderProps {
   title: string;
@@ -15,13 +16,15 @@ export function Header({ title }: HeaderProps) {
   const environment = useEnvironmentStore((state) => state.environment);
   const isTestMode = environment === 'test';
 
+  // Suscribirse a WebSocket para actualizaciones en tiempo real
+  useSocketNotificaciones();
+
   // Fetch notification stats for the badge
-  // Refetch cada 5 minutos para evitar exceder límite de conexiones BD (500/hora)
+  // Sin polling - actualizaciones via WebSocket
   const { data: stats } = useQuery({
     queryKey: ['notificaciones-stats'],
     queryFn: () => notificacionesService.getStats(),
-    refetchInterval: 300000, // 5 minutos
-    staleTime: 60000, // Considerar datos frescos por 1 minuto
+    staleTime: 5 * 60 * 1000, // 5 minutos - datos se consideran frescos
     enabled: !!user,
   });
 

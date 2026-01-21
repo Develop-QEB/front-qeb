@@ -139,10 +139,18 @@ export function useSocketNotificaciones() {
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
     };
 
+    const handleNotificacionLeida = () => {
+      console.log('[Socket] Notificación leída');
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+    };
+
     socket.on(SOCKET_EVENTS.NOTIFICACION_NUEVA, handleNotificacionNueva);
+    socket.on(SOCKET_EVENTS.NOTIFICACION_LEIDA, handleNotificacionLeida);
 
     return () => {
       socket.off(SOCKET_EVENTS.NOTIFICACION_NUEVA, handleNotificacionNueva);
+      socket.off(SOCKET_EVENTS.NOTIFICACION_LEIDA, handleNotificacionLeida);
     };
   }, [queryClient]);
 }

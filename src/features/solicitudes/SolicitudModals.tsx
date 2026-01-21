@@ -1045,8 +1045,7 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
     queryKey: ['solicitud-comments', solicitud?.id],
     queryFn: () => solicitudesService.getComments(solicitud!.id),
     enabled: isOpen && !!solicitud,
-    refetchOnMount: 'always',
-    staleTime: 0,
+    staleTime: 60000, // 1 minuto - evita refetches innecesarios
   });
 
   // Refetch comments when modal opens
