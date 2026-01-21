@@ -2065,6 +2065,17 @@ function TaskDetailModal({
   const [impresionTab, setImpresionTab] = useState<'resumen' | 'tabla'>('resumen');
   const [recepcionTab, setRecepcionTab] = useState<'resumen' | 'tabla'>('resumen');
 
+  // Estado para nodos expandidos en las tablas de Impresión y Recepción
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const toggleNode = useCallback((nodeKey: string) => {
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeKey)) next.delete(nodeKey);
+      else next.add(nodeKey);
+      return next;
+    });
+  }, []);
+
   // Filtrar usuarios por búsqueda (para asignar recepción)
   const filteredUsuariosRecepcion = useMemo(() => {
     if (!recepcionAsignadoSearch.trim()) return usuarios;
@@ -2139,17 +2150,20 @@ function TaskDetailModal({
   }, [task, inventoryData]);
 
   // Agrupar taskInventory por Catorcena > APS > Grupo (para tablas de Impresión y Recepción)
+  // Estructura jerárquica de 3 niveles para poder colapsar cada nivel
   const groupedTaskInventory = useMemo(() => {
-    if (taskInventory.length === 0) return {} as Record<string, InventoryRow[]>;
+    if (taskInventory.length === 0) return {} as Record<string, Record<string, Record<string, InventoryRow[]>>>;
 
-    const groups: Record<string, InventoryRow[]> = {};
+    const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
     taskInventory.forEach(item => {
       const catorcenaKey = `Catorcena ${item.catorcena} - ${item.anio}`;
       const apsKey = `APS ${item.aps ?? 'Sin asignar'}`;
       const grupoKey = item.grupo_id ? `Grupo ${item.grupo_id}` : `Item ${item.id}`;
-      const key = `${catorcenaKey} > ${apsKey} > ${grupoKey}`;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
+
+      if (!groups[catorcenaKey]) groups[catorcenaKey] = {};
+      if (!groups[catorcenaKey][apsKey]) groups[catorcenaKey][apsKey] = {};
+      if (!groups[catorcenaKey][apsKey][grupoKey]) groups[catorcenaKey][apsKey][grupoKey] = [];
+      groups[catorcenaKey][apsKey][grupoKey].push(item);
     });
     return groups;
   }, [taskInventory]);
@@ -3337,66 +3351,143 @@ function TaskDetailModal({
                       Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por Catorcena &gt; APS &gt; Grupo
                     </h4>
                   </div>
-                  <div className="overflow-x-auto max-h-[400px]">
-                    {Object.entries(groupedTaskInventory).map(([groupKey, items]) => (
-                      <div key={groupKey} className="bg-zinc-900/30">
-                        <div className="px-4 py-2 bg-purple-900/20 border-b border-purple-500/20 flex items-center justify-between sticky top-0 z-10">
-                          <span className="text-sm font-medium text-purple-300">{groupKey}</span>
-                          <span className="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-300">{items.length}</span>
+                  <div className="max-h-[400px] overflow-y-auto divide-y divide-border">
+                    {Object.entries(groupedTaskInventory).map(([catorcenaKey, apsGroups]) => {
+                      const level1NodeKey = `impresion-${catorcenaKey}`;
+                      const level1Expanded = expandedNodes.has(level1NodeKey);
+                      const level1ItemCount = Object.values(apsGroups).reduce(
+                        (sum, grupoGroups) => sum + Object.values(grupoGroups).reduce((s, items) => s + items.length, 0), 0
+                      );
+                      return (
+                        <div key={catorcenaKey}>
+                          {/* Nivel 1 - Catorcena */}
+                          <button
+                            onClick={() => toggleNode(level1NodeKey)}
+                            className="w-full px-4 py-3 flex items-center justify-between bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              {level1Expanded ? (
+                                <ChevronDown className="h-4 w-4 text-purple-400" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-purple-400" />
+                              )}
+                              <span className="text-sm font-bold text-white">{catorcenaKey}</span>
+                            </div>
+                            <span className="px-2 py-0.5 rounded text-xs bg-purple-600/40 text-purple-200">{level1ItemCount}</span>
+                          </button>
+                          {level1Expanded && (
+                            <div className="pl-4">
+                              {Object.entries(apsGroups).map(([apsKey, grupoGroups]) => {
+                                const level2NodeKey = `${level1NodeKey}|${apsKey}`;
+                                const level2Expanded = expandedNodes.has(level2NodeKey);
+                                const level2ItemCount = Object.values(grupoGroups).reduce((s, items) => s + items.length, 0);
+                                return (
+                                  <div key={level2NodeKey} className="border-l-2 border-purple-600/30">
+                                    {/* Nivel 2 - APS */}
+                                    <button
+                                      onClick={() => toggleNode(level2NodeKey)}
+                                      className="w-full px-4 py-2 flex items-center justify-between bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        {level2Expanded ? (
+                                          <ChevronDown className="h-3.5 w-3.5 text-purple-400" />
+                                        ) : (
+                                          <ChevronRight className="h-3.5 w-3.5 text-purple-400" />
+                                        )}
+                                        <span className="text-xs font-semibold text-purple-300">{apsKey}</span>
+                                      </div>
+                                      <span className="px-2 py-0.5 rounded text-[10px] bg-purple-600/30 text-purple-300">{level2ItemCount}</span>
+                                    </button>
+                                    {level2Expanded && (
+                                      <div className="pl-4">
+                                        {Object.entries(grupoGroups).map(([grupoKey, items]) => {
+                                          const level3NodeKey = `${level2NodeKey}|${grupoKey}`;
+                                          const level3Expanded = expandedNodes.has(level3NodeKey);
+                                          return (
+                                            <div key={level3NodeKey} className="border-l-2 border-amber-500/20">
+                                              {/* Nivel 3 - Grupo */}
+                                              <button
+                                                onClick={() => toggleNode(level3NodeKey)}
+                                                className="w-full px-4 py-1.5 flex items-center justify-between hover:bg-amber-900/10 transition-colors"
+                                              >
+                                                <div className="flex items-center gap-2">
+                                                  {level3Expanded ? (
+                                                    <ChevronDown className="h-3 w-3 text-amber-400" />
+                                                  ) : (
+                                                    <ChevronRight className="h-3 w-3 text-amber-400" />
+                                                  )}
+                                                  <span className="text-[11px] font-medium text-amber-300">{grupoKey}</span>
+                                                </div>
+                                                <span className="px-2 py-0.5 rounded text-[10px] bg-amber-600/20 text-amber-300">{items.length}</span>
+                                              </button>
+                                              {level3Expanded && (
+                                                <div className="bg-card/50 ml-4 overflow-x-auto">
+                                                  <table className="w-full text-xs">
+                                                    <thead className="bg-purple-900/20">
+                                                      <tr className="text-left">
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Archivo</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">ID</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Formato</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Código Único</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Ubicación</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Cara</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Formato</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Plaza</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Municipio</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">NSE</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Rsv ID</th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                      {items.map((item) => (
+                                                        <tr key={item.id} className="border-t border-border/30 hover:bg-purple-900/10">
+                                                          <td className="px-3 py-2">
+                                                            {item.archivo_arte && item.archivo_arte !== 'sin_arte' ? (
+                                                              <div className="w-12 h-9 bg-zinc-800 rounded overflow-hidden border border-zinc-700">
+                                                                <img
+                                                                  src={getImageUrl(item.archivo_arte) || ''}
+                                                                  alt="Arte"
+                                                                  className="w-full h-full object-cover"
+                                                                  onError={(e) => {
+                                                                    (e.target as HTMLImageElement).style.display = 'none';
+                                                                  }}
+                                                                />
+                                                              </div>
+                                                            ) : (
+                                                              <div className="w-12 h-9 bg-zinc-800 rounded border border-zinc-700 flex items-center justify-center">
+                                                                <Image className="w-4 h-4 text-zinc-600" />
+                                                              </div>
+                                                            )}
+                                                          </td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.id || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_medio || '-'}</td>
+                                                          <td className="px-3 py-2 text-white font-mono whitespace-nowrap">{item.codigo_unico || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 max-w-[200px] truncate" title={item.ubicacion || '-'}>{item.ubicacion || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_de_cara || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.mueble || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.plaza || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.municipio || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.nse || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.rsv_id || '-'}</td>
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                        <table className="w-full text-xs">
-                          <thead className="bg-zinc-800/50">
-                            <tr className="text-left">
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Archivo</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">ID</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Formato</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Código Único</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Ubicación</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Cara</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Formato</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Plaza</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Municipio</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">NSE</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Rsv ID</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {items.map((item) => (
-                              <tr key={item.id} className="border-t border-border/30 hover:bg-purple-900/10">
-                                <td className="px-3 py-2">
-                                  {item.archivo_arte && item.archivo_arte !== 'sin_arte' ? (
-                                    <div className="w-12 h-9 bg-zinc-800 rounded overflow-hidden border border-zinc-700">
-                                      <img
-                                        src={getImageUrl(item.archivo_arte) || ''}
-                                        alt="Arte"
-                                        className="w-full h-full object-cover"
-                                        onError={(e) => {
-                                          (e.target as HTMLImageElement).style.display = 'none';
-                                        }}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div className="w-12 h-9 bg-zinc-800 rounded border border-zinc-700 flex items-center justify-center">
-                                      <Image className="w-4 h-4 text-zinc-600" />
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.id || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_medio || '-'}</td>
-                                <td className="px-3 py-2 text-white font-mono whitespace-nowrap">{item.codigo_unico || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 max-w-[200px] truncate" title={item.ubicacion || '-'}>{item.ubicacion || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_de_cara || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.mueble || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.plaza || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.municipio || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.nse || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.rsv_id || '-'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -3473,66 +3564,143 @@ function TaskDetailModal({
                       Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por Catorcena &gt; APS &gt; Grupo
                     </h4>
                   </div>
-                  <div className="overflow-x-auto max-h-[400px]">
-                    {Object.entries(groupedTaskInventory).map(([groupKey, items]) => (
-                      <div key={groupKey} className="bg-zinc-900/30">
-                        <div className="px-4 py-2 bg-purple-900/20 border-b border-purple-500/20 flex items-center justify-between sticky top-0 z-10">
-                          <span className="text-sm font-medium text-purple-300">{groupKey}</span>
-                          <span className="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-300">{items.length}</span>
+                  <div className="max-h-[400px] overflow-y-auto divide-y divide-border">
+                    {Object.entries(groupedTaskInventory).map(([catorcenaKey, apsGroups]) => {
+                      const level1NodeKey = `recepcion-${catorcenaKey}`;
+                      const level1Expanded = expandedNodes.has(level1NodeKey);
+                      const level1ItemCount = Object.values(apsGroups).reduce(
+                        (sum, grupoGroups) => sum + Object.values(grupoGroups).reduce((s, items) => s + items.length, 0), 0
+                      );
+                      return (
+                        <div key={catorcenaKey}>
+                          {/* Nivel 1 - Catorcena */}
+                          <button
+                            onClick={() => toggleNode(level1NodeKey)}
+                            className="w-full px-4 py-3 flex items-center justify-between bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              {level1Expanded ? (
+                                <ChevronDown className="h-4 w-4 text-purple-400" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-purple-400" />
+                              )}
+                              <span className="text-sm font-bold text-white">{catorcenaKey}</span>
+                            </div>
+                            <span className="px-2 py-0.5 rounded text-xs bg-purple-600/40 text-purple-200">{level1ItemCount}</span>
+                          </button>
+                          {level1Expanded && (
+                            <div className="pl-4">
+                              {Object.entries(apsGroups).map(([apsKey, grupoGroups]) => {
+                                const level2NodeKey = `${level1NodeKey}|${apsKey}`;
+                                const level2Expanded = expandedNodes.has(level2NodeKey);
+                                const level2ItemCount = Object.values(grupoGroups).reduce((s, items) => s + items.length, 0);
+                                return (
+                                  <div key={level2NodeKey} className="border-l-2 border-purple-600/30">
+                                    {/* Nivel 2 - APS */}
+                                    <button
+                                      onClick={() => toggleNode(level2NodeKey)}
+                                      className="w-full px-4 py-2 flex items-center justify-between bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        {level2Expanded ? (
+                                          <ChevronDown className="h-3.5 w-3.5 text-purple-400" />
+                                        ) : (
+                                          <ChevronRight className="h-3.5 w-3.5 text-purple-400" />
+                                        )}
+                                        <span className="text-xs font-semibold text-purple-300">{apsKey}</span>
+                                      </div>
+                                      <span className="px-2 py-0.5 rounded text-[10px] bg-purple-600/30 text-purple-300">{level2ItemCount}</span>
+                                    </button>
+                                    {level2Expanded && (
+                                      <div className="pl-4">
+                                        {Object.entries(grupoGroups).map(([grupoKey, items]) => {
+                                          const level3NodeKey = `${level2NodeKey}|${grupoKey}`;
+                                          const level3Expanded = expandedNodes.has(level3NodeKey);
+                                          return (
+                                            <div key={level3NodeKey} className="border-l-2 border-amber-500/20">
+                                              {/* Nivel 3 - Grupo */}
+                                              <button
+                                                onClick={() => toggleNode(level3NodeKey)}
+                                                className="w-full px-4 py-1.5 flex items-center justify-between hover:bg-amber-900/10 transition-colors"
+                                              >
+                                                <div className="flex items-center gap-2">
+                                                  {level3Expanded ? (
+                                                    <ChevronDown className="h-3 w-3 text-amber-400" />
+                                                  ) : (
+                                                    <ChevronRight className="h-3 w-3 text-amber-400" />
+                                                  )}
+                                                  <span className="text-[11px] font-medium text-amber-300">{grupoKey}</span>
+                                                </div>
+                                                <span className="px-2 py-0.5 rounded text-[10px] bg-amber-600/20 text-amber-300">{items.length}</span>
+                                              </button>
+                                              {level3Expanded && (
+                                                <div className="bg-card/50 ml-4 overflow-x-auto">
+                                                  <table className="w-full text-xs">
+                                                    <thead className="bg-purple-900/20">
+                                                      <tr className="text-left">
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Archivo</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">ID</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Formato</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Código Único</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Ubicación</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Cara</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Formato</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Plaza</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Municipio</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">NSE</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Rsv ID</th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                      {items.map((item) => (
+                                                        <tr key={item.id} className="border-t border-border/30 hover:bg-purple-900/10">
+                                                          <td className="px-3 py-2">
+                                                            {item.archivo_arte && item.archivo_arte !== 'sin_arte' ? (
+                                                              <div className="w-12 h-9 bg-zinc-800 rounded overflow-hidden border border-zinc-700">
+                                                                <img
+                                                                  src={getImageUrl(item.archivo_arte) || ''}
+                                                                  alt="Arte"
+                                                                  className="w-full h-full object-cover"
+                                                                  onError={(e) => {
+                                                                    (e.target as HTMLImageElement).style.display = 'none';
+                                                                  }}
+                                                                />
+                                                              </div>
+                                                            ) : (
+                                                              <div className="w-12 h-9 bg-zinc-800 rounded border border-zinc-700 flex items-center justify-center">
+                                                                <Image className="w-4 h-4 text-zinc-600" />
+                                                              </div>
+                                                            )}
+                                                          </td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.id || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_medio || '-'}</td>
+                                                          <td className="px-3 py-2 text-white font-mono whitespace-nowrap">{item.codigo_unico || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 max-w-[200px] truncate" title={item.ubicacion || '-'}>{item.ubicacion || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_de_cara || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.mueble || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.plaza || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.municipio || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.nse || '-'}</td>
+                                                          <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.rsv_id || '-'}</td>
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                        <table className="w-full text-xs">
-                          <thead className="bg-zinc-800/50">
-                            <tr className="text-left">
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Archivo</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">ID</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Formato</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Código Único</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Ubicación</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Cara</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Formato</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Plaza</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Municipio</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">NSE</th>
-                              <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Rsv ID</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {items.map((item) => (
-                              <tr key={item.id} className="border-t border-border/30 hover:bg-purple-900/10">
-                                <td className="px-3 py-2">
-                                  {item.archivo_arte && item.archivo_arte !== 'sin_arte' ? (
-                                    <div className="w-12 h-9 bg-zinc-800 rounded overflow-hidden border border-zinc-700">
-                                      <img
-                                        src={getImageUrl(item.archivo_arte) || ''}
-                                        alt="Arte"
-                                        className="w-full h-full object-cover"
-                                        onError={(e) => {
-                                          (e.target as HTMLImageElement).style.display = 'none';
-                                        }}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div className="w-12 h-9 bg-zinc-800 rounded border border-zinc-700 flex items-center justify-center">
-                                      <Image className="w-4 h-4 text-zinc-600" />
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.id || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_medio || '-'}</td>
-                                <td className="px-3 py-2 text-white font-mono whitespace-nowrap">{item.codigo_unico || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 max-w-[200px] truncate" title={item.ubicacion || '-'}>{item.ubicacion || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_de_cara || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.mueble || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.plaza || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.municipio || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.nse || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.rsv_id || '-'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
