@@ -2063,6 +2063,7 @@ function TaskDetailModal({
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const recepcionInputRef = useRef<HTMLInputElement>(null);
   const [impresionTab, setImpresionTab] = useState<'resumen' | 'tabla'>('resumen');
+  const [recepcionTab, setRecepcionTab] = useState<'resumen' | 'tabla'>('resumen');
 
   // Filtrar usuarios por búsqueda (para asignar recepción)
   const filteredUsuariosRecepcion = useMemo(() => {
@@ -3397,6 +3398,78 @@ function TaskDetailModal({
           {/* === VISTA ESPECIAL PARA TAREAS DE RECEPCIÓN === */}
           {task.tipo === 'Recepción' && (
             <div className="space-y-6">
+              {/* Tabs */}
+              <div className="flex gap-2 border-b border-border pb-2">
+                <button
+                  onClick={() => setRecepcionTab('resumen')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    recepcionTab === 'resumen'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Resumen
+                </button>
+                <button
+                  onClick={() => setRecepcionTab('tabla')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    recepcionTab === 'tabla'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Ver tabla ({taskInventory.length})
+                </button>
+              </div>
+
+              {/* Tab Tabla */}
+              {recepcionTab === 'tabla' && (
+                <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
+                    <h4 className="text-sm font-medium text-purple-300">
+                      Desglose completo ({taskInventory.length} ubicaciones)
+                    </h4>
+                  </div>
+                  <div className="overflow-x-auto max-h-[400px]">
+                    <table className="w-full text-xs">
+                      <thead className="bg-zinc-800/80 sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">ID</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Tipo Formato</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Código Único</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Ubicación</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Tipo Cara</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Formato</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Plaza</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Municipio</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">NSE</th>
+                          <th className="px-3 py-2 text-left text-zinc-400 font-medium whitespace-nowrap">Rsv ID</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/50">
+                        {taskInventory.map((item, idx) => (
+                          <tr key={item.id || idx} className="hover:bg-zinc-800/30">
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.id || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_medio || '-'}</td>
+                            <td className="px-3 py-2 text-white font-mono whitespace-nowrap">{item.codigo_unico || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 max-w-[250px] truncate" title={item.ubicacion || '-'}>{item.ubicacion || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.tipo_de_cara || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.mueble || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.plaza || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.municipio || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.nse || '-'}</td>
+                            <td className="px-3 py-2 text-zinc-300 whitespace-nowrap">{item.rsv_id || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab Resumen */}
+              {recepcionTab === 'resumen' && (
+                <>
               {/* Info de la tarea de Recepción */}
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
                 <h4 className="text-sm font-medium text-purple-300 mb-3">Recepción de Impresiones</h4>
@@ -3782,6 +3855,9 @@ function TaskDetailModal({
                   </button>
                 </div>
               )}
+                </>
+              )}
+
               {(task.estatus === 'Activo' || task.estatus === 'Pendiente') && !canResolveProduccionTasks && (
                 <div className="bg-zinc-800/50 border border-border rounded-lg p-4 text-center">
                   <p className="text-sm text-zinc-400">Tarea de recepción activa - Solo visualización</p>
