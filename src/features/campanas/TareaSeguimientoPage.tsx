@@ -2963,8 +2963,8 @@ function TaskDetailModal({
 
   const tabs = [
     { key: 'resumen' as const, label: 'Paso 1: Resumen', icon: FileText },
-    { key: 'editar' as const, label: 'Paso 2: Editar Arte', icon: Edit3 },
-    { key: 'atender' as const, label: 'Paso 3: Atender Arte', icon: CheckCircle2 },
+    { key: 'atender' as const, label: 'Paso 2: Atender Arte', icon: CheckCircle2 },
+    { key: 'editar' as const, label: 'Paso 3: Editar Arte', icon: Edit3 },
   ];
 
   return (
