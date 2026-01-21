@@ -236,6 +236,32 @@ export const solicitudesService = {
     }
     return response.data.data;
   },
+
+  async evaluarAutorizacion(data: {
+    ciudad?: string;
+    formato: string;
+    tipo?: string;
+    caras: number;
+    bonificacion?: number;
+    costo: number;
+    tarifa_publica?: number;
+  }): Promise<{
+    estado: 'aprobado' | 'pendiente_dcm' | 'pendiente_dg';
+    motivo?: string;
+    tarifa_efectiva?: number;
+    total_caras?: number;
+  }> {
+    const response = await api.post<ApiResponse<{
+      estado: 'aprobado' | 'pendiente_dcm' | 'pendiente_dg';
+      motivo?: string;
+      tarifa_efectiva?: number;
+      total_caras?: number;
+    }>>('/solicitudes/evaluar-autorizacion', data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al evaluar autorización');
+    }
+    return response.data.data;
+  },
 };
 
 // Types for full details

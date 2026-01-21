@@ -381,6 +381,7 @@ interface CaraEntry {
   tarifaPublica: number;
   descuento: number;
   precioTotal: number;
+  estado_autorizacion?: 'aprobado' | 'pendiente_dcm' | 'pendiente_dg' | 'rechazado';
 }
 
 interface Props {
@@ -976,7 +977,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   }, [catorcenasData, yearFin, catorcenaFin]);
 
   // Add cara entry
-  const handleAddCara = () => {
+  const handleAddCara = async () => {
     if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo) return;
 
     const [yearStr, catStr] = newCara.periodo.split('-');
@@ -990,6 +991,39 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const totalCaras = newCara.renta + newCara.bonificacion;
     const descuento = totalCaras > 0 ? (newCara.bonificacion / totalCaras) : 0;
     const precioTotal = newCara.tarifaPublica * newCara.renta;
+
+    // Evaluar estado de autorización con el backend
+    let estadoAutorizacion: CaraEntry['estado_autorizacion'] = undefined;
+    try {
+      const ciudadesStr = newCara.ciudades.length > 0
+        ? newCara.ciudades.join(', ')
+        : filteredCiudades.join(', ');
+
+      console.log('[handleAddCara] Evaluando autorización:', {
+        ciudad: ciudadesStr,
+        formato: newCara.formato,
+        tipo: newCara.tipo,
+        caras: newCara.renta,
+        bonificacion: newCara.bonificacion,
+        costo: precioTotal,
+        tarifa_publica: newCara.tarifaPublica
+      });
+
+      const resultado = await solicitudesService.evaluarAutorizacion({
+        ciudad: ciudadesStr,
+        formato: newCara.formato,
+        tipo: newCara.tipo,
+        caras: newCara.renta,
+        bonificacion: newCara.bonificacion,
+        costo: precioTotal,
+        tarifa_publica: newCara.tarifaPublica
+      });
+      console.log('[handleAddCara] Resultado autorización:', resultado);
+      estadoAutorizacion = resultado.estado;
+    } catch (error: any) {
+      console.error('[handleAddCara] Error evaluando autorización:', error?.response?.data || error?.message || error);
+      // Si falla, dejamos sin estado (se evaluará al guardar)
+    }
 
     const cara: CaraEntry = {
       id: `${Date.now()}-${Math.random()}`,
@@ -1008,6 +1042,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tarifaPublica: newCara.tarifaPublica,
       descuento: descuento * 100, // Store as percentage
       precioTotal,
+      estado_autorizacion: estadoAutorizacion,
     };
 
     setCaras([...caras, cara]);
@@ -1345,6 +1380,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             tarifaPublica: Number(cara.tarifa_publica) || 0,
             descuento: Number(cara.descuento) || 0,
             precioTotal: Number(cara.costo) || 0,
+            estado_autorizacion: cara.estado_autorizacion as CaraEntry['estado_autorizacion'],
           };
         });
         setCaras(loadedCaras);
@@ -1986,7 +2022,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           {/* Expanded items */}
                           {isExpanded && (
                             <div className="bg-zinc-900/50 overflow-x-auto">
-                              <table className="w-full min-w-[900px]">
+                              <table className="w-full min-w-[1000px]">
                                 <thead>
                                   <tr className="bg-zinc-800/30">
                                     <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Artículo</th>
@@ -1998,6 +2034,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                     <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Total</th>
                                     <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Tarifa Púb.</th>
                                     <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Precio Total</th>
+                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Estado</th>
                                     <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500"></th>
                                   </tr>
                                 </thead>
@@ -2029,6 +2066,33 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-center text-white font-medium">{totalCaras}</td>
                                         <td className="px-2 py-2 text-xs text-right text-zinc-300">{formatCurrency(cara.tarifaPublica)}</td>
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
+                                        <td className="px-2 py-2 text-center">
+                                          {cara.estado_autorizacion === 'aprobado' && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                                              Aprobado
+                                            </span>
+                                          )}
+                                          {cara.estado_autorizacion === 'pendiente_dcm' && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
+                                              Pend. DCM
+                                            </span>
+                                          )}
+                                          {cara.estado_autorizacion === 'pendiente_dg' && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
+                                              Pend. DG
+                                            </span>
+                                          )}
+                                          {cara.estado_autorizacion === 'rechazado' && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">
+                                              Rechazado
+                                            </span>
+                                          )}
+                                          {!cara.estado_autorizacion && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-600/30 text-zinc-400">
+                                              Por evaluar
+                                            </span>
+                                          )}
+                                        </td>
                                         <td className="px-2 py-2 text-center">
                                           <button
                                             type="button"
