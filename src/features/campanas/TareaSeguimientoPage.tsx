@@ -2582,9 +2582,13 @@ function TaskDetailModal({
     try {
       let archivo = '';
       if (uploadOption === 'file' && selectedFile) {
-        // Subir el archivo al servidor primero
-        const uploadResult = await campanasService.uploadArteFile(selectedFile);
-        archivo = uploadResult.url;
+        // Convertir archivo a base64 (como en solicitudes)
+        archivo = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Error al leer el archivo'));
+          reader.readAsDataURL(selectedFile);
+        });
       } else if (uploadOption === 'existing') {
         archivo = existingArtUrl;
       } else if (uploadOption === 'link') {
@@ -2613,9 +2617,13 @@ function TaskDetailModal({
     try {
       let archivo = '';
       if (uploadOption === 'file' && selectedFile) {
-        // Subir el archivo al servidor primero
-        const uploadResult = await campanasService.uploadArteFile(selectedFile);
-        archivo = uploadResult.url;
+        // Convertir archivo a base64 (como en solicitudes)
+        archivo = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Error al leer el archivo'));
+          reader.readAsDataURL(selectedFile);
+        });
       } else if (uploadOption === 'existing') {
         archivo = existingArtUrl;
       } else if (uploadOption === 'link') {
@@ -8183,10 +8191,15 @@ export function TareaSeguimientoPage() {
           return;
         }
 
-        // Upload file to server
+        // Convertir archivo a base64 (como en solicitudes)
         setUploadArtError(null);
-        const uploadResult = await campanasService.uploadArteFile(data.value);
-        archivo = uploadResult.url;
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Error al leer el archivo'));
+          reader.readAsDataURL(data.value as File);
+        });
+        archivo = base64;
       }
 
       if (archivo) {
