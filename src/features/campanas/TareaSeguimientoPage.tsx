@@ -2784,7 +2784,7 @@ function TaskDetailModal({
         return;
       }
 
-      // Verificar si evidencia ya tiene archivos
+      // Verificar si evidencia ya tiene archivos CON archivoData (URL de Cloudinary)
       let archivosFromEvidencia: { archivo: string; archivoData?: string; spot: number; tipo: string }[] = [];
       try {
         if (task.evidencia) {
@@ -2795,8 +2795,12 @@ function TaskDetailModal({
         console.error('Error parsing evidencia for archivos check:', e);
       }
 
-      // Si ya hay archivos en evidencia, no cargar de API
-      if (archivosFromEvidencia.length > 0) {
+      // Solo usar archivos de evidencia si TODOS tienen archivoData (URL de Cloudinary)
+      // Si no tienen archivoData, cargar desde API para obtener las URLs actualizadas
+      const evidenciaHasArchivoData = archivosFromEvidencia.length > 0 &&
+        archivosFromEvidencia.every(a => a.archivoData && a.archivoData.trim() !== '');
+
+      if (evidenciaHasArchivoData) {
         setLoadedArchivosDigitales([]);
         return;
       }
@@ -5435,8 +5439,11 @@ function TaskDetailModal({
                         console.error('Error parsing programacion evidencia:', e);
                       }
 
-                      // Usar archivos de evidencia, o cargar desde API si están vacíos
-                      const archivos = archivosFromEvidencia.length > 0 ? archivosFromEvidencia : loadedArchivosDigitales;
+                      // Usar archivos de evidencia solo si tienen archivoData (URL de Cloudinary)
+                      // Si no tienen archivoData, usar los cargados desde API
+                      const evidenciaHasArchivoData = archivosFromEvidencia.length > 0 &&
+                        archivosFromEvidencia.every(a => a.archivoData && a.archivoData.trim() !== '');
+                      const archivos = evidenciaHasArchivoData ? archivosFromEvidencia : loadedArchivosDigitales;
 
                       // Merge persisted programados with local state
                       const currentProgramados = { ...programados, ...programadosState };
@@ -7499,6 +7506,7 @@ function CreateTaskModal({
         indicaciones: programacionIndicaciones,
         archivos: archivosDigitalesProgramacion.map(a => ({
           archivo: a.archivo,
+          archivoData: a.archivoData, // URL de Cloudinary para previews y descargas
           spot: a.spot,
           tipo: a.tipo,
         })),
