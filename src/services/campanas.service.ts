@@ -63,7 +63,7 @@ export interface ImagenDigital {
   id: number;
   idReserva: number;
   archivo: string;
-  archivoData?: string; // Base64 data URL
+  archivoData?: string; // URL de Cloudinary o Base64 data URL
   comentario: string;
   estado: string;
   respuesta: string;

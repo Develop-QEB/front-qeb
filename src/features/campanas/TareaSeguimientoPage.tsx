@@ -7922,7 +7922,7 @@ function CreateTaskModal({
 
                 {/* Descripción */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción *</label>
                   <textarea
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
@@ -7935,7 +7935,7 @@ function CreateTaskModal({
 
                 {/* Catorcena de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega *</label>
                   <select
                     value={catorcenaEntrega || ''}
                     onChange={(e) => setCatorcenaEntrega(e.target.value || null)}
@@ -8529,7 +8529,7 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !catorcenaEntrega || !asignadoId) : tipo === 'Programación' ? (!titulo.trim() || isLoadingArchivosDigitales) : !titulo.trim()) || isSubmitting}
+            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !catorcenaEntrega || !asignadoId) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !catorcenaEntrega || !asignadoId || isLoadingArchivosDigitales) : !titulo.trim()) || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {(isSubmitting || (tipo === 'Programación' && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
