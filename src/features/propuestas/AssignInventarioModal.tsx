@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
@@ -584,6 +584,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Advanced inventory filters
   const [showOnlyUnicos, setShowOnlyUnicos] = useState(false);
   const [showOnlyCompletos, setShowOnlyCompletos] = useState(false);
+  const [showOnlyUnicosDigitales, setShowOnlyUnicosDigitales] = useState(false);
   const [groupByDistance, setGroupByDistance] = useState(false);
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
@@ -1525,6 +1526,27 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
   }, [reservas]);
 
+  // Filter for unique digital inventories - hide digital items whose codigo_unico is already reserved
+  const filterUnicosDigitales = useCallback((inventarios: InventarioDisponible[]): InventarioDisponible[] => {
+    // Get codigo_unicos that are already reserved (from digital items)
+    const reservedCodigosDigitales = new Set<string>();
+    reservas.forEach(reserva => {
+      if (reserva.codigo_unico) {
+        reservedCodigosDigitales.add(reserva.codigo_unico);
+      }
+    });
+
+    // Filter out digital items whose codigo_unico is already in reservas
+    return inventarios.filter(inv => {
+      // Only filter digital items
+      const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
+      if (!isDigital) return true; // Keep non-digital items as-is
+
+      // For digital items, exclude if this codigo_unico is already reserved
+      return !reservedCodigosDigitales.has(inv.codigo_unico || '');
+    });
+  }, [reservas]);
+
   // Filter for complete inventories - MERGE flujo/contraflujo pairs into single "completo" rows
   const filterCompletos = useCallback((inventarios: InventarioDisponible[]): (InventarioDisponible & { isCompleto?: boolean; flujoId?: number; contraflujoId?: number })[] => {
     // Group by base code and location
@@ -1752,14 +1774,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       data = data.filter(inv => inv.tipo_de_cara === flujoFilter);
     }
 
-    // Apply unique filter
-    if (showOnlyUnicos) {
-      data = filterUnicos(data);
-    }
-
     // Apply complete filter (merges pairs into single rows)
     if (showOnlyCompletos) {
       data = filterCompletos(data);
+    }
+
+    // Apply unique digital filter (hide digital items with same codigo_unico in reservas)
+    if (showOnlyUnicosDigitales) {
+      data = filterUnicosDigitales(data);
     }
 
     // Apply distance grouping
@@ -1806,7 +1828,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, groupByDistance, filterUnicos, filterCompletos, groupByDistanceFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, groupByDistance, filterUnicos, filterCompletos, filterUnicosDigitales, groupByDistanceFunc, sortColumn, sortDirection, reservas]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -1818,11 +1840,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setPoiFilterIds(null);
   }, []);
 
+  // Check if there are digital items in inventory
+  const hasDigitalInventory = useMemo(() => {
+    return inventarioDisponible.some(inv =>
+      inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0)
+    );
+  }, [inventarioDisponible]);
+
   // Clear all filters
   const clearAllFilters = useCallback(() => {
     setFlujoFilter('Todos');
     setShowOnlyUnicos(false);
     setShowOnlyCompletos(false);
+    setShowOnlyUnicosDigitales(false);
     setGroupByDistance(false);
     setPoiFilterIds(null);
     setDisponiblesSearchTerm('');
@@ -1995,7 +2025,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const link = document.createElement('a');
     link.href = url;
     const filterInfo = [
-      showOnlyUnicos ? 'unicos' : '',
+      showOnlyUnicosDigitales ? 'unicos_digitales' : '',
       showOnlyCompletos ? 'completos' : '',
       groupByDistance ? 'agrupados' : '',
       flujoFilter !== 'Todos' ? flujoFilter.toLowerCase() : ''
@@ -2074,7 +2104,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     const runReservation = async (shouldGroup: boolean) => {
-      const newReservas: { inventario_id: number; tipo: string; latitud: number; longitud: number }[] = [];
+      const newReservas: { inventario_id: number; espacio_id?: number; tipo: string; latitud: number; longitud: number }[] = [];
       let flujoCount = 0;
       let contraflujoCount = 0;
 
@@ -2089,8 +2119,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           const contraflujoOrig = inventarioDisponible.find(i => i.id === inv.contraflujoId);
 
           if (flujoOrig && flujoCount < remainingToAssign.flujo) {
+            const isDigitalFlujo = flujoOrig.tradicional_digital === 'Digital' || (flujoOrig.total_espacios && flujoOrig.total_espacios > 0);
             newReservas.push({
               inventario_id: inv.flujoId!,
+              espacio_id: isDigitalFlujo && flujoOrig.espacio_id ? flujoOrig.espacio_id : undefined,
               tipo: 'Flujo',
               latitud: flujoOrig.latitud || 0,
               longitud: flujoOrig.longitud || 0,
@@ -2099,8 +2131,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           }
 
           if (contraflujoOrig && contraflujoCount < remainingToAssign.contraflujo) {
+            const isDigitalContra = contraflujoOrig.tradicional_digital === 'Digital' || (contraflujoOrig.total_espacios && contraflujoOrig.total_espacios > 0);
             newReservas.push({
               inventario_id: inv.contraflujoId!,
+              espacio_id: isDigitalContra && contraflujoOrig.espacio_id ? contraflujoOrig.espacio_id : undefined,
               tipo: 'Contraflujo',
               latitud: contraflujoOrig.latitud || 0,
               longitud: contraflujoOrig.longitud || 0,
@@ -2115,8 +2149,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             : contraflujoCount < remainingToAssign.contraflujo;
 
           if (canReserve) {
+            // For digital items, use espacio_id directly; otherwise use inventario_id
+            const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
             newReservas.push({
-              inventario_id: invId,
+              inventario_id: inv.id,
+              espacio_id: isDigital && inv.espacio_id ? inv.espacio_id : undefined,
               tipo,
               latitud: inv.latitud || 0,
               longitud: inv.longitud || 0,
@@ -2825,21 +2862,6 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                   <div className="w-px h-6 bg-zinc-700" />
 
-                  {/* Unique filter */}
-                  <button
-                    onClick={() => { setShowOnlyUnicos(!showOnlyUnicos); if (!showOnlyUnicos) setShowOnlyCompletos(false); }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicos
-                      ? 'bg-cyan-500 text-white shadow'
-                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
-                      }`}
-                  >
-                    <Grid className="h-3.5 w-3.5" />
-                    Únicos
-                    {showOnlyUnicos && (
-                      <X className="h-3 w-3 ml-0.5 hover:text-cyan-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicos(false); }} />
-                    )}
-                  </button>
-
                   {/* Complete filter */}
                   <button
                     onClick={() => { setShowOnlyCompletos(!showOnlyCompletos); if (!showOnlyCompletos) setShowOnlyUnicos(false); }}
@@ -2854,6 +2876,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <X className="h-3 w-3 ml-0.5 hover:text-pink-200" onClick={(e) => { e.stopPropagation(); setShowOnlyCompletos(false); }} />
                     )}
                   </button>
+
+                  {/* Unique digital filter - only show when there are digital items */}
+                  {hasDigitalInventory && (
+                    <button
+                      onClick={() => setShowOnlyUnicosDigitales(!showOnlyUnicosDigitales)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicosDigitales
+                        ? 'bg-orange-500 text-white shadow'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        }`}
+                    >
+                      <Monitor className="h-3.5 w-3.5" />
+                      Únicos Digitales
+                      {showOnlyUnicosDigitales && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-orange-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicosDigitales(false); }} />
+                      )}
+                    </button>
+                  )}
 
                   {/* Distance grouping */}
                   <button
@@ -2963,7 +3002,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </span>
 
                     {/* Clear all filters */}
-                    {(flujoFilter !== 'Todos' || showOnlyUnicos || showOnlyCompletos || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
+                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicosDigitales || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
                       <button
                         onClick={clearAllFilters}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -3084,6 +3123,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 {sortColumn !== 'codigo_unico' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
                               </div>
                             </th>
+                            {hasDigitalInventory && (
+                              <th className="px-3 py-2 text-left text-xs text-zinc-400 font-medium">
+                                Espacio
+                              </th>
+                            )}
                             <th
                               className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
                               onClick={() => handleSort('tipo_de_cara')}
@@ -3144,7 +3188,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
                                   onClick={() => toggleGroupExpansion(groupName)}
                                 >
-                                  <td colSpan={6} className="px-3 py-2">
+                                  <td colSpan={hasDigitalInventory ? 7 : 6} className="px-3 py-2">
                                     <div className="flex items-center gap-3">
                                       {expandedGroups.has(groupName) ? (
                                         <ChevronDown className="h-4 w-4 text-purple-400" />
@@ -3189,6 +3233,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       />
                                     </td>
                                     <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                    {hasDigitalInventory && (
+                                      <td className="px-3 py-2 text-zinc-400 text-xs">
+                                        {inv.numero_espacio && inv.total_espacios ? (
+                                          <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
+                                            {inv.numero_espacio} de {inv.total_espacios}
+                                          </span>
+                                        ) : '-'}
+                                      </td>
+                                    )}
                                     <td className="px-3 py-2">
                                       <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Flujo'
                                         ? 'bg-blue-500/20 text-blue-300'
@@ -3231,6 +3284,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   />
                                 </td>
                                 <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                {hasDigitalInventory && (
+                                  <td className="px-3 py-2 text-zinc-400 text-xs">
+                                    {inv.numero_espacio && inv.total_espacios ? (
+                                      <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
+                                        {inv.numero_espacio} de {inv.total_espacios}
+                                      </span>
+                                    ) : '-'}
+                                  </td>
+                                )}
                                 <td className="px-3 py-2">
                                   <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Flujo'
                                     ? 'bg-blue-500/20 text-blue-300'

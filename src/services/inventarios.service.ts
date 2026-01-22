@@ -26,6 +26,8 @@ export interface InventarioDisponible extends Inventario {
   espacios: { id: number; inventario_id: number; numero_espacio: number }[];
   espacios_count: number;
   ya_reservado_para_cara: boolean;
+  espacio_id: number | null;  // ID del espacio específico (para digitales)
+  numero_espacio: number | null;  // Número del espacio (ej: 1 de 13)
 }
 
 export interface DisponiblesResponse {
@@ -198,6 +200,46 @@ export const inventariosService = {
     }>>(`/inventarios/${id}/historial`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener historial');
+    }
+    return response.data.data;
+  },
+
+  // Poblar espacios de inventarios digitales
+  async poblarEspacios(): Promise<{
+    inventarios_procesados: number;
+    espacios_creados: number;
+    detalle: Array<{ id: number; codigo: string; tipo: string; espacios: number }>;
+  }> {
+    const response = await api.post<ApiResponse<{
+      inventarios_procesados: number;
+      espacios_creados: number;
+      detalle: Array<{ id: number; codigo: string; tipo: string; espacios: number }>;
+    }>>('/inventarios/espacios/poblar');
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al poblar espacios');
+    }
+    return response.data.data;
+  },
+
+  // Obtener espacios disponibles de un inventario
+  async getEspaciosDisponibles(inventarioId: number, params: {
+    fecha_inicio?: string;
+    fecha_fin?: string;
+    solicitudCaraId?: number;
+  } = {}): Promise<{
+    total_espacios: number;
+    disponibles: number;
+    reservados: number;
+    espacios: Array<{ id: number; inventario_id: number; numero_espacio: number; disponible: boolean }>;
+  }> {
+    const response = await api.get<ApiResponse<{
+      total_espacios: number;
+      disponibles: number;
+      reservados: number;
+      espacios: Array<{ id: number; inventario_id: number; numero_espacio: number; disponible: boolean }>;
+    }>>(`/inventarios/${inventarioId}/espacios`, { params });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener espacios');
     }
     return response.data.data;
   },
