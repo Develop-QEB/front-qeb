@@ -2475,7 +2475,7 @@ function TaskDetailModal({
   const [expandedNodesProgramacionModal, setExpandedNodesProgramacionModal] = useState<Set<string>>(new Set());
   const [programacionModalSearch, setProgramacionModalSearch] = useState('');
   // Mapa de nombres de archivos digitales por item ID (para búsqueda)
-  const [digitalFileNamesMap, setDigitalFileNamesMap] = useState<Map<number, string[]>>(new Map());
+  const [digitalFileNamesMap, setDigitalFileNamesMap] = useState<Map<string, string[]>>(new Map());
 
   // Funciones para filtros/agrupaciones del modal de Programación
   const addFilterProgramacionModal = useCallback(() => {
@@ -2745,8 +2745,8 @@ function TaskDetailModal({
         const idsParam = Array.from(allReservaIds).join(',');
         const imagenes = await campanasService.getImagenesDigitales(campanaId, idsParam);
 
-        // Crear mapa de nombres de archivos por item ID
-        const newMap = new Map<number, string[]>();
+        // Crear mapa de nombres de archivos por item ID (string key)
+        const newMap = new Map<string, string[]>();
         taskInventory.forEach(item => {
           const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
           const fileNames: string[] = [];
@@ -2829,20 +2829,18 @@ function TaskDetailModal({
               case '=': return fileNames.some(fn => fn === filterVal);
               case '!=': return fileNames.every(fn => fn !== filterVal);
               case 'contains': return fileNames.some(fn => fn.includes(filterVal));
-              case 'startsWith': return fileNames.some(fn => fn.startsWith(filterVal));
-              case 'endsWith': return fileNames.some(fn => fn.endsWith(filterVal));
+              case 'not_contains': return fileNames.every(fn => !fn.includes(filterVal));
               default: return true;
             }
           }
 
           // Filtrado normal para otros campos
-          const val = String((item as Record<string, unknown>)[filter.field] ?? '').toLowerCase();
+          const val = String((item as unknown as Record<string, unknown>)[filter.field] ?? '').toLowerCase();
           switch (filter.operator) {
             case '=': return val === filterVal;
             case '!=': return val !== filterVal;
             case 'contains': return val.includes(filterVal);
-            case 'startsWith': return val.startsWith(filterVal);
-            case 'endsWith': return val.endsWith(filterVal);
+            case 'not_contains': return !val.includes(filterVal);
             default: return true;
           }
         })
@@ -2852,8 +2850,8 @@ function TaskDetailModal({
     // Aplicar ordenamiento
     if (sortFieldProgramacionModal) {
       result.sort((a, b) => {
-        const aVal = String((a as Record<string, unknown>)[sortFieldProgramacionModal] ?? '');
-        const bVal = String((b as Record<string, unknown>)[sortFieldProgramacionModal] ?? '');
+        const aVal = String((a as unknown as Record<string, unknown>)[sortFieldProgramacionModal] ?? '');
+        const bVal = String((b as unknown as Record<string, unknown>)[sortFieldProgramacionModal] ?? '');
         const cmp = aVal.localeCompare(bVal, undefined, { numeric: true });
         return sortDirectionProgramacionModal === 'asc' ? cmp : -cmp;
       });
@@ -2876,9 +2874,7 @@ function TaskDetailModal({
         case 'plaza': return item.plaza || 'Sin plaza';
         case 'mueble': return item.mueble || 'Sin mueble';
         case 'ciudad': return item.ciudad || 'Sin ciudad';
-        case 'tradicional_digital': return item.tradicional_digital || 'Sin tipo';
-        case 'nse': return item.nse || 'Sin NSE';
-        case 'estatus_instalacion': return item.tarea_instalacion_estatus || 'Sin estatus';
+        case 'tipo_medio': return item.tradicional_digital || 'Sin tipo';
         default: return 'Otros';
       }
     };
@@ -2909,7 +2905,7 @@ function TaskDetailModal({
 
     taskInventory.forEach(item => {
       FILTER_FIELDS_INVENTARIO.forEach(f => {
-        const val = (item as Record<string, unknown>)[f.field];
+        const val = (item as unknown as Record<string, unknown>)[f.field];
         if (val !== null && val !== undefined && val !== '') {
           uniqueVals[f.field].add(String(val));
         }
