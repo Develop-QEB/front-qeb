@@ -11436,7 +11436,7 @@ export function TareaSeguimientoPage() {
                 { key: 'impresiones', label: 'Impresiones', icon: Printer },
                 { key: 'testigo', label: 'Validar Instalacion', icon: Camera },
               ] as { key: MainTab; label: string; icon: typeof Upload }[])
-                .filter(tab => (tab.key !== 'impresiones' || shouldShowImpresionesTab) && (tab.key !== 'programacion' || inventoryProgramacionData.length > 0))
+                .filter(tab => tab.key !== 'impresiones' || shouldShowImpresionesTab)
                 .map((tab) => {
                 const Icon = tab.icon;
                 return (
