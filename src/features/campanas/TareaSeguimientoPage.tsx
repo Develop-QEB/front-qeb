@@ -6610,7 +6610,7 @@ export function TareaSeguimientoPage() {
   // --- Validar Instalación (testigo) ---
   const [filtersTestigo, setFiltersTestigo] = useState<FilterCondition[]>([]);
   const [showFiltersTestigo, setShowFiltersTestigo] = useState(false);
-  const [activeGroupingsTestigo, setActiveGroupingsTestigo] = useState<GroupByField[]>(['catorcena']);
+  const [activeGroupingsTestigo, setActiveGroupingsTestigo] = useState<GroupByField[]>(['catorcena', 'aps', 'grupo']);
   const [showGroupingTestigo, setShowGroupingTestigo] = useState(false);
   const [sortFieldTestigo, setSortFieldTestigo] = useState<string | null>(null);
   const [sortDirectionTestigo, setSortDirectionTestigo] = useState<'asc' | 'desc'>('asc');
@@ -8879,7 +8879,27 @@ export function TareaSeguimientoPage() {
           {/* Filter Toolbar (Testigo tab) */}
           {activeMainTab === 'testigo' && (
             <div className="px-4 py-2 border-b border-border flex items-center justify-between">
-              <span className="text-xs text-zinc-400">{filteredTestigoData.length} de {inventoryTestigosData.length} testigos</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-zinc-400">{filteredTestigoData.length} de {inventoryTestigosData.length} instalaciones</span>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por ID, código, plaza..."
+                    value={inventorySearch}
+                    onChange={(e) => setInventorySearch(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                  />
+                  {inventorySearch && (
+                    <button
+                      onClick={() => setInventorySearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
               <FilterToolbar
                 filters={filtersTestigo}
                 showFilters={showFiltersTestigo}
@@ -9984,7 +10004,7 @@ export function TareaSeguimientoPage() {
                   );
                 })}
               </div>
-            ) : activeMainTab === 'testigo' ? (
+            ) : activeMainTab === 'testigo' && activeGroupingsTestigo.length === 0 ? (
               // Tabla plana de Validar Instalación (sin agrupaciones)
               <div className="bg-card/50">
                 <table className="w-full text-xs">
