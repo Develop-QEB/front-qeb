@@ -63,6 +63,7 @@ export interface ImagenDigital {
   id: number;
   idReserva: number;
   archivo: string;
+  archivoData?: string; // Base64 data URL
   comentario: string;
   estado: string;
   respuesta: string;

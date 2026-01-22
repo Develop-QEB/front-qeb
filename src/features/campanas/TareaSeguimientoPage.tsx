@@ -616,6 +616,7 @@ interface DigitalFile {
 interface ImagenDigitalView {
   id: number;
   archivo: string;
+  archivoData?: string; // Base64 data URL
   spot: number;
   tipo: 'image' | 'video';
   estado: string;
@@ -694,7 +695,7 @@ function DigitalGalleryModal({
                 {currentImage?.tipo === 'video' ? (
                   <video
                     key={currentImage.id}
-                    src={getImageUrl(currentImage.archivo) || ''}
+                    src={getImageUrl(currentImage.archivoData || currentImage.archivo) || ''}
                     controls
                     controlsList="nodownload"
                     className="max-w-full max-h-[450px] rounded"
@@ -703,7 +704,7 @@ function DigitalGalleryModal({
                 ) : (
                   <img
                     key={currentImage?.id}
-                    src={getImageUrl(currentImage?.archivo) || ''}
+                    src={getImageUrl(currentImage?.archivoData || currentImage?.archivo) || ''}
                     alt={`Imagen ${currentIndex + 1}`}
                     className="max-w-full max-h-full object-contain"
                   />
@@ -752,7 +753,7 @@ function DigitalGalleryModal({
                         </div>
                       ) : (
                         <img
-                          src={getImageUrl(img.archivo) || ''}
+                          src={getImageUrl(img.archivoData || img.archivo) || ''}
                           alt={`Thumbnail ${index + 1}`}
                           className="w-full h-full object-cover"
                         />
@@ -2537,6 +2538,7 @@ function TaskDetailModal({
       setDigitalGalleryImages(imagenes.map(img => ({
         id: img.id,
         archivo: img.archivo,
+        archivoData: img.archivoData, // Base64 data URL
         spot: img.spot,
         tipo: img.archivo.match(/\.(mp4|mov|avi|webm|mkv|wmv)$/i) ? 'video' as const : 'image' as const,
         estado: img.estado,
@@ -2629,7 +2631,7 @@ function TaskDetailModal({
   // Estado para tracking de artes programados en tarea de Programación
   const [programadosState, setProgramadosState] = useState<Record<string, boolean>>({});
   // Estado para archivos digitales cargados desde API (fallback si evidencia no tiene archivos)
-  const [loadedArchivosDigitales, setLoadedArchivosDigitales] = useState<{ archivo: string; spot: number; tipo: string }[]>([]);
+  const [loadedArchivosDigitales, setLoadedArchivosDigitales] = useState<{ archivo: string; archivoData?: string; spot: number; tipo: string }[]>([]);
   const [isLoadingArchivosDigitales, setIsLoadingArchivosDigitales] = useState(false);
 
   // Estado para nodos expandidos en las tablas de Impresión y Recepción
@@ -2812,6 +2814,7 @@ function TaskDetailModal({
         const imagenes = await campanasService.getImagenesDigitales(campanaId, idsParam);
         const archivos = imagenes.map(img => ({
           archivo: img.archivo,
+          archivoData: img.archivoData,
           spot: img.spot,
           tipo: img.tipo,
         }));
@@ -3055,6 +3058,7 @@ function TaskDetailModal({
         setExistingDigitalFilesEditar(imagenes.map(img => ({
           id: img.id,
           archivo: img.archivo,
+          archivoData: img.archivoData,
           spot: img.spot,
           tipo: img.archivo.match(/\.(mp4|mov|avi|webm|mkv|wmv)$/i) ? 'video' as const : 'image' as const,
           estado: img.estado,
@@ -5458,7 +5462,7 @@ function TaskDetailModal({
                       };
 
                       // Function to export single arte as CSV
-                      const handleExportCSV = (archivo: { archivo: string; spot: number; tipo: string }, indicacion: string) => {
+                      const handleExportCSV = (archivo: { archivo: string; archivoData?: string; spot: number; tipo: string }, indicacion: string) => {
                         const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
                         const csvContent = [
                           ['Campo', 'Valor'],
@@ -5507,7 +5511,8 @@ function TaskDetailModal({
                               const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
                               const isVideo = archivo.tipo === 'video';
                               const indicacion = indicaciones[archivo.archivo] || '';
-                              const fileUrl = getImageUrl(archivo.archivo);
+                              // Usar archivoData (base64) si está disponible, si no fallback a archivo
+                              const fileUrl = getImageUrl(archivo.archivoData || archivo.archivo);
                               const isProgramado = currentProgramados[archivo.archivo] === true;
 
                               return (
@@ -6556,7 +6561,8 @@ function TaskDetailModal({
                             {/* Archivos existentes del servidor */}
                             {existingDigitalFilesEditar.map((existingFile) => {
                               const isMarkedForDeletion = filesToDelete.includes(existingFile.id);
-                              const imageUrl = getImageUrl(existingFile.archivo);
+                              // Usar archivoData (base64) si está disponible
+                              const imageUrl = getImageUrl(existingFile.archivoData || existingFile.archivo);
                               return (
                                 <div
                                   key={`existing-${existingFile.id}`}
@@ -7344,6 +7350,7 @@ function CreateTaskModal({
   const [archivosDigitalesProgramacion, setArchivosDigitalesProgramacion] = useState<{
     id: number;
     archivo: string;
+    archivoData?: string; // Base64 data URL
     spot: number;
     tipo: string;
   }[]>([]);
@@ -7383,6 +7390,7 @@ function CreateTaskModal({
             setArchivosDigitalesProgramacion(imagenes.map(img => ({
               id: img.id,
               archivo: img.archivo,
+              archivoData: img.archivoData,
               spot: img.spot,
               tipo: img.tipo,
             })));
@@ -8033,7 +8041,8 @@ function CreateTaskModal({
                       {archivosDigitalesProgramacion.map((archivo) => {
                         const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
                         const isVideo = archivo.tipo === 'video';
-                        const fileUrl = getImageUrl(archivo.archivo);
+                        // Usar archivoData (base64) si está disponible
+                        const fileUrl = getImageUrl(archivo.archivoData || archivo.archivo);
                         return (
                           <div key={archivo.id} className="p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
                             <div className="flex gap-3 mb-2">
@@ -10924,6 +10933,7 @@ export function TareaSeguimientoPage() {
       setDigitalGalleryImages(imagenes.map(img => ({
         id: img.id,
         archivo: img.archivo,
+        archivoData: img.archivoData, // Base64 data URL
         spot: img.spot,
         tipo: img.tipo,
         estado: img.estado,
