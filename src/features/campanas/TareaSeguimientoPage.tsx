@@ -6672,8 +6672,8 @@ export function TareaSeguimientoPage() {
   // Inventario SIN arte (para tab "Subir Artes")
   // Se carga siempre inicialmente para determinar el tab por defecto
   const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte, isFetched: isFetchedSinArte } = useQuery({
-    queryKey: ['campana-inventario-sin-arte', campanaId, activeFormat],
-    queryFn: () => campanasService.getInventarioSinArte(campanaId, activeFormat === 'tradicional' ? 'Tradicional' : 'Digital'),
+    queryKey: ['campana-inventario-sin-arte', campanaId],
+    queryFn: () => campanasService.getInventarioSinArte(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'versionario' || !initialTabDetermined),
   });
 
@@ -6688,8 +6688,8 @@ export function TareaSeguimientoPage() {
   // Inventario para TESTIGOS (para tab "Validar Instalación")
   // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
   const { data: inventarioTestigosAPI = [], isLoading: isLoadingInventarioTestigos, isFetched: isFetchedTestigos } = useQuery({
-    queryKey: ['campana-inventario-testigos', campanaId, activeFormat],
-    queryFn: () => campanasService.getInventarioTestigos(campanaId, activeFormat === 'tradicional' ? 'Tradicional' : 'Digital'),
+    queryKey: ['campana-inventario-testigos', campanaId],
+    queryFn: () => campanasService.getInventarioTestigos(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'testigo' || !initialTabDetermined),
   });
 
@@ -7651,11 +7651,9 @@ export function TareaSeguimientoPage() {
       data = filteredTestigoData;
     }
 
-    // Filter by format for non-atender tabs (atender already has format in query)
-    if (activeMainTab !== 'atender') {
-      const formatFilter = activeFormat === 'tradicional' ? 'Tradicional' : 'Digital';
-      data = data.filter((item) => item.tradicional_digital === formatFilter);
-    }
+    // Filter by format for all tabs
+    const formatFilter = activeFormat === 'tradicional' ? 'Tradicional' : 'Digital';
+    data = data.filter((item) => item.tradicional_digital === formatFilter);
 
     // Filter by search
     if (inventorySearch) {

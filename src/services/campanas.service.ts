@@ -542,20 +542,16 @@ export const campanasService = {
   // NUEVOS ENDPOINTS PARA GESTION DE ARTES
   // ============================================================================
 
-  async getInventarioSinArte(id: number, formato: string = 'Tradicional'): Promise<InventarioConArte[]> {
-    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`, {
-      params: { formato },
-    });
+  async getInventarioSinArte(id: number): Promise<InventarioConArte[]> {
+    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener inventario sin arte');
     }
     return response.data.data;
   },
 
-  async getInventarioTestigos(id: number, formato: string = 'Tradicional'): Promise<InventarioConArte[]> {
-    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-testigos`, {
-      params: { formato },
-    });
+  async getInventarioTestigos(id: number): Promise<InventarioConArte[]> {
+    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-testigos`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener inventario para testigos');
     }
