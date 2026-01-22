@@ -3018,24 +3018,13 @@ function TaskDetailModal({
   }, [taskInventory, selectedArteIds]);
 
   // Detectar si todos los items seleccionados en Editar son digitales
-  // Considera digital si:
-  // 1. tradicional_digital === 'Digital'
-  // 2. O el item tiene archivo_arte (indicando que tiene archivos subidos)
-  // 3. O es una tarea de Corrección (siempre tienen archivos digitales)
+  // Solo considera digital si tradicional_digital === 'Digital'
   const isDigitalEditarSelection = useMemo(() => {
     if (selectedArteItems.length === 0) return false;
 
-    // Si es tarea de Corrección, siempre es digital (tiene archivos para editar)
-    if (task?.tipo === 'Correccion') {
-      return true;
-    }
-
-    // Verificar si todos los items son digitales O tienen archivo_arte
-    return selectedArteItems.every(item =>
-      item.tradicional_digital === 'Digital' ||
-      (item.archivo_arte && item.archivo_arte.length > 0)
-    );
-  }, [selectedArteItems, task?.tipo]);
+    // Verificar si todos los items son digitales basándose únicamente en tradicional_digital
+    return selectedArteItems.every(item => item.tradicional_digital === 'Digital');
+  }, [selectedArteItems]);
 
   // Cargar archivos digitales existentes cuando se seleccionen items digitales
   useEffect(() => {
