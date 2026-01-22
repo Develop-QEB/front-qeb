@@ -5609,18 +5609,23 @@ function TaskDetailModal({
                                 onClick={() => onUpdateTask(task.id, { estatus: 'Completado' })}
                                 disabled={isUpdating || !allProgramados}
                                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                                  allProgramados
+                                  allProgramados && !isUpdating
                                     ? 'bg-green-600 text-white hover:bg-green-700'
                                     : 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
                                 } disabled:opacity-50`}
                                 title={!allProgramados ? 'Debes marcar todos los artes como programados para completar la tarea' : ''}
                               >
                                 {isUpdating ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Completando...
+                                  </>
                                 ) : (
-                                  <Check className="h-4 w-4" />
+                                  <>
+                                    <Check className="h-4 w-4" />
+                                    Marcar como Completada
+                                  </>
                                 )}
-                                Marcar como Completada
                               </button>
                             </div>
                           )}
@@ -6491,19 +6496,28 @@ function TaskDetailModal({
                         onClick={handleUpdateImageDigital}
                         disabled={selectedArteIds.size === 0 || (digitalFilesEditar.length === 0 && filesToDelete.length === 0) || isUpdating}
                         className={`flex items-center justify-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
-                          selectedArteIds.size > 0 && (digitalFilesEditar.length > 0 || filesToDelete.length > 0)
+                          selectedArteIds.size > 0 && (digitalFilesEditar.length > 0 || filesToDelete.length > 0) && !isUpdating
                             ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
                             : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                         }`}
                       >
-                        <Upload className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">
-                          {filesToDelete.length > 0 && digitalFilesEditar.length === 0
-                            ? 'Eliminar Archivos'
-                            : filesToDelete.length > 0
-                            ? 'Actualizar y Eliminar'
-                            : 'Actualizar Arte Digital'}
-                        </span>
+                        {isUpdating ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                            <span className="truncate">Actualizando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-4 w-4 flex-shrink-0" />
+                            <span className="truncate">
+                              {filesToDelete.length > 0 && digitalFilesEditar.length === 0
+                                ? 'Eliminar Archivos'
+                                : filesToDelete.length > 0
+                                ? 'Actualizar y Eliminar'
+                                : 'Actualizar Arte Digital'}
+                            </span>
+                          </>
+                        )}
                       </button>
                     </div>
 
@@ -6736,13 +6750,22 @@ function TaskDetailModal({
                         onClick={handleUpdateImage}
                         disabled={selectedArteIds.size === 0 || isUpdating}
                         className={`flex items-center justify-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
-                          selectedArteIds.size > 0
+                          selectedArteIds.size > 0 && !isUpdating
                             ? 'bg-purple-600 hover:bg-purple-700 text-white'
                             : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                         }`}
                       >
-                        <Upload className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Actualizar Arte</span>
+                        {isUpdating ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                            <span className="truncate">Actualizando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-4 w-4 flex-shrink-0" />
+                            <span className="truncate">Actualizar Arte</span>
+                          </>
+                        )}
                       </button>
                     </div>
 
@@ -11721,18 +11744,23 @@ export function TareaSeguimientoPage() {
                     }}
                     disabled={selectedInventoryIds.size === 0 || assignArteMutation.isPending || isCheckingTareas || hasSelectedItemsWithInstalacion}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                      selectedInventoryIds.size > 0 && !isCheckingTareas && !hasSelectedItemsWithInstalacion
+                      selectedInventoryIds.size > 0 && !isCheckingTareas && !hasSelectedItemsWithInstalacion && !assignArteMutation.isPending
                         ? 'bg-red-600 hover:bg-red-700 text-white'
                         : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                     }`}
                     title={hasSelectedItemsWithInstalacion ? 'No se puede limpiar arte de items con instalación activa' : undefined}
                   >
-                    {isCheckingTareas ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {isCheckingTareas || assignArteMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        {assignArteMutation.isPending ? 'Limpiando...' : 'Verificando...'}
+                      </>
                     ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <>
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Limpiar Arte
+                      </>
                     )}
-                    Limpiar Arte
                   </button>
                   <button
                     onClick={handleCreateTaskClick}
