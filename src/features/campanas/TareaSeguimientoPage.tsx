@@ -13874,6 +13874,11 @@ Por favor registra la cantidad de impresiones recibidas.`,
             tareaId: parseInt(taskId),
             data
           });
+          // Si se está marcando como completada, cerrar el modal
+          if (data.estatus === 'Completado') {
+            setIsTaskDetailModalOpen(false);
+            setSelectedTask(null);
+          }
         }}
         isUpdating={updateArteStatusMutation.isPending || assignArteMutation.isPending}
         campanaId={campanaId}
