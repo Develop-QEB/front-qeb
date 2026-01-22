@@ -2785,7 +2785,7 @@ function TaskDetailModal({
       }
 
       // Verificar si evidencia ya tiene archivos
-      let archivosFromEvidencia: { archivo: string; spot: number; tipo: string }[] = [];
+      let archivosFromEvidencia: { archivo: string; archivoData?: string; spot: number; tipo: string }[] = [];
       try {
         if (task.evidencia) {
           const parsed = JSON.parse(task.evidencia);
@@ -5422,7 +5422,7 @@ function TaskDetailModal({
                     <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Programación por Arte</h4>
                     {(() => {
                       let indicaciones: Record<string, string> = {};
-                      let archivosFromEvidencia: { archivo: string; spot: number; tipo: string }[] = [];
+                      let archivosFromEvidencia: { archivo: string; archivoData?: string; spot: number; tipo: string }[] = [];
                       let programados: Record<string, boolean> = {};
                       try {
                         if (task.evidencia) {
