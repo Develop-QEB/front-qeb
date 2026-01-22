@@ -10913,6 +10913,7 @@ export function TareaSeguimientoPage() {
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['digital-file-summaries', campanaId] });
 
       setIsUploadArtModalOpen(false);
       setSelectedInventoryIds(new Set());
