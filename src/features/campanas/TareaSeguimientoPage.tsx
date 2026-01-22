@@ -5461,30 +5461,6 @@ function TaskDetailModal({
                         }
                       };
 
-                      // Function to export single arte as CSV
-                      const handleExportCSV = (archivo: { archivo: string; archivoData?: string; spot: number; tipo: string }, indicacion: string) => {
-                        const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
-                        const csvContent = [
-                          ['Campo', 'Valor'],
-                          ['Archivo', fileName],
-                          ['Ruta', archivo.archivo],
-                          ['Spot', String(archivo.spot)],
-                          ['Tipo', archivo.tipo],
-                          ['Indicaciones', indicacion || 'Sin indicaciones'],
-                          ['Programado', currentProgramados[archivo.archivo] ? 'Sí' : 'No'],
-                        ].map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n');
-
-                        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-                        const url = URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.download = `programacion_${fileName.replace(/\.[^/.]+$/, '')}.csv`;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        URL.revokeObjectURL(url);
-                      };
-
                       // Mostrar loading mientras se cargan archivos
                       if (isLoadingArchivosDigitales) {
                         return (
@@ -5580,15 +5556,6 @@ function TaskDetailModal({
                                           )}
                                           {isProgramado ? 'Programado' : 'Pendiente'}
                                         </button>
-                                        {/* CSV Export */}
-                                        <button
-                                          onClick={() => handleExportCSV(archivo, indicacion)}
-                                          className="flex items-center gap-1 px-2 py-1 bg-emerald-600/20 text-emerald-400 rounded text-xs hover:bg-emerald-600/30 transition-colors"
-                                          title="Exportar a CSV"
-                                        >
-                                          <FileSpreadsheet className="h-3 w-3" />
-                                          CSV
-                                        </button>
                                         {/* Download */}
                                         <a
                                           href={fileUrl || '#'}
@@ -5682,6 +5649,42 @@ function TaskDetailModal({
                           </button>
                         )}
                       </div>
+                      {/* Botón exportar CSV */}
+                      <button
+                        onClick={() => {
+                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Catorcena', 'Estado Arte'];
+                          const rows = filteredProgramacionModalData.map(item => [
+                            item.id,
+                            item.codigo_unico,
+                            item.tradicional_digital,
+                            item.ubicacion,
+                            item.plaza,
+                            item.mueble,
+                            item.ciudad,
+                            item.nse,
+                            item.catorcena ? `C${item.catorcena}` : '-',
+                            item.estado_arte || '-',
+                          ]);
+                          const csvContent = [
+                            headers.join(','),
+                            ...rows.map(row => row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(','))
+                          ].join('\n');
+                          const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                          const url = URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.download = `programacion_tabla_${task?.titulo || 'tarea'}_${new Date().toISOString().split('T')[0]}.csv`;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 text-emerald-400 rounded-lg text-xs hover:bg-emerald-600/30 transition-colors border border-emerald-500/30"
+                        title="Exportar tabla a CSV"
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5" />
+                        Exportar CSV
+                      </button>
                     </div>
                     <FilterToolbar
                       filters={filtersProgramacionModal}
