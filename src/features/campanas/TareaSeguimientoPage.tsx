@@ -41,9 +41,17 @@ import {
   History,
   Printer,
   ExternalLink,
+  GripVertical,
+  Play,
+  Film,
+  Video,
+  Monitor,
+  FileSpreadsheet,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioConArte, TareaCampana, ArteExistente } from '../../services/campanas.service';
+import { campanasService, InventarioConArte, TareaCampana, ArteExistente, DigitalFileSummary } from '../../services/campanas.service';
 import { proveedoresService } from '../../services/proveedores.service';
 import { Proveedor, Catorcena } from '../../types';
 import { solicitudesService } from '../../services/solicitudes.service';
@@ -115,7 +123,7 @@ const getImageUrl = (url: string | undefined | null): string | null => {
 // TYPES
 // ============================================================================
 
-type MainTab = 'versionario' | 'atender' | 'impresiones' | 'testigo';
+type MainTab = 'versionario' | 'atender' | 'programacion' | 'impresiones' | 'testigo';
 type FormatTab = 'tradicional' | 'digital';
 type TasksTab = 'tradicionales' | 'completadas' | 'calendario';
 type CalendarView = 'month' | 'week' | 'day' | 'list';
@@ -274,6 +282,12 @@ const FILTER_FIELDS_INVENTARIO: FilterFieldConfig[] = [
   { field: 'tipo_de_cara', label: 'Tipo Cara', type: 'string' },
   { field: 'catorcena', label: 'Catorcena', type: 'number' },
   { field: 'aps', label: 'APS', type: 'number' },
+];
+
+// Campos de filtro extendidos para el modal de Programación (incluye nombre de archivo)
+const FILTER_FIELDS_PROGRAMACION_MODAL: FilterFieldConfig[] = [
+  ...FILTER_FIELDS_INVENTARIO,
+  { field: 'nombre_archivo', label: 'Nombre Archivo', type: 'string' },
 ];
 
 // Campos disponibles para filtros en tareas de producción
@@ -589,12 +603,192 @@ type UploadOption = 'file' | 'existing' | 'link';
 type TaskDetailTab = 'resumen' | 'editar' | 'atender';
 type GroupByArte = 'inventario' | 'ciudad' | 'grupo';
 
+// Tipo para archivos digitales con posición de spot
+interface DigitalFile {
+  id: string;
+  file: File;
+  preview: string;
+  spot: number;
+  type: 'image' | 'video';
+}
+
+// Tipo para imágenes digitales del backend
+interface ImagenDigitalView {
+  id: number;
+  archivo: string;
+  spot: number;
+  tipo: 'image' | 'video';
+  estado: string;
+}
+
+// Digital Gallery Modal Component
+function DigitalGalleryModal({
+  isOpen,
+  onClose,
+  imagenes,
+  isLoading,
+  title,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  imagenes: ImagenDigitalView[];
+  isLoading: boolean;
+  title?: string;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const handlePrev = () => {
+    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : imagenes.length - 1));
+  };
+
+  const handleNext = () => {
+    setCurrentIndex((prev) => (prev < imagenes.length - 1 ? prev + 1 : 0));
+  };
+
+  // Reset index when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentIndex(0);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const currentImage = imagenes[currentIndex];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="relative bg-card border border-border rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Film className="h-5 w-5 text-cyan-400" />
+            {title || 'Galería Digital'}
+            <Badge className="bg-cyan-600/30 text-cyan-300 border-cyan-500/30 text-[10px]">
+              {imagenes.length} archivo{imagenes.length !== 1 ? 's' : ''}
+            </Badge>
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-cyan-900/30 rounded-lg transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden p-4 flex flex-col">
+          {isLoading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+            </div>
+          ) : imagenes.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center text-zinc-500">
+              <div className="text-center">
+                <Film className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                <p>No hay archivos digitales</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Main viewer */}
+              <div className="flex-1 relative bg-black rounded-lg flex items-center justify-center min-h-[300px]">
+                {currentImage?.tipo === 'video' ? (
+                  <video
+                    key={currentImage.id}
+                    src={getImageUrl(currentImage.archivo) || ''}
+                    controls
+                    controlsList="nodownload"
+                    className="max-w-full max-h-[450px] rounded"
+                    style={{ minHeight: '200px' }}
+                  />
+                ) : (
+                  <img
+                    key={currentImage?.id}
+                    src={getImageUrl(currentImage?.archivo) || ''}
+                    alt={`Imagen ${currentIndex + 1}`}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                )}
+
+                {/* Navigation arrows */}
+                {imagenes.length > 1 && (
+                  <>
+                    <button
+                      onClick={handlePrev}
+                      className="absolute left-2 p-2 bg-black/50 hover:bg-black/70 rounded-full transition-colors"
+                    >
+                      <ChevronLeft className="h-6 w-6" />
+                    </button>
+                    <button
+                      onClick={handleNext}
+                      className="absolute right-2 p-2 bg-black/50 hover:bg-black/70 rounded-full transition-colors"
+                    >
+                      <ChevronRight className="h-6 w-6" />
+                    </button>
+                  </>
+                )}
+
+                {/* Spot indicator */}
+                <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded text-xs">
+                  Spot {currentImage?.spot} de {imagenes.length}
+                </div>
+              </div>
+
+              {/* Thumbnails */}
+              {imagenes.length > 1 && (
+                <div className="mt-3 flex gap-2 overflow-x-auto py-2 px-1">
+                  {imagenes.map((img, index) => (
+                    <button
+                      key={img.id}
+                      onClick={() => setCurrentIndex(index)}
+                      className={`relative flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-all ${
+                        index === currentIndex
+                          ? 'border-cyan-400 ring-2 ring-cyan-400/30'
+                          : 'border-transparent hover:border-cyan-400/50'
+                      }`}
+                    >
+                      {img.tipo === 'video' ? (
+                        <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                          <Play className="h-6 w-6 text-cyan-400" />
+                        </div>
+                      ) : (
+                        <img
+                          src={getImageUrl(img.archivo) || ''}
+                          alt={`Thumbnail ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-center py-0.5">
+                        {img.spot}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 p-4 border-t border-border flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Upload Art Modal Component
 function UploadArtModal({
   isOpen,
   onClose,
   selectedInventory,
   onSubmit,
+  onSubmitDigital,
   artesExistentes,
   isLoadingArtes,
   isSubmitting,
@@ -605,6 +799,7 @@ function UploadArtModal({
   onClose: () => void;
   selectedInventory: InventoryRow[];
   onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => void;
+  onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[] }) => void;
   artesExistentes: ArteExistente[];
   isLoadingArtes: boolean;
   isSubmitting: boolean;
@@ -618,6 +813,16 @@ function UploadArtModal({
   const [link, setLink] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState<{ nombre: string; usos: number; url: string } | null>(null);
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+
+  // Estado para archivos digitales (múltiples)
+  const [digitalFiles, setDigitalFiles] = useState<DigitalFile[]>([]);
+  const [draggedFile, setDraggedFile] = useState<string | null>(null);
+
+  // Detectar si todos los items seleccionados son digitales
+  const isDigitalInventory = useMemo(() => {
+    if (selectedInventory.length === 0) return false;
+    return selectedInventory.every(item => item.tradicional_digital === 'Digital');
+  }, [selectedInventory]);
 
   // Filtros y ordenamiento para la lista de items
   const [modalSearch, setModalSearch] = useState('');
@@ -697,7 +902,7 @@ function UploadArtModal({
     return groups;
   }, [filteredModalInventory, modalGroupBy]);
 
-  // Manejar cambio de archivo
+  // Manejar cambio de archivo (tradicional)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0] || null;
     setFile(selectedFile);
@@ -732,7 +937,88 @@ function UploadArtModal({
     }
   };
 
+  // Manejar cambio de archivos digitales (múltiples)
+  const handleDigitalFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newFiles: DigitalFile[] = [];
+    const currentMaxSpot = digitalFiles.length > 0 ? Math.max(...digitalFiles.map(f => f.spot)) : 0;
+
+    Array.from(files).forEach((file, index) => {
+      const isVideo = file.type.startsWith('video/');
+      const isImage = file.type.startsWith('image/');
+
+      if (!isVideo && !isImage) return; // Solo aceptar videos e imágenes
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const newFile: DigitalFile = {
+          id: `${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`,
+          file,
+          preview: event.target?.result as string,
+          spot: currentMaxSpot + index + 1,
+          type: isVideo ? 'video' : 'image',
+        };
+        setDigitalFiles(prev => [...prev, newFile]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Limpiar el input para permitir seleccionar los mismos archivos de nuevo
+    e.target.value = '';
+  };
+
+  // Eliminar un archivo digital
+  const handleRemoveDigitalFile = (id: string) => {
+    setDigitalFiles(prev => {
+      const filtered = prev.filter(f => f.id !== id);
+      // Reordenar spots después de eliminar
+      return filtered.map((f, index) => ({ ...f, spot: index + 1 }));
+    });
+  };
+
+  // Manejar drag start para reordenar
+  const handleDragStart = (id: string) => {
+    setDraggedFile(id);
+  };
+
+  // Manejar drag over
+  const handleDragOver = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedFile || draggedFile === targetId) return;
+
+    setDigitalFiles(prev => {
+      const draggedIndex = prev.findIndex(f => f.id === draggedFile);
+      const targetIndex = prev.findIndex(f => f.id === targetId);
+
+      if (draggedIndex === -1 || targetIndex === -1) return prev;
+
+      const newFiles = [...prev];
+      const [removed] = newFiles.splice(draggedIndex, 1);
+      newFiles.splice(targetIndex, 0, removed);
+
+      // Actualizar spots después de reordenar
+      return newFiles.map((f, index) => ({ ...f, spot: index + 1 }));
+    });
+  };
+
+  // Manejar drag end
+  const handleDragEnd = () => {
+    setDraggedFile(null);
+  };
+
   const handleSubmit = () => {
+    // Si es digital y hay archivos digitales, usar el handler de digital
+    if (isDigitalInventory && digitalFiles.length > 0 && onSubmitDigital) {
+      onSubmitDigital({
+        files: digitalFiles.map(f => ({ file: f.file, spot: f.spot })),
+        inventoryIds: selectedInventory.map((i) => i.id),
+      });
+      return;
+    }
+
+    // Flujo tradicional
     let value: string | File = '';
     if (selectedOption === 'existing') {
       value = existingArtUrl;
@@ -760,6 +1046,8 @@ function UploadArtModal({
     setModalGroupBy('none');
     setModalSortBy('codigo');
     setDuplicateWarning(null);
+    setDigitalFiles([]);
+    setDraggedFile(null);
     onClose();
   };
 
@@ -776,6 +1064,13 @@ function UploadArtModal({
 
   const isSubmitDisabled = () => {
     if (isSubmitting) return true;
+
+    // Para inventario digital
+    if (isDigitalInventory) {
+      return digitalFiles.length === 0;
+    }
+
+    // Para inventario tradicional
     if (isCheckingDuplicate) return true;
     if (duplicateWarning) return true; // No permitir subir si hay duplicado
     if (selectedOption === 'existing' && !existingArtUrl) return true;
@@ -795,6 +1090,12 @@ function UploadArtModal({
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Upload className="h-5 w-5 text-purple-400" />
             Asignar Arte
+            {isDigitalInventory && (
+              <Badge className="bg-cyan-600/30 text-cyan-300 border-cyan-500/30 text-[10px]">
+                <Film className="h-3 w-3 mr-1" />
+                Digital
+              </Badge>
+            )}
           </h3>
           <button onClick={handleClose} className="p-1 hover:bg-purple-900/30 rounded-lg transition-colors">
             <X className="h-5 w-5" />
@@ -814,167 +1115,303 @@ function UploadArtModal({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
             {/* Left Column - Upload Options & Preview */}
             <div className="flex flex-col space-y-4">
-              {/* Option Selector */}
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                  Tipo de subida
-                </label>
-                <select
-                  value={selectedOption}
-                  onChange={(e) => setSelectedOption(e.target.value as UploadOption)}
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-                  disabled={isSubmitting}
-                >
-                  <option value="file">Subir archivo</option>
-                  <option value="existing">Escoger existente</option>
-                  <option value="link">Subir link</option>
-                </select>
-              </div>
+              {isDigitalInventory ? (
+                /* ===== INTERFAZ DIGITAL - MÚLTIPLES ARCHIVOS ===== */
+                <>
+                  {/* Header info */}
+                  <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <Film className="h-4 w-4 text-cyan-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs text-cyan-300 font-medium">
+                          Inventario Digital - Rotación de contenido
+                        </p>
+                        <p className="text-[10px] text-cyan-400/70 mt-1">
+                          Puedes subir múltiples imágenes y/o videos que se mostrarán en rotación.
+                          Arrastra para reordenar la secuencia.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
-              {/* Dynamic Input based on option */}
-              <div className="space-y-3">
-                {selectedOption === 'file' && (
+                  {/* File Input */}
                   <div>
                     <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                      Seleccionar archivo
+                      Agregar archivos
                     </label>
                     <div className="relative">
                       <input
                         type="file"
-                        onChange={handleFileChange}
-                        accept="image/*,.pdf"
+                        onChange={handleDigitalFilesChange}
+                        accept="image/*,video/*"
+                        multiple
                         disabled={isSubmitting}
-                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-purple-600 file:text-white hover:file:bg-purple-700 disabled:opacity-50"
+                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-cyan-600 file:text-white hover:file:bg-cyan-700 disabled:opacity-50"
                       />
                     </div>
-                    {file && (
-                      <p className="mt-2 text-xs text-purple-300 flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5" />
-                        {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                      </p>
-                    )}
-                    {isCheckingDuplicate && (
-                      <div className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Verificando si el archivo ya existe...
-                      </div>
-                    )}
-                    {duplicateWarning && (
-                      <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                        <div className="flex items-start gap-2">
-                          <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                          <div className="flex-1">
-                            <p className="text-xs text-amber-300 font-medium">
-                              Ya existe un archivo con el nombre "{duplicateWarning.nombre}"
-                            </p>
-                            <p className="text-[10px] text-amber-400/70 mt-1">
-                              Usado {duplicateWarning.usos} {duplicateWarning.usos === 1 ? 'vez' : 'veces'} en esta campaña
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={handleUseExisting}
-                                className="px-2 py-1 text-[10px] bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-                              >
-                                Usar el existente
-                              </button>
-                              <span className="text-[10px] text-amber-400/50 self-center">
-                                o cambia el nombre del archivo
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                     <p className="mt-2 text-[10px] text-zinc-500">
-                      Formatos permitidos: JPG, PNG, GIF, WEBP, PDF (max 10MB)
+                      Formatos: JPG, PNG, GIF, WEBP, MP4, MOV, WEBM (max 50MB por archivo)
                     </p>
                   </div>
-                )}
 
-                {selectedOption === 'existing' && (
+                  {/* Lista de archivos con drag & drop */}
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-medium text-zinc-400">
+                        Archivos para rotación
+                      </label>
+                      <Badge className="bg-cyan-600/30 text-cyan-300 border-cyan-500/30 text-[10px]">
+                        {digitalFiles.length} archivo{digitalFiles.length !== 1 ? 's' : ''}
+                      </Badge>
+                    </div>
+                    <div className="h-64 border border-border rounded-lg bg-zinc-900/50 overflow-auto">
+                      {digitalFiles.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-center text-zinc-500">
+                          <div>
+                            <Upload className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                            <p className="text-xs">
+                              Selecciona archivos para agregarlos a la rotación
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-2 space-y-2">
+                          {digitalFiles.map((digitalFile, index) => (
+                            <div
+                              key={digitalFile.id}
+                              draggable
+                              onDragStart={() => handleDragStart(digitalFile.id)}
+                              onDragOver={(e) => handleDragOver(e, digitalFile.id)}
+                              onDragEnd={handleDragEnd}
+                              className={`flex items-center gap-2 p-2 rounded-lg border transition-all cursor-move ${
+                                draggedFile === digitalFile.id
+                                  ? 'border-cyan-500 bg-cyan-500/20 opacity-50'
+                                  : 'border-border bg-background hover:border-cyan-500/50'
+                              }`}
+                            >
+                              {/* Drag Handle */}
+                              <div className="flex-shrink-0 text-zinc-500 hover:text-cyan-400 cursor-grab">
+                                <GripVertical className="h-4 w-4" />
+                              </div>
+
+                              {/* Spot Number */}
+                              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-cyan-600/30 flex items-center justify-center">
+                                <span className="text-[10px] font-bold text-cyan-300">{digitalFile.spot}</span>
+                              </div>
+
+                              {/* Preview */}
+                              <div className="flex-shrink-0 w-12 h-12 rounded overflow-hidden bg-zinc-800">
+                                {digitalFile.type === 'video' ? (
+                                  <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+                                    <Play className="h-5 w-5 text-cyan-400" />
+                                  </div>
+                                ) : (
+                                  <img
+                                    src={digitalFile.preview}
+                                    alt={`Preview ${index + 1}`}
+                                    className="w-full h-full object-cover"
+                                  />
+                                )}
+                              </div>
+
+                              {/* File Info */}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-white truncate" title={digitalFile.file.name}>
+                                  {digitalFile.file.name}
+                                </p>
+                                <p className="text-[10px] text-zinc-500 flex items-center gap-1.5">
+                                  {digitalFile.type === 'video' ? (
+                                    <Film className="h-3 w-3 text-cyan-400" />
+                                  ) : (
+                                    <Image className="h-3 w-3 text-purple-400" />
+                                  )}
+                                  {digitalFile.type === 'video' ? 'Video' : 'Imagen'} •{' '}
+                                  {(digitalFile.file.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
+
+                              {/* Delete Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDigitalFile(digitalFile.id)}
+                                className="flex-shrink-0 p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                title="Eliminar archivo"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* ===== INTERFAZ TRADICIONAL - UN ARCHIVO ===== */
+                <>
+                  {/* Option Selector */}
                   <div>
                     <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                      Seleccionar arte existente
+                      Tipo de subida
                     </label>
-                    {isLoadingArtes ? (
-                      <div className="flex items-center gap-2 py-2 text-zinc-400">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-sm">Cargando artes...</span>
+                    <select
+                      value={selectedOption}
+                      onChange={(e) => setSelectedOption(e.target.value as UploadOption)}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      disabled={isSubmitting}
+                    >
+                      <option value="file">Subir archivo</option>
+                      <option value="existing">Escoger existente</option>
+                      <option value="link">Subir link</option>
+                    </select>
+                  </div>
+
+                  {/* Dynamic Input based on option */}
+                  <div className="space-y-3">
+                    {selectedOption === 'file' && (
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          Seleccionar archivo
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="file"
+                            onChange={handleFileChange}
+                            accept="image/*,.pdf"
+                            disabled={isSubmitting}
+                            className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-purple-600 file:text-white hover:file:bg-purple-700 disabled:opacity-50"
+                          />
+                        </div>
+                        {file && (
+                          <p className="mt-2 text-xs text-purple-300 flex items-center gap-1.5">
+                            <FileText className="h-3.5 w-3.5" />
+                            {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                          </p>
+                        )}
+                        {isCheckingDuplicate && (
+                          <div className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Verificando si el archivo ya existe...
+                          </div>
+                        )}
+                        {duplicateWarning && (
+                          <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1">
+                                <p className="text-xs text-amber-300 font-medium">
+                                  Ya existe un archivo con el nombre "{duplicateWarning.nombre}"
+                                </p>
+                                <p className="text-[10px] text-amber-400/70 mt-1">
+                                  Usado {duplicateWarning.usos} {duplicateWarning.usos === 1 ? 'vez' : 'veces'} en esta campaña
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleUseExisting}
+                                    className="px-2 py-1 text-[10px] bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                                  >
+                                    Usar el existente
+                                  </button>
+                                  <span className="text-[10px] text-amber-400/50 self-center">
+                                    o cambia el nombre del archivo
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        <p className="mt-2 text-[10px] text-zinc-500">
+                          Formatos permitidos: JPG, PNG, GIF, WEBP, PDF (max 10MB)
+                        </p>
                       </div>
-                    ) : artesExistentes.length === 0 ? (
-                      <div className="p-3 bg-zinc-800/50 rounded-lg text-center">
-                        <p className="text-xs text-zinc-500">No hay artes existentes en esta campaña</p>
+                    )}
+
+                    {selectedOption === 'existing' && (
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          Seleccionar arte existente
+                        </label>
+                        {isLoadingArtes ? (
+                          <div className="flex items-center gap-2 py-2 text-zinc-400">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-sm">Cargando artes...</span>
+                          </div>
+                        ) : artesExistentes.length === 0 ? (
+                          <div className="p-3 bg-zinc-800/50 rounded-lg text-center">
+                            <p className="text-xs text-zinc-500">No hay artes existentes en esta campaña</p>
+                          </div>
+                        ) : (
+                          <select
+                            value={existingArtUrl}
+                            onChange={(e) => setExistingArtUrl(e.target.value)}
+                            className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            disabled={isSubmitting}
+                          >
+                            <option value="">-- Selecciona un arte --</option>
+                            {artesExistentes.map((art) => (
+                              <option key={art.id} value={art.url}>
+                                {art.nombre} ({art.usos} uso{art.usos !== 1 ? 's' : ''})
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </div>
-                    ) : (
-                      <select
-                        value={existingArtUrl}
-                        onChange={(e) => setExistingArtUrl(e.target.value)}
-                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-                        disabled={isSubmitting}
-                      >
-                        <option value="">-- Selecciona un arte --</option>
-                        {artesExistentes.map((art) => (
-                          <option key={art.id} value={art.url}>
-                            {art.nombre} ({art.usos} uso{art.usos !== 1 ? 's' : ''})
-                          </option>
-                        ))}
-                      </select>
+                    )}
+
+                    {selectedOption === 'link' && (
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          URL del arte
+                        </label>
+                        <input
+                          type="url"
+                          value={link}
+                          onChange={(e) => setLink(e.target.value)}
+                          placeholder="https://ejemplo.com/arte.jpg"
+                          disabled={isSubmitting}
+                          className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                        />
+                      </div>
                     )}
                   </div>
-                )}
 
-                {selectedOption === 'link' && (
-                  <div>
+                  {/* Preview Section */}
+                  <div className="flex-1 min-h-0">
                     <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                      URL del arte
+                      Previsualizacion
                     </label>
-                    <input
-                      type="url"
-                      value={link}
-                      onChange={(e) => setLink(e.target.value)}
-                      placeholder="https://ejemplo.com/arte.jpg"
-                      disabled={isSubmitting}
-                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                    />
+                    <div className="h-48 border border-border rounded-lg bg-zinc-900/50 flex items-center justify-center overflow-hidden">
+                      {previewUrl ? (
+                        <img
+                          src={previewUrl}
+                          alt="Preview"
+                          className="max-w-full max-h-full object-contain"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                          }}
+                        />
+                      ) : (
+                        <div className="text-center text-zinc-500">
+                          <Image className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                          <p className="text-xs">
+                            {selectedOption === 'file' && 'Selecciona un archivo para ver la previsualizacion'}
+                            {selectedOption === 'existing' && 'Selecciona un arte existente'}
+                            {selectedOption === 'link' && 'Ingresa una URL para ver la previsualizacion'}
+                          </p>
+                        </div>
+                      )}
+                      {previewUrl && (
+                        <div className="hidden text-center text-zinc-500">
+                          <AlertCircle className="h-8 w-8 mx-auto mb-2 text-amber-400" />
+                          <p className="text-xs">No se pudo cargar la imagen</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-
-              {/* Preview Section */}
-              <div className="flex-1 min-h-0">
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                  Previsualizacion
-                </label>
-                <div className="h-48 border border-border rounded-lg bg-zinc-900/50 flex items-center justify-center overflow-hidden">
-                  {previewUrl ? (
-                    <img
-                      src={previewUrl}
-                      alt="Preview"
-                      className="max-w-full max-h-full object-contain"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                      }}
-                    />
-                  ) : (
-                    <div className="text-center text-zinc-500">
-                      <Image className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                      <p className="text-xs">
-                        {selectedOption === 'file' && 'Selecciona un archivo para ver la previsualizacion'}
-                        {selectedOption === 'existing' && 'Selecciona un arte existente'}
-                        {selectedOption === 'link' && 'Ingresa una URL para ver la previsualizacion'}
-                      </p>
-                    </div>
-                  )}
-                  {previewUrl && (
-                    <div className="hidden text-center text-zinc-500">
-                      <AlertCircle className="h-8 w-8 mx-auto mb-2 text-amber-400" />
-                      <p className="text-xs">No se pudo cargar la imagen</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+                </>
+              )}
             </div>
 
             {/* Right Column - Selected Items Table */}
@@ -1125,6 +1562,7 @@ const TIPOS_TAREA = [
   { value: 'Revisión de artes', label: 'Revisión de artes', description: 'Revisión y aprobación de artes' },
   { value: 'Impresión', label: 'Impresión', description: 'Impresión de materiales publicitarios' },
   { value: 'Testigo', label: 'Testigo', description: 'Validación de instalación con evidencia fotográfica' },
+  { value: 'Programación', label: 'Programación', description: 'Programación de artes digitales con indicaciones' },
 ];
 
 // ============================================================================
@@ -1990,13 +2428,16 @@ function TaskDetailModal({
   onReject,
   onCorrect,
   onUpdateArte,
+  onUpdateArteDigital,
   onTaskComplete,
   onSendToReview,
   onCreateRecepcion,
   onCreateRecepcionFaltante,
+  onUpdateTask,
   isUpdating,
   campanaId,
   canResolveProduccionTasks = true,
+  digitalSummaryMap,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -2008,17 +2449,137 @@ function TaskDetailModal({
   onReject: (reservaIds: number[], comentario: string) => Promise<void>;
   onCorrect: (reservaIds: number[], instrucciones: string) => void;
   onUpdateArte: (reservaIds: number[], archivo: string) => void;
+  onUpdateArteDigital: (reservaIds: number[], files: { file: File; spot: number }[], deleteArchivos?: string[]) => Promise<void>;
   onTaskComplete: (taskId: string, observaciones?: string) => Promise<void>;
   onSendToReview: (reservaIds: number[], responsableOriginal: string) => Promise<void>;
   onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string) => Promise<void>;
   onCreateRecepcionFaltante: (faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[], observaciones: string) => Promise<void>;
+  onUpdateTask: (taskId: string, data: { evidencia?: string; estatus?: string }) => Promise<void>;
   isUpdating: boolean;
   campanaId: number;
   canResolveProduccionTasks?: boolean;
+  digitalSummaryMap: Map<number, DigitalFileSummary>;
 }) {
   const [activeTab, setActiveTab] = useState<TaskDetailTab>('resumen');
   const [selectedArteIds, setSelectedArteIds] = useState<Set<string>>(new Set());
   const [groupBy, setGroupBy] = useState<GroupByArte>('inventario');
+
+  // Estados para la tabla agrupada del modal de Programación (Ver Tabla tab)
+  const [filtersProgramacionModal, setFiltersProgramacionModal] = useState<FilterCondition[]>([]);
+  const [showFiltersProgramacionModal, setShowFiltersProgramacionModal] = useState(false);
+  const [activeGroupingsProgramacionModal, setActiveGroupingsProgramacionModal] = useState<GroupByField[]>(['catorcena', 'aps', 'grupo']);
+  const [showGroupingProgramacionModal, setShowGroupingProgramacionModal] = useState(false);
+  const [sortFieldProgramacionModal, setSortFieldProgramacionModal] = useState<string | null>(null);
+  const [sortDirectionProgramacionModal, setSortDirectionProgramacionModal] = useState<'asc' | 'desc'>('asc');
+  const [showSortProgramacionModal, setShowSortProgramacionModal] = useState(false);
+  const [expandedNodesProgramacionModal, setExpandedNodesProgramacionModal] = useState<Set<string>>(new Set());
+  const [programacionModalSearch, setProgramacionModalSearch] = useState('');
+  // Mapa de nombres de archivos digitales por item ID (para búsqueda)
+  const [digitalFileNamesMap, setDigitalFileNamesMap] = useState<Map<number, string[]>>(new Map());
+
+  // Funciones para filtros/agrupaciones del modal de Programación
+  const addFilterProgramacionModal = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS_INVENTARIO[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFiltersProgramacionModal(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilterProgramacionModal = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFiltersProgramacionModal(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+  }, []);
+
+  const removeFilterProgramacionModal = useCallback((id: string) => {
+    setFiltersProgramacionModal(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearAllFiltersProgramacionModal = useCallback(() => {
+    setFiltersProgramacionModal([]);
+  }, []);
+
+  const toggleGroupingProgramacionModal = useCallback((field: GroupByField) => {
+    setActiveGroupingsProgramacionModal(prev => {
+      if (prev.includes(field)) return prev.filter(f => f !== field);
+      if (prev.length < 3) return [...prev, field];
+      return [...prev.slice(1), field];
+    });
+  }, []);
+
+  const clearGroupingsProgramacionModal = useCallback(() => {
+    setActiveGroupingsProgramacionModal([]);
+  }, []);
+
+  const toggleNodeProgramacionModal = useCallback((nodeKey: string) => {
+    setExpandedNodesProgramacionModal(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeKey)) next.delete(nodeKey);
+      else next.add(nodeKey);
+      return next;
+    });
+  }, []);
+
+  // Estado para galería digital dentro del modal
+  const [isDigitalGalleryOpen, setIsDigitalGalleryOpen] = useState(false);
+  const [digitalGalleryImages, setDigitalGalleryImages] = useState<ImagenDigitalView[]>([]);
+  const [digitalGalleryTitle, setDigitalGalleryTitle] = useState('');
+  const [isLoadingDigitalGallery, setIsLoadingDigitalGallery] = useState(false);
+
+  // Handler para abrir galería digital
+  const openDigitalGalleryModal = useCallback(async (reservaId: number, codigoUnico: string) => {
+    setIsLoadingDigitalGallery(true);
+    setDigitalGalleryTitle(`Galería Digital - ${codigoUnico}`);
+    setIsDigitalGalleryOpen(true);
+    try {
+      const imagenes = await campanasService.getImagenesDigitales(campanaId, reservaId);
+      setDigitalGalleryImages(imagenes.map(img => ({
+        id: img.id,
+        archivo: img.archivo,
+        spot: img.spot,
+        tipo: img.archivo.match(/\.(mp4|mov|avi|webm|mkv|wmv)$/i) ? 'video' as const : 'image' as const,
+        estado: img.estado,
+      })));
+    } catch (error) {
+      console.error('Error fetching digital images:', error);
+      setDigitalGalleryImages([]);
+    } finally {
+      setIsLoadingDigitalGallery(false);
+    }
+  }, [campanaId]);
+
+  // Helper para obtener resumen digital de un item
+  const getDigitalSummaryForItem = useCallback((item: InventoryRow) => {
+    if (item.tradicional_digital !== 'Digital' || !item.rsv_id) return null;
+    const rsvIds = item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+    let totalArchivos = 0;
+    let totalImagenes = 0;
+    let totalVideos = 0;
+    rsvIds.forEach(rsvId => {
+      const summary = digitalSummaryMap.get(rsvId);
+      if (summary) {
+        totalArchivos += summary.totalArchivos;
+        totalImagenes += summary.countImagenes;
+        totalVideos += summary.countVideos;
+      }
+    });
+    if (totalArchivos === 0) return null;
+    return { total: totalArchivos, imagenes: totalImagenes, videos: totalVideos };
+  }, [digitalSummaryMap]);
+
+  // Helper para generar texto de resumen digital
+  const getDigitalSummaryText = useCallback((summary: { total: number; imagenes: number; videos: number } | null) => {
+    if (!summary) return '-';
+    const parts: string[] = [];
+    if (summary.imagenes > 0) {
+      parts.push(`${summary.imagenes} ${summary.imagenes === 1 ? 'imagen' : 'imágenes'}`);
+    }
+    if (summary.videos > 0) {
+      parts.push(`${summary.videos} ${summary.videos === 1 ? 'video' : 'videos'}`);
+    }
+    return parts.join(', ') || '-';
+  }, []);
 
   // Query para catorcenas (para convertir fecha_fin a catorcena)
   const { data: catorcenasData } = useQuery({
@@ -2064,6 +2625,9 @@ function TaskDetailModal({
   const recepcionInputRef = useRef<HTMLInputElement>(null);
   const [impresionTab, setImpresionTab] = useState<'resumen' | 'tabla'>('resumen');
   const [recepcionTab, setRecepcionTab] = useState<'resumen' | 'tabla'>('resumen');
+  const [programacionTab, setProgramacionTab] = useState<'resumen' | 'tabla'>('resumen');
+  // Estado para tracking de artes programados en tarea de Programación
+  const [programadosState, setProgramadosState] = useState<Record<string, boolean>>({});
 
   // Estado para nodos expandidos en las tablas de Impresión y Recepción
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
@@ -2113,6 +2677,15 @@ function TaskDetailModal({
   const [existingArtUrl, setExistingArtUrl] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
 
+  // Estados para archivos digitales en Editar tab (múltiples)
+  const [digitalFilesEditar, setDigitalFilesEditar] = useState<DigitalFile[]>([]);
+  const [draggedFileEditar, setDraggedFileEditar] = useState<string | null>(null);
+
+  // Estados para archivos digitales existentes (del servidor)
+  const [existingDigitalFilesEditar, setExistingDigitalFilesEditar] = useState<ImagenDigitalView[]>([]);
+  const [isLoadingExistingFiles, setIsLoadingExistingFiles] = useState(false);
+  const [filesToDelete, setFilesToDelete] = useState<number[]>([]); // IDs de archivos a eliminar
+
   // Estados para filtros y agrupaciones - Paso 1 (Resumen)
   const [filtersResumen, setFiltersResumen] = useState<FilterCondition[]>([]);
   const [showFiltersResumen, setShowFiltersResumen] = useState(false);
@@ -2149,6 +2722,55 @@ function TaskDetailModal({
     });
   }, [task, inventoryData]);
 
+  // Efecto para cargar nombres de archivos digitales cuando se abre el tab "Ver tabla" en Programación
+  useEffect(() => {
+    const loadDigitalFileNames = async () => {
+      if (task?.tipo !== 'Programación' || programacionTab !== 'tabla' || taskInventory.length === 0) return;
+
+      // Recopilar todas las reservas únicas
+      const allReservaIds = new Set<number>();
+      taskInventory.forEach(item => {
+        if (item.rsv_id) {
+          item.rsv_id.split(',').forEach(id => {
+            const numId = parseInt(id.trim());
+            if (!isNaN(numId)) allReservaIds.add(numId);
+          });
+        }
+      });
+
+      if (allReservaIds.size === 0) return;
+
+      try {
+        // Cargar archivos digitales para todas las reservas
+        const idsParam = Array.from(allReservaIds).join(',');
+        const imagenes = await campanasService.getImagenesDigitales(campanaId, idsParam);
+
+        // Crear mapa de nombres de archivos por item ID
+        const newMap = new Map<number, string[]>();
+        taskInventory.forEach(item => {
+          const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+          const fileNames: string[] = [];
+          rsvIds.forEach(rsvId => {
+            const files = imagenes.filter(img => img.idReserva === rsvId);
+            files.forEach(file => {
+              // Extraer el nombre del archivo de la ruta
+              const fileName = file.archivo.split('/').pop() || file.archivo;
+              fileNames.push(fileName.toLowerCase());
+            });
+          });
+          if (fileNames.length > 0) {
+            newMap.set(item.id, fileNames);
+          }
+        });
+        setDigitalFileNamesMap(newMap);
+      } catch (error) {
+        console.error('Error loading digital file names:', error);
+      }
+    };
+
+    loadDigitalFileNames();
+  }, [task?.tipo, programacionTab, taskInventory, campanaId]);
+
   // Agrupar taskInventory por Catorcena > APS > Grupo (para tablas de Impresión y Recepción)
   // Estructura jerárquica de 3 niveles para poder colapsar cada nivel
   const groupedTaskInventory = useMemo(() => {
@@ -2167,6 +2789,143 @@ function TaskDetailModal({
     });
     return groups;
   }, [taskInventory]);
+
+  // Datos filtrados para la tabla del modal de Programación
+  const filteredProgramacionModalData = useMemo(() => {
+    let result = [...taskInventory];
+
+    // Aplicar búsqueda (incluye nombres de archivos digitales)
+    if (programacionModalSearch.trim()) {
+      const search = programacionModalSearch.toLowerCase();
+      result = result.filter(item => {
+        // Búsqueda en campos estándar
+        const matchesStandard =
+          String(item.id).includes(search) ||
+          item.codigo_unico?.toLowerCase().includes(search) ||
+          item.ubicacion?.toLowerCase().includes(search) ||
+          item.plaza?.toLowerCase().includes(search) ||
+          item.mueble?.toLowerCase().includes(search) ||
+          item.ciudad?.toLowerCase().includes(search);
+
+        // Búsqueda en nombres de archivos digitales
+        const fileNames = digitalFileNamesMap.get(item.id) || [];
+        const matchesFileName = fileNames.some(fileName => fileName.includes(search));
+
+        return matchesStandard || matchesFileName;
+      });
+    }
+
+    // Aplicar filtros
+    if (filtersProgramacionModal.length > 0) {
+      result = result.filter(item =>
+        filtersProgramacionModal.every(filter => {
+          if (!filter.value) return true;
+          const filterVal = filter.value.toLowerCase();
+
+          // Manejo especial para nombre_archivo (busca en los archivos digitales)
+          if (filter.field === 'nombre_archivo') {
+            const fileNames = digitalFileNamesMap.get(item.id) || [];
+            switch (filter.operator) {
+              case '=': return fileNames.some(fn => fn === filterVal);
+              case '!=': return fileNames.every(fn => fn !== filterVal);
+              case 'contains': return fileNames.some(fn => fn.includes(filterVal));
+              case 'startsWith': return fileNames.some(fn => fn.startsWith(filterVal));
+              case 'endsWith': return fileNames.some(fn => fn.endsWith(filterVal));
+              default: return true;
+            }
+          }
+
+          // Filtrado normal para otros campos
+          const val = String((item as Record<string, unknown>)[filter.field] ?? '').toLowerCase();
+          switch (filter.operator) {
+            case '=': return val === filterVal;
+            case '!=': return val !== filterVal;
+            case 'contains': return val.includes(filterVal);
+            case 'startsWith': return val.startsWith(filterVal);
+            case 'endsWith': return val.endsWith(filterVal);
+            default: return true;
+          }
+        })
+      );
+    }
+
+    // Aplicar ordenamiento
+    if (sortFieldProgramacionModal) {
+      result.sort((a, b) => {
+        const aVal = String((a as Record<string, unknown>)[sortFieldProgramacionModal] ?? '');
+        const bVal = String((b as Record<string, unknown>)[sortFieldProgramacionModal] ?? '');
+        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true });
+        return sortDirectionProgramacionModal === 'asc' ? cmp : -cmp;
+      });
+    }
+
+    return result;
+  }, [taskInventory, programacionModalSearch, filtersProgramacionModal, sortFieldProgramacionModal, sortDirectionProgramacionModal, digitalFileNamesMap]);
+
+  // Inventario agrupado para la tabla del modal de Programación (3 niveles dinámicos)
+  const programacionModalGroupedInventory = useMemo(() => {
+    if (filteredProgramacionModalData.length === 0 || activeGroupingsProgramacionModal.length === 0) {
+      return {} as Record<string, Record<string, Record<string, InventoryRow[]>>>;
+    }
+
+    const getGroupKey = (item: InventoryRow, field: GroupByField): string => {
+      switch (field) {
+        case 'catorcena': return `Catorcena ${item.catorcena} - ${item.anio}`;
+        case 'aps': return `APS ${item.aps ?? 'Sin asignar'}`;
+        case 'grupo': return item.grupo_id ? `Grupo ${item.grupo_id}` : `Item ${item.id}`;
+        case 'plaza': return item.plaza || 'Sin plaza';
+        case 'mueble': return item.mueble || 'Sin mueble';
+        case 'ciudad': return item.ciudad || 'Sin ciudad';
+        case 'tradicional_digital': return item.tradicional_digital || 'Sin tipo';
+        case 'nse': return item.nse || 'Sin NSE';
+        case 'estatus_instalacion': return item.tarea_instalacion_estatus || 'Sin estatus';
+        default: return 'Otros';
+      }
+    };
+
+    const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
+    const [g1, g2, g3] = activeGroupingsProgramacionModal;
+
+    filteredProgramacionModalData.forEach(item => {
+      const key1 = getGroupKey(item, g1);
+      const key2 = g2 ? getGroupKey(item, g2) : 'default';
+      const key3 = g3 ? getGroupKey(item, g3) : 'default';
+
+      if (!groups[key1]) groups[key1] = {};
+      if (!groups[key1][key2]) groups[key1][key2] = {};
+      if (!groups[key1][key2][key3]) groups[key1][key2][key3] = [];
+      groups[key1][key2][key3].push(item);
+    });
+
+    return groups;
+  }, [filteredProgramacionModalData, activeGroupingsProgramacionModal]);
+
+  // Valores únicos para filtros del modal de Programación (incluye nombres de archivos)
+  const getUniqueValuesProgramacionModal = useMemo(() => {
+    const uniqueVals: Record<string, Set<string>> = {};
+    FILTER_FIELDS_INVENTARIO.forEach(f => { uniqueVals[f.field] = new Set(); });
+    // Agregar campo para nombre de archivo
+    uniqueVals['nombre_archivo'] = new Set();
+
+    taskInventory.forEach(item => {
+      FILTER_FIELDS_INVENTARIO.forEach(f => {
+        const val = (item as Record<string, unknown>)[f.field];
+        if (val !== null && val !== undefined && val !== '') {
+          uniqueVals[f.field].add(String(val));
+        }
+      });
+      // Agregar nombres de archivos digitales
+      const fileNames = digitalFileNamesMap.get(item.id) || [];
+      fileNames.forEach(fileName => {
+        uniqueVals['nombre_archivo'].add(fileName);
+      });
+    });
+    const result: Record<string, string[]> = {};
+    Object.entries(uniqueVals).forEach(([field, set]) => {
+      result[field] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    });
+    return result;
+  }, [taskInventory, digitalFileNamesMap]);
 
   // Extraer total de impresiones pedidas (para Recepción)
   // Usa num_impresiones directamente, con fallbacks para tareas antiguas
@@ -2198,6 +2957,68 @@ function TaskDetailModal({
   const selectedArteItems = useMemo(() => {
     return taskInventory.filter(item => selectedArteIds.has(item.id));
   }, [taskInventory, selectedArteIds]);
+
+  // Detectar si todos los items seleccionados en Editar son digitales
+  // Considera digital si:
+  // 1. tradicional_digital === 'Digital'
+  // 2. O el item tiene archivo_arte (indicando que tiene archivos subidos)
+  // 3. O es una tarea de Corrección (siempre tienen archivos digitales)
+  const isDigitalEditarSelection = useMemo(() => {
+    if (selectedArteItems.length === 0) return false;
+
+    // Si es tarea de Corrección, siempre es digital (tiene archivos para editar)
+    if (task?.tipo === 'Correccion') {
+      return true;
+    }
+
+    // Verificar si todos los items son digitales O tienen archivo_arte
+    return selectedArteItems.every(item =>
+      item.tradicional_digital === 'Digital' ||
+      (item.archivo_arte && item.archivo_arte.length > 0)
+    );
+  }, [selectedArteItems, task?.tipo]);
+
+  // Cargar archivos digitales existentes cuando se seleccionen items digitales
+  useEffect(() => {
+    const loadExistingDigitalFiles = async () => {
+      if (!isDigitalEditarSelection || selectedArteItems.length === 0) {
+        setExistingDigitalFilesEditar([]);
+        setDigitalFilesEditar([]);
+        setFilesToDelete([]);
+        return;
+      }
+
+      // Obtener el primer reserva ID de los items seleccionados
+      const firstItem = selectedArteItems[0];
+      const rsvIds = firstItem.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+
+      if (rsvIds.length === 0) {
+        setExistingDigitalFilesEditar([]);
+        return;
+      }
+
+      setIsLoadingExistingFiles(true);
+      try {
+        const imagenes = await campanasService.getImagenesDigitales(campanaId, rsvIds[0]);
+        setExistingDigitalFilesEditar(imagenes.map(img => ({
+          id: img.id,
+          archivo: img.archivo,
+          spot: img.spot,
+          tipo: img.archivo.match(/\.(mp4|mov|avi|webm|mkv|wmv)$/i) ? 'video' as const : 'image' as const,
+          estado: img.estado,
+        })));
+        setFilesToDelete([]);
+        setDigitalFilesEditar([]);
+      } catch (error) {
+        console.error('Error loading existing digital files:', error);
+        setExistingDigitalFilesEditar([]);
+      } finally {
+        setIsLoadingExistingFiles(false);
+      }
+    };
+
+    loadExistingDigitalFiles();
+  }, [isDigitalEditarSelection, selectedArteItems, campanaId]);
 
   // Agrupar inventario para tab Atender
   // Cuando se agrupa por ciudad/grupo, también se sub-agrupa por archivo para separar artes diferentes
@@ -2565,6 +3386,122 @@ function TaskDetailModal({
       const reader = new FileReader();
       reader.onloadend = () => setFilePreview(reader.result as string);
       reader.readAsDataURL(file);
+    }
+  };
+
+  // Manejar cambio de archivos digitales (múltiples) en Editar tab
+  const handleDigitalFilesChangeEditar = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // Contar archivos existentes que no están marcados para eliminar
+    const existingNotDeleted = existingDigitalFilesEditar.filter(f => !filesToDelete.includes(f.id));
+    const existingMaxSpot = existingNotDeleted.length > 0 ? Math.max(...existingNotDeleted.map(f => f.spot)) : 0;
+    const newMaxSpot = digitalFilesEditar.length > 0 ? Math.max(...digitalFilesEditar.map(f => f.spot)) : 0;
+    const currentMaxSpot = Math.max(existingMaxSpot, newMaxSpot);
+
+    Array.from(files).forEach((file, index) => {
+      const isVideo = file.type.startsWith('video/');
+      const isImage = file.type.startsWith('image/');
+
+      if (!isVideo && !isImage) return; // Solo aceptar videos e imágenes
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const newFile: DigitalFile = {
+          id: `${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`,
+          file,
+          preview: event.target?.result as string,
+          spot: currentMaxSpot + index + 1,
+          type: isVideo ? 'video' : 'image',
+        };
+        setDigitalFilesEditar(prev => [...prev, newFile]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Limpiar el input para permitir seleccionar los mismos archivos de nuevo
+    e.target.value = '';
+  };
+
+  // Eliminar un archivo digital nuevo de Editar tab
+  const handleRemoveDigitalFileEditar = (id: string) => {
+    setDigitalFilesEditar(prev => {
+      const filtered = prev.filter(f => f.id !== id);
+      // Reordenar spots después de eliminar
+      const existingCount = existingDigitalFilesEditar.filter(f => !filesToDelete.includes(f.id)).length;
+      return filtered.map((f, index) => ({ ...f, spot: existingCount + index + 1 }));
+    });
+  };
+
+  // Marcar un archivo existente para eliminación
+  const handleRemoveExistingFileEditar = (id: number) => {
+    setFilesToDelete(prev => [...prev, id]);
+    // Reordenar los spots de los archivos nuevos
+    const remainingExisting = existingDigitalFilesEditar.filter(f => !filesToDelete.includes(f.id) && f.id !== id).length;
+    setDigitalFilesEditar(prev => prev.map((f, index) => ({ ...f, spot: remainingExisting + index + 1 })));
+  };
+
+  // Restaurar un archivo existente que estaba marcado para eliminación
+  const handleRestoreExistingFileEditar = (id: number) => {
+    setFilesToDelete(prev => prev.filter(fid => fid !== id));
+  };
+
+  // Manejar drag start para reordenar en Editar tab
+  const handleDragStartEditar = (id: string) => {
+    setDraggedFileEditar(id);
+  };
+
+  // Manejar drag over en Editar tab
+  const handleDragOverEditar = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedFileEditar || draggedFileEditar === targetId) return;
+
+    setDigitalFilesEditar(prev => {
+      const draggedIndex = prev.findIndex(f => f.id === draggedFileEditar);
+      const targetIndex = prev.findIndex(f => f.id === targetId);
+
+      if (draggedIndex === -1 || targetIndex === -1) return prev;
+
+      const newFiles = [...prev];
+      const [removed] = newFiles.splice(draggedIndex, 1);
+      newFiles.splice(targetIndex, 0, removed);
+
+      // Actualizar spots después de reordenar
+      return newFiles.map((f, index) => ({ ...f, spot: index + 1 }));
+    });
+  };
+
+  // Manejar drag end en Editar tab
+  const handleDragEndEditar = () => {
+    setDraggedFileEditar(null);
+  };
+
+  // Handler para actualizar artes digitales (múltiples archivos)
+  const handleUpdateImageDigital = async () => {
+    // Verificar que hay cambios (archivos a eliminar o nuevos archivos)
+    if (filesToDelete.length === 0 && digitalFilesEditar.length === 0) return;
+
+    const reservaIds = selectedArteItems.flatMap(item =>
+      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+    );
+
+    if (reservaIds.length > 0) {
+      // Convertir IDs de archivos a eliminar a sus paths de archivo
+      // Esto permite eliminar el mismo archivo de todas las reservas seleccionadas
+      const archivosToDelete = filesToDelete
+        .map(id => existingDigitalFilesEditar.find(f => f.id === id)?.archivo)
+        .filter((archivo): archivo is string => !!archivo);
+
+      await onUpdateArteDigital(
+        reservaIds,
+        digitalFilesEditar.map(f => ({ file: f.file, spot: f.spot })),
+        archivosToDelete
+      );
+      setSelectedArteIds(new Set());
+      setDigitalFilesEditar([]);
+      setExistingDigitalFilesEditar([]);
+      setFilesToDelete([]);
     }
   };
 
@@ -3026,7 +3963,13 @@ function TaskDetailModal({
 
   if (!isOpen || !task) return null;
 
-  const tabs = [
+  // Para tareas de Corrección, el orden es: Resumen -> Editar -> Atender
+  // Para otras tareas: Resumen -> Atender -> Editar
+  const tabs = task.tipo === 'Correccion' ? [
+    { key: 'resumen' as const, label: 'Paso 1: Resumen', icon: FileText },
+    { key: 'editar' as const, label: 'Paso 2: Editar Arte', icon: Edit3 },
+    { key: 'atender' as const, label: 'Paso 3: Atender Arte', icon: CheckCircle2 },
+  ] : [
     { key: 'resumen' as const, label: 'Paso 1: Resumen', icon: FileText },
     { key: 'atender' as const, label: 'Paso 2: Atender Arte', icon: CheckCircle2 },
     { key: 'editar' as const, label: 'Paso 3: Editar Arte', icon: Edit3 },
@@ -3056,7 +3999,7 @@ function TaskDetailModal({
           </div>
 
           {/* Tabs - Solo mostrar si NO es tarea de Impresión, Recepción, Instalación ni Testigo */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && (
+          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && (
             <div className="flex flex-wrap gap-2 mt-4">
               {tabs
                 .filter(tab => canResolveProduccionTasks || tab.key === 'resumen')
@@ -4349,6 +5292,573 @@ function TaskDetailModal({
             </div>
           )}
 
+          {/* === VISTA ESPECIAL PARA TAREAS DE PROGRAMACIÓN === */}
+          {task.tipo === 'Programación' && (
+            <div className="space-y-6">
+              {/* Tabs */}
+              <div className="flex gap-2 border-b border-border pb-2">
+                <button
+                  onClick={() => setProgramacionTab('resumen')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'resumen'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Resumen
+                </button>
+                <button
+                  onClick={() => setProgramacionTab('tabla')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'tabla'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Ver tabla ({taskInventory.length})
+                </button>
+              </div>
+
+              {/* Tab Resumen */}
+              {programacionTab === 'resumen' && (
+                <>
+                  {/* Info de la Tarea */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Tarea</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <p className="text-white font-medium">{task.titulo || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Estatus:</span>
+                        <p className={`font-medium ${task.estatus === 'Completado' ? 'text-green-400' : task.estatus === 'Activo' || task.estatus === 'Pendiente' ? 'text-yellow-400' : 'text-blue-400'}`}>
+                          {task.estatus}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Asignado:</span>
+                        <p className="text-white font-medium">{task.asignado || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Catorcena:</span>
+                        <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Creador:</span>
+                        <p className="text-white">{task.creador || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <p className="text-white">{task.fecha_inicio || '-'}</p>
+                      </div>
+                      {task.descripcion && (
+                        <div className="col-span-2">
+                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <p className="text-white">{task.descripcion}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Indicaciones por Arte */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Programación por Arte</h4>
+                    {(() => {
+                      let indicaciones: Record<string, string> = {};
+                      let archivos: { archivo: string; spot: number; tipo: string }[] = [];
+                      let programados: Record<string, boolean> = {};
+                      try {
+                        if (task.evidencia) {
+                          const parsed = JSON.parse(task.evidencia);
+                          indicaciones = parsed.indicaciones || {};
+                          archivos = parsed.archivos || [];
+                          programados = parsed.programados || {};
+                        }
+                      } catch (e) {
+                        console.error('Error parsing programacion evidencia:', e);
+                      }
+
+                      // Merge persisted programados with local state
+                      const currentProgramados = { ...programados, ...programadosState };
+                      const allProgramados = archivos.length > 0 && archivos.every(a => currentProgramados[a.archivo] === true);
+
+                      // Function to toggle programado and save to backend
+                      const handleToggleProgramado = async (archivoPath: string) => {
+                        const newValue = !currentProgramados[archivoPath];
+                        const newProgramados = { ...currentProgramados, [archivoPath]: newValue };
+                        setProgramadosState(newProgramados);
+
+                        // Update evidencia in backend
+                        try {
+                          const newEvidencia = JSON.stringify({
+                            indicaciones,
+                            archivos,
+                            programados: newProgramados,
+                          });
+                          await onUpdateTask(task.id, { evidencia: newEvidencia });
+                        } catch (e) {
+                          console.error('Error updating programados:', e);
+                        }
+                      };
+
+                      // Function to export single arte as CSV
+                      const handleExportCSV = (archivo: { archivo: string; spot: number; tipo: string }, indicacion: string) => {
+                        const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
+                        const csvContent = [
+                          ['Campo', 'Valor'],
+                          ['Archivo', fileName],
+                          ['Ruta', archivo.archivo],
+                          ['Spot', String(archivo.spot)],
+                          ['Tipo', archivo.tipo],
+                          ['Indicaciones', indicacion || 'Sin indicaciones'],
+                          ['Programado', currentProgramados[archivo.archivo] ? 'Sí' : 'No'],
+                        ].map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n');
+
+                        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `programacion_${fileName.replace(/\.[^/.]+$/, '')}.csv`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                      };
+
+                      if (archivos.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-zinc-500 text-sm">
+                            <Image className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                            No hay archivos digitales asociados a esta tarea
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <>
+                          <div className="space-y-4">
+                            {archivos.map((archivo, index) => {
+                              const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
+                              const isVideo = archivo.tipo === 'video';
+                              const indicacion = indicaciones[archivo.archivo] || '';
+                              const fileUrl = getImageUrl(archivo.archivo);
+                              const isProgramado = currentProgramados[archivo.archivo] === true;
+
+                              return (
+                                <div key={index} className={`flex gap-4 p-3 border rounded-lg transition-colors ${isProgramado ? 'bg-green-900/20 border-green-500/30' : 'bg-purple-900/10 border-purple-500/20'}`}>
+                                  {/* Thumbnail */}
+                                  <div className="flex-shrink-0 w-24 h-16 bg-zinc-800 rounded overflow-hidden">
+                                    {isVideo ? (
+                                      <div className="relative w-full h-full">
+                                        <video src={fileUrl || ''} className="w-full h-full object-cover" muted preload="metadata" />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                                          <Play className="h-6 w-6 text-white" />
+                                        </div>
+                                      </div>
+                                    ) : fileUrl ? (
+                                      <img src={fileUrl} alt={fileName} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <Image className="h-6 w-6 text-zinc-600" />
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Info y indicaciones */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                      <div className="flex items-center gap-2">
+                                        {isVideo ? (
+                                          <Video className="h-4 w-4 text-blue-400" />
+                                        ) : (
+                                          <Image className="h-4 w-4 text-green-400" />
+                                        )}
+                                        <span className="text-sm text-white font-medium truncate" title={fileName}>
+                                          {fileName}
+                                        </span>
+                                        <span className="text-[10px] text-zinc-400 bg-zinc-700 px-1.5 py-0.5 rounded">
+                                          Spot {archivo.spot}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        {/* Switch Programado */}
+                                        <button
+                                          onClick={() => handleToggleProgramado(archivo.archivo)}
+                                          disabled={isUpdating || task.estatus === 'Completado'}
+                                          className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors ${
+                                            isProgramado
+                                              ? 'bg-green-600/30 text-green-400 hover:bg-green-600/40'
+                                              : 'bg-zinc-700/50 text-zinc-400 hover:bg-zinc-600/50'
+                                          } ${(isUpdating || task.estatus === 'Completado') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                          title={isProgramado ? 'Marcado como programado' : 'Marcar como programado'}
+                                        >
+                                          {isProgramado ? (
+                                            <ToggleRight className="h-4 w-4" />
+                                          ) : (
+                                            <ToggleLeft className="h-4 w-4" />
+                                          )}
+                                          {isProgramado ? 'Programado' : 'Pendiente'}
+                                        </button>
+                                        {/* CSV Export */}
+                                        <button
+                                          onClick={() => handleExportCSV(archivo, indicacion)}
+                                          className="flex items-center gap-1 px-2 py-1 bg-emerald-600/20 text-emerald-400 rounded text-xs hover:bg-emerald-600/30 transition-colors"
+                                          title="Exportar a CSV"
+                                        >
+                                          <FileSpreadsheet className="h-3 w-3" />
+                                          CSV
+                                        </button>
+                                        {/* Download */}
+                                        <a
+                                          href={fileUrl || '#'}
+                                          download={fileName}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-1 px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs hover:bg-blue-600/30 transition-colors"
+                                        >
+                                          <Download className="h-3 w-3" />
+                                          Descargar
+                                        </a>
+                                      </div>
+                                    </div>
+                                    <div className="bg-zinc-800/60 rounded p-2">
+                                      <p className="text-xs text-white whitespace-pre-wrap">
+                                        {indicacion || <span className="text-zinc-500 italic">Sin indicaciones especificadas</span>}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Progress indicator */}
+                          <div className="mt-4 pt-3 border-t border-border">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-zinc-400">
+                                Progreso: {archivos.filter(a => currentProgramados[a.archivo] === true).length} de {archivos.length} programados
+                              </span>
+                              {allProgramados && (
+                                <span className="flex items-center gap-1 text-green-400">
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  Todos programados
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Botón para marcar como completada - Solo habilitado si todos están programados */}
+                          {(task.estatus === 'Activo' || task.estatus === 'Pendiente') && canResolveProduccionTasks && (
+                            <div className="mt-4 flex justify-end">
+                              <button
+                                onClick={() => onUpdateTask(task.id, { estatus: 'Completado' })}
+                                disabled={isUpdating || !allProgramados}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                                  allProgramados
+                                    ? 'bg-green-600 text-white hover:bg-green-700'
+                                    : 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
+                                } disabled:opacity-50`}
+                                title={!allProgramados ? 'Debes marcar todos los artes como programados para completar la tarea' : ''}
+                              >
+                                {isUpdating ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Check className="h-4 w-4" />
+                                )}
+                                Marcar como Completada
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </>
+              )}
+
+              {/* Tab Ver Tabla - Con agrupaciones y filtros */}
+              {programacionTab === 'tabla' && (
+                <div className="space-y-4">
+                  {/* Toolbar de búsqueda y filtros */}
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-zinc-400">{filteredProgramacionModalData.length} de {taskInventory.length} items</span>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                        <input
+                          type="text"
+                          placeholder="Buscar por ID, código, nombre archivo..."
+                          value={programacionModalSearch}
+                          onChange={(e) => setProgramacionModalSearch(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                        />
+                        {programacionModalSearch && (
+                          <button
+                            onClick={() => setProgramacionModalSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <FilterToolbar
+                      filters={filtersProgramacionModal}
+                      showFilters={showFiltersProgramacionModal}
+                      setShowFilters={setShowFiltersProgramacionModal}
+                      addFilter={addFilterProgramacionModal}
+                      updateFilter={updateFilterProgramacionModal}
+                      removeFilter={removeFilterProgramacionModal}
+                      clearFilters={clearAllFiltersProgramacionModal}
+                      uniqueValues={getUniqueValuesProgramacionModal}
+                      activeGroupings={activeGroupingsProgramacionModal}
+                      showGrouping={showGroupingProgramacionModal}
+                      setShowGrouping={setShowGroupingProgramacionModal}
+                      toggleGrouping={toggleGroupingProgramacionModal}
+                      clearGroupings={clearGroupingsProgramacionModal}
+                      sortField={sortFieldProgramacionModal}
+                      sortDirection={sortDirectionProgramacionModal}
+                      showSort={showSortProgramacionModal}
+                      setShowSort={setShowSortProgramacionModal}
+                      setSortField={setSortFieldProgramacionModal}
+                      setSortDirection={setSortDirectionProgramacionModal}
+                      filteredCount={filteredProgramacionModalData.length}
+                      totalCount={taskInventory.length}
+                      useFixedDropdowns={true}
+                      filterFields={FILTER_FIELDS_PROGRAMACION_MODAL}
+                    />
+                  </div>
+
+                  {/* Contenedor de la tabla */}
+                  <div className="bg-zinc-900/50 rounded-lg border border-border">
+                    <div className="min-h-[200px] max-h-[400px] overflow-auto">
+                      {taskInventory.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-zinc-400 h-[200px]">
+                          <Image className="h-12 w-12 mb-3 opacity-50" />
+                          <p className="text-sm">Sin inventario asociado</p>
+                        </div>
+                      ) : activeGroupingsProgramacionModal.length > 0 ? (
+                        /* Vista agrupada jerárquica de 3 niveles */
+                        <div className="divide-y divide-border">
+                          {Object.entries(programacionModalGroupedInventory).map(([level1Key, level2Groups]) => {
+                            const level1NodeKey = `prog-modal-${level1Key}`;
+                            const level1Expanded = expandedNodesProgramacionModal.has(level1NodeKey);
+                            const level1ItemCount = Object.values(level2Groups).reduce(
+                              (sum, level3Groups) => sum + Object.values(level3Groups).reduce((s, items) => s + items.length, 0), 0
+                            );
+                            return (
+                              <div key={level1NodeKey}>
+                                {/* Nivel 1 */}
+                                <button
+                                  onClick={() => toggleNodeProgramacionModal(level1NodeKey)}
+                                  className="w-full px-4 py-3 flex items-center justify-between bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {level1Expanded ? (
+                                      <ChevronDown className="h-4 w-4 text-purple-400" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-purple-400" />
+                                    )}
+                                    <span className="text-sm font-bold text-white">{level1Key}</span>
+                                  </div>
+                                  <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                                    {level1ItemCount}
+                                  </Badge>
+                                </button>
+                                {level1Expanded && (
+                                  <div className="pl-4">
+                                    {Object.entries(level2Groups).map(([level2Key, level3Groups]) => {
+                                      const level2NodeKey = `${level1NodeKey}|${level2Key}`;
+                                      const level2Expanded = expandedNodesProgramacionModal.has(level2NodeKey);
+                                      const level2ItemCount = Object.values(level3Groups).reduce((s, items) => s + items.length, 0);
+                                      return (
+                                        <div key={level2NodeKey} className="border-l-2 border-purple-600/30">
+                                          {/* Nivel 2 */}
+                                          <button
+                                            onClick={() => toggleNodeProgramacionModal(level2NodeKey)}
+                                            className="w-full px-4 py-2 flex items-center justify-between bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              {level2Expanded ? (
+                                                <ChevronDown className="h-3.5 w-3.5 text-purple-400" />
+                                              ) : (
+                                                <ChevronRight className="h-3.5 w-3.5 text-purple-400" />
+                                              )}
+                                              <span className="text-xs font-semibold text-purple-300">{level2Key}</span>
+                                            </div>
+                                            <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
+                                              {level2ItemCount}
+                                            </Badge>
+                                          </button>
+                                          {level2Expanded && (
+                                            <div className="pl-4">
+                                              {Object.entries(level3Groups).map(([level3Key, items]) => {
+                                                const level3NodeKey = `${level2NodeKey}|${level3Key}`;
+                                                const level3Expanded = expandedNodesProgramacionModal.has(level3NodeKey);
+                                                return (
+                                                  <div key={level3NodeKey} className="border-l-2 border-amber-500/20">
+                                                    {/* Nivel 3 */}
+                                                    <button
+                                                      onClick={() => toggleNodeProgramacionModal(level3NodeKey)}
+                                                      className="w-full px-4 py-1.5 flex items-center justify-between hover:bg-amber-900/10 transition-colors"
+                                                    >
+                                                      <div className="flex items-center gap-2">
+                                                        {level3Expanded ? (
+                                                          <ChevronDown className="h-3 w-3 text-amber-400" />
+                                                        ) : (
+                                                          <ChevronRight className="h-3 w-3 text-amber-400" />
+                                                        )}
+                                                        <span className="text-[11px] font-medium text-amber-300">{level3Key}</span>
+                                                      </div>
+                                                      <Badge className="bg-amber-600/20 text-amber-300 border-amber-500/20 text-[10px]">
+                                                        {items.length}
+                                                      </Badge>
+                                                    </button>
+                                                    {level3Expanded && (
+                                                      <div className="bg-card/50 ml-4">
+                                                        <table className="w-full text-xs">
+                                                          <thead className="bg-purple-900/20">
+                                                            <tr className="border-b border-border text-left">
+                                                              <th className="p-2 font-medium text-purple-300">ID</th>
+                                                              <th className="p-2 font-medium text-purple-300">Archivo</th>
+                                                              <th className="p-2 font-medium text-purple-300">Código</th>
+                                                              <th className="p-2 font-medium text-purple-300">Tipo</th>
+                                                              <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                                              <th className="p-2 font-medium text-purple-300">Plaza</th>
+                                                              <th className="p-2 font-medium text-purple-300">Mueble</th>
+                                                              <th className="p-2 font-medium text-purple-300">Ciudad</th>
+                                                              <th className="p-2 font-medium text-purple-300">NSE</th>
+                                                            </tr>
+                                                          </thead>
+                                                          <tbody>
+                                                            {items.map((item) => {
+                                                              const digitalSummary = getDigitalSummaryForItem(item);
+                                                              return (
+                                                              <tr key={item.id} className="border-b border-border/50 hover:bg-purple-900/20">
+                                                                <td className="p-2 text-zinc-300">{item.id}</td>
+                                                                <td className="p-2">
+                                                                  {digitalSummary ? (
+                                                                    <button
+                                                                      onClick={() => {
+                                                                        const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                                                        if (rsvIds.length > 0) {
+                                                                          openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                                                        }
+                                                                      }}
+                                                                      className="w-10 h-8 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                                                      title={`Ver ${getDigitalSummaryText(digitalSummary)}`}
+                                                                    >
+                                                                      <Film className="h-3 w-3 text-cyan-400" />
+                                                                      <span className="text-cyan-400 font-bold text-[10px]">{digitalSummary.total}</span>
+                                                                    </button>
+                                                                  ) : (
+                                                                    <div className="w-10 h-8 rounded bg-zinc-800 flex items-center justify-center">
+                                                                      <Image className="h-3 w-3 text-zinc-600" />
+                                                                    </div>
+                                                                  )}
+                                                                </td>
+                                                                <td className="p-2 font-medium text-white">{item.codigo_unico}</td>
+                                                                <td className="p-2">
+                                                                  <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-cyan-500/20 text-cyan-300">
+                                                                    {item.tradicional_digital}
+                                                                  </span>
+                                                                </td>
+                                                                <td className="p-2 text-zinc-300 max-w-[150px] truncate" title={item.ubicacion}>
+                                                                  {item.ubicacion}
+                                                                </td>
+                                                                <td className="p-2 text-zinc-300">{item.plaza}</td>
+                                                                <td className="p-2 text-zinc-300">{item.mueble}</td>
+                                                                <td className="p-2 text-zinc-300">{item.ciudad}</td>
+                                                                <td className="p-2 text-zinc-300">{item.nse}</td>
+                                                              </tr>
+                                                            );})}
+                                                          </tbody>
+                                                        </table>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        /* Vista sin agrupar - tabla plana */
+                        <table className="w-full text-sm">
+                          <thead className="bg-zinc-800/80 sticky top-0 z-10">
+                            <tr>
+                              <th className="p-2 text-left text-xs font-medium text-zinc-400">ID</th>
+                              <th className="p-2 text-left text-xs font-medium text-zinc-400">Archivo</th>
+                              <th className="p-2 text-left text-xs font-medium text-zinc-400">Código</th>
+                              <th className="p-2 text-left text-xs font-medium text-zinc-400">Tipo</th>
+                              <th className="p-2 text-left text-xs font-medium text-zinc-400">Ubicación</th>
+                              <th className="p-2 text-left text-xs font-medium text-zinc-400">Plaza</th>
+                              <th className="p-2 text-left text-xs font-medium text-zinc-400">Mueble</th>
+                              <th className="p-2 text-left text-xs font-medium text-zinc-400">Ciudad</th>
+                              <th className="p-2 text-left text-xs font-medium text-zinc-400">NSE</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredProgramacionModalData.map((item) => {
+                              const digitalSummary = getDigitalSummaryForItem(item);
+                              return (
+                              <tr key={item.id} className="border-b border-border/50 hover:bg-purple-900/20">
+                                <td className="p-2 text-xs text-zinc-300">{item.id}</td>
+                                <td className="p-2">
+                                  {digitalSummary ? (
+                                    <button
+                                      onClick={() => {
+                                        const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                        if (rsvIds.length > 0) {
+                                          openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                        }
+                                      }}
+                                      className="w-10 h-8 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                      title={`Ver ${getDigitalSummaryText(digitalSummary)}`}
+                                    >
+                                      <Film className="h-3 w-3 text-cyan-400" />
+                                      <span className="text-cyan-400 font-bold text-[10px]">{digitalSummary.total}</span>
+                                    </button>
+                                  ) : (
+                                    <div className="w-10 h-8 rounded bg-zinc-800 flex items-center justify-center">
+                                      <Image className="h-3 w-3 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="p-2 text-xs font-medium text-white">{item.codigo_unico}</td>
+                                <td className="p-2">
+                                  <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-cyan-500/20 text-cyan-300">
+                                    {item.tradicional_digital}
+                                  </span>
+                                </td>
+                                <td className="p-2 text-xs text-zinc-300 max-w-[180px] truncate" title={item.ubicacion}>
+                                  {item.ubicacion}
+                                </td>
+                                <td className="p-2 text-xs text-zinc-300">{item.plaza}</td>
+                                <td className="p-2 text-xs text-zinc-300">{item.mueble}</td>
+                                <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
+                                <td className="p-2 text-xs text-zinc-300">{item.nse}</td>
+                              </tr>
+                            );})}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* === VISTA ESPECIAL PARA TAREAS DE TESTIGO === */}
           {task.tipo === 'Testigo' && (
             <TestigoTaskView
@@ -4362,8 +5872,8 @@ function TaskDetailModal({
             />
           )}
 
-          {/* Tab Resumen - Solo para tareas que NO son Impresión, Recepción, Instalación ni Testigo */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && activeTab === 'resumen' && (
+          {/* Tab Resumen - Solo para tareas que NO son Impresión, Recepción, Instalación, Testigo ni Programación */}
+          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && activeTab === 'resumen' && (
             <div className="space-y-4">
               {/* Info de la tarea - Compacta */}
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
@@ -4594,10 +6104,27 @@ function TaskDetailModal({
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredDataResumen.map((item) => (
+                        {filteredDataResumen.map((item) => {
+                          const digitalSummary = getDigitalSummaryForItem(item);
+                          const isDigital = item.tradicional_digital === 'Digital';
+                          return (
                           <tr key={item.id} className="border-t border-border/50 hover:bg-purple-900/10">
                             <td className="p-3">
-                              {item.archivo_arte ? (
+                              {isDigital && digitalSummary ? (
+                                <button
+                                  onClick={() => {
+                                    const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                    if (rsvIds.length > 0) {
+                                      openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                    }
+                                  }}
+                                  className="w-16 h-12 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                  title={`Ver ${getDigitalSummaryText(digitalSummary)}`}
+                                >
+                                  <Film className="h-4 w-4 text-cyan-400" />
+                                  <span className="text-cyan-400 font-bold text-xs">{digitalSummary.total}</span>
+                                </button>
+                              ) : item.archivo_arte ? (
                                 <div className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
                                   <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
                                 </div>
@@ -4624,7 +6151,7 @@ function TaskDetailModal({
                               </span>
                             </td>
                           </tr>
-                        ))}
+                        );})}
                       </tbody>
                     </table>
                   )}
@@ -4717,7 +6244,10 @@ function TaskDetailModal({
                               </tr>
                             </thead>
                             <tbody>
-                              {items.map((item) => (
+                              {items.map((item) => {
+                                const digitalSummary = getDigitalSummaryForItem(item);
+                                const isDigital = item.tradicional_digital === 'Digital';
+                                return (
                                 <tr key={item.id} className={`border-t border-border/30 transition-colors ${selectedArteIds.has(item.id) ? 'bg-purple-900/30' : 'hover:bg-purple-900/10'}`}>
                                   <td className="p-2">
                                     <input
@@ -4728,7 +6258,21 @@ function TaskDetailModal({
                                     />
                                   </td>
                                   <td className="p-2">
-                                    {item.archivo_arte ? (
+                                    {isDigital && digitalSummary ? (
+                                      <button
+                                        onClick={() => {
+                                          const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                          if (rsvIds.length > 0) {
+                                            openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                          }
+                                        }}
+                                        className="w-12 h-9 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                        title={`Ver ${getDigitalSummaryText(digitalSummary)}`}
+                                      >
+                                        <Film className="h-3 w-3 text-cyan-400" />
+                                        <span className="text-cyan-400 font-bold text-[10px]">{digitalSummary.total}</span>
+                                      </button>
+                                    ) : item.archivo_arte ? (
                                       <div className="w-12 h-9 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
                                         <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
                                       </div>
@@ -4742,7 +6286,7 @@ function TaskDetailModal({
                                   <td className="p-2 text-zinc-300">{item.mueble}</td>
                                   <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
                                 </tr>
-                              ))}
+                              );})}
                             </tbody>
                           </table>
                         </div>
@@ -4775,7 +6319,10 @@ function TaskDetailModal({
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredDataEditar.map((item) => (
+                        {filteredDataEditar.map((item) => {
+                          const digitalSummary = getDigitalSummaryForItem(item);
+                          const isDigital = item.tradicional_digital === 'Digital';
+                          return (
                           <tr
                             key={item.id}
                             className={`border-t border-border/50 transition-colors ${
@@ -4791,7 +6338,21 @@ function TaskDetailModal({
                               />
                             </td>
                             <td className="p-3">
-                              {item.archivo_arte ? (
+                              {isDigital && digitalSummary ? (
+                                <button
+                                  onClick={() => {
+                                    const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                    if (rsvIds.length > 0) {
+                                      openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                    }
+                                  }}
+                                  className="w-14 h-10 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                  title={`Ver ${getDigitalSummaryText(digitalSummary)}`}
+                                >
+                                  <Film className="h-4 w-4 text-cyan-400" />
+                                  <span className="text-cyan-400 font-bold text-[10px]">{digitalSummary.total}</span>
+                                </button>
+                              ) : item.archivo_arte ? (
                                 <div className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
                                   <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
                                 </div>
@@ -4806,7 +6367,7 @@ function TaskDetailModal({
                             <td className="p-3 text-zinc-300">{item.mueble}</td>
                             <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
                           </tr>
-                        ))}
+                        );})}
                       </tbody>
                     </table>
                   )}
@@ -4815,111 +6376,376 @@ function TaskDetailModal({
 
               {/* Columna Derecha - Opciones de edicion */}
               <div className="space-y-4">
-                {/* Botones de accion */}
-                <div className="flex justify-center">
-                  <button
-                    onClick={handleUpdateImage}
-                    disabled={selectedArteIds.size === 0 || isUpdating}
-                    className={`flex items-center justify-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
-                      selectedArteIds.size > 0
-                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                    }`}
-                  >
-                    <Upload className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">Actualizar Arte</span>
-                  </button>
-                </div>
-
-                {/* Selector de opcion */}
-                <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                  <label className="block text-sm font-medium text-zinc-300 mb-2">
-                    Escoja una opcion
-                  </label>
-                  <select
-                    value={uploadOption}
-                    onChange={(e) => setUploadOption(e.target.value as UploadOption)}
-                    className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-1 focus:ring-purple-500"
-                  >
-                    <option value="file">Subir archivo</option>
-                    <option value="existing">Escoger existente</option>
-                    <option value="link">Subir link</option>
-                  </select>
-                </div>
-
-                {/* Contenido segun opcion */}
-                <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                  {uploadOption === 'file' && (
-                    <div>
-                      <label className="block text-sm font-medium text-zinc-300 mb-2">
-                        Subir archivo
-                      </label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileChange}
-                        className="w-full text-sm text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700"
-                      />
-                      {filePreview && (
-                        <div className="mt-3">
-                          <img src={filePreview} alt="Preview" className="max-h-40 rounded-lg" />
+                {isDigitalEditarSelection ? (
+                  /* ===== INTERFAZ DIGITAL - MÚLTIPLES ARCHIVOS ===== */
+                  <>
+                    {/* Header info */}
+                    <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <Film className="h-4 w-4 text-cyan-400 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs text-cyan-300 font-medium">
+                            Inventario Digital - Rotación de contenido
+                          </p>
+                          <p className="text-[10px] text-cyan-400/70 mt-1">
+                            Puedes subir múltiples imágenes y/o videos que se mostrarán en rotación.
+                            Arrastra para reordenar la secuencia.
+                          </p>
                         </div>
-                      )}
+                      </div>
                     </div>
-                  )}
 
-                  {uploadOption === 'existing' && (
-                    <div>
-                      <label className="block text-sm font-medium text-zinc-300 mb-2">
-                        Seleccionar archivo existente
-                      </label>
-                      {isLoadingArtes ? (
-                        <div className="flex items-center gap-2 text-zinc-400">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Cargando artes...
-                        </div>
-                      ) : (
-                        <select
-                          value={existingArtUrl}
-                          onChange={(e) => setExistingArtUrl(e.target.value)}
-                          className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-1 focus:ring-purple-500"
-                        >
-                          <option value="">Seleccionar...</option>
-                          {artesExistentes.map((arte) => (
-                            <option key={arte.id} value={arte.url}>
-                              {arte.nombre} ({arte.usos} usos)
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      {existingArtUrl && (
-                        <div className="mt-3">
-                          <img src={getImageUrl(existingArtUrl) || existingArtUrl} alt="Preview" className="max-h-40 rounded-lg" />
-                        </div>
-                      )}
+                    {/* Boton de actualizar */}
+                    <div className="flex justify-center">
+                      <button
+                        onClick={handleUpdateImageDigital}
+                        disabled={selectedArteIds.size === 0 || (digitalFilesEditar.length === 0 && filesToDelete.length === 0) || isUpdating}
+                        className={`flex items-center justify-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+                          selectedArteIds.size > 0 && (digitalFilesEditar.length > 0 || filesToDelete.length > 0)
+                            ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                            : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                        }`}
+                      >
+                        <Upload className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">
+                          {filesToDelete.length > 0 && digitalFilesEditar.length === 0
+                            ? 'Eliminar Archivos'
+                            : filesToDelete.length > 0
+                            ? 'Actualizar y Eliminar'
+                            : 'Actualizar Arte Digital'}
+                        </span>
+                      </button>
                     </div>
-                  )}
 
-                  {uploadOption === 'link' && (
-                    <div>
-                      <label className="block text-sm font-medium text-zinc-300 mb-2">
-                        URL de la imagen
+                    {/* File Input */}
+                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                      <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                        Agregar archivos
                       </label>
-                      <input
-                        type="url"
-                        value={linkUrl}
-                        onChange={(e) => setLinkUrl(e.target.value)}
-                        placeholder="https://..."
+                      <div className="relative">
+                        <input
+                          type="file"
+                          onChange={handleDigitalFilesChangeEditar}
+                          accept="image/*,video/*"
+                          multiple
+                          disabled={isUpdating}
+                          className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-cyan-600 file:text-white hover:file:bg-cyan-700 disabled:opacity-50"
+                        />
+                      </div>
+                      <p className="mt-2 text-[10px] text-zinc-500">
+                        Formatos: JPG, PNG, GIF, WEBP, MP4, MOV, WEBM (max 50MB por archivo)
+                      </p>
+                    </div>
+
+                    {/* Lista de archivos con drag & drop */}
+                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-medium text-zinc-400">
+                          Archivos para rotación
+                        </label>
+                        <div className="flex items-center gap-2">
+                          {filesToDelete.length > 0 && (
+                            <Badge className="bg-red-600/30 text-red-300 border-red-500/30 text-[10px]">
+                              {filesToDelete.length} a eliminar
+                            </Badge>
+                          )}
+                          {digitalFilesEditar.length > 0 && (
+                            <Badge className="bg-green-600/30 text-green-300 border-green-500/30 text-[10px]">
+                              {digitalFilesEditar.length} nuevo{digitalFilesEditar.length !== 1 ? 's' : ''}
+                            </Badge>
+                          )}
+                          <Badge className="bg-cyan-600/30 text-cyan-300 border-cyan-500/30 text-[10px]">
+                            {existingDigitalFilesEditar.filter(f => !filesToDelete.includes(f.id)).length + digitalFilesEditar.length} total
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="h-64 border border-border rounded-lg bg-zinc-900/50 overflow-auto">
+                        {isLoadingExistingFiles ? (
+                          <div className="h-full flex items-center justify-center text-center text-zinc-500">
+                            <div>
+                              <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-cyan-400" />
+                              <p className="text-xs">Cargando archivos existentes...</p>
+                            </div>
+                          </div>
+                        ) : existingDigitalFilesEditar.length === 0 && digitalFilesEditar.length === 0 ? (
+                          <div className="h-full flex items-center justify-center text-center text-zinc-500">
+                            <div>
+                              <Upload className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                              <p className="text-xs">
+                                No hay archivos. Selecciona archivos para agregarlos a la rotación.
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-2 space-y-2">
+                            {/* Archivos existentes del servidor */}
+                            {existingDigitalFilesEditar.map((existingFile) => {
+                              const isMarkedForDeletion = filesToDelete.includes(existingFile.id);
+                              const imageUrl = getImageUrl(existingFile.archivo);
+                              return (
+                                <div
+                                  key={`existing-${existingFile.id}`}
+                                  className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${
+                                    isMarkedForDeletion
+                                      ? 'border-red-500/50 bg-red-500/10 opacity-60'
+                                      : 'border-zinc-600 bg-zinc-800/50 hover:border-cyan-500/50'
+                                  }`}
+                                >
+                                  {/* Existing Badge */}
+                                  <div className="flex-shrink-0 px-1.5 py-0.5 rounded bg-zinc-600/50 text-[8px] text-zinc-400 font-medium">
+                                    EXISTE
+                                  </div>
+
+                                  {/* Spot Number */}
+                                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-600/50 flex items-center justify-center">
+                                    <span className="text-[10px] font-bold text-zinc-300">{existingFile.spot}</span>
+                                  </div>
+
+                                  {/* Preview */}
+                                  <div className="flex-shrink-0 w-10 h-10 rounded overflow-hidden bg-zinc-800">
+                                    {existingFile.tipo === 'video' ? (
+                                      <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+                                        <Play className="h-4 w-4 text-cyan-400" />
+                                      </div>
+                                    ) : (
+                                      <img
+                                        src={imageUrl || ''}
+                                        alt={`Archivo ${existingFile.spot}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    )}
+                                  </div>
+
+                                  {/* File Info */}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[10px] text-white truncate" title={existingFile.archivo}>
+                                      {existingFile.archivo.split('/').pop() || 'archivo'}
+                                    </p>
+                                    <p className="text-[9px] text-zinc-500 flex items-center gap-1">
+                                      {existingFile.tipo === 'video' ? (
+                                        <Film className="h-2.5 w-2.5 text-cyan-400" />
+                                      ) : (
+                                        <Image className="h-2.5 w-2.5 text-purple-400" />
+                                      )}
+                                      {existingFile.tipo === 'video' ? 'Video' : 'Imagen'} • Guardado en servidor
+                                    </p>
+                                  </div>
+
+                                  {/* Delete/Restore Button */}
+                                  {isMarkedForDeletion ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRestoreExistingFileEditar(existingFile.id)}
+                                      className="flex-shrink-0 p-1 text-green-400 hover:text-green-300 hover:bg-green-500/10 rounded transition-colors"
+                                      title="Restaurar archivo"
+                                    >
+                                      <RefreshCw className="h-3.5 w-3.5" />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveExistingFileEditar(existingFile.id)}
+                                      className="flex-shrink-0 p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                      title="Eliminar archivo"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Separador si hay ambos tipos */}
+                            {existingDigitalFilesEditar.length > 0 && digitalFilesEditar.length > 0 && (
+                              <div className="flex items-center gap-2 py-1">
+                                <div className="flex-1 h-px bg-green-500/30"></div>
+                                <span className="text-[10px] text-green-400 font-medium">Nuevos archivos</span>
+                                <div className="flex-1 h-px bg-green-500/30"></div>
+                              </div>
+                            )}
+
+                            {/* Archivos nuevos (por subir) */}
+                            {digitalFilesEditar.map((digitalFile, index) => (
+                              <div
+                                key={digitalFile.id}
+                                draggable
+                                onDragStart={() => handleDragStartEditar(digitalFile.id)}
+                                onDragOver={(e) => handleDragOverEditar(e, digitalFile.id)}
+                                onDragEnd={handleDragEndEditar}
+                                className={`flex items-center gap-2 p-2 rounded-lg border transition-all cursor-move ${
+                                  draggedFileEditar === digitalFile.id
+                                    ? 'border-cyan-500 bg-cyan-500/20 opacity-50'
+                                    : 'border-green-500/30 bg-green-500/5 hover:border-green-500/50'
+                                }`}
+                              >
+                                {/* Drag Handle */}
+                                <div className="flex-shrink-0 text-zinc-500 hover:text-cyan-400 cursor-grab">
+                                  <GripVertical className="h-4 w-4" />
+                                </div>
+
+                                {/* Spot Number */}
+                                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-green-600/30 flex items-center justify-center">
+                                  <span className="text-[10px] font-bold text-green-300">{digitalFile.spot}</span>
+                                </div>
+
+                                {/* Preview */}
+                                <div className="flex-shrink-0 w-10 h-10 rounded overflow-hidden bg-zinc-800">
+                                  {digitalFile.type === 'video' ? (
+                                    <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+                                      <Play className="h-4 w-4 text-cyan-400" />
+                                    </div>
+                                  ) : (
+                                    <img
+                                      src={digitalFile.preview}
+                                      alt={`Preview ${index + 1}`}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  )}
+                                </div>
+
+                                {/* File Info */}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[10px] text-white truncate" title={digitalFile.file.name}>
+                                    {digitalFile.file.name}
+                                  </p>
+                                  <p className="text-[9px] text-zinc-500 flex items-center gap-1">
+                                    {digitalFile.type === 'video' ? (
+                                      <Film className="h-2.5 w-2.5 text-cyan-400" />
+                                    ) : (
+                                      <Image className="h-2.5 w-2.5 text-purple-400" />
+                                    )}
+                                    {digitalFile.type === 'video' ? 'Video' : 'Imagen'} •{' '}
+                                    {(digitalFile.file.size / 1024 / 1024).toFixed(2)} MB
+                                    <span className="text-green-400 ml-1">(Nuevo)</span>
+                                  </p>
+                                </div>
+
+                                {/* Delete Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveDigitalFileEditar(digitalFile.id)}
+                                  className="flex-shrink-0 p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                  title="Eliminar archivo"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  /* ===== INTERFAZ TRADICIONAL - UN ARCHIVO ===== */
+                  <>
+                    {/* Botones de accion */}
+                    <div className="flex justify-center">
+                      <button
+                        onClick={handleUpdateImage}
+                        disabled={selectedArteIds.size === 0 || isUpdating}
+                        className={`flex items-center justify-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+                          selectedArteIds.size > 0
+                            ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                            : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                        }`}
+                      >
+                        <Upload className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">Actualizar Arte</span>
+                      </button>
+                    </div>
+
+                    {/* Selector de opcion */}
+                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">
+                        Escoja una opcion
+                      </label>
+                      <select
+                        value={uploadOption}
+                        onChange={(e) => setUploadOption(e.target.value as UploadOption)}
                         className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-1 focus:ring-purple-500"
-                      />
-                      {linkUrl && (
-                        <div className="mt-3">
-                          <img src={linkUrl} alt="Preview" className="max-h-40 rounded-lg" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />
+                      >
+                        <option value="file">Subir archivo</option>
+                        <option value="existing">Escoger existente</option>
+                        <option value="link">Subir link</option>
+                      </select>
+                    </div>
+
+                    {/* Contenido segun opcion */}
+                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                      {uploadOption === 'file' && (
+                        <div>
+                          <label className="block text-sm font-medium text-zinc-300 mb-2">
+                            Subir archivo
+                          </label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileChange}
+                            className="w-full text-sm text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700"
+                          />
+                          {filePreview && (
+                            <div className="mt-3">
+                              <img src={filePreview} alt="Preview" className="max-h-40 rounded-lg" />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {uploadOption === 'existing' && (
+                        <div>
+                          <label className="block text-sm font-medium text-zinc-300 mb-2">
+                            Seleccionar archivo existente
+                          </label>
+                          {isLoadingArtes ? (
+                            <div className="flex items-center gap-2 text-zinc-400">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Cargando artes...
+                            </div>
+                          ) : (
+                            <select
+                              value={existingArtUrl}
+                              onChange={(e) => setExistingArtUrl(e.target.value)}
+                              className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-1 focus:ring-purple-500"
+                            >
+                              <option value="">Seleccionar...</option>
+                              {artesExistentes.map((arte) => (
+                                <option key={arte.id} value={arte.url}>
+                                  {arte.nombre} ({arte.usos} usos)
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {existingArtUrl && (
+                            <div className="mt-3">
+                              <img src={getImageUrl(existingArtUrl) || existingArtUrl} alt="Preview" className="max-h-40 rounded-lg" />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {uploadOption === 'link' && (
+                        <div>
+                          <label className="block text-sm font-medium text-zinc-300 mb-2">
+                            URL de la imagen
+                          </label>
+                          <input
+                            type="url"
+                            value={linkUrl}
+                            onChange={(e) => setLinkUrl(e.target.value)}
+                            placeholder="https://..."
+                            className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-1 focus:ring-purple-500"
+                          />
+                          {linkUrl && (
+                            <div className="mt-3">
+                              <img src={linkUrl} alt="Preview" className="max-h-40 rounded-lg" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -4951,10 +6777,28 @@ function TaskDetailModal({
                     </div>
                     <div className="p-3 max-h-[300px] overflow-auto">
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {taskInventory.map((item) => (
+                        {taskInventory.map((item) => {
+                          const digitalSummary = getDigitalSummaryForItem(item);
+                          const isDigital = item.tradicional_digital === 'Digital';
+                          return (
                           <div key={item.id} className="bg-zinc-800/50 rounded-lg p-2 border border-border">
                             <div className="aspect-video bg-zinc-900 rounded overflow-hidden mb-2">
-                              {item.archivo_arte ? (
+                              {isDigital && digitalSummary ? (
+                                <button
+                                  onClick={() => {
+                                    const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                    if (rsvIds.length > 0) {
+                                      openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                    }
+                                  }}
+                                  className="w-full h-full bg-cyan-500/20 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                  title={`Ver ${getDigitalSummaryText(digitalSummary)}`}
+                                >
+                                  <Film className="h-8 w-8 text-cyan-400 mb-1" />
+                                  <span className="text-cyan-400 font-bold text-lg">{digitalSummary.total}</span>
+                                  <span className="text-cyan-300 text-[10px]">{getDigitalSummaryText(digitalSummary)}</span>
+                                </button>
+                              ) : item.archivo_arte ? (
                                 <img src={getImageUrl(item.archivo_arte) || ''} alt={item.codigo_unico} className="w-full h-full object-cover" />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
@@ -4964,7 +6808,7 @@ function TaskDetailModal({
                             </div>
                             <p className="text-xs font-mono text-zinc-300 truncate">{item.codigo_unico}</p>
                           </div>
-                        ))}
+                        );})}
                       </div>
                     </div>
                   </div>
@@ -5102,12 +6946,30 @@ function TaskDetailModal({
                           {groupBy === 'inventario' ? (
                             // Vista individual: mostrar todas las cards
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {items.map((item) => (
+                              {items.map((item) => {
+                                const digitalSummary = getDigitalSummaryForItem(item);
+                                const isDigital = item.tradicional_digital === 'Digital';
+                                return (
                                 <div key={item.id} className="bg-zinc-800/50 rounded-lg p-3 border border-border">
                                   <div className="flex gap-3">
                                     {/* Preview */}
                                     <div className="flex-shrink-0">
-                                      {item.archivo_arte ? (
+                                      {isDigital && digitalSummary ? (
+                                        // Para digitales: mostrar botón con contador que abre galería
+                                        <button
+                                          onClick={() => {
+                                            const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                            if (rsvIds.length > 0) {
+                                              openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                            }
+                                          }}
+                                          className="w-20 h-16 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                          title="Ver galería digital"
+                                        >
+                                          <Film className="h-5 w-5 text-cyan-400 mb-1" />
+                                          <span className="text-cyan-400 font-bold text-sm">{digitalSummary.total}</span>
+                                        </button>
+                                      ) : item.archivo_arte ? (
                                         <div className="w-20 h-16 rounded overflow-hidden bg-zinc-700 border border-zinc-600">
                                           <img
                                             src={getImageUrl(item.archivo_arte) || ''}
@@ -5126,7 +6988,9 @@ function TaskDetailModal({
                                     <div className="flex-1 min-w-0">
                                       <p className="text-sm font-medium text-white truncate">{item.codigo_unico}</p>
                                       <p className="text-xs text-zinc-400 truncate">{item.mueble}</p>
-                                      <p className="text-xs text-zinc-500 truncate">{item.ubicacion}</p>
+                                      <p className="text-xs text-zinc-500 truncate">
+                                        {isDigital && digitalSummary ? getDigitalSummaryText(digitalSummary) : item.ubicacion}
+                                      </p>
                                       <div className="mt-1 flex items-center gap-2">
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
                                           item.estado_arte === 'aprobado'
@@ -5137,7 +7001,7 @@ function TaskDetailModal({
                                         }`}>
                                           {item.estado_arte === 'aprobado' ? 'Aprobado' : item.estado_arte === 'rechazado' ? 'Rechazado' : 'Sin revisar'}
                                         </span>
-                                        {item.archivo_arte && (
+                                        {!isDigital && item.archivo_arte && (
                                           <button
                                             onClick={() => downloadImage(getImageUrl(item.archivo_arte)!, `${item.codigo_unico}.jpg`)}
                                             className="text-[10px] text-zinc-400 hover:text-white"
@@ -5150,18 +7014,39 @@ function TaskDetailModal({
                                     </div>
                                   </div>
                                 </div>
-                              ))}
+                              );})}
                             </div>
                           ) : (
                             // Vista agrupada (ciudad/grupo): mostrar solo UNA card representativa con conteo
+                            (() => {
+                              const representativeItem = items[0];
+                              const digitalSummary = representativeItem ? getDigitalSummaryForItem(representativeItem) : null;
+                              const isDigital = representativeItem?.tradicional_digital === 'Digital';
+                              return (
                             <div className="bg-zinc-800/50 rounded-lg p-4 border border-border">
                               <div className="flex gap-4">
                                 {/* Preview de la imagen representativa */}
                                 <div className="flex-shrink-0 relative">
-                                  {items[0]?.archivo_arte ? (
+                                  {isDigital && digitalSummary ? (
+                                    // Para digitales: mostrar botón con contador que abre galería
+                                    <button
+                                      onClick={() => {
+                                        const rsvIds = representativeItem.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                        if (rsvIds.length > 0) {
+                                          openDigitalGalleryModal(rsvIds[0], representativeItem.codigo_unico);
+                                        }
+                                      }}
+                                      className="w-32 h-24 rounded-lg bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                      title="Ver galería digital"
+                                    >
+                                      <Film className="h-8 w-8 text-cyan-400 mb-1" />
+                                      <span className="text-cyan-400 font-bold text-lg">{digitalSummary.total}</span>
+                                      <span className="text-cyan-300 text-[10px]">{getDigitalSummaryText(digitalSummary)}</span>
+                                    </button>
+                                  ) : representativeItem?.archivo_arte ? (
                                     <div className="w-32 h-24 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600">
                                       <img
-                                        src={getImageUrl(items[0].archivo_arte) || ''}
+                                        src={getImageUrl(representativeItem.archivo_arte) || ''}
                                         alt="Arte"
                                         className="w-full h-full object-cover"
                                       />
@@ -5180,7 +7065,7 @@ function TaskDetailModal({
                                 {/* Info del grupo */}
                                 <div className="flex-1 min-w-0">
                                   <p className="text-base font-semibold text-white mb-1">
-                                    {items.length} ubicacion{items.length !== 1 ? 'es' : ''} con esta imagen
+                                    {items.length} ubicacion{items.length !== 1 ? 'es' : ''} {isDigital ? 'con estos archivos' : 'con esta imagen'}
                                   </p>
                                   <p className="text-xs text-zinc-400 mb-2">
                                     {groupBy === 'ciudad' ? 'Ciudad' : 'Grupo'}: <span className="text-purple-300 font-medium">{groupKey.split('|||')[0]}</span>
@@ -5203,10 +7088,10 @@ function TaskDetailModal({
                                       </span>
                                     )}
                                   </div>
-                                  {/* Botón de descarga */}
-                                  {items[0]?.archivo_arte && (
+                                  {/* Botón de descarga - solo para tradicionales */}
+                                  {!isDigital && representativeItem?.archivo_arte && (
                                     <button
-                                      onClick={() => downloadImage(getImageUrl(items[0].archivo_arte)!, `${groupKey}.jpg`)}
+                                      onClick={() => downloadImage(getImageUrl(representativeItem.archivo_arte)!, `${groupKey}.jpg`)}
                                       className="mt-2 text-xs text-zinc-400 hover:text-white flex items-center gap-1"
                                       title="Descargar"
                                     >
@@ -5217,6 +7102,8 @@ function TaskDetailModal({
                                 </div>
                               </div>
                             </div>
+                              );
+                            })()
                           )}
                         </div>
                       </div>
@@ -5282,6 +7169,18 @@ function TaskDetailModal({
           )}
         </div>
       </div>
+
+      {/* Digital Gallery Modal dentro de TaskDetailModal */}
+      <DigitalGalleryModal
+        isOpen={isDigitalGalleryOpen}
+        onClose={() => {
+          setIsDigitalGalleryOpen(false);
+          setDigitalGalleryImages([]);
+        }}
+        imagenes={digitalGalleryImages}
+        isLoading={isLoadingDigitalGallery}
+        title={digitalGalleryTitle}
+      />
     </div>
   );
 }
@@ -5365,6 +7264,16 @@ function CreateTaskModal({
   // Campos específicos para Impresión - impresiones por cada arte (agrupado por archivo)
   const [impresiones, setImpresiones] = useState<Record<string, number>>({});
 
+  // Campos específicos para Programación - indicaciones por cada archivo digital
+  const [programacionIndicaciones, setProgramacionIndicaciones] = useState<Record<string, string>>({});
+  const [archivosDigitalesProgramacion, setArchivosDigitalesProgramacion] = useState<{
+    id: number;
+    archivo: string;
+    spot: number;
+    tipo: string;
+  }[]>([]);
+  const [isLoadingArchivosDigitales, setIsLoadingArchivosDigitales] = useState(false);
+
   // Inicializar impresiones cuando cambia el inventario seleccionado (cantidad de ubicaciones por defecto)
   useEffect(() => {
     if (isOpen && selectedInventory.length > 0 && tipo === 'Impresión') {
@@ -5382,6 +7291,37 @@ function CreateTaskModal({
       setImpresiones(initial);
     }
   }, [isOpen, selectedInventory, tipo]);
+
+  // Cargar archivos digitales cuando se selecciona tipo Programación
+  useEffect(() => {
+    if (isOpen && selectedInventory.length > 0 && tipo === 'Programación') {
+      const loadDigitalFiles = async () => {
+        setIsLoadingArchivosDigitales(true);
+        try {
+          // Obtener los rsv_ids de los items seleccionados
+          const reservaIds = selectedInventory.flatMap(item =>
+            item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+          );
+          if (reservaIds.length > 0) {
+            const idsParam = reservaIds.join(',');
+            const imagenes = await campanasService.getImagenesDigitales(campanaId, idsParam);
+            setArchivosDigitalesProgramacion(imagenes.map(img => ({
+              id: img.id,
+              archivo: img.archivo,
+              spot: img.spot,
+              tipo: img.tipo,
+            })));
+          }
+        } catch (error) {
+          console.error('Error al cargar archivos digitales:', error);
+          setArchivosDigitalesProgramacion([]);
+        } finally {
+          setIsLoadingArchivosDigitales(false);
+        }
+      };
+      loadDigitalFiles();
+    }
+  }, [isOpen, selectedInventory, tipo, campanaId]);
 
   const selectedProveedor = proveedores.find(p => p.id === proveedorId);
 
@@ -5463,6 +7403,25 @@ function CreateTaskModal({
         payload.asignado = asignadoNombre;
         (payload as any).id_asignado = String(asignadoId);
       }
+    } else if (tipo === 'Programación') {
+      // Campos adicionales para Programación
+      (payload as any).catorcena_entrega = catorcenaEntrega;
+      (payload as any).fecha_creacion = new Date().toISOString();
+      (payload as any).listado_inventario = selectedIds.join(',');
+      // Guardar indicaciones de programación como JSON en evidencia
+      (payload as any).evidencia = JSON.stringify({
+        indicaciones: programacionIndicaciones,
+        archivos: archivosDigitalesProgramacion.map(a => ({
+          archivo: a.archivo,
+          spot: a.spot,
+          tipo: a.tipo,
+        })),
+      });
+      // Asignado para Programación usa usuarios
+      if (asignadoId && asignadoNombre) {
+        payload.asignado = asignadoNombre;
+        (payload as any).id_asignado = String(asignadoId);
+      }
     } else if (proveedorId && selectedProveedor) {
       // Para otros tipos usa proveedores
       payload.proveedores_id = proveedorId;
@@ -5496,6 +7455,9 @@ function CreateTaskModal({
     setFechaCreacion(new Date().toISOString().slice(0, 16));
     // Reset campos de Impresión
     setImpresiones({});
+    // Reset campos de Programación
+    setProgramacionIndicaciones({});
+    setArchivosDigitalesProgramacion([]);
     onClose();
   };
 
@@ -5568,7 +7530,7 @@ function CreateTaskModal({
         {tipo && (
           <div className="space-y-4 border-t border-border pt-4">
             {/* Campos comunes - Título para tipos que no tienen formulario propio */}
-            {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Instalación' && tipo !== 'Testigo' && (
+            {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Instalación' && tipo !== 'Testigo' && tipo !== 'Programación' && (
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
                 <input
@@ -5745,7 +7707,22 @@ function CreateTaskModal({
                   <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega</label>
                   <select
                     value={catorcenaEntrega || ''}
-                    onChange={(e) => setCatorcenaEntrega(e.target.value || null)}
+                    onChange={(e) => {
+                      const value = e.target.value || null;
+                      setCatorcenaEntrega(value);
+                      // Buscar la catorcena y establecer fecha_fin
+                      if (value) {
+                        const match = value.match(/Catorcena (\d+), (\d+)/);
+                        if (match) {
+                          const numCatorcena = parseInt(match[1]);
+                          const year = parseInt(match[2]);
+                          const catorcenaFound = catorcenas.find(c => c.numero_catorcena === numCatorcena && c.a_o === year);
+                          if (catorcenaFound) {
+                            setFechaFin(catorcenaFound.fecha_fin.split('T')[0]);
+                          }
+                        }
+                      }
+                    }}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
                   >
@@ -5837,6 +7814,218 @@ function CreateTaskModal({
                     disabled
                     className="w-full px-3 py-2 text-sm bg-zinc-800/50 border border-border rounded-lg text-zinc-400 cursor-not-allowed"
                   />
+                </div>
+              </>
+            )}
+
+            {/* === FORMULARIO PROGRAMACIÓN === */}
+            {tipo === 'Programación' && (
+              <>
+                {/* Título */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                  <input
+                    type="text"
+                    value={titulo}
+                    onChange={(e) => setTitulo(e.target.value)}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    placeholder="Título de la programación"
+                  />
+                </div>
+
+                {/* Descripción */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción</label>
+                  <textarea
+                    value={descripcion}
+                    onChange={(e) => setDescripcion(e.target.value)}
+                    rows={2}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
+                    placeholder="Descripción general de la programación..."
+                  />
+                </div>
+
+                {/* Catorcena de entrega */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega</label>
+                  <select
+                    value={catorcenaEntrega || ''}
+                    onChange={(e) => setCatorcenaEntrega(e.target.value || null)}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                  >
+                    <option value="">Seleccionar</option>
+                    {[2024, 2025, 2026].flatMap(year =>
+                      Array.from({ length: 26 }, (_, i) => i + 1).map(num => (
+                        <option key={`${num}-${year}`} value={`Catorcena ${num}, ${year}`}>
+                          Catorcena {num}, {year}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                {/* Asignado */}
+                <div className="relative">
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignado *</label>
+                  {isLoadingUsuarios ? (
+                    <div className="flex items-center gap-2 py-2 text-zinc-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Cargando...</span>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={asignadoSearch}
+                        onChange={(e) => {
+                          setAsignadoSearch(e.target.value);
+                          setShowAsignadoDropdown(true);
+                          if (!e.target.value) {
+                            setAsignadoId(null);
+                            setAsignadoNombre('');
+                          }
+                        }}
+                        onFocus={() => setShowAsignadoDropdown(true)}
+                        onBlur={() => setTimeout(() => setShowAsignadoDropdown(false), 200)}
+                        placeholder="Buscar usuario..."
+                        disabled={isSubmitting}
+                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                      />
+                      {showAsignadoDropdown && filteredUsuarios.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {filteredUsuarios.map((u) => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              onClick={() => {
+                                setAsignadoId(u.id);
+                                setAsignadoNombre(u.nombre);
+                                setAsignadoSearch(`${u.id}, ${u.nombre}`);
+                                setShowAsignadoDropdown(false);
+                              }}
+                              className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
+                            >
+                              {u.id}, {u.nombre}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Fecha de creación (solo lectura) */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de creación</label>
+                  <input
+                    type="datetime-local"
+                    value={fechaCreacion}
+                    disabled
+                    className="w-full px-3 py-2 text-sm bg-zinc-800/50 border border-border rounded-lg text-zinc-400 cursor-not-allowed"
+                  />
+                </div>
+
+                {/* Creador (solo lectura) */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Creador *</label>
+                  <input
+                    type="text"
+                    value={user ? `${user.id}, ${user.nombre}` : 'Usuario no identificado'}
+                    disabled
+                    className="w-full px-3 py-2 text-sm bg-zinc-800/50 border border-border rounded-lg text-zinc-400 cursor-not-allowed"
+                  />
+                </div>
+
+                {/* Archivos digitales con indicaciones */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-2">
+                    Indicaciones por archivo ({archivosDigitalesProgramacion.length} archivo(s))
+                  </label>
+                  {isLoadingArchivosDigitales ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
+                      <span className="ml-2 text-sm text-zinc-400">Cargando archivos...</span>
+                    </div>
+                  ) : archivosDigitalesProgramacion.length === 0 ? (
+                    <div className="p-4 bg-zinc-800/50 rounded-lg text-center">
+                      <p className="text-sm text-zinc-500">No se encontraron archivos digitales</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                      {archivosDigitalesProgramacion.map((archivo) => {
+                        const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
+                        const isVideo = archivo.tipo === 'video';
+                        const fileUrl = getImageUrl(archivo.archivo);
+                        return (
+                          <div key={archivo.id} className="p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+                            <div className="flex gap-3 mb-2">
+                              {/* Thumbnail/Preview */}
+                              <div className="flex-shrink-0 w-20 h-14 bg-zinc-800 rounded overflow-hidden">
+                                {isVideo ? (
+                                  <div className="relative w-full h-full">
+                                    <video
+                                      src={fileUrl || ''}
+                                      className="w-full h-full object-cover"
+                                      muted
+                                      preload="metadata"
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                      <Play className="h-6 w-6 text-white" />
+                                    </div>
+                                  </div>
+                                ) : fileUrl ? (
+                                  <img
+                                    src={fileUrl}
+                                    alt={fileName}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      target.src = '';
+                                      target.parentElement!.innerHTML = '<div class="w-full h-full flex items-center justify-center"><svg class="h-6 w-6 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>';
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <Image className="h-6 w-6 text-zinc-600" />
+                                  </div>
+                                )}
+                              </div>
+                              {/* File info */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  {isVideo ? (
+                                    <Video className="h-3 w-3 text-blue-400 flex-shrink-0" />
+                                  ) : (
+                                    <Image className="h-3 w-3 text-green-400 flex-shrink-0" />
+                                  )}
+                                  <span className="text-xs text-white truncate" title={fileName}>
+                                    {fileName}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded inline-block mt-1">
+                                  Spot {archivo.spot}
+                                </span>
+                              </div>
+                            </div>
+                            <textarea
+                              value={programacionIndicaciones[archivo.archivo] || ''}
+                              onChange={(e) => setProgramacionIndicaciones(prev => ({
+                                ...prev,
+                                [archivo.archivo]: e.target.value
+                              }))}
+                              placeholder="Indicaciones de programación para este archivo..."
+                              disabled={isSubmitting}
+                              className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
+                              rows={2}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -5997,7 +8186,22 @@ function CreateTaskModal({
                   <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega *</label>
                   <select
                     value={catorcenaEntrega || ''}
-                    onChange={(e) => setCatorcenaEntrega(e.target.value || null)}
+                    onChange={(e) => {
+                      const value = e.target.value || null;
+                      setCatorcenaEntrega(value);
+                      // Buscar la catorcena y establecer fecha_fin
+                      if (value) {
+                        const match = value.match(/Catorcena (\d+), (\d+)/);
+                        if (match) {
+                          const numCatorcena = parseInt(match[1]);
+                          const year = parseInt(match[2]);
+                          const catorcenaFound = catorcenas.find(c => c.numero_catorcena === numCatorcena && c.a_o === year);
+                          if (catorcenaFound) {
+                            setFechaFin(catorcenaFound.fecha_fin.split('T')[0]);
+                          }
+                        }
+                      }
+                    }}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
                   >
@@ -6126,7 +8330,22 @@ function CreateTaskModal({
                   <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega *</label>
                   <select
                     value={catorcenaEntrega || ''}
-                    onChange={(e) => setCatorcenaEntrega(e.target.value || null)}
+                    onChange={(e) => {
+                      const value = e.target.value || null;
+                      setCatorcenaEntrega(value);
+                      // Buscar la catorcena y establecer fecha_fin
+                      if (value) {
+                        const match = value.match(/Catorcena (\d+), (\d+)/);
+                        if (match) {
+                          const numCatorcena = parseInt(match[1]);
+                          const year = parseInt(match[2]);
+                          const catorcenaFound = catorcenas.find(c => c.numero_catorcena === numCatorcena && c.a_o === year);
+                          if (catorcenaFound) {
+                            setFechaFin(catorcenaFound.fecha_fin.split('T')[0]);
+                          }
+                        }
+                      }
+                    }}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
                   >
@@ -6471,6 +8690,12 @@ function SummaryCards({ stats, activeTab }: { stats: SummaryStats; activeTab: Ma
         { label: 'Tareas Activas', value: stats.tareasActivas, icon: ClipboardList, color: 'blue' },
       ];
     }
+    if (activeTab === 'programacion') {
+      return [
+        { label: 'Artes Digitales', value: stats.totalInventario, icon: Monitor, color: 'purple' },
+        { label: 'Tareas Activas', value: stats.tareasActivas, icon: ClipboardList, color: 'blue' },
+      ];
+    }
     // testigo
     return [
       { label: 'Pendientes', value: stats.totalInventario - stats.aprobados, icon: Camera, color: 'amber' },
@@ -6524,6 +8749,11 @@ const TAB_DESCRIPTIONS: Record<MainTab, { title: string; description: string; ic
     title: 'Revisar y Aprobar',
     description: 'Revisa los artes subidos, aprueba o rechaza, y gestiona tareas de produccion',
     icon: Eye,
+  },
+  programacion: {
+    title: 'Programación',
+    description: 'Gestiona las tareas de programación de artes digitales con indicaciones',
+    icon: Monitor,
   },
   impresiones: {
     title: 'Impresiones',
@@ -6604,6 +8834,17 @@ export function TareaSeguimientoPage() {
   const [activeEstadoArteTab, setActiveEstadoArteTab] = useState<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado'>('sin_revisar');
   const [hasAutoSelectedEstadoArteTab, setHasAutoSelectedEstadoArteTab] = useState(false);
 
+  // --- Programación (digital) ---
+  const [filtersProgramacion, setFiltersProgramacion] = useState<FilterCondition[]>([]);
+  const [showFiltersProgramacion, setShowFiltersProgramacion] = useState(false);
+  const [activeGroupingsProgramacion, setActiveGroupingsProgramacion] = useState<GroupByField[]>(['catorcena', 'aps', 'grupo']);
+  const [showGroupingProgramacion, setShowGroupingProgramacion] = useState(false);
+  const [sortFieldProgramacion, setSortFieldProgramacion] = useState<string | null>(null);
+  const [sortDirectionProgramacion, setSortDirectionProgramacion] = useState<'asc' | 'desc'>('asc');
+  const [showSortProgramacion, setShowSortProgramacion] = useState(false);
+  const [expandedGroupsProgramacion, setExpandedGroupsProgramacion] = useState<Set<string>>(new Set());
+  const [activeEstadoProgramacionTab, setActiveEstadoProgramacionTab] = useState<'en_programacion' | 'programado'>('en_programacion');
+
   // --- Impresiones ---
   const [activeEstadoImpresionTab, setActiveEstadoImpresionTab] = useState<'en_impresion' | 'pendiente_recepcion' | 'recibido'>('en_impresion');
 
@@ -6616,13 +8857,15 @@ export function TareaSeguimientoPage() {
   const [sortDirectionTestigo, setSortDirectionTestigo] = useState<'asc' | 'desc'>('asc');
   const [showSortTestigo, setShowSortTestigo] = useState(false);
   const [expandedGroupsTestigo, setExpandedGroupsTestigo] = useState<Set<string>>(new Set());
+  const [activeEstadoInstalacionTab, setActiveEstadoInstalacionTab] = useState<'por_instalar' | 'instaladas' | 'testigo'>('por_instalar');
 
   // Helper: check if grouped (basado en el tab activo)
   const isGrouped = useMemo(() => {
     if (activeMainTab === 'versionario') return activeGroupingsVersionario.length > 0;
     if (activeMainTab === 'atender') return activeGroupingsAtender.length > 0;
+    if (activeMainTab === 'programacion') return activeGroupingsProgramacion.length > 0;
     return activeGroupingsTestigo.length > 0;
-  }, [activeMainTab, activeGroupingsVersionario, activeGroupingsAtender, activeGroupingsTestigo]);
+  }, [activeMainTab, activeGroupingsVersionario, activeGroupingsAtender, activeGroupingsProgramacion, activeGroupingsTestigo]);
 
   // Tasks state
   const [tasksSearch, setTasksSearch] = useState('');
@@ -6644,6 +8887,12 @@ export function TareaSeguimientoPage() {
   const [isUploadArtModalOpen, setIsUploadArtModalOpen] = useState(false);
   const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
+
+  // Digital Gallery Modal state
+  const [isDigitalGalleryOpen, setIsDigitalGalleryOpen] = useState(false);
+  const [digitalGalleryImages, setDigitalGalleryImages] = useState<ImagenDigitalView[]>([]);
+  const [isLoadingDigitalGallery, setIsLoadingDigitalGallery] = useState(false);
+  const [digitalGalleryTitle, setDigitalGalleryTitle] = useState('');
 
   // Modal confirmación limpiar arte
   const [isConfirmClearModalOpen, setIsConfirmClearModalOpen] = useState(false);
@@ -6677,12 +8926,12 @@ export function TareaSeguimientoPage() {
     enabled: campanaId > 0 && (activeMainTab === 'versionario' || !initialTabDetermined),
   });
 
-  // Inventario CON arte (para tab "Revisar y Aprobar" e "Impresiones")
+  // Inventario CON arte (para tab "Revisar y Aprobar", "Programación" e "Impresiones")
   // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
   const { data: inventarioArteAPI = [], isLoading: isLoadingInventarioArte, isFetched: isFetchedConArte } = useQuery({
     queryKey: ['campana-inventario-arte', campanaId],
     queryFn: () => campanasService.getInventarioConArte(campanaId),
-    enabled: campanaId > 0 && (activeMainTab === 'atender' || activeMainTab === 'impresiones' || !initialTabDetermined || isTaskDetailModalOpen),
+    enabled: campanaId > 0 && (activeMainTab === 'atender' || activeMainTab === 'programacion' || activeMainTab === 'impresiones' || !initialTabDetermined || isTaskDetailModalOpen),
   });
 
   // Inventario para TESTIGOS (para tab "Validar Instalación")
@@ -6716,6 +8965,22 @@ export function TareaSeguimientoPage() {
     enabled: isCreateModalOpen,
   });
   const proveedores = proveedoresData?.data || [];
+
+  // Resumen de archivos digitales por reserva
+  const { data: digitalFileSummaries = [] } = useQuery({
+    queryKey: ['digital-file-summaries', campanaId],
+    queryFn: () => campanasService.getDigitalFileSummaries(campanaId),
+    enabled: campanaId > 0,
+  });
+
+  // Crear mapa para búsqueda rápida por reserva ID
+  const digitalSummaryMap = useMemo(() => {
+    const map = new Map<number, DigitalFileSummary>();
+    digitalFileSummaries.forEach(summary => {
+      map.set(summary.idReserva, summary);
+    });
+    return map;
+  }, [digitalFileSummaries]);
 
   // ---- Determinar tab inicial basado en contenido ----
   useEffect(() => {
@@ -6855,6 +9120,7 @@ export function TareaSeguimientoPage() {
       campanasService.updateTarea(campanaId, tareaId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', campanaId] });
     },
   });
 
@@ -6941,6 +9207,41 @@ export function TareaSeguimientoPage() {
 
   const clearGroupingsAtender = useCallback(() => {
     setActiveGroupingsAtender([]);
+  }, []);
+
+  // --- Funciones para Programación (programacion) ---
+  const addFilterProgramacion = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS_INVENTARIO[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFiltersProgramacion(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilterProgramacion = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFiltersProgramacion(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+  }, []);
+
+  const removeFilterProgramacion = useCallback((id: string) => {
+    setFiltersProgramacion(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearAllFiltersProgramacion = useCallback(() => {
+    setFiltersProgramacion([]);
+  }, []);
+
+  const toggleGroupingProgramacion = useCallback((field: GroupByField) => {
+    setActiveGroupingsProgramacion(prev => {
+      if (prev.includes(field)) return prev.filter(f => f !== field);
+      if (prev.length < 3) return [...prev, field];
+      return [...prev.slice(1), field];
+    });
+  }, []);
+
+  const clearGroupingsProgramacion = useCallback(() => {
+    setActiveGroupingsProgramacion([]);
   }, []);
 
   // --- Funciones para Validar Instalación (testigo) ---
@@ -7104,10 +9405,112 @@ export function TareaSeguimientoPage() {
     });
   }, [inventarioArteAPI, transformInventarioToRow, tareasActivasRsvIds]);
 
+  // Transform inventario para items en tareas de Programación (tab "Programación")
+  // Muestra items digitales que están en tareas de tipo Programación
+  type EstadoProgramacion = 'en_programacion' | 'programado';
+
+  const inventoryProgramacionData = useMemo((): (InventoryRow & {
+    tarea_id?: number;
+    tarea_estatus?: string;
+    tarea_titulo?: string;
+    estado_programacion?: EstadoProgramacion;
+    indicaciones?: string;
+  })[] => {
+    // Filtrar tareas de tipo Programación
+    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación');
+
+    if (tareasProgramacion.length === 0) return [];
+
+    // Crear mapa de rsv_id a info de tarea de Programación
+    const rsvTareaProgramacionMap = new Map<string, {
+      tareaId: number;
+      estatus: string;
+      titulo: string;
+      evidencia: string | null;
+    }>();
+
+    tareasProgramacion.forEach(tarea => {
+      const rsvIds = tarea.ids_reservas?.split(',').map(id => id.trim()) || [];
+      rsvIds.forEach(rsvId => {
+        if (rsvId) {
+          rsvTareaProgramacionMap.set(rsvId, {
+            tareaId: tarea.id,
+            estatus: tarea.estatus || 'Pendiente',
+            titulo: tarea.titulo || '',
+            evidencia: tarea.evidencia || null,
+          });
+        }
+      });
+    });
+
+    // Filtrar items de inventario que son digitales y están en tareas de Programación
+    const resultRows: (InventoryRow & {
+      tarea_id?: number;
+      tarea_estatus?: string;
+      tarea_titulo?: string;
+      estado_programacion?: EstadoProgramacion;
+      indicaciones?: string;
+    })[] = [];
+
+    inventoryArteData.forEach(item => {
+      // Solo mostrar items digitales
+      if (item.tradicional_digital !== 'Digital') return;
+
+      const rsvIds = item.rsv_id?.split(',').map(id => id.trim()) || [];
+
+      for (const rsvId of rsvIds) {
+        const tareaInfo = rsvTareaProgramacionMap.get(rsvId);
+        if (tareaInfo) {
+          // Determinar estado de programación:
+          // - 'programado' si la tarea está Completada
+          // - 'en_programacion' para cualquier otro estado (Activo, Pendiente, En Progreso)
+          const estadoProgramacion: EstadoProgramacion = tareaInfo.estatus === 'Completado'
+            ? 'programado'
+            : 'en_programacion';
+
+          // Extraer indicaciones de evidencia
+          let indicaciones = '';
+          if (tareaInfo.evidencia) {
+            try {
+              const evidenciaParsed = JSON.parse(tareaInfo.evidencia);
+              if (evidenciaParsed.indicaciones && item.archivo_arte) {
+                indicaciones = evidenciaParsed.indicaciones[item.archivo_arte] || '';
+              }
+            } catch (e) {
+              // Ignorar errores de parseo
+            }
+          }
+
+          resultRows.push({
+            ...item,
+            tarea_id: tareaInfo.tareaId,
+            tarea_estatus: tareaInfo.estatus,
+            tarea_titulo: tareaInfo.titulo,
+            estado_programacion: estadoProgramacion,
+            indicaciones,
+          });
+          break; // Solo agregar una vez por item
+        }
+      }
+    });
+
+    // De-duplicar por ID
+    const seen = new Set<string>();
+    return resultRows.filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
+  }, [inventoryArteData, tareasAPI]);
+
   // Transform inventario para testigos (tab "Validar Instalación")
   // Incluye de-duplicación por ID de inventario para evitar claves duplicadas en React
   // NOTA: Usamos grupo_id de inventoryArteData para mantener consistencia con "Revisar y aprobar"
-  const inventoryTestigosData = useMemo((): InventoryRow[] => {
+  const inventoryTestigosData = useMemo((): (InventoryRow & {
+    tarea_instalacion_id?: number;
+    tarea_instalacion_titulo?: string;
+    tarea_instalacion_estatus?: string;
+  })[] => {
     // Crear mapa de grupo_id desde inventoryArteData
     const arteGrupoMap = new Map<string, string>();
     inventoryArteData.forEach(item => {
@@ -7123,7 +9526,13 @@ export function TareaSeguimientoPage() {
       if (grupoFromArte) {
         row.grupo_id = grupoFromArte;
       }
-      return row;
+      // Preservar campos de la tarea de instalación del backend
+      return {
+        ...row,
+        tarea_instalacion_id: (item as any).tarea_instalacion_id,
+        tarea_instalacion_titulo: (item as any).tarea_instalacion_titulo,
+        tarea_instalacion_estatus: (item as any).tarea_instalacion_estatus,
+      };
     });
     const seen = new Set<string>();
     return rows.filter(row => {
@@ -7396,6 +9805,9 @@ export function TareaSeguimientoPage() {
       data = inventoryArteData;
     } else if (activeMainTab === 'impresiones') {
       data = inventoryImpresionesData;
+    } else if (activeMainTab === 'programacion') {
+      // Programación solo tiene items digitales
+      data = inventoryProgramacionData;
     } else {
       data = inventoryTestigosData;
     }
@@ -7404,7 +9816,7 @@ export function TareaSeguimientoPage() {
     const digital = data.filter(item => item.tradicional_digital === 'Digital').length;
 
     return { tradicional, digital };
-  }, [activeMainTab, inventorySinArteData, inventoryArteData, inventoryImpresionesData, inventoryTestigosData]);
+  }, [activeMainTab, inventorySinArteData, inventoryArteData, inventoryImpresionesData, inventoryProgramacionData, inventoryTestigosData]);
 
   // Auto-switch format tab when current is empty
   useEffect(() => {
@@ -7470,14 +9882,55 @@ export function TareaSeguimientoPage() {
     return data;
   }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoArteTab, inventorySearch]);
 
+  // Datos filtrados y ordenados para Programación (programacion)
+  const filteredProgramacionData = useMemo(() => {
+    // Filtrar por estado según el sub-tab activo
+    let data = inventoryProgramacionData.filter(item => {
+      return item.estado_programacion === activeEstadoProgramacionTab;
+    });
+
+    // Aplicar filtros adicionales
+    data = applyFilters(data, filtersProgramacion);
+
+    // Aplicar ordenamiento
+    if (sortFieldProgramacion) {
+      data = [...data].sort((a, b) => {
+        const aVal = a[sortFieldProgramacion as keyof InventoryRow];
+        const bVal = b[sortFieldProgramacion as keyof InventoryRow];
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        let comparison = 0;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          comparison = aVal - bVal;
+        } else {
+          comparison = String(aVal).localeCompare(String(bVal));
+        }
+        return sortDirectionProgramacion === 'asc' ? comparison : -comparison;
+      });
+    }
+    return data;
+  }, [inventoryProgramacionData, filtersProgramacion, sortFieldProgramacion, sortDirectionProgramacion, activeEstadoProgramacionTab]);
+
   // Datos filtrados y ordenados para Validar Instalación (testigo)
-  // Solo muestra ubicaciones que tienen estado "validar_instalacion"
+  // Filtra según el sub-tab activo de estado de instalación
   const filteredTestigoData = useMemo(() => {
-    // Primero filtrar solo ubicaciones con estado "validar_instalacion"
+    // Filtrar según el tab activo de estado de instalación
     let data = inventoryTestigosData.filter(item => {
-      const rsvIds = item.rsv_id?.split(',').map(id => id.trim()) || [];
-      const instalacionInfo = rsvIds.map(id => instalacionStatusMap.get(id)).find(info => info);
-      return instalacionInfo?.estado === 'validar_instalacion';
+      // Usar el estado de la tarea de instalación del backend
+      const tareaEstatus = item.tarea_instalacion_estatus;
+
+      if (activeEstadoInstalacionTab === 'por_instalar') {
+        // Tareas pendientes o activas (aún no instaladas)
+        return tareaEstatus === 'Pendiente' || tareaEstatus === 'Activo' || tareaEstatus === 'En proceso';
+      } else if (activeEstadoInstalacionTab === 'instaladas') {
+        // Tareas atendidas o completadas (ya instaladas)
+        return tareaEstatus === 'Atendido' || tareaEstatus === 'Completado';
+      } else if (activeEstadoInstalacionTab === 'testigo') {
+        // Items instalados que necesitan o tienen testigo
+        // Mostrar items con tarea completada para subir/ver testigos
+        return tareaEstatus === 'Atendido' || tareaEstatus === 'Completado';
+      }
+      return true;
     });
 
     // Aplicar filtros adicionales
@@ -7499,7 +9952,66 @@ export function TareaSeguimientoPage() {
       });
     }
     return data;
-  }, [inventoryTestigosData, filtersTestigo, sortFieldTestigo, sortDirectionTestigo, instalacionStatusMap]);
+  }, [inventoryTestigosData, filtersTestigo, sortFieldTestigo, sortDirectionTestigo, activeEstadoInstalacionTab]);
+
+  // Datos para sub-tab Testigo: agrupados por asignado de tareas tipo Testigo
+  type TestigoGroupedData = {
+    asignado: string;
+    tareaId: number;
+    tareaTitulo: string;
+    tareaEstatus: string;
+    tareaFechaFin: string;
+    items: (typeof inventoryTestigosData)[number][];
+  };
+
+  const testigoGroupedByAsignado = useMemo((): TestigoGroupedData[] => {
+    // Filtrar tareas de tipo Testigo
+    const tareasTestigo = tareasAPI.filter(t => t.tipo === 'Testigo');
+
+    if (tareasTestigo.length === 0) return [];
+
+    // Crear mapa de rsv_id a inventory item para búsqueda rápida
+    const rsvIdToInventory = new Map<string, (typeof inventoryTestigosData)[number]>();
+    inventoryTestigosData.forEach(item => {
+      const rsvIds = item.rsv_id.split(',').map(id => id.trim());
+      rsvIds.forEach(rsvId => {
+        rsvIdToInventory.set(rsvId, item);
+      });
+    });
+
+    // Para cada tarea Testigo, obtener los items asociados
+    const grouped: TestigoGroupedData[] = tareasTestigo.map(tarea => {
+      const idsReservas = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
+      const items: (typeof inventoryTestigosData)[number][] = [];
+
+      idsReservas.forEach(rsvId => {
+        const item = rsvIdToInventory.get(rsvId);
+        if (item && !items.find(i => i.id === item.id)) {
+          items.push(item);
+        }
+      });
+
+      return {
+        asignado: tarea.asignado || 'Sin asignar',
+        tareaId: tarea.id,
+        tareaTitulo: tarea.titulo || 'Sin título',
+        tareaEstatus: tarea.estatus || 'Pendiente',
+        tareaFechaFin: tarea.fecha_fin?.split('T')[0] || '',
+        items,
+      };
+    });
+
+    return grouped;
+  }, [tareasAPI, inventoryTestigosData]);
+
+  // Conteo de items únicos en tareas Testigo (para el badge del sub-tab)
+  const testigoItemsCount = useMemo(() => {
+    const uniqueIds = new Set<string>();
+    testigoGroupedByAsignado.forEach(group => {
+      group.items.forEach(item => uniqueIds.add(item.id));
+    });
+    return uniqueIds.size;
+  }, [testigoGroupedByAsignado]);
 
   // Datos filtrados para Impresiones (por estado y formato)
   const filteredImpresionesData = useMemo(() => {
@@ -7536,6 +10048,15 @@ export function TareaSeguimientoPage() {
     });
     return values;
   }, [inventoryArteData]);
+
+  const getUniqueValuesProgramacion = useMemo(() => {
+    const values: Record<string, string[]> = {};
+    FILTER_FIELDS_INVENTARIO.forEach(field => {
+      const unique = [...new Set(inventoryProgramacionData.map(item => String(item[field.field as keyof InventoryRow] || '')))].filter(v => v).sort();
+      values[field.field] = unique;
+    });
+    return values;
+  }, [inventoryProgramacionData]);
 
   const getUniqueValuesTestigo = useMemo(() => {
     const values: Record<string, string[]> = {};
@@ -7620,6 +10141,8 @@ export function TareaSeguimientoPage() {
       data = inventorySinArteData;
     } else if (activeMainTab === 'atender') {
       data = inventoryArteData;
+    } else if (activeMainTab === 'programacion') {
+      data = inventoryProgramacionData;
     } else {
       data = inventoryTestigosData;
     }
@@ -7631,7 +10154,7 @@ export function TareaSeguimientoPage() {
       tiposMedio: [...new Set(data.map(i => i.tipo_medio).filter(Boolean))].sort(),
       catorcenas: [...new Set(data.map(i => i.catorcena).filter(c => c > 0))].sort((a, b) => a - b),
     };
-  }, [inventorySinArteData, inventoryArteData, inventoryTestigosData, activeMainTab]);
+  }, [inventorySinArteData, inventoryArteData, inventoryProgramacionData, inventoryTestigosData, activeMainTab]);
 
   // Check if any filter is active
   const hasActiveFilters = filters.ciudad || filters.plaza || filters.mueble || filters.tipo_medio || filters.catorcena !== null;
@@ -7646,14 +10169,19 @@ export function TareaSeguimientoPage() {
     } else if (activeMainTab === 'atender') {
       // Tab "Revisar y Aprobar": usar datos ya filtrados
       data = filteredAtenderData;
+    } else if (activeMainTab === 'programacion') {
+      // Tab "Programación": usar datos ya filtrados
+      data = filteredProgramacionData;
     } else {
       // Tab "Validar Instalación": usar datos ya filtrados
       data = filteredTestigoData;
     }
 
-    // Filter by format for all tabs
-    const formatFilter = activeFormat === 'tradicional' ? 'Tradicional' : 'Digital';
-    data = data.filter((item) => item.tradicional_digital === formatFilter);
+    // Filter by format for all tabs except Programación (which is Digital only)
+    if (activeMainTab !== 'programacion') {
+      const formatFilter = activeFormat === 'tradicional' ? 'Tradicional' : 'Digital';
+      data = data.filter((item) => item.tradicional_digital === formatFilter);
+    }
 
     // Filter by search
     if (inventorySearch) {
@@ -7713,7 +10241,7 @@ export function TareaSeguimientoPage() {
     });
 
     return data;
-  }, [filteredVersionarioData, filteredAtenderData, filteredTestigoData, inventorySearch, activeFormat, activeMainTab, sortField, sortDirection]);
+  }, [filteredVersionarioData, filteredAtenderData, filteredProgramacionData, filteredTestigoData, inventorySearch, activeFormat, activeMainTab, sortField, sortDirection]);
 
   const filteredTasks = useMemo(() => {
     // Primero aplicar filtros avanzados
@@ -7895,6 +10423,47 @@ export function TareaSeguimientoPage() {
     return sortedGroups;
   }, [filteredInventory, activeGroupingsAtender]);
 
+  // Agrupación para tab "Programación" basada en activeGroupingsProgramacion
+  const programacionGroupedInventory = useMemo(() => {
+    const numLevels = Math.min(activeGroupingsProgramacion.length, 3);
+
+    // Si no hay agrupaciones, devolver estructura vacía
+    if (numLevels === 0) {
+      return {} as Record<string, Record<string, Record<string, InventoryRow[]>>>;
+    }
+
+    const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
+
+    // Ordenar items por ID descendente (más recientes primero) antes de agrupar
+    const sortedInventory = [...filteredProgramacionData].sort((a, b) => parseInt(b.id) - parseInt(a.id));
+
+    sortedInventory.forEach((item) => {
+      const level1Key = activeGroupingsProgramacion[0] ? getGroupKeyForField(item, activeGroupingsProgramacion[0]) : 'Todo';
+      const level2Key = activeGroupingsProgramacion[1] ? getGroupKeyForField(item, activeGroupingsProgramacion[1]) : 'Items';
+      const level3Key = activeGroupingsProgramacion[2] ? getGroupKeyForField(item, activeGroupingsProgramacion[2]) : 'Items';
+
+      if (!groups[level1Key]) groups[level1Key] = {};
+      if (!groups[level1Key][level2Key]) groups[level1Key][level2Key] = {};
+      if (!groups[level1Key][level2Key][level3Key]) groups[level1Key][level2Key][level3Key] = [];
+
+      groups[level1Key][level2Key][level3Key].push(item);
+    });
+
+    // Ordenar las keys de los grupos de forma descendente
+    const sortedGroups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
+    Object.keys(groups).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(level1Key => {
+      sortedGroups[level1Key] = {};
+      Object.keys(groups[level1Key]).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(level2Key => {
+        sortedGroups[level1Key][level2Key] = {};
+        Object.keys(groups[level1Key][level2Key]).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(level3Key => {
+          sortedGroups[level1Key][level2Key][level3Key] = groups[level1Key][level2Key][level3Key];
+        });
+      });
+    });
+
+    return sortedGroups;
+  }, [filteredProgramacionData, activeGroupingsProgramacion]);
+
   // Agrupación para tab "Validar Instalación" basada en activeGroupingsTestigo
   const testigoGroupedInventory = useMemo(() => {
     const numLevels = Math.min(activeGroupingsTestigo.length, 3);
@@ -7949,6 +10518,8 @@ export function TareaSeguimientoPage() {
       allItems = inventorySinArteData;
     } else if (activeMainTab === 'atender') {
       allItems = inventoryArteData;
+    } else if (activeMainTab === 'programacion') {
+      allItems = inventoryProgramacionData;
     } else {
       allItems = inventoryTestigosData;
     }
@@ -7962,7 +10533,7 @@ export function TareaSeguimientoPage() {
       tareasActivas: tasks.filter(t => t.estatus?.toLowerCase() === 'pendiente' || t.estatus?.toLowerCase() === 'en_progreso' || t.estatus?.toLowerCase() === 'en progreso').length,
       tareasCompletadas: completedTasks.length,
     };
-  }, [inventorySinArteData, inventoryArteData, inventoryTestigosData, activeMainTab, tasks, completedTasks]);
+  }, [inventorySinArteData, inventoryArteData, inventoryProgramacionData, inventoryTestigosData, activeMainTab, tasks, completedTasks]);
 
   // ---- Handlers ----
   const toggleInventorySelection = useCallback((id: string) => {
@@ -8037,16 +10608,24 @@ export function TareaSeguimientoPage() {
     const allAprobado = counts.aprobado === total;
     const allPendiente = (counts.sinRevisar + counts.enRevision + counts.rechazado) === total;
 
+    // Verificar si todos los items seleccionados son digitales
+    const allDigital = selectedInventoryItems.every(item => item.tradicional_digital === 'Digital');
+
     // Determinar tipos disponibles según el estado de los inventarios
     let availableTipos: string[] = [];
     let initialTipo = '';
 
     if (allAprobado) {
-      // Todos aprobados: mostrar Instalación, y solo Impresión si tiene IMU y NO ha sido recibido
-      if (hasIMU && !hasRecibido) {
+      if (allDigital) {
+        // Para digitales aprobados: solo mostrar Programación
+        availableTipos = ['Programación'];
+        initialTipo = 'Programación';
+      } else if (hasIMU && !hasRecibido) {
+        // Tradicionales con IMU: mostrar Impresión e Instalación
         availableTipos = ['Impresión', 'Instalación'];
         initialTipo = 'Impresión';
       } else {
+        // Tradicionales sin IMU: solo Instalación
         availableTipos = ['Instalación'];
         initialTipo = 'Instalación';
       }
@@ -8055,17 +10634,16 @@ export function TareaSeguimientoPage() {
       availableTipos = ['Revisión de artes'];
       initialTipo = 'Revisión de artes';
     } else {
-      // Mezcla: mostrar tipos según IMU (pero excluir Impresión si ya fue recibido)
-      if (hasIMU && !hasRecibido) {
+      // Mezcla: mostrar tipos según IMU y tipo de inventario (pero excluir Impresión si ya fue recibido)
+      if (allDigital) {
+        availableTipos = ['Programación', 'Revisión de artes'];
+        initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Programación' : 'Revisión de artes';
+      } else if (hasIMU && !hasRecibido) {
         availableTipos = ['Instalación', 'Revisión de artes', 'Impresión'];
+        initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Impresión' : 'Revisión de artes';
       } else {
         availableTipos = ['Instalación', 'Revisión de artes'];
-      }
-      // Pre-seleccionar según mayoría
-      if (counts.aprobado > counts.sinRevisar + counts.enRevision) {
-        initialTipo = (hasIMU && !hasRecibido) ? 'Impresión' : 'Instalación';
-      } else {
-        initialTipo = 'Revisión de artes';
+        initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Instalación' : 'Revisión de artes';
       }
     }
 
@@ -8139,6 +10717,8 @@ export function TareaSeguimientoPage() {
         // Campos para Impresión
         impresiones: task.impresiones,
         num_impresiones: (task as any).num_impresiones,
+        // Campos para Programación (indicaciones guardadas como JSON)
+        evidencia: (task as any).evidencia,
       });
       // Éxito - cerrar modal y actualizar
       setIsCreateModalOpen(false);
@@ -8210,6 +10790,87 @@ export function TareaSeguimientoPage() {
     }
   }, [selectedInventoryItems, assignArteMutation, campanaId]);
 
+  // Handler para subir archivos digitales (múltiples)
+  const handleUploadDigitalArt = useCallback(async (data: { files: { file: File; spot: number }[]; inventoryIds: string[] }) => {
+    // Get reserva IDs from selected inventory items
+    const reservaIds = selectedInventoryItems.flatMap(item =>
+      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+    );
+
+    if (reservaIds.length === 0) {
+      setUploadArtError('No se encontraron reservas para actualizar');
+      return;
+    }
+
+    if (data.files.length === 0) {
+      setUploadArtError('No se seleccionaron archivos');
+      return;
+    }
+
+    try {
+      setUploadArtError(null);
+
+      // Convertir todos los archivos a base64 con su spot
+      const filesWithBase64 = await Promise.all(
+        data.files.map(async ({ file, spot }) => {
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = () => reject(new Error(`Error al leer el archivo ${file.name}`));
+            reader.readAsDataURL(file);
+          });
+          return {
+            archivo: base64,
+            spot,
+            nombre: file.name,
+            tipo: file.type.startsWith('video/') ? 'video' : 'image',
+          };
+        })
+      );
+
+      // Llamar al servicio para asignar arte digital
+      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithBase64);
+
+      // Invalidar queries y cerrar modal
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+
+      setIsUploadArtModalOpen(false);
+      setSelectedInventoryIds(new Set());
+      setUploadArtError(null);
+    } catch (error) {
+      console.error('Error al subir archivos digitales:', error);
+      setUploadArtError(error instanceof Error ? error.message : 'Error al subir los archivos digitales');
+    }
+  }, [selectedInventoryItems, campanaId, queryClient]);
+
+  // Handler para abrir la galería de imágenes digitales
+  const openDigitalGallery = useCallback(async (reservaIds: number | number[], codigoUnico: string) => {
+    setIsLoadingDigitalGallery(true);
+    setDigitalGalleryTitle(`Galería Digital - ${codigoUnico}`);
+    setIsDigitalGalleryOpen(true);
+
+    try {
+      // Soportar tanto un solo ID como un array de IDs
+      const idsParam = Array.isArray(reservaIds) ? reservaIds.join(',') : reservaIds;
+      const imagenes = await campanasService.getImagenesDigitales(campanaId, idsParam);
+      setDigitalGalleryImages(imagenes.map(img => ({
+        id: img.id,
+        archivo: img.archivo,
+        spot: img.spot,
+        tipo: img.tipo,
+        estado: img.estado,
+      })));
+    } catch (error) {
+      console.error('Error al cargar imágenes digitales:', error);
+      setDigitalGalleryImages([]);
+    } finally {
+      setIsLoadingDigitalGallery(false);
+    }
+  }, [campanaId]);
+
   // ---- Render helpers ----
   // Render row for Versionario tab (shows inventory pending art upload)
   const renderVersionarioRow = (item: InventoryRow, showCheckbox = true) => (
@@ -8255,7 +10916,43 @@ export function TareaSeguimientoPage() {
   );
 
   // Render row for Atender tab (shows art review status)
-  const renderAtenderRow = (item: InventoryRow, showCheckbox = true, hideInstalado = false) => (
+  const renderAtenderRow = (item: InventoryRow, showCheckbox = true, hideInstalado = false) => {
+    // Para items digitales, obtener el resumen de archivos
+    const isDigital = item.tradicional_digital === 'Digital';
+    let digitalSummary: { total: number; imagenes: number; videos: number } | null = null;
+
+    if (isDigital && item.rsv_id) {
+      const rsvIds = item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      let totalArchivos = 0;
+      let totalImagenes = 0;
+      let totalVideos = 0;
+      rsvIds.forEach(rsvId => {
+        const summary = digitalSummaryMap.get(rsvId);
+        if (summary) {
+          totalArchivos += summary.totalArchivos;
+          totalImagenes += summary.countImagenes;
+          totalVideos += summary.countVideos;
+        }
+      });
+      if (totalArchivos > 0) {
+        digitalSummary = { total: totalArchivos, imagenes: totalImagenes, videos: totalVideos };
+      }
+    }
+
+    // Generar texto descriptivo para archivos digitales
+    const getDigitalSummaryText = () => {
+      if (!digitalSummary) return '-';
+      const parts: string[] = [];
+      if (digitalSummary.imagenes > 0) {
+        parts.push(`${digitalSummary.imagenes} ${digitalSummary.imagenes === 1 ? 'imagen' : 'imágenes'}`);
+      }
+      if (digitalSummary.videos > 0) {
+        parts.push(`${digitalSummary.videos} ${digitalSummary.videos === 1 ? 'video' : 'videos'}`);
+      }
+      return parts.join(', ') || '-';
+    };
+
+    return (
     <tr
       key={item.id}
       className={`border-b border-border/50 hover:bg-purple-900/20 transition-colors ${
@@ -8281,7 +10978,21 @@ export function TareaSeguimientoPage() {
       <td className="p-2 text-xs font-medium text-white">{item.id}</td>
       <td className="p-2 text-xs text-zinc-300">{item.arte_aprobado || 'Sin revisar'}</td>
       <td className="p-2">
-        {item.archivo_arte ? (
+        {isDigital && digitalSummary ? (
+          // Para digitales: mostrar contador de archivos con icono clickeable para abrir galería
+          <button
+            onClick={() => {
+              const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+              if (rsvIds.length > 0) {
+                openDigitalGallery(rsvIds, item.codigo_unico);
+              }
+            }}
+            className="flex items-center justify-center w-10 h-10 bg-blue-500/20 rounded hover:bg-blue-500/30 transition-colors"
+            title="Ver galería digital"
+          >
+            <span className="text-blue-400 font-bold text-lg">{digitalSummary.total}</span>
+          </button>
+        ) : item.archivo_arte ? (
           <img
             src={getImageUrl(item.archivo_arte) || ''}
             alt="Arte"
@@ -8297,8 +11008,10 @@ export function TareaSeguimientoPage() {
       <td className="p-2 text-xs text-zinc-300">{item.mueble}</td>
       <td className="p-2 text-xs text-zinc-300">{item.plaza}</td>
       <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
-      <td className="p-2 text-xs text-blue-400 max-w-[150px] truncate" title={item.archivo_arte}>
-        {item.archivo_arte ? (
+      <td className="p-2 text-xs text-blue-400 max-w-[150px] truncate" title={isDigital && digitalSummary ? getDigitalSummaryText() : item.archivo_arte}>
+        {isDigital && digitalSummary ? (
+          <span className="text-blue-300">{getDigitalSummaryText()}</span>
+        ) : item.archivo_arte ? (
           <a href={getImageUrl(item.archivo_arte) || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
             {item.archivo_arte.split('/').pop()}
           </a>
@@ -8332,7 +11045,8 @@ export function TareaSeguimientoPage() {
         })()}
       </td>
     </tr>
-  );
+    );
+  };
 
   // Render row for Testigo tab (estilo original)
   const renderTestigoRow = (item: InventoryRow, showCheckbox = true) => (
@@ -8368,6 +11082,76 @@ export function TareaSeguimientoPage() {
       </td>
     </tr>
   );
+
+  // Render row for Programación tab (muestra estado de programación y tarea asociada)
+  const renderProgramacionRow = (item: InventoryRow & { tarea_id?: number; tarea_titulo?: string; estado_programacion?: string }) => {
+    // Para items digitales, obtener el resumen de archivos
+    let digitalSummary: { total: number; imagenes: number; videos: number } | null = null;
+    if (item.rsv_id) {
+      const rsvIds = item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      let totalArchivos = 0;
+      let totalImagenes = 0;
+      let totalVideos = 0;
+      rsvIds.forEach(rsvId => {
+        const summary = digitalSummaryMap.get(rsvId);
+        if (summary) {
+          totalArchivos += summary.totalArchivos;
+          totalImagenes += summary.countImagenes;
+          totalVideos += summary.countVideos;
+        }
+      });
+      if (totalArchivos > 0) {
+        digitalSummary = { total: totalArchivos, imagenes: totalImagenes, videos: totalVideos };
+      }
+    }
+
+    // Estado de programación con colores
+    const estadoConfig: Record<string, { label: string; color: string }> = {
+      'en_programacion': { label: 'En Programación', color: 'bg-blue-500/20 text-blue-400' },
+      'programado': { label: 'Programado', color: 'bg-green-500/20 text-green-400' },
+    };
+    const estado = estadoConfig[item.estado_programacion || 'en_programacion'] || estadoConfig.en_programacion;
+
+    return (
+      <tr
+        key={item.id}
+        className="border-b border-border/50 hover:bg-purple-900/20 transition-colors"
+      >
+        <td className="p-2 text-xs font-medium text-white">{item.id}</td>
+        <td className="p-2">
+          {digitalSummary ? (
+            <button
+              onClick={() => {
+                const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                if (rsvIds.length > 0) {
+                  openDigitalGallery(rsvIds, item.codigo_unico);
+                }
+              }}
+              className="flex items-center justify-center w-10 h-10 bg-blue-500/20 rounded hover:bg-blue-500/30 transition-colors"
+              title="Ver galería digital"
+            >
+              <span className="text-blue-400 font-bold text-lg">{digitalSummary.total}</span>
+            </button>
+          ) : (
+            <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center">
+              <Image className="h-5 w-5 text-zinc-600" />
+            </div>
+          )}
+        </td>
+        <td className="p-2 text-xs text-zinc-300 max-w-[150px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
+        <td className="p-2 text-xs text-zinc-300">{item.plaza}</td>
+        <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
+        <td className="p-2 text-xs text-purple-300 max-w-[120px] truncate" title={item.tarea_titulo || '-'}>
+          {item.tarea_titulo || '-'}
+        </td>
+        <td className="p-2">
+          <span className={`px-2 py-0.5 rounded text-[10px] whitespace-nowrap ${estado.color}`}>
+            {estado.label}
+          </span>
+        </td>
+      </tr>
+    );
+  };
 
   // Render row for Testigo tab (estilo idéntico a Revisar y aprobar)
   const renderTestigoRowStyled = (item: InventoryRow) => (
@@ -8569,10 +11353,11 @@ export function TareaSeguimientoPage() {
               {([
                 { key: 'versionario', label: 'Subir Artes', icon: Upload },
                 { key: 'atender', label: 'Revisar y Aprobar', icon: Eye },
+                { key: 'programacion', label: 'Programación', icon: Monitor },
                 { key: 'impresiones', label: 'Impresiones', icon: Printer },
                 { key: 'testigo', label: 'Validar Instalacion', icon: Camera },
               ] as { key: MainTab; label: string; icon: typeof Upload }[])
-                .filter(tab => tab.key !== 'impresiones' || shouldShowImpresionesTab)
+                .filter(tab => (tab.key !== 'impresiones' || shouldShowImpresionesTab) && (tab.key !== 'programacion' || inventoryProgramacionData.length > 0))
                 .map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -8593,8 +11378,8 @@ export function TareaSeguimientoPage() {
             </div>
           </div>
 
-          {/* Sub-tabs: Formato - Solo mostrar si hay elementos */}
-          {(formatCounts.tradicional > 0 || formatCounts.digital > 0) && (
+          {/* Sub-tabs: Formato - Solo mostrar si hay elementos y no estamos en Programación (que es solo digital) */}
+          {activeMainTab !== 'programacion' && (formatCounts.tradicional > 0 || formatCounts.digital > 0) && (
             <div className="px-4 py-2 border-b border-border bg-purple-900/5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -8705,12 +11490,17 @@ export function TareaSeguimientoPage() {
           {activeMainTab === 'atender' && (
             <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
               <div className="flex items-center gap-1">
-                {[
-                  { key: 'sin_revisar' as const, label: 'Sin Revisar', count: inventoryArteData.filter(i => i.estado_arte === 'sin_revisar').length },
-                  { key: 'en_revision' as const, label: 'En Revisión', count: inventoryArteData.filter(i => i.estado_arte === 'en_revision').length },
-                  { key: 'aprobado' as const, label: 'Aprobado', count: inventoryArteData.filter(i => i.estado_arte === 'aprobado').length },
-                  { key: 'rechazado' as const, label: 'Rechazado', count: inventoryArteData.filter(i => i.estado_arte === 'rechazado').length },
-                ].map(tab => (
+                {(() => {
+                  // Filtrar por formato seleccionado (Tradicional/Digital)
+                  const formatFilter = activeFormat === 'tradicional' ? 'Tradicional' : 'Digital';
+                  const filteredByFormat = inventoryArteData.filter(i => i.tradicional_digital === formatFilter);
+                  return [
+                    { key: 'sin_revisar' as const, label: 'Sin Revisar', count: filteredByFormat.filter(i => i.estado_arte === 'sin_revisar').length },
+                    { key: 'en_revision' as const, label: 'En Revisión', count: filteredByFormat.filter(i => i.estado_arte === 'en_revision').length },
+                    { key: 'aprobado' as const, label: 'Aprobado', count: filteredByFormat.filter(i => i.estado_arte === 'aprobado').length },
+                    { key: 'rechazado' as const, label: 'Rechazado', count: filteredByFormat.filter(i => i.estado_arte === 'rechazado').length },
+                  ];
+                })().map(tab => (
                   <button
                     key={tab.key}
                     onClick={() => setActiveEstadoArteTab(tab.key)}
@@ -8738,7 +11528,9 @@ export function TareaSeguimientoPage() {
           {activeMainTab === 'atender' && (
             <div className="px-4 py-2 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="text-xs text-zinc-400">{filteredAtenderData.length} de {inventoryArteData.length} artes</span>
+                <span className="text-xs text-zinc-400">
+                  {filteredAtenderData.filter(i => i.tradicional_digital === (activeFormat === 'tradicional' ? 'Tradicional' : 'Digital')).length} de {inventoryArteData.filter(i => i.tradicional_digital === (activeFormat === 'tradicional' ? 'Tradicional' : 'Digital')).length} artes
+                </span>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                   <input
@@ -8873,6 +11665,139 @@ export function TareaSeguimientoPage() {
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Estado Programación Tabs (Programación tab) */}
+          {activeMainTab === 'programacion' && (
+            <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
+              <div className="flex items-center gap-1">
+                {[
+                  { key: 'en_programacion' as const, label: 'En Programación', count: inventoryProgramacionData.filter(i => i.estado_programacion === 'en_programacion').length },
+                  { key: 'programado' as const, label: 'Programado', count: inventoryProgramacionData.filter(i => i.estado_programacion === 'programado').length },
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveEstadoProgramacionTab(tab.key)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+                      activeEstadoProgramacionTab === tab.key
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+                    }`}
+                  >
+                    {tab.label}
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      activeEstadoProgramacionTab === tab.key
+                        ? 'bg-purple-500/50 text-purple-100'
+                        : 'bg-zinc-700 text-zinc-400'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Filter Toolbar (Programación tab) */}
+          {activeMainTab === 'programacion' && (
+            <div className="px-4 py-2 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-zinc-400">
+                  {filteredProgramacionData.length} de {inventoryProgramacionData.length} artes digitales
+                </span>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por ID, código, plaza..."
+                    value={inventorySearch}
+                    onChange={(e) => setInventorySearch(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                  />
+                  {inventorySearch && (
+                    <button
+                      onClick={() => setInventorySearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <FilterToolbar
+                filters={filtersProgramacion}
+                showFilters={showFiltersProgramacion}
+                setShowFilters={setShowFiltersProgramacion}
+                addFilter={addFilterProgramacion}
+                updateFilter={updateFilterProgramacion}
+                removeFilter={removeFilterProgramacion}
+                clearFilters={clearAllFiltersProgramacion}
+                uniqueValues={getUniqueValuesProgramacion}
+                activeGroupings={activeGroupingsProgramacion}
+                showGrouping={showGroupingProgramacion}
+                setShowGrouping={setShowGroupingProgramacion}
+                toggleGrouping={toggleGroupingProgramacion}
+                clearGroupings={clearGroupingsProgramacion}
+                sortField={sortFieldProgramacion}
+                sortDirection={sortDirectionProgramacion}
+                showSort={showSortProgramacion}
+                setShowSort={setShowSortProgramacion}
+                setSortField={setSortFieldProgramacion}
+                setSortDirection={setSortDirectionProgramacion}
+                filteredCount={filteredProgramacionData.length}
+                totalCount={inventoryProgramacionData.length}
+              />
+            </div>
+          )}
+
+          {/* Action Buttons (Programación tab) */}
+          {activeMainTab === 'programacion' && (
+            <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-purple-900/10 to-transparent flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 text-zinc-400">
+                  <Info className="h-4 w-4" />
+                  <span className="text-xs">Items digitales en tareas de programación</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Estado Instalacion Tabs (Testigo tab) */}
+          {activeMainTab === 'testigo' && (
+            <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
+              <div className="flex items-center gap-1">
+                {[
+                  { key: 'por_instalar' as const, label: 'Por Instalar', count: inventoryTestigosData.filter(i => {
+                    const estatus = i.tarea_instalacion_estatus;
+                    return estatus === 'Pendiente' || estatus === 'Activo' || estatus === 'En proceso';
+                  }).length },
+                  { key: 'instaladas' as const, label: 'Instaladas', count: inventoryTestigosData.filter(i => {
+                    const estatus = i.tarea_instalacion_estatus;
+                    return estatus === 'Atendido' || estatus === 'Completado';
+                  }).length },
+                  { key: 'testigo' as const, label: 'Testigo', count: testigoGroupedByAsignado.length },
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveEstadoInstalacionTab(tab.key)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+                      activeEstadoInstalacionTab === tab.key
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+                    }`}
+                  >
+                    {tab.label}
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      activeEstadoInstalacionTab === tab.key
+                        ? 'bg-purple-500/50 text-purple-100'
+                        : 'bg-zinc-700 text-zinc-400'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -9791,6 +12716,268 @@ export function TareaSeguimientoPage() {
                   <tbody>{filteredInventory.map((item) => renderAtenderRow(item, true, true))}</tbody>
                 </table>
               </div>
+            ) : activeMainTab === 'programacion' && activeGroupingsProgramacion.length > 0 ? (
+              // Vista jerárquica de 3 niveles para Programación (con agrupaciones)
+              <div className="divide-y divide-border">
+                {Object.entries(programacionGroupedInventory).map(([level1Key, level2Groups]) => {
+                  const level1Expanded = expandedNodes.has(`programacion-${level1Key}`);
+                  const level1ItemCount = Object.values(level2Groups).reduce(
+                    (sum, level3Groups) => sum + Object.values(level3Groups).reduce((s, items) => s + items.length, 0), 0
+                  );
+                  const getAllLevel1Items = () => Object.values(level2Groups).flatMap(l3 => Object.values(l3).flat());
+                  return (
+                    <div key={level1Key}>
+                      {/* Nivel 1 */}
+                      <button
+                        onClick={() => toggleNode(`programacion-${level1Key}`)}
+                        className="w-full px-4 py-3 flex items-center justify-between bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          {level1Expanded ? (
+                            <ChevronDown className="h-4 w-4 text-purple-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-purple-400" />
+                          )}
+                          <span className="text-sm font-bold text-white">{level1Key}</span>
+                        </div>
+                        <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                          {level1ItemCount}
+                        </Badge>
+                      </button>
+                      {level1Expanded && (
+                        <div className="pl-4">
+                          {Object.entries(level2Groups).map(([level2Key, level3Groups]) => {
+                            const level2Expanded = expandedNodes.has(`programacion-${level1Key}-${level2Key}`);
+                            const level2ItemCount = Object.values(level3Groups).reduce((s, items) => s + items.length, 0);
+                            const getAllLevel2Items = () => Object.values(level3Groups).flat();
+                            return (
+                              <div key={level2Key} className="border-l border-purple-500/20">
+                                <button
+                                  onClick={() => toggleNode(`programacion-${level1Key}-${level2Key}`)}
+                                  className="w-full px-4 py-2 flex items-center justify-between bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {level2Expanded ? (
+                                      <ChevronDown className="h-3 w-3 text-purple-400" />
+                                    ) : (
+                                      <ChevronRight className="h-3 w-3 text-purple-400" />
+                                    )}
+                                    <span className="text-xs font-medium text-white">{level2Key}</span>
+                                  </div>
+                                  <Badge className="bg-purple-500/30 text-purple-200 border-purple-500/20 text-[10px]">
+                                    {level2ItemCount}
+                                  </Badge>
+                                </button>
+                                {level2Expanded && (
+                                  <div className="pl-4">
+                                    {Object.entries(level3Groups).map(([level3Key, items]) => {
+                                      const level3Expanded = expandedNodes.has(`programacion-${level1Key}-${level2Key}-${level3Key}`);
+                                      return (
+                                        <div key={level3Key} className="border-l border-purple-500/10">
+                                          <button
+                                            onClick={() => toggleNode(`programacion-${level1Key}-${level2Key}-${level3Key}`)}
+                                            className="w-full px-4 py-1.5 flex items-center justify-between hover:bg-purple-900/10 transition-colors"
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              {level3Expanded ? (
+                                                <ChevronDown className="h-3 w-3 text-purple-400/70" />
+                                              ) : (
+                                                <ChevronRight className="h-3 w-3 text-purple-400/70" />
+                                              )}
+                                              <span className="text-[11px] text-zinc-300">{level3Key}</span>
+                                            </div>
+                                            <span className="text-[10px] text-zinc-500">{items.length}</span>
+                                          </button>
+                                          {level3Expanded && (
+                                            <div className="bg-zinc-900/20">
+                                              <table className="w-full text-xs">
+                                                <thead className="bg-purple-900/20">
+                                                  <tr className="border-b border-border text-left">
+                                                    <th className="p-2 font-medium text-purple-300">ID</th>
+                                                    <th className="p-2 font-medium text-purple-300">Arte</th>
+                                                    <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                                    <th className="p-2 font-medium text-purple-300">Plaza</th>
+                                                    <th className="p-2 font-medium text-purple-300">Ciudad</th>
+                                                    <th className="p-2 font-medium text-purple-300">Tarea</th>
+                                                    <th className="p-2 font-medium text-purple-300">Estado</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {items.map((item) => renderProgramacionRow(item as InventoryRow & { tarea_id?: number; tarea_titulo?: string; estado_programacion?: string }))}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : activeMainTab === 'programacion' && activeGroupingsProgramacion.length === 0 ? (
+              // Tabla plana de Programación (sin agrupaciones)
+              <div className="bg-card/50">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-purple-900/20 z-10">
+                    <tr className="border-b border-border text-left">
+                      <th className="p-2 font-medium text-purple-300">ID</th>
+                      <th className="p-2 font-medium text-purple-300">Arte</th>
+                      <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                      <th className="p-2 font-medium text-purple-300">Plaza</th>
+                      <th className="p-2 font-medium text-purple-300">Ciudad</th>
+                      <th className="p-2 font-medium text-purple-300">Tarea</th>
+                      <th className="p-2 font-medium text-purple-300">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProgramacionData.map((item) => (
+                      <tr
+                        key={item.id}
+                        className="border-b border-border/50 hover:bg-purple-900/10 transition-colors"
+                      >
+                        <td className="p-2 text-zinc-300 font-mono">{item.id}</td>
+                        <td className="p-2">
+                          {item.archivo_arte ? (
+                            <div className="w-12 h-10 bg-zinc-800 rounded overflow-hidden">
+                              <img
+                                src={getImageUrl(item.archivo_arte) || ''}
+                                alt="Arte"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-12 h-10 bg-zinc-800 rounded flex items-center justify-center">
+                              <Image className="h-4 w-4 text-zinc-600" />
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-2 text-zinc-300 max-w-[200px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
+                        <td className="p-2 text-zinc-400">{item.plaza}</td>
+                        <td className="p-2 text-zinc-400">{item.ciudad}</td>
+                        <td className="p-2">
+                          <span className="text-xs text-purple-300">{item.tarea_titulo || '-'}</span>
+                        </td>
+                        <td className="p-2">
+                          <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${
+                            item.estado_programacion === 'programado'
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-blue-500/20 text-blue-400'
+                          }`}>
+                            {item.estado_programacion === 'programado' ? 'Programado' : 'En Programación'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : activeMainTab === 'testigo' && activeEstadoInstalacionTab === 'testigo' ? (
+              // Vista especial para sub-tab Testigo: agrupada por asignado de tareas Testigo
+              <div className="divide-y divide-border">
+                {testigoGroupedByAsignado.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-zinc-800 mb-3">
+                      <Camera className="h-6 w-6 text-zinc-500" />
+                    </div>
+                    <p className="text-sm text-zinc-400">No hay tareas de testigo creadas</p>
+                    <p className="text-xs text-zinc-500 mt-1">Selecciona items en "Instaladas" y crea una tarea tipo Testigo</p>
+                  </div>
+                ) : (
+                  testigoGroupedByAsignado.map((group) => {
+                    const groupKey = `testigo-task-${group.tareaId}`;
+                    const isExpanded = expandedNodes.has(groupKey);
+                    const estatusColors: Record<string, string> = {
+                      'Pendiente': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+                      'Activo': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+                      'En proceso': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+                      'Atendido': 'bg-green-500/20 text-green-400 border-green-500/30',
+                      'Completado': 'bg-green-500/20 text-green-400 border-green-500/30',
+                    };
+                    return (
+                      <div key={groupKey}>
+                        <button
+                          onClick={() => toggleNode(groupKey)}
+                          className="w-full px-4 py-3 flex items-center justify-between bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-purple-400" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-purple-400" />
+                            )}
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-purple-400" />
+                              <span className="text-sm font-bold text-white">{group.asignado}</span>
+                            </div>
+                            <span className="text-xs text-zinc-400">|</span>
+                            <span className="text-xs text-zinc-300">{group.tareaTitulo}</span>
+                            {group.tareaFechaFin && (
+                              <>
+                                <span className="text-xs text-zinc-400">|</span>
+                                <span className="text-xs text-zinc-400">{group.tareaFechaFin}</span>
+                              </>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full border ${estatusColors[group.tareaEstatus] || 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'}`}>
+                              {group.tareaEstatus}
+                            </span>
+                            <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                              {group.items.length} items
+                            </Badge>
+                          </div>
+                        </button>
+                        {isExpanded && (
+                          <div className="bg-zinc-900/30 border-l-2 border-purple-500/30">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b border-border text-left">
+                                  <th className="p-2 pl-6 font-medium text-purple-300">Código</th>
+                                  <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
+                                  <th className="p-2 font-medium text-purple-300">Catorcena</th>
+                                  <th className="p-2 font-medium text-purple-300">APS</th>
+                                  <th className="p-2 font-medium text-purple-300">Plaza</th>
+                                  <th className="p-2 font-medium text-purple-300">Ciudad</th>
+                                  <th className="p-2 font-medium text-purple-300">Testigo</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {group.items.map((item) => (
+                                  <tr key={item.id} className="border-b border-border/50 hover:bg-zinc-800/30">
+                                    <td className="p-2 pl-6 text-white font-mono">{item.codigo_unico}</td>
+                                    <td className="p-2 text-zinc-300">{item.tipo_de_cara}</td>
+                                    <td className="p-2 text-zinc-300">{item.catorcena}</td>
+                                    <td className="p-2 text-zinc-300">{item.aps || '-'}</td>
+                                    <td className="p-2 text-zinc-300">{item.plaza}</td>
+                                    <td className="p-2 text-zinc-300">{item.ciudad}</td>
+                                    <td className="p-2">
+                                      <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${
+                                        item.testigo_status === 'validado'
+                                          ? 'bg-green-500/20 text-green-400'
+                                          : 'bg-yellow-500/20 text-yellow-400'
+                                      }`}>
+                                        {item.testigo_status === 'validado' ? 'Validado' : 'Pendiente'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             ) : activeMainTab === 'testigo' && activeGroupingsTestigo.length > 0 ? (
               // Vista jerárquica de 3 niveles para Validar Instalación (con agrupaciones)
               <div className="divide-y divide-border">
@@ -10463,11 +13650,24 @@ export function TareaSeguimientoPage() {
         }}
         selectedInventory={selectedInventoryItems}
         onSubmit={handleUploadArt}
+        onSubmitDigital={handleUploadDigitalArt}
         artesExistentes={artesExistentes}
         isLoadingArtes={isLoadingArtes}
         isSubmitting={assignArteMutation.isPending}
         error={uploadArtError}
         campanaId={campanaId}
+      />
+
+      {/* Digital Gallery Modal */}
+      <DigitalGalleryModal
+        isOpen={isDigitalGalleryOpen}
+        onClose={() => {
+          setIsDigitalGalleryOpen(false);
+          setDigitalGalleryImages([]);
+        }}
+        imagenes={digitalGalleryImages}
+        isLoading={isLoadingDigitalGallery}
+        title={digitalGalleryTitle}
       />
 
       {/* Task Detail Modal */}
@@ -10524,6 +13724,43 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
         }}
         onUpdateArte={(reservaIds, archivo) => {
           assignArteMutation.mutate({ reservaIds, archivo });
+        }}
+        onUpdateArteDigital={async (reservaIds, files, deleteArchivos) => {
+          // 1. Primero eliminar los archivos marcados para eliminación (usando modo por archivos + reservaIds)
+          if (deleteArchivos && deleteArchivos.length > 0) {
+            // Usar el nuevo modo que elimina por archivo path en todas las reservas seleccionadas
+            await campanasService.deleteImagenesDigitales(campanaId, undefined, deleteArchivos, reservaIds);
+          }
+
+          // 2. Luego agregar los nuevos archivos (si hay)
+          if (files.length > 0) {
+            // Convertir todos los archivos a base64 con su spot
+            const filesWithBase64 = await Promise.all(
+              files.map(async ({ file, spot }) => {
+                const base64 = await new Promise<string>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.onerror = () => reject(new Error(`Error al leer el archivo ${file.name}`));
+                  reader.readAsDataURL(file);
+                });
+                return {
+                  archivo: base64,
+                  spot,
+                  nombre: file.name,
+                  tipo: file.type.startsWith('video/') ? 'video' : 'image',
+                };
+              })
+            );
+            // Llamar al servicio para agregar nuevos archivos digitales (sin eliminar los existentes)
+            await campanasService.addArteDigital(campanaId, reservaIds, filesWithBase64);
+          }
+
+          // Invalidar queries
+          queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+          queryClient.invalidateQueries({ queryKey: ['digital-file-summaries', campanaId] });
         }}
         onTaskComplete={async (taskId, observaciones) => {
           await updateTareaMutation.mutateAsync({
@@ -10636,9 +13873,16 @@ Por favor registra la cantidad de impresiones recibidas.`,
           // Refrescar lista de tareas
           queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
         }}
+        onUpdateTask={async (taskId, data) => {
+          await updateTareaMutation.mutateAsync({
+            tareaId: parseInt(taskId),
+            data
+          });
+        }}
         isUpdating={updateArteStatusMutation.isPending || assignArteMutation.isPending}
         campanaId={campanaId}
         canResolveProduccionTasks={permissions.canResolveProduccionTasks}
+        digitalSummaryMap={digitalSummaryMap}
       />
     </div>
   );

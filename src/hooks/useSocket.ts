@@ -79,6 +79,7 @@ export function useSocketCampana(campanaId: number | null) {
     const handleTareaActualizada = (data: { tareaId: number; campanaId: number }) => {
       console.log('[Socket] Tarea actualizada:', data);
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', data.campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', data.campanaId] });
     };
 
     const handleTareaEliminada = (data: { tareaId: number; campanaId: number }) => {

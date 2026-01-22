@@ -59,6 +59,24 @@ export interface SAPPostResponse {
   error?: string;
 }
 
+export interface ImagenDigital {
+  id: number;
+  idReserva: number;
+  archivo: string;
+  comentario: string;
+  estado: string;
+  respuesta: string;
+  spot: number;
+  tipo: 'image' | 'video';
+}
+
+export interface DigitalFileSummary {
+  idReserva: number;
+  totalArchivos: number;
+  countImagenes: number;
+  countVideos: number;
+}
+
 export interface InventarioReservado {
   rsv_ids: string;
   id: number;
@@ -565,6 +583,84 @@ export const campanasService = {
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar arte');
+    }
+    return response.data.data;
+  },
+
+  async assignArteDigital(
+    id: number,
+    reservaIds: number[],
+    archivos: { archivo: string; spot: number; nombre: string; tipo: string }[]
+  ): Promise<{ message: string; affected: number }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/assign-arte-digital`, {
+      reservaIds,
+      archivos,
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al asignar arte digital');
+    }
+    return response.data.data;
+  },
+
+  async getImagenesDigitales(campanaId: number, reservaId: number | string): Promise<ImagenDigital[]> {
+    const response = await api.get<ApiResponse<ImagenDigital[]>>(`/campanas/${campanaId}/imagenes-digitales/${reservaId}`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener imágenes digitales');
+    }
+    return response.data.data;
+  },
+
+  async getDigitalFileSummaries(campanaId: number): Promise<DigitalFileSummary[]> {
+    const response = await api.get<ApiResponse<DigitalFileSummary[]>>(`/campanas/${campanaId}/digital-file-summaries`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener resumen de archivos digitales');
+    }
+    return response.data.data;
+  },
+
+  /**
+   * Eliminar archivos digitales
+   * Modo 1: Por imageIds (elimina registros específicos)
+   * Modo 2: Por archivos + reservaIds (elimina de múltiples reservas a la vez)
+   */
+  async deleteImagenesDigitales(
+    campanaId: number,
+    imageIds?: number[],
+    archivos?: string[],
+    reservaIds?: number[]
+  ): Promise<void> {
+    const data: { imageIds?: number[]; archivos?: string[]; reservaIds?: number[] } = {};
+
+    if (archivos && archivos.length > 0 && reservaIds && reservaIds.length > 0) {
+      // Modo 2: Eliminar por archivos + reservaIds
+      data.archivos = archivos;
+      data.reservaIds = reservaIds;
+    } else if (imageIds && imageIds.length > 0) {
+      // Modo 1: Eliminar por imageIds
+      data.imageIds = imageIds;
+    } else {
+      throw new Error('Se requiere imageIds o (archivos + reservaIds)');
+    }
+
+    const response = await api.delete<ApiResponse<{ message: string }>>(`/campanas/${campanaId}/imagenes-digitales`, {
+      data,
+    });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar archivos digitales');
+    }
+  },
+
+  async addArteDigital(
+    campanaId: number,
+    reservaIds: number[],
+    archivos: Array<{ archivo: string; spot: number; nombre: string; tipo: string }>
+  ): Promise<{ message: string; affected: number; files: string[] }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number; files: string[] }>>(
+      `/campanas/${campanaId}/add-arte-digital`,
+      { reservaIds, archivos }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al agregar arte digital');
     }
     return response.data.data;
   },
