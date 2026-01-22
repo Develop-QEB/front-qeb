@@ -2628,6 +2628,9 @@ function TaskDetailModal({
   const [programacionTab, setProgramacionTab] = useState<'resumen' | 'tabla'>('resumen');
   // Estado para tracking de artes programados en tarea de Programación
   const [programadosState, setProgramadosState] = useState<Record<string, boolean>>({});
+  // Estado para archivos digitales cargados desde API (fallback si evidencia no tiene archivos)
+  const [loadedArchivosDigitales, setLoadedArchivosDigitales] = useState<{ archivo: string; spot: number; tipo: string }[]>([]);
+  const [isLoadingArchivosDigitales, setIsLoadingArchivosDigitales] = useState(false);
 
   // Estado para nodos expandidos en las tablas de Impresión y Recepción
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
@@ -2770,6 +2773,59 @@ function TaskDetailModal({
 
     loadDigitalFileNames();
   }, [task?.tipo, programacionTab, taskInventory, campanaId]);
+
+  // Efecto para cargar archivos digitales para el tab "Resumen" en Programación si no están en evidencia
+  useEffect(() => {
+    const loadArchivosForResumen = async () => {
+      if (!isOpen || task?.tipo !== 'Programación') {
+        setLoadedArchivosDigitales([]);
+        return;
+      }
+
+      // Verificar si evidencia ya tiene archivos
+      let archivosFromEvidencia: { archivo: string; spot: number; tipo: string }[] = [];
+      try {
+        if (task.evidencia) {
+          const parsed = JSON.parse(task.evidencia);
+          archivosFromEvidencia = parsed.archivos || [];
+        }
+      } catch (e) {
+        console.error('Error parsing evidencia for archivos check:', e);
+      }
+
+      // Si ya hay archivos en evidencia, no cargar de API
+      if (archivosFromEvidencia.length > 0) {
+        setLoadedArchivosDigitales([]);
+        return;
+      }
+
+      // Cargar archivos desde API usando ids_reservas de la tarea
+      const reservaIds = task.ids_reservas?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+      if (reservaIds.length === 0) {
+        setLoadedArchivosDigitales([]);
+        return;
+      }
+
+      setIsLoadingArchivosDigitales(true);
+      try {
+        const idsParam = reservaIds.join(',');
+        const imagenes = await campanasService.getImagenesDigitales(campanaId, idsParam);
+        const archivos = imagenes.map(img => ({
+          archivo: img.archivo,
+          spot: img.spot,
+          tipo: img.tipo,
+        }));
+        setLoadedArchivosDigitales(archivos);
+      } catch (error) {
+        console.error('Error loading archivos digitales for resumen:', error);
+        setLoadedArchivosDigitales([]);
+      } finally {
+        setIsLoadingArchivosDigitales(false);
+      }
+    };
+
+    loadArchivosForResumen();
+  }, [isOpen, task?.tipo, task?.evidencia, task?.ids_reservas, campanaId]);
 
   // Agrupar taskInventory por Catorcena > APS > Grupo (para tablas de Impresión y Recepción)
   // Estructura jerárquica de 3 niveles para poder colapsar cada nivel
@@ -5362,18 +5418,21 @@ function TaskDetailModal({
                     <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Programación por Arte</h4>
                     {(() => {
                       let indicaciones: Record<string, string> = {};
-                      let archivos: { archivo: string; spot: number; tipo: string }[] = [];
+                      let archivosFromEvidencia: { archivo: string; spot: number; tipo: string }[] = [];
                       let programados: Record<string, boolean> = {};
                       try {
                         if (task.evidencia) {
                           const parsed = JSON.parse(task.evidencia);
                           indicaciones = parsed.indicaciones || {};
-                          archivos = parsed.archivos || [];
+                          archivosFromEvidencia = parsed.archivos || [];
                           programados = parsed.programados || {};
                         }
                       } catch (e) {
                         console.error('Error parsing programacion evidencia:', e);
                       }
+
+                      // Usar archivos de evidencia, o cargar desde API si están vacíos
+                      const archivos = archivosFromEvidencia.length > 0 ? archivosFromEvidencia : loadedArchivosDigitales;
 
                       // Merge persisted programados with local state
                       const currentProgramados = { ...programados, ...programadosState };
@@ -5385,7 +5444,7 @@ function TaskDetailModal({
                         const newProgramados = { ...currentProgramados, [archivoPath]: newValue };
                         setProgramadosState(newProgramados);
 
-                        // Update evidencia in backend
+                        // Update evidencia in backend (usar archivos actuales para preservar estructura)
                         try {
                           const newEvidencia = JSON.stringify({
                             indicaciones,
@@ -5421,6 +5480,16 @@ function TaskDetailModal({
                         document.body.removeChild(link);
                         URL.revokeObjectURL(url);
                       };
+
+                      // Mostrar loading mientras se cargan archivos
+                      if (isLoadingArchivosDigitales) {
+                        return (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-purple-400 mr-2" />
+                            <span className="text-zinc-400 text-sm">Cargando archivos digitales...</span>
+                          </div>
+                        );
+                      }
 
                       if (archivos.length === 0) {
                         return (
@@ -8448,11 +8517,11 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !catorcenaEntrega || !asignadoId) : !titulo.trim()) || isSubmitting}
+            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !catorcenaEntrega || !asignadoId) : tipo === 'Programación' ? (!titulo.trim() || isLoadingArchivosDigitales) : !titulo.trim()) || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isSubmitting ? 'Generando...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : tipo === 'Testigo' ? 'Crear Testigo' : 'Crear tarea'}
+            {(isSubmitting || (tipo === 'Programación' && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Generando...' : tipo === 'Programación' && isLoadingArchivosDigitales ? 'Cargando archivos...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : tipo === 'Testigo' ? 'Crear Testigo' : 'Crear tarea'}
           </button>
         </div>
       </div>
