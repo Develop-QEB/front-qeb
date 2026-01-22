@@ -8036,7 +8036,7 @@ function CreateTaskModal({
                 {/* Archivos digitales con indicaciones */}
                 <div>
                   <label className="block text-xs font-medium text-zinc-400 mb-2">
-                    Indicaciones por archivo ({archivosDigitalesProgramacion.length} archivo(s))
+                    Indicaciones por archivo * ({archivosDigitalesProgramacion.length} archivo(s))
                   </label>
                   {isLoadingArchivosDigitales ? (
                     <div className="flex items-center justify-center py-4">
@@ -8537,7 +8537,7 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !catorcenaEntrega || !asignadoId) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !catorcenaEntrega || !asignadoId || isLoadingArchivosDigitales) : !titulo.trim()) || isSubmitting}
+            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !catorcenaEntrega || !asignadoId) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !catorcenaEntrega || !asignadoId || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : !titulo.trim()) || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {(isSubmitting || (tipo === 'Programación' && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
