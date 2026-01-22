@@ -7514,11 +7514,12 @@ function CreateTaskModal({
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
       // Guardar indicaciones de programación como JSON en evidencia
+      // NOTA: NO incluir archivoData aquí porque puede ser muy grande (base64) y truncar el JSON
+      // Los archivos se cargan desde la API usando el nombre del archivo cuando se necesitan
       (payload as any).evidencia = JSON.stringify({
         indicaciones: programacionIndicaciones,
         archivos: archivosDigitalesProgramacion.map(a => ({
           archivo: a.archivo,
-          archivoData: a.archivoData, // URL de Cloudinary para previews y descargas
           spot: a.spot,
           tipo: a.tipo,
         })),
