@@ -5512,17 +5512,27 @@ function TaskDetailModal({
 
                               return (
                                 <div key={index} className={`flex gap-4 p-3 border rounded-lg transition-colors ${isProgramado ? 'bg-green-900/20 border-green-500/30' : 'bg-purple-900/10 border-purple-500/20'}`}>
-                                  {/* Thumbnail */}
+                                  {/* Thumbnail - mismo estilo que DigitalGalleryModal */}
                                   <div className="flex-shrink-0 w-24 h-16 bg-zinc-800 rounded overflow-hidden">
                                     {isVideo ? (
-                                      <div className="relative w-full h-full">
-                                        <video src={fileUrl || ''} className="w-full h-full object-cover" muted preload="metadata" />
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                                          <Play className="h-6 w-6 text-white" />
-                                        </div>
+                                      <div className="w-full h-full flex items-center justify-center bg-zinc-800">
+                                        <Play className="h-6 w-6 text-purple-400" />
                                       </div>
                                     ) : fileUrl ? (
-                                      <img src={fileUrl} alt={fileName} className="w-full h-full object-cover" />
+                                      <>
+                                        <img
+                                          src={fileUrl}
+                                          alt={fileName}
+                                          className="w-full h-full object-cover"
+                                          onError={(e) => {
+                                            (e.target as HTMLImageElement).style.display = 'none';
+                                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                          }}
+                                        />
+                                        <div className="w-full h-full flex items-center justify-center hidden">
+                                          <Image className="h-6 w-6 text-zinc-600" />
+                                        </div>
+                                      </>
                                     ) : (
                                       <div className="w-full h-full flex items-center justify-center">
                                         <Image className="h-6 w-6 text-zinc-600" />
@@ -8027,19 +8037,11 @@ function CreateTaskModal({
                         return (
                           <div key={archivo.id} className="p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
                             <div className="flex gap-3 mb-2">
-                              {/* Thumbnail/Preview */}
+                              {/* Thumbnail/Preview - mismo estilo que DigitalGalleryModal */}
                               <div className="flex-shrink-0 w-20 h-14 bg-zinc-800 rounded overflow-hidden">
                                 {isVideo ? (
-                                  <div className="relative w-full h-full">
-                                    <video
-                                      src={fileUrl || ''}
-                                      className="w-full h-full object-cover"
-                                      muted
-                                      preload="metadata"
-                                    />
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                                      <Play className="h-6 w-6 text-white" />
-                                    </div>
+                                  <div className="w-full h-full flex items-center justify-center bg-zinc-800">
+                                    <Play className="h-6 w-6 text-purple-400" />
                                   </div>
                                 ) : fileUrl ? (
                                   <img
@@ -8047,16 +8049,14 @@ function CreateTaskModal({
                                     alt={fileName}
                                     className="w-full h-full object-cover"
                                     onError={(e) => {
-                                      const target = e.target as HTMLImageElement;
-                                      target.src = '';
-                                      target.parentElement!.innerHTML = '<div class="w-full h-full flex items-center justify-center"><svg class="h-6 w-6 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>';
+                                      (e.target as HTMLImageElement).style.display = 'none';
+                                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
                                     }}
                                   />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center">
-                                    <Image className="h-6 w-6 text-zinc-600" />
-                                  </div>
-                                )}
+                                ) : null}
+                                <div className={`w-full h-full flex items-center justify-center ${fileUrl && !isVideo ? 'hidden' : ''}`}>
+                                  <Image className="h-6 w-6 text-zinc-600" />
+                                </div>
                               </div>
                               {/* File info */}
                               <div className="flex-1 min-w-0">
