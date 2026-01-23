@@ -2438,6 +2438,7 @@ function TaskDetailModal({
   isUpdating,
   campanaId,
   canResolveProduccionTasks = true,
+  canResolveRevisionArtesTasks = true,
   digitalSummaryMap,
 }: {
   isOpen: boolean;
@@ -2459,11 +2460,23 @@ function TaskDetailModal({
   isUpdating: boolean;
   campanaId: number;
   canResolveProduccionTasks?: boolean;
+  canResolveRevisionArtesTasks?: boolean;
   digitalSummaryMap: Map<number, DigitalFileSummary>;
 }) {
   const [activeTab, setActiveTab] = useState<TaskDetailTab>('resumen');
   const [selectedArteIds, setSelectedArteIds] = useState<Set<string>>(new Set());
   const [groupBy, setGroupBy] = useState<GroupByArte>('inventario');
+
+  // Determinar si puede resolver la tarea actual basado en su tipo
+  const canResolveCurrentTask = useMemo(() => {
+    if (!task) return false;
+    // Para tareas de "Revisión de artes", usar canResolveRevisionArtesTasks
+    if (task.tipo === 'Revisión de artes') {
+      return canResolveRevisionArtesTasks;
+    }
+    // Para otras tareas (producción), usar canResolveProduccionTasks
+    return canResolveProduccionTasks;
+  }, [task, canResolveRevisionArtesTasks, canResolveProduccionTasks]);
 
   // Estados para la tabla agrupada del modal de Programación (Ver Tabla tab)
   const [filtersProgramacionModal, setFiltersProgramacionModal] = useState<FilterCondition[]>([]);
@@ -4051,7 +4064,7 @@ function TaskDetailModal({
           {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && (
             <div className="flex flex-wrap gap-2 mt-4">
               {tabs
-                .filter(tab => canResolveProduccionTasks || tab.key === 'resumen')
+                .filter(tab => canResolveCurrentTask || tab.key === 'resumen')
                 .map((tab) => (
                 <button
                   key={tab.key}
@@ -6245,7 +6258,7 @@ function TaskDetailModal({
           )}
 
           {/* Tab Editar - Solo para tareas que NO son Impresión y con permisos */}
-          {task?.tipo !== 'Impresión' && activeTab === 'editar' && canResolveProduccionTasks && (
+          {task?.tipo !== 'Impresión' && activeTab === 'editar' && canResolveCurrentTask && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Columna Izquierda - Lista de artes con checkbox */}
               <div className="bg-zinc-900/50 rounded-lg border border-border">
@@ -6854,7 +6867,7 @@ function TaskDetailModal({
           )}
 
           {/* Tab Atender */}
-          {activeTab === 'atender' && task?.tipo === 'Correccion' && canResolveProduccionTasks && (
+          {activeTab === 'atender' && task?.tipo === 'Correccion' && canResolveCurrentTask && (
             // Vista especial para tareas de Corrección - Solo enviar a revisión
             <div className="space-y-4">
               <div className="bg-amber-900/20 border border-amber-500/30 rounded-lg p-4">
@@ -6955,7 +6968,7 @@ function TaskDetailModal({
           )}
 
           {/* Tab Atender - Vista normal para revisión de artes (no Corrección ni Impresión) */}
-          {activeTab === 'atender' && task?.tipo !== 'Correccion' && task?.tipo !== 'Impresión' && canResolveProduccionTasks && (
+          {activeTab === 'atender' && task?.tipo !== 'Correccion' && task?.tipo !== 'Impresión' && canResolveCurrentTask && (
             <div className="space-y-4">
               {/* Toolbar de agrupación */}
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -9080,7 +9093,7 @@ export function TareaSeguimientoPage() {
     return map;
   }, [digitalFileSummaries]);
 
-  // ---- Determinar tab inicial basado en contenido ----
+  // ---- Determinar tab inicial basado en contenido y permisos ----
   useEffect(() => {
     // Solo ejecutar una vez cuando los datos estén disponibles
     if (initialTabDetermined) return;
@@ -9090,14 +9103,18 @@ export function TareaSeguimientoPage() {
     if (!allQueriesFetched) return;
 
     // Determinar el tab con contenido (prioridad: versionario > atender > testigo)
-    if (inventarioSinArteAPI.length > 0) {
+    // Pero respetando permisos
+    if (inventarioSinArteAPI.length > 0 && permissions.canSeeTabSubirArtes) {
       setActiveMainTab('versionario');
     } else if (inventarioArteAPI.length > 0) {
       setActiveMainTab('atender');
-    } else if (inventarioTestigosAPI.length > 0) {
+    } else if (inventarioTestigosAPI.length > 0 && permissions.canSeeTabValidacionInstalacion) {
       setActiveMainTab('testigo');
+    } else if (!permissions.canSeeTabSubirArtes) {
+      // Si no puede ver versionario, default a atender
+      setActiveMainTab('atender');
     }
-    // Si ninguno tiene contenido, se queda en versionario por defecto
+    // Si ninguno tiene contenido y puede ver versionario, se queda en versionario por defecto
 
     setInitialTabDetermined(true);
   }, [
@@ -9108,6 +9125,8 @@ export function TareaSeguimientoPage() {
     inventarioSinArteAPI.length,
     inventarioArteAPI.length,
     inventarioTestigosAPI.length,
+    permissions.canSeeTabSubirArtes,
+    permissions.canSeeTabValidacionInstalacion,
   ]);
 
   // ---- Determinar tab de estado_arte inicial basado en contenido ----
@@ -11398,6 +11417,9 @@ export function TareaSeguimientoPage() {
             <div className="hidden sm:flex items-center gap-2">
               {(['versionario', 'atender', 'impresiones', 'testigo'] as MainTab[])
                 .filter(step => step !== 'impresiones' || shouldShowImpresionesTab)
+                .filter(step => step !== 'versionario' || permissions.canSeeTabSubirArtes)
+                .filter(step => step !== 'impresiones' || permissions.canSeeTabImpresiones)
+                .filter(step => step !== 'testigo' || permissions.canSeeTabValidacionInstalacion)
                 .map((step, idx, arr) => {
                 const isActive = activeMainTab === step;
                 const isPast = arr.indexOf(activeMainTab) > idx;
@@ -11458,6 +11480,10 @@ export function TareaSeguimientoPage() {
                 { key: 'testigo', label: 'Validar Instalacion', icon: Camera },
               ] as { key: MainTab; label: string; icon: typeof Upload }[])
                 .filter(tab => tab.key !== 'impresiones' || shouldShowImpresionesTab)
+                .filter(tab => tab.key !== 'versionario' || permissions.canSeeTabSubirArtes)
+                .filter(tab => tab.key !== 'programacion' || permissions.canSeeTabProgramacion)
+                .filter(tab => tab.key !== 'impresiones' || permissions.canSeeTabImpresiones)
+                .filter(tab => tab.key !== 'testigo' || permissions.canSeeTabValidacionInstalacion)
                 .map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -11752,22 +11778,24 @@ export function TareaSeguimientoPage() {
                       </>
                     )}
                   </button>
-                  <button
-                    onClick={handleCreateTaskClick}
-                    disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                      selectedInventoryIds.size > 0 && !isCheckingExistingTasks
-                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                    }`}
-                  >
-                    {isCheckingExistingTasks ? (
-                      <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <Plus className="h-3.5 w-3.5" />
-                    )}
-                    {isCheckingExistingTasks ? 'Verificando...' : 'Crear Tarea'}
-                  </button>
+                  {permissions.canCreateTareasGestionArtes && (
+                    <button
+                      onClick={handleCreateTaskClick}
+                      disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                        selectedInventoryIds.size > 0 && !isCheckingExistingTasks
+                          ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                          : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                      }`}
+                    >
+                      {isCheckingExistingTasks ? (
+                        <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5" />
+                      )}
+                      {isCheckingExistingTasks ? 'Verificando...' : 'Crear Tarea'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -11882,7 +11910,8 @@ export function TareaSeguimientoPage() {
                     return estatus === 'Atendido' || estatus === 'Completado';
                   }).length },
                   { key: 'testigo' as const, label: 'Testigo', count: testigoGroupedByAsignado.length },
-                ].map(tab => (
+                ].filter(tab => tab.key !== 'testigo' || permissions.canSeeTabTestigos)
+                .map(tab => (
                   <button
                     key={tab.key}
                     onClick={() => setActiveEstadoInstalacionTab(tab.key)}
@@ -12029,7 +12058,7 @@ export function TareaSeguimientoPage() {
                   </div>
                 )}
               </div>
-              {permissions.canEditGestionArtes && (
+              {permissions.canEditGestionArtes && permissions.canCreateTareasGestionArtes && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleCreateTaskClick}
@@ -12078,7 +12107,7 @@ export function TareaSeguimientoPage() {
                   </div>
                 )}
               </div>
-              {permissions.canEditGestionArtes && (
+              {permissions.canEditGestionArtes && permissions.canCreateTareasGestionArtes && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleCreateTaskClick}
@@ -13992,6 +14021,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
         isUpdating={updateArteStatusMutation.isPending || assignArteMutation.isPending}
         campanaId={campanaId}
         canResolveProduccionTasks={permissions.canResolveProduccionTasks}
+        canResolveRevisionArtesTasks={permissions.canResolveRevisionArtesTasks}
         digitalSummaryMap={digitalSummaryMap}
       />
     </div>

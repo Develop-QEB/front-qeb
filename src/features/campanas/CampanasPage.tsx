@@ -1627,13 +1627,15 @@ export function CampanasPage() {
               </button>
 
               {/* Órdenes de Montaje */}
-              <button
-                onClick={() => setOrdenesMontajeModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30 transition-all"
-              >
-                <ClipboardList className="h-4 w-4" />
-                Órdenes de Montaje
-              </button>
+              {permissions.canSeeOrdenesMontajeButton && (
+                <button
+                  onClick={() => setOrdenesMontajeModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30 transition-all"
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  Órdenes de Montaje
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -2136,6 +2138,7 @@ export function CampanasPage() {
       <OrdenesMontajeModal
         isOpen={ordenesMontajeModalOpen}
         onClose={() => setOrdenesMontajeModalOpen(false)}
+        canExport={permissions.canExportOrdenesMontaje}
       />
     </div>
   );

@@ -64,11 +64,24 @@ export interface RolePermissions {
   canSeeGestionArtes: boolean; // Ver página de Gestión de Artes
   canEditGestionArtes: boolean;
   canResolveProduccionTasks: boolean; // Resolver/completar tareas de producción (Impresión, Recepción, Instalación)
+  canSeeOrdenesMontajeButton: boolean; // Ver botón de órdenes de montaje en campañas
+
+  // Gestión de Artes - Tabs
+  canSeeTabProgramacion: boolean;
+  canSeeTabImpresiones: boolean;
+  canSeeTabSubirArtes: boolean;
+  canSeeTabTestigos: boolean;
+  canSeeTabValidacionInstalacion: boolean;
+  canCreateTareasGestionArtes: boolean; // Crear tareas en gestión de artes
+  canResolveRevisionArtesTasks: boolean; // Resolver tareas de revisión de artes
 
   // Inventarios
   canCreateInventarios: boolean;
   canEditInventarios: boolean;
   canDeleteInventarios: boolean;
+
+  // Órdenes de Montaje
+  canExportOrdenesMontaje: boolean;
 }
 
 // Permisos por defecto (acceso total - para Admin)
@@ -110,10 +123,21 @@ const defaultPermissions: RolePermissions = {
   canSeeGestionArtes: true,
   canEditGestionArtes: true,
   canResolveProduccionTasks: true,
+  canSeeOrdenesMontajeButton: true,
+
+  canSeeTabProgramacion: true,
+  canSeeTabImpresiones: true,
+  canSeeTabSubirArtes: true,
+  canSeeTabTestigos: true,
+  canSeeTabValidacionInstalacion: true,
+  canCreateTareasGestionArtes: true,
+  canResolveRevisionArtesTasks: true,
 
   canCreateInventarios: true,
   canEditInventarios: true,
   canDeleteInventarios: true,
+
+  canExportOrdenesMontaje: true,
 };
 
 // Permisos específicos por rol
@@ -244,7 +268,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - solo pueden cambiar a Atendido
+    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
     canEditPropuestaStatus: true,
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
@@ -275,7 +299,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeePropuestas: true,
     canSeeCampanas: true,
     canSeeInventarios: false,
-    canSeeAdminUsuarios: true,
+    canSeeAdminUsuarios: false,
 
     // Clientes - oculto
     canCreateClientes: false,
@@ -294,7 +318,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - solo pueden cambiar a Atendido
+    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
     canEditPropuestaStatus: true,
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
@@ -315,6 +339,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,
+
+    // Órdenes de Montaje - solo visualización
+    canExportOrdenesMontaje: false,
   },
   'Especialista de tráfico': {
     // Secciones visibles
@@ -325,7 +352,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeePropuestas: true,
     canSeeCampanas: true,
     canSeeInventarios: false,
-    canSeeAdminUsuarios: true,
+    canSeeAdminUsuarios: false,
 
     // Clientes - oculto
     canCreateClientes: false,
@@ -344,7 +371,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - solo pueden cambiar a Atendido
+    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
     canEditPropuestaStatus: true,
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
@@ -365,6 +392,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,
+
+    // Órdenes de Montaje - solo visualización
+    canExportOrdenesMontaje: false,
   },
   'Auxiliar de tráfico': {
     // Secciones visibles
@@ -375,7 +405,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeePropuestas: true,
     canSeeCampanas: true,
     canSeeInventarios: false,
-    canSeeAdminUsuarios: true,
+    canSeeAdminUsuarios: false,
 
     // Clientes - oculto
     canCreateClientes: false,
@@ -394,7 +424,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - solo pueden cambiar a Atendido
+    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
     canEditPropuestaStatus: true,
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
@@ -415,6 +445,135 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,
+
+    // Órdenes de Montaje - solo visualización
+    canExportOrdenesMontaje: false,
+  },
+  'Coordinador de Diseño': {
+    // Secciones visibles
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - oculto
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas
+    canEditCampanas: false, // No pueden editar campaña
+    canEditDetalleCampana: false, // No pueden asignar APs
+    canDeleteDetalleCampana: false, // No pueden quitar APs
+    canSeeGestionArtes: true, // Sí pueden ver gestión de artes
+    canEditGestionArtes: true,
+    canResolveProduccionTasks: false, // No pueden resolver tareas de producción
+    canSeeOrdenesMontajeButton: false, // Ocultar botón órdenes de montaje
+
+    // Gestión de Artes - Tabs
+    canSeeTabProgramacion: false,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: false,
+    canCreateTareasGestionArtes: false, // No pueden crear tareas
+    canResolveRevisionArtesTasks: true, // Sí pueden resolver tareas de revisión de artes
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    // Órdenes de Montaje
+    canExportOrdenesMontaje: false,
+  },
+  'Diseñadores': {
+    // Secciones visibles
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - oculto
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas
+    canEditCampanas: false, // No pueden editar campaña
+    canEditDetalleCampana: false, // No pueden asignar APs
+    canDeleteDetalleCampana: false, // No pueden quitar APs
+    canSeeGestionArtes: true, // Sí pueden ver gestión de artes
+    canEditGestionArtes: true,
+    canResolveProduccionTasks: false, // No pueden resolver tareas de producción
+    canSeeOrdenesMontajeButton: false, // Ocultar botón órdenes de montaje
+
+    // Gestión de Artes - Tabs
+    canSeeTabProgramacion: false,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: false,
+    canCreateTareasGestionArtes: false, // No pueden crear tareas
+    canResolveRevisionArtesTasks: true, // Sí pueden resolver tareas de revisión de artes
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    // Órdenes de Montaje
+    canExportOrdenesMontaje: false,
   },
 };
 

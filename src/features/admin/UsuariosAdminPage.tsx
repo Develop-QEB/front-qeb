@@ -15,27 +15,55 @@ const AREAS_DISPONIBLES = [
   'Mercadotecnia',
   'Compras',
   'Operaciones',
+  'Facturación',
 ];
 
-const PUESTOS_DISPONIBLES = [
-  'Asesor Comercial',
-  'Gerente Digital Programático',
-  'Analista de Servicio al Cliente',
-  'Gerente de Tráfico',
-  'Coordinador de tráfico',
-  'Especialista de tráfico',
-  'Auxiliar de tráfico',
-  'Coordinador de Diseño',
-  'Diseñadores',
-  'Compradores',
-  'Director de Operaciones',
-  'Gerentes de Operaciones Plazas y CON',
-  'Jefes de Operaciones Plazas y CON',
-  'Supervisores de Operaciones',
-  'Coordinador de Facturación y Cobranza',
-  'Mesa de Control',
-  'Analista de Facturación y Cobranza',
-];
+// Mapeo de puestos por área
+const PUESTOS_POR_AREA: Record<string, string[]> = {
+  'Comercial': [
+    'Asesor Comercial',
+    'Gerente Digital Programático',
+    'Analista de Servicio al Cliente',
+  ],
+  'Tráfico': [
+    'Gerente de Tráfico',
+    'Coordinador de tráfico',
+    'Especialista de tráfico',
+    'Auxiliar de tráfico',
+  ],
+  'Mercadotecnia': [
+    'Coordinador de Diseño',
+    'Diseñadores',
+  ],
+  'Compras': [
+    'Compradores',
+  ],
+  'Operaciones': [
+    'Director de Operaciones',
+    'Gerentes de Operaciones Plazas y CON',
+    'Jefes de Operaciones Plazas y CON',
+    'Supervisores de Operaciones',
+  ],
+  'Facturación': [
+    'Coordinador de Facturación y Cobranza',
+    'Mesa de Control',
+    'Analista de Facturación y Cobranza',
+  ],
+};
+
+// Función para obtener puestos según área
+const getPuestosPorArea = (area: string): string[] => {
+  return PUESTOS_POR_AREA[area] || [];
+};
+
+// Función para obtener roles según área (puestos del área + Administrador)
+const getRolesPorArea = (area: string): string[] => {
+  const puestos = PUESTOS_POR_AREA[area] || [];
+  return [...puestos, 'Administrador'];
+};
+
+// Todos los puestos (para compatibilidad)
+const PUESTOS_DISPONIBLES = Object.values(PUESTOS_POR_AREA).flat();
 
 const ROLES_DISPONIBLES = [...PUESTOS_DISPONIBLES, 'Administrador'];
 
@@ -57,9 +85,18 @@ function CreateModal({
     password: '',
     area: '',
     puesto: '',
-    rol: 'Asesor Comercial',
+    rol: '',
     foto_perfil: '',
   });
+
+  // Puestos y roles filtrados según área seleccionada
+  const puestosDisponibles = form.area ? getPuestosPorArea(form.area) : [];
+  const rolesDisponibles = form.area ? getRolesPorArea(form.area) : [];
+
+  // Cuando cambia el área, resetear puesto y rol
+  const handleAreaChange = (newArea: string) => {
+    setForm({ ...form, area: newArea, puesto: '', rol: '' });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,7 +165,7 @@ function CreateModal({
               <label className={labelClasses}>Área *</label>
               <select
                 value={form.area}
-                onChange={(e) => setForm({ ...form, area: e.target.value })}
+                onChange={(e) => handleAreaChange(e.target.value)}
                 className={inputClasses}
                 required
               >
@@ -148,9 +185,10 @@ function CreateModal({
                 onChange={(e) => setForm({ ...form, puesto: e.target.value })}
                 className={inputClasses}
                 required
+                disabled={!form.area || puestosDisponibles.length === 0}
               >
-                <option value="">Seleccionar puesto...</option>
-                {PUESTOS_DISPONIBLES.map((puesto) => (
+                <option value="">{!form.area ? 'Primero selecciona un área...' : puestosDisponibles.length === 0 ? 'Sin puestos disponibles' : 'Seleccionar puesto...'}</option>
+                {puestosDisponibles.map((puesto) => (
                   <option key={puesto} value={puesto}>
                     {puesto}
                   </option>
@@ -164,8 +202,11 @@ function CreateModal({
                 value={form.rol}
                 onChange={(e) => setForm({ ...form, rol: e.target.value })}
                 className={inputClasses}
+                required
+                disabled={!form.area}
               >
-                {ROLES_DISPONIBLES.map((rol) => (
+                <option value="">{!form.area ? 'Primero selecciona un área...' : 'Seleccionar rol...'}</option>
+                {rolesDisponibles.map((rol) => (
                   <option key={rol} value={rol}>
                     {rol}
                   </option>
@@ -234,6 +275,15 @@ function EditModal({
     rol: usuario.rol,
   });
 
+  // Puestos y roles filtrados según área seleccionada
+  const puestosDisponibles = form.area ? getPuestosPorArea(form.area) : [];
+  const rolesDisponibles = form.area ? getRolesPorArea(form.area) : [];
+
+  // Cuando cambia el área, resetear puesto y rol
+  const handleAreaChange = (newArea: string) => {
+    setForm({ ...form, area: newArea, puesto: '', rol: '' });
+  };
+
   useEffect(() => {
     setForm({
       nombre: usuario.nombre,
@@ -281,7 +331,7 @@ function EditModal({
             <label className={labelClasses}>Área</label>
             <select
               value={form.area}
-              onChange={(e) => setForm({ ...form, area: e.target.value })}
+              onChange={(e) => handleAreaChange(e.target.value)}
               className={inputClasses}
             >
               <option value="">Seleccionar área...</option>
@@ -299,9 +349,10 @@ function EditModal({
               value={form.puesto}
               onChange={(e) => setForm({ ...form, puesto: e.target.value })}
               className={inputClasses}
+              disabled={!form.area || puestosDisponibles.length === 0}
             >
-              <option value="">Seleccionar puesto...</option>
-              {PUESTOS_DISPONIBLES.map((puesto) => (
+              <option value="">{!form.area ? 'Primero selecciona un área...' : puestosDisponibles.length === 0 ? 'Sin puestos disponibles' : 'Seleccionar puesto...'}</option>
+              {puestosDisponibles.map((puesto) => (
                 <option key={puesto} value={puesto}>
                   {puesto}
                 </option>
@@ -315,8 +366,10 @@ function EditModal({
               value={form.rol}
               onChange={(e) => setForm({ ...form, rol: e.target.value })}
               className={inputClasses}
+              disabled={!form.area}
             >
-              {ROLES_DISPONIBLES.map((rol) => (
+              <option value="">{!form.area ? 'Primero selecciona un área...' : 'Seleccionar rol...'}</option>
+              {rolesDisponibles.map((rol) => (
                 <option key={rol} value={rol}>
                   {rol}
                 </option>

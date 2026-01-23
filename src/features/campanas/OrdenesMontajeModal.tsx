@@ -45,6 +45,7 @@ const getFileUrl = (url: string | undefined | null): string | null => {
 interface OrdenesMontajeModalProps {
   isOpen: boolean;
   onClose: () => void;
+  canExport?: boolean;
 }
 
 type TabType = 'cat' | 'digital' | 'invian';
@@ -183,7 +184,7 @@ function formatDate(dateStr: string | null): string {
   return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProps) {
+export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: OrdenesMontajeModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('cat');
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -1023,14 +1024,16 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
             </span>
 
             {/* Export */}
-            <button
-              onClick={handleExportXLSX}
-              disabled={isLoading || dataCount === 0}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-green-600 hover:bg-green-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="h-4 w-4" />
-              Exportar
-            </button>
+            {canExport && (
+              <button
+                onClick={handleExportXLSX}
+                disabled={isLoading || dataCount === 0}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-green-600 hover:bg-green-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="h-4 w-4" />
+                Exportar
+              </button>
+            )}
           </div>
         </div>
 
