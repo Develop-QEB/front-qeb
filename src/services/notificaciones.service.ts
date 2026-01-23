@@ -172,4 +172,5 @@ export interface CaraAutorizacion {
   articulo?: string;
   cliente?: string;
   campana?: string;
+  catorcena?: string;
 }

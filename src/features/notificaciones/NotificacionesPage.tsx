@@ -1427,17 +1427,28 @@ function TaskDrawer({
               </div>
             )}
 
-            {/* Info de contexto: Cliente y Campaña */}
-            {carasPendientes.length > 0 && (carasPendientes[0].cliente || carasPendientes[0].campana) && (
-              <div className="mb-3 p-2 rounded-lg bg-zinc-800/30 border border-zinc-700/50">
-                {carasPendientes[0].cliente && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-zinc-500">Cliente:</span>
-                    <span className="text-white font-medium">{carasPendientes[0].cliente}</span>
-                  </div>
-                )}
+            {/* Info de contexto: Cliente, Campaña y Catorcena */}
+            {carasPendientes.length > 0 && (
+              <div className="mb-3 p-3 rounded-lg bg-zinc-800/30 border border-zinc-700/50">
+                <div className="grid grid-cols-2 gap-2">
+                  {carasPendientes[0].cliente && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <Building2 className="h-3.5 w-3.5 text-zinc-500" />
+                      <span className="text-zinc-500">Cliente:</span>
+                      <span className="text-white font-medium truncate">{carasPendientes[0].cliente}</span>
+                    </div>
+                  )}
+                  {carasPendientes[0].catorcena && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <Calendar className="h-3.5 w-3.5 text-zinc-500" />
+                      <span className="text-zinc-500">Catorcena:</span>
+                      <span className="text-cyan-300 font-medium">{carasPendientes[0].catorcena}</span>
+                    </div>
+                  )}
+                </div>
                 {carasPendientes[0].campana && (
-                  <div className="flex items-center gap-2 text-xs mt-1">
+                  <div className="flex items-center gap-2 text-xs mt-2">
+                    <Tag className="h-3.5 w-3.5 text-zinc-500" />
                     <span className="text-zinc-500">Campaña:</span>
                     <span className="text-purple-300 font-medium">{carasPendientes[0].campana}</span>
                   </div>
@@ -1446,22 +1457,29 @@ function TaskDrawer({
             )}
 
             {/* Tabla de caras estilo solicitudes */}
-            <div className="max-h-64 overflow-y-auto mb-4 scrollbar-purple rounded-lg border border-zinc-700/50">
-              <table className="w-full">
+            <div className="max-h-64 overflow-x-auto overflow-y-auto mb-4 scrollbar-purple rounded-lg border border-zinc-700/50">
+              <table className="w-full min-w-[500px]">
                 <thead className="sticky top-0 bg-zinc-800/90 backdrop-blur-sm">
                   <tr>
                     <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500 uppercase">Artículo</th>
                     <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500 uppercase">Tipo</th>
                     <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Caras</th>
                     <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Bonif.</th>
+                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Total</th>
+                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500 uppercase">Tarifa Efect.</th>
                     <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Estado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
                   {carasPendientes.map((cara) => (
                     <tr key={cara.id} className="hover:bg-zinc-800/30">
-                      <td className="px-2 py-2 text-[10px] text-zinc-300 max-w-[100px] truncate" title={cara.articulo || '-'}>
-                        {cara.articulo || '-'}
+                      <td className="px-2 py-2 max-w-[120px]">
+                        <div className="text-xs text-white font-medium truncate" title={cara.articulo || '-'}>
+                          {cara.articulo || '-'}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 truncate" title={cara.formato}>
+                          {cara.formato}
+                        </div>
                       </td>
                       <td className="px-2 py-2">
                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
@@ -1470,6 +1488,10 @@ function TaskDrawer({
                       </td>
                       <td className="px-2 py-2 text-xs text-center text-white">{cara.caras}</td>
                       <td className="px-2 py-2 text-xs text-center text-emerald-400">{cara.bonificacion}</td>
+                      <td className="px-2 py-2 text-xs text-center text-cyan-300 font-semibold">{cara.total_caras}</td>
+                      <td className="px-2 py-2 text-xs text-right text-purple-300 font-mono">
+                        ${cara.tarifa_efectiva?.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                      </td>
                       <td className="px-2 py-2 text-center">
                         {cara.estado_autorizacion === 'aprobado' && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">OK</span>
