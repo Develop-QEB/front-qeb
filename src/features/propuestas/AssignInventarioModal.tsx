@@ -3403,8 +3403,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   {mapsLoaded ? (
                     <AdvancedMapComponent
                       inventarios={processedInventory}
-                      selectedInventory={selectedInventory}
-                      onToggleSelection={toggleInventorySelection}
+                      selectedInventory={new Set(Array.from(selectedInventory).map(key => parseInt(key.split('_')[0])))}
+                      onToggleSelection={(id: number) => {
+                        const inv = processedInventory.find(i => i.id === id);
+                        if (inv) toggleInventorySelection(getInventoryKey(inv));
+                      }}
                       mapCenter={mapCenter}
                       onFilterByPOI={handlePOIFilter}
                       hasPOIFilter={poiFilterIds !== null}

@@ -1105,7 +1105,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       formato: cara.formato,
       tipo: cara.tipo as 'Tradicional' | 'Digital' | '',
       nse: cara.nse,
-      periodo: cara.periodo,
+      periodo: `${cara.catorcenaYear}-${cara.catorcenaNum}`,
       renta: cara.renta,
       bonificacion: cara.bonificacion,
       tarifaPublica: cara.tarifaPublica,
