@@ -45,6 +45,7 @@ interface FilterFieldConfig {
 
 // Campos disponibles para filtrar/ordenar
 const FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'fecha_creacion', label: 'Fecha', type: 'string' },
   { field: 'titulo', label: 'Título', type: 'string' },
   { field: 'tipo', label: 'Tipo', type: 'string' },
   { field: 'estatus', label: 'Estado', type: 'string' },
@@ -1415,41 +1416,61 @@ function TaskDrawer({
               </div>
             )}
 
+            {/* Info de contexto: Cliente y Campaña */}
+            {carasPendientes.length > 0 && (carasPendientes[0].cliente || carasPendientes[0].campana) && (
+              <div className="mb-3 p-2 rounded-lg bg-zinc-800/30 border border-zinc-700/50">
+                {carasPendientes[0].cliente && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-zinc-500">Cliente:</span>
+                    <span className="text-white font-medium">{carasPendientes[0].cliente}</span>
+                  </div>
+                )}
+                {carasPendientes[0].campana && (
+                  <div className="flex items-center gap-2 text-xs mt-1">
+                    <span className="text-zinc-500">Campaña:</span>
+                    <span className="text-purple-300 font-medium">{carasPendientes[0].campana}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Tabla de caras estilo solicitudes */}
             <div className="max-h-64 overflow-y-auto mb-4 scrollbar-purple rounded-lg border border-zinc-700/50">
               <table className="w-full">
                 <thead className="sticky top-0 bg-zinc-800/90 backdrop-blur-sm">
                   <tr>
-                    <th className="px-3 py-2 text-left text-[10px] font-semibold text-zinc-500 uppercase">Tipo</th>
-                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Caras</th>
-                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Bonif.</th>
-                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Total</th>
-                    <th className="px-3 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Estado</th>
+                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500 uppercase">Artículo</th>
+                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500 uppercase">Tipo</th>
+                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Caras</th>
+                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Bonif.</th>
+                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Estado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
                   {carasPendientes.map((cara) => (
                     <tr key={cara.id} className="hover:bg-zinc-800/30">
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2 text-[10px] text-zinc-300 max-w-[100px] truncate" title={cara.articulo || '-'}>
+                        {cara.articulo || '-'}
+                      </td>
+                      <td className="px-2 py-2">
                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
                           {cara.tipo}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-xs text-center text-white">{cara.caras}</td>
-                      <td className="px-3 py-2 text-xs text-center text-emerald-400">{cara.bonificacion}</td>
-                      <td className="px-3 py-2 text-xs text-center text-white font-medium">{cara.total_caras}</td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-2 py-2 text-xs text-center text-white">{cara.caras}</td>
+                      <td className="px-2 py-2 text-xs text-center text-emerald-400">{cara.bonificacion}</td>
+                      <td className="px-2 py-2 text-center">
                         {cara.estado_autorizacion === 'aprobado' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Aprobado</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">OK</span>
                         )}
                         {cara.estado_autorizacion === 'pendiente_dcm' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. DCM</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">DCM</span>
                         )}
                         {cara.estado_autorizacion === 'pendiente_dg' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">DG</span>
                         )}
                         {cara.estado_autorizacion === 'rechazado' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rechazado</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rech.</span>
                         )}
                       </td>
                     </tr>
@@ -1605,8 +1626,8 @@ export function NotificacionesPage() {
   const [showFilterPopup, setShowFilterPopup] = useState(false);
   const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
   const [showGroupPopup, setShowGroupPopup] = useState(false);
-  const [sortField, setSortField] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortField, setSortField] = useState<string | null>('fecha_creacion');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [showSortPopup, setShowSortPopup] = useState(false);
 
   // Obtener usuario actual
@@ -1797,8 +1818,8 @@ export function NotificacionesPage() {
   const clearAllFilters = useCallback(() => {
     setFilters([]);
     setActiveGroupings([]);
-    setSortField(null);
-    setSortDirection('asc');
+    setSortField('fecha_creacion');
+    setSortDirection('desc');
     setFilterFecha('all');
     setSearch('');
     setFilterEstatus('');

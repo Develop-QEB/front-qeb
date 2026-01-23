@@ -15,6 +15,7 @@ import { formatCurrency } from '../../lib/utils';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
+import { useSocketPropuesta } from '../../hooks/useSocket';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
@@ -500,6 +501,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
 
+  // WebSocket para escuchar cambios en reservas en tiempo real
+  useSocketPropuesta(propuesta?.id || null);
+
   // Si readOnly es true, sobrescribir permisos para modo visualización
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario;
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta;
@@ -561,7 +565,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     tipo: '',
     formato: '',
   });
-  const [selectedInventory, setSelectedInventory] = useState<Set<number>>(new Set());
+  const [selectedInventory, setSelectedInventory] = useState<Set<string>>(new Set());
+
+  // Helper function to get unique key for inventory item (handles digital spaces)
+  const getInventoryKey = useCallback((inv: InventarioDisponible | ProcessedInventoryItem): string => {
+    const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
+    return isDigital && inv.espacio_id ? `${inv.id}_${inv.espacio_id}` : `${inv.id}`;
+  }, []);
   const [selectedReservados, setSelectedReservados] = useState<Set<string>>(new Set());
   const [selectedMapReservas, setSelectedMapReservas] = useState<Set<string>>(new Set()); // For map highlighting
   const [reservadosSearchTerm, setReservadosSearchTerm] = useState('');
@@ -1779,6 +1789,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       data = filterCompletos(data);
     }
 
+    // Apply unique filter for traditional items (hide items whose counterpart is reserved)
+    if (showOnlyUnicos) {
+      data = filterUnicos(data);
+    }
+
     // Apply unique digital filter (hide digital items with same codigo_unico in reservas)
     if (showOnlyUnicosDigitales) {
       data = filterUnicosDigitales(data);
@@ -1844,6 +1859,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const hasDigitalInventory = useMemo(() => {
     return inventarioDisponible.some(inv =>
       inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0)
+    );
+  }, [inventarioDisponible]);
+
+  // Check if there are traditional items in inventory
+  const hasTradicionalInventory = useMemo(() => {
+    return inventarioDisponible.some(inv =>
+      inv.tradicional_digital === 'Tradicional' || (!inv.total_espacios || inv.total_espacios === 0)
     );
   }, [inventarioDisponible]);
 
@@ -1927,9 +1949,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const matchingInventory = inventarioDisponible
       .filter(inv => inv.codigo_unico && availableCodes.includes(inv.codigo_unico));
 
-    setSelectedInventory(new Set(matchingInventory.map(inv => inv.id)));
+    setSelectedInventory(new Set(matchingInventory.map(inv => getInventoryKey(inv))));
     setShowCsvSection(false);
-  }, [csvData, inventarioDisponible]);
+  }, [csvData, inventarioDisponible, getInventoryKey]);
 
   const handleClearCsv = useCallback(() => {
     setCsvFile(null);
@@ -2050,26 +2072,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Select all in group
   // Toggle all items in a group - if all selected, deselect all; otherwise select all
   const toggleAllInGroup = (items: ProcessedInventoryItem[]) => {
-    const allSelected = items.every(inv => selectedInventory.has(inv.id));
+    const allSelected = items.every(inv => selectedInventory.has(getInventoryKey(inv)));
     setSelectedInventory(prev => {
       const next = new Set(prev);
       if (allSelected) {
         // Deselect all
-        items.forEach(inv => next.delete(inv.id));
+        items.forEach(inv => next.delete(getInventoryKey(inv)));
       } else {
         // Select all
-        items.forEach(inv => next.add(inv.id));
+        items.forEach(inv => next.add(getInventoryKey(inv)));
       }
       return next;
     });
   };
 
-  // Handle inventory selection
-  const toggleInventorySelection = (id: number) => {
+  // Handle inventory selection (uses unique key for digital items)
+  const toggleInventorySelection = (key: string) => {
     setSelectedInventory(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -2079,7 +2101,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     if (!selectedCaraForSearch || selectedInventory.size === 0) return;
 
     // Check for pairs that could be grouped
-    const selectedItems = processedInventory.filter(i => selectedInventory.has(i.id));
+    const selectedItems = processedInventory.filter(i => selectedInventory.has(getInventoryKey(i)));
     const potentialPairs = new Set<string>();
 
     selectedItems.forEach(item => {
@@ -2108,8 +2130,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       let flujoCount = 0;
       let contraflujoCount = 0;
 
-      selectedInventory.forEach(invId => {
-        const inv = processedInventory.find(i => i.id === invId);
+      selectedInventory.forEach(invKey => {
+        const inv = processedInventory.find(i => getInventoryKey(i) === invKey);
         if (!inv) return;
 
         // If it's a "completo" item, reserve both flujo and contraflujo
@@ -2247,12 +2269,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     }
 
     const runBonificacion = async () => {
-      const newReservas: { inventario_id: number; tipo: string; latitud: number; longitud: number }[] = [];
-      selectedInventory.forEach(invId => {
-        const inv = processedInventory.find(i => i.id === invId);
+      const newReservas: { inventario_id: number; espacio_id?: number; tipo: string; latitud: number; longitud: number }[] = [];
+      selectedInventory.forEach(invKey => {
+        const inv = processedInventory.find(i => getInventoryKey(i) === invKey);
         if (inv) {
+          const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
           newReservas.push({
-            inventario_id: invId,
+            inventario_id: inv.id,
+            espacio_id: isDigital && inv.espacio_id ? inv.espacio_id : undefined,
             tipo: 'Bonificacion',
             latitud: inv.latitud || 0,
             longitud: inv.longitud || 0,
@@ -2877,6 +2901,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     )}
                   </button>
 
+                  {/* Unique filter for traditional items - only show when there are traditional items */}
+                  {hasTradicionalInventory && (
+                    <button
+                      onClick={() => { setShowOnlyUnicos(!showOnlyUnicos); if (!showOnlyUnicos) setShowOnlyCompletos(false); }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicos
+                        ? 'bg-cyan-500 text-white shadow'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        }`}
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      Únicos
+                      {showOnlyUnicos && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-cyan-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicos(false); }} />
+                      )}
+                    </button>
+                  )}
+
                   {/* Unique digital filter - only show when there are digital items */}
                   {hasDigitalInventory && (
                     <button
@@ -3002,7 +3043,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </span>
 
                     {/* Clear all filters */}
-                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicosDigitales || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
+                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicos || showOnlyUnicosDigitales || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
                       <button
                         onClick={clearAllFilters}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -3105,7 +3146,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   if (selectedInventory.size === processedInventory.length) {
                                     setSelectedInventory(new Set());
                                   } else {
-                                    setSelectedInventory(new Set(processedInventory.map(i => i.id)));
+                                    setSelectedInventory(new Set(processedInventory.map(i => getInventoryKey(i))));
                                   }
                                 }}
                                 className="checkbox-purple"
@@ -3206,7 +3247,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         }}
                                         className="ml-auto text-xs text-purple-400 hover:text-purple-300"
                                       >
-                                        {items.every(inv => selectedInventory.has(inv.id)) ? 'Deseleccionar' : 'Seleccionar todos'}
+                                        {items.every(inv => selectedInventory.has(getInventoryKey(inv))) ? 'Deseleccionar' : 'Seleccionar todos'}
                                       </button>
                                     </div>
                                   </td>
@@ -3214,9 +3255,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 {/* Group Items */}
                                 {expandedGroups.has(groupName) && items.map((inv) => (
                                   <tr
-                                    key={inv.id}
-                                    onClick={() => toggleInventorySelection(inv.id)}
-                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(inv.id)
+                                    key={getInventoryKey(inv)}
+                                    onClick={() => toggleInventorySelection(getInventoryKey(inv))}
+                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(getInventoryKey(inv))
                                       ? 'bg-purple-500/10'
                                       : inv.ya_reservado_para_cara
                                         ? 'bg-green-500/5'
@@ -3226,8 +3267,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     <td className="px-3 py-2 pl-8">
                                       <input
                                         type="checkbox"
-                                        checked={selectedInventory.has(inv.id)}
-                                        onChange={() => toggleInventorySelection(inv.id)}
+                                        checked={selectedInventory.has(getInventoryKey(inv))}
+                                        onChange={() => toggleInventorySelection(getInventoryKey(inv))}
                                         onClick={(e) => e.stopPropagation()}
                                         className="checkbox-purple"
                                       />
@@ -3265,9 +3306,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             // Normal flat view
                             processedInventory.map((inv) => (
                               <tr
-                                key={inv.id}
-                                onClick={() => toggleInventorySelection(inv.id)}
-                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(inv.id)
+                                key={getInventoryKey(inv)}
+                                onClick={() => toggleInventorySelection(getInventoryKey(inv))}
+                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(getInventoryKey(inv))
                                   ? 'bg-purple-500/10'
                                   : inv.ya_reservado_para_cara
                                     ? 'bg-green-500/5'
@@ -3277,8 +3318,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 <td className="px-3 py-2">
                                   <input
                                     type="checkbox"
-                                    checked={selectedInventory.has(inv.id)}
-                                    onChange={() => toggleInventorySelection(inv.id)}
+                                    checked={selectedInventory.has(getInventoryKey(inv))}
+                                    onChange={() => toggleInventorySelection(getInventoryKey(inv))}
                                     onClick={(e) => e.stopPropagation()}
                                     className="checkbox-purple"
                                   />

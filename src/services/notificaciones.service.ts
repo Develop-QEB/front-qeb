@@ -169,4 +169,7 @@ export interface CaraAutorizacion {
   estado_autorizacion: string;
   total_caras: number;
   tarifa_efectiva: number;
+  articulo?: string;
+  cliente?: string;
+  campana?: string;
 }

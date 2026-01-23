@@ -16,6 +16,12 @@ export const SOCKET_EVENTS = {
   ARTE_RECHAZADO: 'arte:rechazado',
   INVENTARIO_ACTUALIZADO: 'inventario:actualizado',
   DATOS_ACTUALIZADOS: 'datos:actualizados',
+  // Nuevos eventos para propuestas y reservas
+  RESERVA_CREADA: 'reserva:creada',
+  RESERVA_ELIMINADA: 'reserva:eliminada',
+  PROPUESTA_ACTUALIZADA: 'propuesta:actualizada',
+  AUTORIZACION_APROBADA: 'autorizacion:aprobada',
+  AUTORIZACION_RECHAZADA: 'autorizacion:rechazada',
 };
 
 let socketInstance: Socket | null = null;
@@ -172,6 +178,91 @@ export function useSocketNotificaciones() {
       socket.off(SOCKET_EVENTS.NOTIFICACION_LEIDA, handleNotificacionLeida);
     };
   }, [queryClient]);
+}
+
+/**
+ * Hook para escuchar eventos de propuestas y reservas
+ */
+export function useSocketPropuesta(propuestaId: number | null) {
+  const queryClient = useQueryClient();
+  const socketRef = useRef<Socket | null>(null);
+  const joinedRoomRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!propuestaId || propuestaId <= 0) return;
+
+    const socket = getSocket();
+    socketRef.current = socket;
+
+    // Unirse al room de la propuesta
+    if (joinedRoomRef.current !== propuestaId) {
+      if (joinedRoomRef.current) {
+        socket.emit('leave-propuesta', joinedRoomRef.current);
+      }
+      socket.emit('join-propuesta', propuestaId);
+      joinedRoomRef.current = propuestaId;
+      console.log('[Socket] Unido a propuesta:', propuestaId);
+    }
+
+    // Handlers para eventos de reservas
+    const handleReservaCreada = (data: { propuestaId: number }) => {
+      console.log('[Socket] Reserva creada:', data);
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+    };
+
+    const handleReservaEliminada = (data: { propuestaId: number }) => {
+      console.log('[Socket] Reserva eliminada:', data);
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+    };
+
+    const handlePropuestaActualizada = (data: { propuestaId: number }) => {
+      console.log('[Socket] Propuesta actualizada:', data);
+      queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+    };
+
+    const handleAutorizacionAprobada = (data: { propuestaId: number; idquote: string }) => {
+      console.log('[Socket] Autorización aprobada:', data);
+      queryClient.invalidateQueries({ queryKey: ['autorizacion-caras', data.idquote] });
+      queryClient.invalidateQueries({ queryKey: ['autorizacion-resumen', data.idquote] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+    };
+
+    const handleAutorizacionRechazada = (data: { propuestaId: number; idquote: string }) => {
+      console.log('[Socket] Autorización rechazada:', data);
+      queryClient.invalidateQueries({ queryKey: ['autorizacion-caras', data.idquote] });
+      queryClient.invalidateQueries({ queryKey: ['autorizacion-resumen', data.idquote] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+    };
+
+    // Suscribirse a eventos
+    socket.on(SOCKET_EVENTS.RESERVA_CREADA, handleReservaCreada);
+    socket.on(SOCKET_EVENTS.RESERVA_ELIMINADA, handleReservaEliminada);
+    socket.on(SOCKET_EVENTS.PROPUESTA_ACTUALIZADA, handlePropuestaActualizada);
+    socket.on(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobada);
+    socket.on(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazada);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.RESERVA_CREADA, handleReservaCreada);
+      socket.off(SOCKET_EVENTS.RESERVA_ELIMINADA, handleReservaEliminada);
+      socket.off(SOCKET_EVENTS.PROPUESTA_ACTUALIZADA, handlePropuestaActualizada);
+      socket.off(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobada);
+      socket.off(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazada);
+    };
+  }, [propuestaId, queryClient]);
+
+  // Función para emitir eventos manualmente
+  const emit = useCallback((event: string, data: unknown) => {
+    socketRef.current?.emit(event, data);
+  }, []);
+
+  return { emit };
 }
 
 /**
