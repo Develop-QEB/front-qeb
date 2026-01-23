@@ -512,13 +512,23 @@ export function SolicitudesPage() {
 
   const [statusSolicitud, setStatusSolicitud] = useState<Solicitud | null>(null);
 
-  // Handle URL params: viewId opens view modal, commentsId opens comments modal
+  // Handle URL params: viewId opens view modal, commentsId opens comments modal, editId opens edit modal
   useEffect(() => {
     const viewIdParam = searchParams.get('viewId');
     const commentsIdParam = searchParams.get('commentsId');
+    const editIdParam = searchParams.get('editId');
     const searchParam = searchParams.get('search');
 
-    if (viewIdParam) {
+    if (editIdParam) {
+      const id = parseInt(editIdParam, 10);
+      if (!isNaN(id)) {
+        // Fetch solicitud and open edit modal
+        solicitudesService.getById(id).then((solicitud) => {
+          setEditSolicitud(solicitud);
+        }).catch(console.error);
+      }
+      setSearchParams({}, { replace: true });
+    } else if (viewIdParam) {
       const id = parseInt(viewIdParam, 10);
       if (!isNaN(id)) {
         setViewSolicitudId(id);

@@ -1159,9 +1159,16 @@ function isCommentNotification(titulo: string): boolean {
   return lower.includes('comentario') || lower.includes('comment');
 }
 
+// Función para verificar si es una tarea de rechazo que requiere edición
+function isRejectionTask(titulo: string): boolean {
+  const lower = titulo.toLowerCase();
+  return lower.includes('rechazad') || lower.includes('requiere edición');
+}
+
 // Función para obtener la ruta de navegación directa al detalle
 function getDirectNavigationPath(tipo: string, id: number, titulo: string): string {
   const isComment = isCommentNotification(titulo);
+  const isRejection = isRejectionTask(titulo);
 
   switch (tipo) {
     case 'propuesta':
@@ -1169,6 +1176,10 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string): stri
     case 'campana':
       return `/campanas/detail/${id}`;
     case 'solicitud':
+      // Si es tarea de rechazo, abrir modal de edición directamente
+      if (isRejection) {
+        return `/solicitudes?editId=${id}`;
+      }
       // Si es notificación de comentario, abrir modal de comentarios
       return isComment ? `/solicitudes?commentsId=${id}` : `/solicitudes?viewId=${id}`;
     default:

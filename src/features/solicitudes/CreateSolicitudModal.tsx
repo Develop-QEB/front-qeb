@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, Upload, ChevronDown, ChevronRight, Check, Users, Building2,
-  Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw, AlertTriangle
+  Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw, AlertTriangle, Pencil
 } from 'lucide-react';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { formatCurrency } from '../../lib/utils';
@@ -700,6 +700,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Expanded catorcenas in table
   const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
 
+  // Editing cara state
+  const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
+
   // Fetch users
   const { data: users } = useQuery({
     queryKey: ['solicitudes-users'],
@@ -1026,7 +1029,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     }
 
     const cara: CaraEntry = {
-      id: `${Date.now()}-${Math.random()}`,
+      id: editingCaraId || `${Date.now()}-${Math.random()}`,
       articulo: newCara.articulo,
       estado: newCara.estado,
       ciudades: newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades,
@@ -1045,7 +1048,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       estado_autorizacion: estadoAutorizacion,
     };
 
-    setCaras([...caras, cara]);
+    if (editingCaraId) {
+      // Update existing cara
+      setCaras(caras.map(c => c.id === editingCaraId ? cara : c));
+      setEditingCaraId(null);
+    } else {
+      // Add new cara
+      setCaras([...caras, cara]);
+    }
 
     // Auto expand the catorcena
     setExpandedCatorcenas(prev => new Set(prev).add(`${catorcenaYear}-${catorcenaNum}`));
@@ -1079,6 +1089,44 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Remove cara
   const handleRemoveCara = (id: string) => {
     setCaras(caras.filter(c => c.id !== id));
+    // If we were editing this cara, clear editing state
+    if (editingCaraId === id) {
+      setEditingCaraId(null);
+    }
+  };
+
+  // Edit cara - loads cara data into form
+  const handleEditCara = (cara: CaraEntry) => {
+    setEditingCaraId(cara.id);
+    setNewCara({
+      articulo: cara.articulo,
+      estado: cara.estado,
+      ciudades: cara.ciudades,
+      formato: cara.formato,
+      tipo: cara.tipo as 'Tradicional' | 'Digital' | '',
+      nse: cara.nse,
+      periodo: cara.periodo,
+      renta: cara.renta,
+      bonificacion: cara.bonificacion,
+      tarifaPublica: cara.tarifaPublica,
+    });
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setEditingCaraId(null);
+    setNewCara({
+      articulo: null,
+      estado: '',
+      ciudades: [],
+      formato: '',
+      tipo: '',
+      nse: [],
+      periodo: '',
+      renta: 1,
+      bonificacion: 0,
+      tarifaPublica: 0,
+    });
   };
 
   // Group caras by catorcena
@@ -1968,19 +2016,30 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     type="button"
                     onClick={handleAddCara}
                     disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors"
+                    className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors`}
                   >
-                    <Plus className="h-4 w-4" />
-                    Agregar Cara
+                    {editingCaraId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    {editingCaraId ? 'Actualizar Cara' : 'Agregar Cara'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleClearNewCara}
-                    className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    Limpiar Campos
-                  </button>
+                  {editingCaraId ? (
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                      Cancelar Edición
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleClearNewCara}
+                      className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Limpiar Campos
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2094,14 +2153,24 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           )}
                                         </td>
                                         <td className="px-2 py-2 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleRemoveCara(cara.id)}
-                                            className="p-1 hover:bg-red-500/20 rounded text-red-400 text-[10px]"
-                                            title="Eliminar"
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </button>
+                                          <div className="flex items-center justify-center gap-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleEditCara(cara)}
+                                              className={`p-1 rounded text-[10px] ${editingCaraId === cara.id ? 'bg-purple-500/30 text-purple-300' : 'hover:bg-purple-500/20 text-purple-400'}`}
+                                              title="Editar"
+                                            >
+                                              <Pencil className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveCara(cara.id)}
+                                              className="p-1 hover:bg-red-500/20 rounded text-red-400 text-[10px]"
+                                              title="Eliminar"
+                                            >
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                          </div>
                                         </td>
                                       </tr>
                                     );
