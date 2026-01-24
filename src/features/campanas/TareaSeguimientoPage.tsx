@@ -13534,15 +13534,20 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300 max-w-[150px] truncate">{task.descripcion}</td>
                             <td className="p-2 text-zinc-300">{task.titulo}</td>
                             <td className="p-2">
-                              <button
-                                onClick={() => {
-                                  setSelectedTask(task);
-                                  setIsTaskDetailModalOpen(true);
-                                }}
-                                className="px-2 py-1 text-[10px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-                              >
-                                Abrir
-                              </button>
+                              {/* Solo mostrar botón Abrir si: no tiene restricción O es tarea de Impresión */}
+                              {(!permissions.canOnlyOpenImpresionTasks || task.tipo === 'Impresión') ? (
+                                <button
+                                  onClick={() => {
+                                    setSelectedTask(task);
+                                    setIsTaskDetailModalOpen(true);
+                                  }}
+                                  className="px-2 py-1 text-[10px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                                >
+                                  Abrir
+                                </button>
+                              ) : (
+                                <span className="text-zinc-500 text-[10px]">-</span>
+                              )}
                             </td>
                           </tr>
                         ))}

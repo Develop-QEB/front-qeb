@@ -1,6 +1,19 @@
 import api from '../lib/api';
 import { ApiResponse } from '../types';
 
+export interface EquipoUsuario {
+  id: number;
+  nombre: string;
+  color: string | null;
+  rol_equipo: string | null;
+}
+
+export interface EquipoAdmin {
+  id: number;
+  nombre: string;
+  color: string | null;
+}
+
 export interface UsuarioAdmin {
   id: number;
   nombre: string;
@@ -10,6 +23,9 @@ export interface UsuarioAdmin {
   rol: string;
   foto_perfil: string | null;
   created_at: string | null;
+  total_equipos?: number;
+  equipos_admin?: EquipoAdmin[];
+  equipos?: EquipoUsuario[];
 }
 
 export interface UpdateUsuarioInput {

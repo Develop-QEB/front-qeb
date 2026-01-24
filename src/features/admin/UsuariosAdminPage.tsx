@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check } from 'lucide-react';
+import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check, Crown } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { Header } from '../../components/layout/Header';
 import { usuariosService, UsuarioAdmin, UpdateUsuarioInput, CreateUsuarioInput } from '../../services/usuarios.service';
@@ -1198,6 +1198,9 @@ function UsuariosTab() {
                     <th className="px-5 py-4 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">
                       Rol
                     </th>
+                    <th className="px-5 py-4 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider hidden xl:table-cell">
+                      Equipos
+                    </th>
                     <th className="px-5 py-4 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">
                       Acciones
                     </th>
@@ -1256,6 +1259,31 @@ function UsuariosTab() {
                           {usuario.rol}
                         </span>
                       </td>
+                      <td className="px-5 py-4 hidden xl:table-cell">
+                        {usuario.equipos && usuario.equipos.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {usuario.equipos.map((equipo) => (
+                              <span
+                                key={equipo.id}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border"
+                                style={{
+                                  backgroundColor: `${equipo.color || '#8B5CF6'}20`,
+                                  borderColor: `${equipo.color || '#8B5CF6'}50`,
+                                  color: equipo.color || '#8B5CF6',
+                                }}
+                                title={equipo.rol_equipo === 'Administrador' ? 'Administrador del equipo' : 'Miembro'}
+                              >
+                                {equipo.rol_equipo === 'Administrador' && (
+                                  <Crown className="h-3 w-3" />
+                                )}
+                                {equipo.nombre}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-zinc-500 text-sm">Sin equipos</span>
+                        )}
+                      </td>
                       <td className="px-5 py-4">
                         <button
                           onClick={() => setEditingUsuario(usuario)}
@@ -1269,7 +1297,7 @@ function UsuariosTab() {
                   ))}
                   {filteredUsuarios.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-5 py-16 text-center">
+                      <td colSpan={8} className="px-5 py-16 text-center">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
                           <Users className="w-8 h-8 text-purple-400" />
                         </div>

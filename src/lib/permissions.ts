@@ -74,6 +74,7 @@ export interface RolePermissions {
   canSeeTabValidacionInstalacion: boolean;
   canCreateTareasGestionArtes: boolean; // Crear tareas en gestión de artes
   canResolveRevisionArtesTasks: boolean; // Resolver tareas de revisión de artes
+  canOnlyOpenImpresionTasks: boolean; // Solo puede abrir tareas de tipo Impresión (oculta botón Abrir para otros tipos)
 
   // Inventarios
   canCreateInventarios: boolean;
@@ -132,6 +133,7 @@ const defaultPermissions: RolePermissions = {
   canSeeTabValidacionInstalacion: true,
   canCreateTareasGestionArtes: true,
   canResolveRevisionArtesTasks: true,
+  canOnlyOpenImpresionTasks: false,
 
   canCreateInventarios: true,
   canEditInventarios: true,
@@ -566,6 +568,70 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabValidacionInstalacion: false,
     canCreateTareasGestionArtes: false, // No pueden crear tareas
     canResolveRevisionArtesTasks: true, // Sí pueden resolver tareas de revisión de artes
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    // Órdenes de Montaje
+    canExportOrdenesMontaje: false,
+  },
+  'Compradores': {
+    // Secciones visibles
+    canSeeDashboard: false, // Oculto
+    canSeeClientes: false, // Oculto
+    canSeeProveedores: false, // Oculto
+    canSeeSolicitudes: false, // Oculto
+    canSeePropuestas: false, // Oculto
+    canSeeCampanas: true, // Visible
+    canSeeInventarios: false, // Oculto
+    canSeeAdminUsuarios: false, // Oculto
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - oculto
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas
+    canEditCampanas: false, // Ocultar botón editar
+    canEditDetalleCampana: false, // No pueden asignar APS
+    canDeleteDetalleCampana: false, // No pueden quitar APS
+    canSeeGestionArtes: true, // Pueden ver gestión de artes
+    canEditGestionArtes: false, // No pueden editar
+    canResolveProduccionTasks: true, // SÍ pueden resolver tareas de producción (Impresión)
+    canSeeOrdenesMontajeButton: false, // Ocultar botón órdenes de montaje
+
+    // Gestión de Artes - Tabs
+    canSeeTabProgramacion: false, // Ocultar
+    canSeeTabImpresiones: true, // VISIBLE - solo este tab
+    canSeeTabSubirArtes: false, // Ocultar
+    canSeeTabTestigos: false, // Ocultar
+    canSeeTabValidacionInstalacion: false, // Ocultar
+    canCreateTareasGestionArtes: false, // No pueden crear tareas
+    canResolveRevisionArtesTasks: false, // No pueden resolver tareas de revisión
+    canOnlyOpenImpresionTasks: true, // Solo pueden abrir tareas de tipo Impresión
 
     // Inventarios - oculto
     canCreateInventarios: false,
