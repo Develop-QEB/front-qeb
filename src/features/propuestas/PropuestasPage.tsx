@@ -17,6 +17,7 @@ import { AssignInventarioModal } from './AssignInventarioModal';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
+import { useSocketEquipos } from '../../hooks/useSocket';
 
 // Status badge colors
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -699,8 +700,8 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
   const [userSearch, setUserSearch] = useState('');
 
   const { data: users } = useQuery({
-    queryKey: ['users-for-assign'],
-    queryFn: () => solicitudesService.getUsers(),
+    queryKey: ['solicitudes-users', 'team-filtered'],
+    queryFn: () => solicitudesService.getUsers(undefined, true),
     enabled: isOpen,
   });
 
@@ -881,6 +882,9 @@ export function PropuestasPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
+
+  // Socket para actualizar usuarios en tiempo real
+  useSocketEquipos();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');

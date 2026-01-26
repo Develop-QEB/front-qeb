@@ -4,9 +4,10 @@ import {
   X, Eye, Edit2, PlayCircle, MessageSquare, Download, FileText,
   Calendar, User, Building2, Package, DollarSign, MapPin, Hash,
   Clock, Send, AlertTriangle, CheckCircle2, XCircle, Loader2,
-  ChevronDown, ChevronRight, Layers, Tag, TrendingUp, BarChart3
+  ChevronDown, ChevronRight, Layers, Tag, TrendingUp, BarChart3, Users
 } from 'lucide-react';
-import { solicitudesService, SolicitudFullDetails, Comentario, SolicitudCara } from '../../services/solicitudes.service';
+import { solicitudesService, SolicitudFullDetails, Comentario, SolicitudCara, UserOption } from '../../services/solicitudes.service';
+import { useSocketEquipos } from '../../hooks/useSocket';
 import { notificacionesService, ResumenAutorizacion } from '../../services/notificaciones.service';
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
@@ -1253,6 +1254,14 @@ interface AtenderModalProps {
 }
 
 export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderModalProps) {
+  const [selectedAsignados, setSelectedAsignados] = useState<{ id: number; nombre: string }[]>([]);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Socket para actualizar usuarios en tiempo real
+  useSocketEquipos();
+
   // Block body scroll when modal is open
   useEffect(() => {
     if (isOpen) {
@@ -1263,10 +1272,46 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
     };
   }, [isOpen]);
 
+  // Fetch users with team filtering
+  const { data: users } = useQuery({
+    queryKey: ['solicitudes-users', 'team-filtered', 'atender-modal'],
+    queryFn: () => solicitudesService.getUsers(undefined, true),
+    enabled: isOpen,
+  });
+
+  // Pre-populate asignados from solicitud when modal opens
+  useEffect(() => {
+    if (isOpen && solicitud) {
+      const existingAsignados: { id: number; nombre: string }[] = [];
+      if (solicitud.id_asignado && solicitud.asignado) {
+        const ids = solicitud.id_asignado.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+        const nombres = solicitud.asignado.split(',').map(n => n.trim());
+        ids.forEach((id, idx) => {
+          if (nombres[idx]) {
+            existingAsignados.push({ id, nombre: nombres[idx] });
+          }
+        });
+      }
+      setSelectedAsignados(existingAsignados);
+    }
+  }, [isOpen, solicitud]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowUserDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const queryClient = useQueryClient();
 
   const atenderMutation = useMutation({
-    mutationFn: (id: number) => solicitudesService.atender(id),
+    mutationFn: ({ id, asignados }: { id: number; asignados: { id: number; nombre: string }[] }) =>
+      solicitudesService.atender(id, asignados),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
@@ -1275,6 +1320,26 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
       onClose();
     },
   });
+
+  const handleAddUser = (user: UserOption) => {
+    if (!selectedAsignados.find(a => a.id === user.id)) {
+      setSelectedAsignados(prev => [...prev, { id: user.id, nombre: user.nombre }]);
+    }
+    setUserSearch('');
+    setShowUserDropdown(false);
+  };
+
+  const handleRemoveUser = (userId: number) => {
+    setSelectedAsignados(prev => prev.filter(a => a.id !== userId));
+  };
+
+  const filteredUsers = useMemo(() => {
+    if (!users) return [];
+    return users.filter(u =>
+      !selectedAsignados.find(a => a.id === u.id) &&
+      u.nombre.toLowerCase().includes(userSearch.toLowerCase())
+    );
+  }, [users, selectedAsignados, userSearch]);
 
   if (!isOpen || !solicitud) return null;
 
@@ -1291,7 +1356,65 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
           </div>
         </div>
 
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6">
+        {/* Asignados Section */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-zinc-300 mb-2">
+            <Users className="h-4 w-4 inline mr-1.5 text-cyan-400" />
+            Asignados
+          </label>
+          <div className="relative" ref={dropdownRef}>
+            <div className="flex flex-wrap gap-2 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700 min-h-[48px]">
+              {selectedAsignados.map(asignado => (
+                <span
+                  key={asignado.id}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-xs border border-cyan-500/30"
+                >
+                  {asignado.nombre}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveUser(asignado.id)}
+                    className="hover:text-cyan-100 transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                value={userSearch}
+                onChange={(e) => {
+                  setUserSearch(e.target.value);
+                  setShowUserDropdown(true);
+                }}
+                onFocus={() => setShowUserDropdown(true)}
+                placeholder={selectedAsignados.length === 0 ? "Buscar usuarios..." : ""}
+                className="flex-1 min-w-[120px] bg-transparent text-white text-sm placeholder:text-zinc-500 focus:outline-none"
+              />
+            </div>
+            {showUserDropdown && filteredUsers.length > 0 && (
+              <div className="absolute z-20 mt-1 w-full max-h-48 overflow-auto rounded-lg bg-zinc-800 border border-zinc-700 shadow-lg">
+                {filteredUsers.map(user => (
+                  <button
+                    key={user.id}
+                    type="button"
+                    onClick={() => handleAddUser(user)}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-700 transition-colors"
+                  >
+                    <span className="text-white">{user.nombre}</span>
+                    {user.area && (
+                      <span className="text-zinc-500 text-xs ml-2">({user.area})</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-zinc-500 mt-1.5">
+            Los asignados serán responsables de dar seguimiento a la propuesta
+          </p>
+        </div>
+
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-4">
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
@@ -1330,7 +1453,7 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
             Cancelar
           </button>
           <button
-            onClick={() => atenderMutation.mutate(solicitud.id)}
+            onClick={() => atenderMutation.mutate({ id: solicitud.id, asignados: selectedAsignados })}
             disabled={atenderMutation.isPending}
             className="px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm hover:bg-cyan-700 disabled:opacity-50 flex items-center gap-2"
           >

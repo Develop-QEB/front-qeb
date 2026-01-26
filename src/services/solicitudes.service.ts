@@ -140,9 +140,12 @@ export const solicitudesService = {
     return response.data.data;
   },
 
-  async getUsers(area?: string): Promise<UserOption[]> {
+  async getUsers(area?: string, filterByTeam: boolean = true): Promise<UserOption[]> {
     const response = await api.get<ApiResponse<UserOption[]>>('/solicitudes/users', {
-      params: area ? { area } : {},
+      params: {
+        ...(area && { area }),
+        filterByTeam: filterByTeam.toString(),
+      },
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener usuarios');
@@ -200,8 +203,8 @@ export const solicitudesService = {
     return response.data.data;
   },
 
-  async atender(id: number): Promise<void> {
-    const response = await api.post<ApiResponse<void>>(`/solicitudes/${id}/atender`);
+  async atender(id: number, asignados?: { id: number; nombre: string }[]): Promise<void> {
+    const response = await api.post<ApiResponse<void>>(`/solicitudes/${id}/atender`, { asignados });
     if (!response.data.success) {
       throw new Error(response.data.error || 'Error al atender solicitud');
     }

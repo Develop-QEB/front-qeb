@@ -75,6 +75,8 @@ export interface RolePermissions {
   canCreateTareasGestionArtes: boolean; // Crear tareas en gestión de artes
   canResolveRevisionArtesTasks: boolean; // Resolver tareas de revisión de artes
   canOnlyOpenImpresionTasks: boolean; // Solo puede abrir tareas de tipo Impresión (oculta botón Abrir para otros tipos)
+  canOnlyOpenRecepcionTasks: boolean; // Solo puede abrir tareas de tipo Recepción (para Operaciones)
+  canOpenTasks: boolean; // Puede abrir/ver detalle de tareas (false = solo visualización de la lista)
 
   // Inventarios
   canCreateInventarios: boolean;
@@ -134,6 +136,8 @@ const defaultPermissions: RolePermissions = {
   canCreateTareasGestionArtes: true,
   canResolveRevisionArtesTasks: true,
   canOnlyOpenImpresionTasks: false,
+  canOnlyOpenRecepcionTasks: false,
+  canOpenTasks: true,
 
   canCreateInventarios: true,
   canEditInventarios: true,
@@ -632,6 +636,466 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateTareasGestionArtes: false, // No pueden crear tareas
     canResolveRevisionArtesTasks: false, // No pueden resolver tareas de revisión
     canOnlyOpenImpresionTasks: true, // Solo pueden abrir tareas de tipo Impresión
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    // Órdenes de Montaje
+    canExportOrdenesMontaje: false,
+  },
+  // ============================================================================
+  // OPERACIONES
+  // ============================================================================
+  'Director de Operaciones': {
+    // Secciones visibles
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - oculto
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas
+    canEditCampanas: false, // Ocultar botón editar
+    canEditDetalleCampana: false, // No pueden asignar APs
+    canDeleteDetalleCampana: false, // No pueden quitar APs
+    canSeeGestionArtes: true, // Pueden ver gestión de artes
+    canEditGestionArtes: false, // No pueden editar
+    canResolveProduccionTasks: true, // Pueden resolver tareas de producción (solo Recepción)
+    canSeeOrdenesMontajeButton: false, // Ocultar botón órdenes de montaje
+
+    // Gestión de Artes - Tabs
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: true,
+    canSeeTabSubirArtes: false, // Oculto
+    canSeeTabTestigos: true,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false, // No pueden crear tareas
+    canResolveRevisionArtesTasks: false, // No pueden resolver tareas de revisión
+    canOnlyOpenRecepcionTasks: true, // Solo pueden abrir tareas de tipo Recepción
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    // Órdenes de Montaje
+    canExportOrdenesMontaje: false,
+  },
+  'Gerentes de Operaciones Plazas y CON': {
+    // Secciones visibles
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - oculto
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas
+    canEditCampanas: false,
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true,
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: true,
+    canSeeOrdenesMontajeButton: false,
+
+    // Gestión de Artes - Tabs
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: true,
+    canSeeTabSubirArtes: false,
+    canSeeTabTestigos: true,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false,
+    canOnlyOpenRecepcionTasks: true,
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    // Órdenes de Montaje
+    canExportOrdenesMontaje: false,
+  },
+  'Jefes de Operaciones Plazas y CON': {
+    // Secciones visibles
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - oculto
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas
+    canEditCampanas: false,
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true,
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: true,
+    canSeeOrdenesMontajeButton: false,
+
+    // Gestión de Artes - Tabs
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: true,
+    canSeeTabSubirArtes: false,
+    canSeeTabTestigos: true,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false,
+    canOnlyOpenRecepcionTasks: true,
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    // Órdenes de Montaje
+    canExportOrdenesMontaje: false,
+  },
+  'Supervisores de Operaciones': {
+    // Secciones visibles
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - oculto
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas
+    canEditCampanas: false,
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true,
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: true,
+    canSeeOrdenesMontajeButton: false,
+
+    // Gestión de Artes - Tabs
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: true,
+    canSeeTabSubirArtes: false,
+    canSeeTabTestigos: true,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false,
+    canOnlyOpenRecepcionTasks: true,
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    // Órdenes de Montaje
+    canExportOrdenesMontaje: false,
+  },
+  // ============================================================================
+  // FACTURACIÓN Y COBRANZA
+  // ============================================================================
+  'Coordinador de Facturación y Cobranza': {
+    // Secciones visibles
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - oculto
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas - solo visualización
+    canEditCampanas: false, // Ocultar botón editar
+    canEditDetalleCampana: false, // No pueden asignar APs
+    canDeleteDetalleCampana: false, // No pueden quitar APs
+    canSeeGestionArtes: true, // Pueden ver gestión de artes
+    canEditGestionArtes: false, // Solo visualización
+    canResolveProduccionTasks: false, // No pueden resolver tareas
+    canSeeOrdenesMontajeButton: false, // Ocultar botón órdenes de montaje
+
+    // Gestión de Artes - Solo visualización total
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: true,
+    canSeeTabSubirArtes: false, // No pueden subir artes
+    canSeeTabTestigos: true,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false, // No pueden crear tareas
+    canResolveRevisionArtesTasks: false, // No pueden resolver tareas de revisión
+    canOnlyOpenImpresionTasks: false,
+    canOnlyOpenRecepcionTasks: false,
+    canOpenTasks: false, // No pueden abrir ninguna tarea - solo visualización
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    // Órdenes de Montaje
+    canExportOrdenesMontaje: false,
+  },
+  'Mesa de Control': {
+    // Secciones visibles
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - oculto
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas - solo visualización
+    canEditCampanas: false,
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true,
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+    canSeeOrdenesMontajeButton: false,
+
+    // Gestión de Artes - Solo visualización total
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: true,
+    canSeeTabSubirArtes: false,
+    canSeeTabTestigos: true,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false,
+    canOnlyOpenImpresionTasks: false,
+    canOnlyOpenRecepcionTasks: false,
+    canOpenTasks: false,
+
+    // Inventarios - oculto
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    // Órdenes de Montaje
+    canExportOrdenesMontaje: false,
+  },
+  'Analista de Facturación y Cobranza': {
+    // Secciones visibles
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    // Clientes - oculto
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    // Proveedores - oculto
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes - oculto
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    // Propuestas - oculto
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas - solo visualización
+    canEditCampanas: false,
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true,
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+    canSeeOrdenesMontajeButton: false,
+
+    // Gestión de Artes - Solo visualización total
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: true,
+    canSeeTabSubirArtes: false,
+    canSeeTabTestigos: true,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false,
+    canOnlyOpenImpresionTasks: false,
+    canOnlyOpenRecepcionTasks: false,
+    canOpenTasks: false,
 
     // Inventarios - oculto
     canCreateInventarios: false,

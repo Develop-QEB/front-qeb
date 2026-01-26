@@ -59,7 +59,7 @@ import { Badge } from '../../components/ui/badge';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
-import { useSocketCampana } from '../../hooks/useSocket';
+import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
 import * as XLSX from 'xlsx';
 
 // URL base para archivos estáticos
@@ -2463,6 +2463,9 @@ function TaskDetailModal({
   canResolveRevisionArtesTasks?: boolean;
   digitalSummaryMap: Map<number, DigitalFileSummary>;
 }) {
+  // Socket para actualizar usuarios en tiempo real
+  useSocketEquipos();
+
   const [activeTab, setActiveTab] = useState<TaskDetailTab>('resumen');
   const [selectedArteIds, setSelectedArteIds] = useState<Set<string>>(new Set());
   const [groupBy, setGroupBy] = useState<GroupByArte>('inventario');
@@ -2605,7 +2608,7 @@ function TaskDetailModal({
 
   // Query para usuarios (para asignar tarea de recepción)
   const { data: usuariosData } = useQuery({
-    queryKey: ['usuarios-detail-modal'],
+    queryKey: ['campanas-usuarios'],
     queryFn: () => campanasService.getUsuarios(),
     enabled: isOpen && task?.tipo === 'Impresión',
   });
@@ -7342,7 +7345,7 @@ function CreateTaskModal({
 
   // Query para usuarios (asignados)
   const { data: usuariosData, isLoading: isLoadingUsuarios } = useQuery({
-    queryKey: ['usuarios-modal'],
+    queryKey: ['campanas-usuarios'],
     queryFn: () => campanasService.getUsuarios(),
   });
   const usuarios = usuariosData || [];
@@ -8891,6 +8894,9 @@ export function TareaSeguimientoPage() {
 
   // WebSocket para sincronización en tiempo real
   useSocketCampana(campanaId);
+
+  // Socket para actualizar usuarios en tiempo real
+  useSocketEquipos();
 
   // ---- State ----
   // Main tabs
@@ -12319,36 +12325,38 @@ export function TareaSeguimientoPage() {
                           <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
                             {grupo.items.length} items
                           </Badge>
-                          <button
-                            onClick={() => {
-                              const tarea = tareasAPI.find(t => t.id === grupo.tarea_id);
-                              if (tarea) {
-                                const taskRow: TaskRow = {
-                                  id: tarea.id.toString(),
-                                  tipo: tarea.tipo || 'Impresión',
-                                  estatus: tarea.estatus || 'Pendiente',
-                                  identificador: `TASK-${tarea.id.toString().padStart(3, '0')}`,
-                                  fecha_inicio: tarea.fecha_inicio?.split('T')[0] || '',
-                                  fecha_fin: tarea.fecha_fin?.split('T')[0] || '',
-                                  creador: tarea.responsable_nombre || tarea.responsable || '',
-                                  asignado: tarea.asignado || '',
-                                  descripcion: tarea.descripcion || '',
-                                  titulo: tarea.titulo || '',
-                                  inventario_ids: tarea.ids_reservas ? tarea.ids_reservas.split(',') : [],
-                                  campana_id: campanaId,
-                                  nombre_proveedores: tarea.nombre_proveedores || undefined,
-                                  proveedores_id: tarea.proveedores_id || undefined,
-                                  num_impresiones: tarea.num_impresiones || undefined,
-                                  evidencia: tarea.evidencia || undefined,
-                                };
-                                setSelectedTask(taskRow);
-                                setIsTaskDetailModalOpen(true);
-                              }
-                            }}
-                            className="px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-                          >
-                            Ver detalle
-                          </button>
+                          {permissions.canOpenTasks && (
+                            <button
+                              onClick={() => {
+                                const tarea = tareasAPI.find(t => t.id === grupo.tarea_id);
+                                if (tarea) {
+                                  const taskRow: TaskRow = {
+                                    id: tarea.id.toString(),
+                                    tipo: tarea.tipo || 'Impresión',
+                                    estatus: tarea.estatus || 'Pendiente',
+                                    identificador: `TASK-${tarea.id.toString().padStart(3, '0')}`,
+                                    fecha_inicio: tarea.fecha_inicio?.split('T')[0] || '',
+                                    fecha_fin: tarea.fecha_fin?.split('T')[0] || '',
+                                    creador: tarea.responsable_nombre || tarea.responsable || '',
+                                    asignado: tarea.asignado || '',
+                                    descripcion: tarea.descripcion || '',
+                                    titulo: tarea.titulo || '',
+                                    inventario_ids: tarea.ids_reservas ? tarea.ids_reservas.split(',') : [],
+                                    campana_id: campanaId,
+                                    nombre_proveedores: tarea.nombre_proveedores || undefined,
+                                    proveedores_id: tarea.proveedores_id || undefined,
+                                    num_impresiones: tarea.num_impresiones || undefined,
+                                    evidencia: tarea.evidencia || undefined,
+                                  };
+                                  setSelectedTask(taskRow);
+                                  setIsTaskDetailModalOpen(true);
+                                }
+                              }}
+                              className="px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                            >
+                              Ver detalle
+                            </button>
+                          )}
                         </div>
                       </div>
                       {/* Lista de items agrupados por arte */}
@@ -13534,8 +13542,10 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300 max-w-[150px] truncate">{task.descripcion}</td>
                             <td className="p-2 text-zinc-300">{task.titulo}</td>
                             <td className="p-2">
-                              {/* Solo mostrar botón Abrir si: no tiene restricción O es tarea de Impresión */}
-                              {(!permissions.canOnlyOpenImpresionTasks || task.tipo === 'Impresión') ? (
+                              {/* Solo mostrar botón Abrir si: canOpenTasks=true Y (no tiene restricción O es tarea del tipo permitido) */}
+                              {permissions.canOpenTasks && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks) ||
+                                (permissions.canOnlyOpenImpresionTasks && task.tipo === 'Impresión') ||
+                                (permissions.canOnlyOpenRecepcionTasks && task.tipo === 'Recepción')) ? (
                                 <button
                                   onClick={() => {
                                     setSelectedTask(task);
@@ -13835,7 +13845,7 @@ export function TareaSeguimientoPage() {
 ${comentario || 'Sin motivo especificado'}
 
 Por favor corrige los artes y vuelve a enviar a revisión.`,
-              tipo: 'Correccion',
+              tipo: 'Corrección',
               asignado: selectedTask.creador,
               ids_reservas: reservaIds.join(','),
             });
@@ -13854,7 +13864,7 @@ Por favor corrige los artes y vuelve a enviar a revisión.`,
 ${instrucciones || 'Sin instrucciones especificadas'}
 
 Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
-                  tipo: 'Correccion',
+                  tipo: 'Corrección',
                   asignado: selectedTask.creador,
                   ids_reservas: reservaIds.join(','),
                 });
@@ -13917,7 +13927,7 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
           await createTareaMutation.mutateAsync({
             titulo: `Revisión de artes - Corrección enviada`,
             descripcion: `Los artes han sido corregidos y están listos para revisión.`,
-            tipo: 'Revision de artes',
+            tipo: 'Revisión de artes',
             asignado: responsableOriginal,
             ids_reservas: reservaIds.join(','),
           });

@@ -13,6 +13,7 @@ import { inventariosService, InventarioDisponible } from '../../services/inventa
 import { campanasService, ReservaModalItem } from '../../services/campanas.service';
 import { formatCurrency } from '../../lib/utils';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
+import { useSocketEquipos } from '../../hooks/useSocket';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
@@ -495,6 +496,10 @@ const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
   const queryClient = useQueryClient();
+
+  // Socket para actualizar usuarios en tiempo real
+  useSocketEquipos();
+
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
 
@@ -667,8 +672,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Fetch users
   const { data: users } = useQuery({
-    queryKey: ['solicitudes-users'],
-    queryFn: () => solicitudesService.getUsers(),
+    queryKey: ['solicitudes-users', 'team-filtered'],
+    queryFn: () => solicitudesService.getUsers(undefined, true),
     enabled: isOpen,
   });
 

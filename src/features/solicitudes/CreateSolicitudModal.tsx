@@ -8,6 +8,7 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { formatCurrency } from '../../lib/utils';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS, getCacheTimestamp, clearSapCache } from '../../lib/sapCache';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
+import { useSocketEquipos } from '../../hooks/useSocket';
 
 // Tarifa publica lookup map based on ItemCode (full SAP codes with tarifa_publica values)
 const TARIFA_PUBLICA_MAP: Record<string, number> = {
@@ -633,6 +634,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const queryClient = useQueryClient();
   const isEditMode = !!editSolicitudId;
 
+  // Socket para actualizar usuarios en tiempo real cuando cambian miembros de equipos
+  useSocketEquipos();
+
   // Toast notification state
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'warning' }>({
     show: false,
@@ -703,17 +707,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Editing cara state
   const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
 
-  // Fetch users
+  // Fetch users (filtered by team)
   const { data: users } = useQuery({
-    queryKey: ['solicitudes-users'],
-    queryFn: () => solicitudesService.getUsers(),
-    enabled: isOpen,
-  });
-
-  // Fetch trafico users by default
-  const { data: traficoUsers } = useQuery({
-    queryKey: ['solicitudes-users-trafico'],
-    queryFn: () => solicitudesService.getUsers('Trafico'),
+    queryKey: ['solicitudes-users', 'team-filtered'],
+    queryFn: () => solicitudesService.getUsers(undefined, true),
     enabled: isOpen,
   });
 
@@ -854,14 +851,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     };
   }, [isOpen]);
 
-  // Reset form when opening modal in create mode - set asignados to traficoUsers directly
+  // Reset form when opening modal in create mode
   useEffect(() => {
     if (isOpen && !isEditMode) {
       // Reset all form state for a fresh start
       setStep(1);
       setSelectedCuic(null);
-      // Set asignados to trafico users (or empty if not loaded yet)
-      setSelectedAsignados(traficoUsers || []);
+      // Start with empty asignados - user must select from their team
+      setSelectedAsignados([]);
       setNombreCampania('');
       setDescripcion('');
       setNotas('');
@@ -887,7 +884,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tarifaPublica: 0,
       });
     }
-  }, [isOpen, isEditMode, traficoUsers]);
+  }, [isOpen, isEditMode]);
 
   // Reset form state when switching between different solicitudes in edit mode
   useEffect(() => {
@@ -1225,7 +1222,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const resetForm = () => {
     setStep(1);
     setSelectedCuic(null);
-    setSelectedAsignados(traficoUsers || []);
+    setSelectedAsignados([]);
     setNombreCampania('');
     setDescripcion('');
     setNotas('');

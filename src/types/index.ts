@@ -1,3 +1,11 @@
+// Equipo del usuario
+export interface UserEquipo {
+  id: number;
+  nombre: string;
+  color: string | null;
+  rol_equipo: string | null;
+}
+
 // Usuario - basado en tabla 'usuario'
 export interface User {
   id: number;
@@ -7,6 +15,7 @@ export interface User {
   area: string;
   puesto: string;
   foto_perfil?: string | null;
+  equipos?: UserEquipo[];
 }
 
 export interface AuthResponse {

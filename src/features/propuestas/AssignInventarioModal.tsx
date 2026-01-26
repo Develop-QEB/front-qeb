@@ -15,7 +15,7 @@ import { formatCurrency } from '../../lib/utils';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
-import { useSocketPropuesta } from '../../hooks/useSocket';
+import { useSocketPropuesta, useSocketEquipos } from '../../hooks/useSocket';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
@@ -504,6 +504,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // WebSocket para escuchar cambios en reservas en tiempo real
   useSocketPropuesta(propuesta?.id || null);
 
+  // Socket para actualizar usuarios en tiempo real
+  useSocketEquipos();
+
   // Si readOnly es true, sobrescribir permisos para modo visualización
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario;
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta;
@@ -679,8 +682,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Fetch users
   const { data: users } = useQuery({
-    queryKey: ['solicitudes-users'],
-    queryFn: () => solicitudesService.getUsers(),
+    queryKey: ['solicitudes-users', 'team-filtered'],
+    queryFn: () => solicitudesService.getUsers(undefined, true),
     enabled: isOpen,
   });
 
