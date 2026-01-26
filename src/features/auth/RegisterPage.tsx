@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,37 +9,53 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Spinner } from '../../components/ui/spinner';
 
-// Puestos disponibles (los mismos que roles, excepto Administrador)
-const PUESTOS = [
-  'Asesor Comercial',
-  'Gerente Digital Programático',
-  'Analista de Servicio al Cliente',
-  'Gerente de Tráfico',
-  'Coordinador de tráfico',
-  'Especialista de tráfico',
-  'Auxiliar de tráfico',
-  'Coordinador de Diseño',
-  'Diseñadores',
-  'Compradores',
-  'Director de Operaciones',
-  'Gerentes de Operaciones Plazas y CON',
-  'Jefes de Operaciones Plazas y CON',
-  'Supervisores de Operaciones',
-  'Coordinador de Facturación y Cobranza',
-  'Mesa de Control',
-  'Analista de Facturación y Cobranza',
-] as const;
-
 // Areas disponibles
 const AREAS = [
   'Comercial',
   'Tráfico',
-  'Diseño',
+  'Mercadotecnia',
+  'Compras',
   'Operaciones',
-  'Facturación y Cobranza',
-  'Tecnología',
-  'Administración',
+  'Facturación',
 ] as const;
+
+// Mapeo de puestos por área (igual que en UsuariosAdminPage)
+const PUESTOS_POR_AREA: Record<string, string[]> = {
+  'Comercial': [
+    'Asesor Comercial',
+    'Gerente Digital Programático',
+    'Analista de Servicio al Cliente',
+  ],
+  'Tráfico': [
+    'Gerente de Tráfico',
+    'Coordinador de tráfico',
+    'Especialista de tráfico',
+    'Auxiliar de tráfico',
+  ],
+  'Mercadotecnia': [
+    'Coordinador de Diseño',
+    'Diseñadores',
+  ],
+  'Compras': [
+    'Compradores',
+  ],
+  'Operaciones': [
+    'Director de Operaciones',
+    'Gerentes de Operaciones Plazas y CON',
+    'Jefes de Operaciones Plazas y CON',
+    'Supervisores de Operaciones',
+  ],
+  'Facturación': [
+    'Coordinador de Facturación y Cobranza',
+    'Mesa de Control',
+    'Analista de Facturación y Cobranza',
+  ],
+};
+
+// Función para obtener puestos según área
+const getPuestosPorArea = (area: string): string[] => {
+  return PUESTOS_POR_AREA[area] || [];
+};
 
 const registerSchema = z.object({
   nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
@@ -60,14 +76,30 @@ export function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedArea, setSelectedArea] = useState('');
+  const [puestosDisponibles, setPuestosDisponibles] = useState<string[]>([]);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
+    setValue,
+    watch,
   } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
   });
+
+  const areaValue = watch('area');
+
+  // Actualizar puestos cuando cambia el área
+  useEffect(() => {
+    if (areaValue && areaValue !== selectedArea) {
+      setSelectedArea(areaValue);
+      const puestos = getPuestosPorArea(areaValue);
+      setPuestosDisponibles(puestos);
+      setValue('puesto', ''); // Resetear puesto cuando cambia el área
+    }
+  }, [areaValue, selectedArea, setValue]);
 
   const onSubmit = async (data: RegisterForm) => {
     setIsLoading(true);
@@ -209,10 +241,13 @@ export function RegisterPage() {
                 <select
                   id="puesto"
                   {...register('puesto')}
-                  className={`w-full h-10 px-3 rounded-md bg-zinc-800/50 border border-zinc-700 text-white focus:border-purple-500 focus:ring-purple-500/20 focus:outline-none ${errors.puesto ? 'border-red-500' : ''}`}
+                  disabled={!selectedArea || puestosDisponibles.length === 0}
+                  className={`w-full h-10 px-3 rounded-md bg-zinc-800/50 border border-zinc-700 text-white focus:border-purple-500 focus:ring-purple-500/20 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${errors.puesto ? 'border-red-500' : ''}`}
                 >
-                  <option value="" className="bg-zinc-800">Selecciona un puesto</option>
-                  {PUESTOS.map((puesto) => (
+                  <option value="" className="bg-zinc-800">
+                    {!selectedArea ? 'Primero selecciona un área' : puestosDisponibles.length === 0 ? 'Sin puestos disponibles' : 'Selecciona un puesto'}
+                  </option>
+                  {puestosDisponibles.map((puesto) => (
                     <option key={puesto} value={puesto} className="bg-zinc-800">{puesto}</option>
                   ))}
                 </select>
