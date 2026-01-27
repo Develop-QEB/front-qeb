@@ -51,6 +51,7 @@ export const SOCKET_EVENTS = {
   CAMPANA_ACTUALIZADA: 'campana:actualizada',
   CAMPANA_ELIMINADA: 'campana:eliminada',
   CAMPANA_STATUS_CHANGED: 'campana:status:changed',
+  CAMPANA_COMENTARIO_CREADO: 'campana:comentario:creado',
 
   // Clientes
   CLIENTE_CREADO: 'cliente:creado',
@@ -166,6 +167,34 @@ export function useSocketCampana(campanaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes', data.campanaId] });
     };
 
+    const handleComentarioCreado = (data: { campanaId: number; comentario: { id: number; autor_id: number; autor_nombre: string; autor_foto?: string | null; contenido: string; fecha: string } }) => {
+      console.log('[Socket] Comentario creado:', data);
+      // Agregar comentario al cache sin recargar toda la campaña
+      queryClient.setQueryData(['campana', data.campanaId], (old: any) => {
+        if (!old) return old;
+        // Verificar si el comentario ya existe por ID o por contenido+autor (para optimistic updates)
+        const existingComment = old.comentarios?.find((c: any) =>
+          c.id === data.comentario.id ||
+          (c.contenido === data.comentario.contenido && c.autor_id === data.comentario.autor_id)
+        );
+        if (existingComment) {
+          // Si existe un comentario temporal con el mismo contenido, actualizar solo el ID (preservar foto)
+          return {
+            ...old,
+            comentarios: old.comentarios.map((c: any) =>
+              (c.contenido === data.comentario.contenido && c.autor_id === data.comentario.autor_id && c.id > 1000000000000)
+                ? { ...c, id: data.comentario.id } // Solo actualizar el ID, preservar la foto
+                : c
+            ),
+          };
+        }
+        return {
+          ...old,
+          comentarios: [...(old.comentarios || []), data.comentario],
+        };
+      });
+    };
+
     // Suscribirse a eventos
     socket.on(SOCKET_EVENTS.TAREA_CREADA, handleTareaCreada);
     socket.on(SOCKET_EVENTS.TAREA_ACTUALIZADA, handleTareaActualizada);
@@ -174,6 +203,7 @@ export function useSocketCampana(campanaId: number | null) {
     socket.on(SOCKET_EVENTS.ARTE_APROBADO, handleArteAprobado);
     socket.on(SOCKET_EVENTS.ARTE_RECHAZADO, handleArteRechazado);
     socket.on(SOCKET_EVENTS.INVENTARIO_ACTUALIZADO, handleInventarioActualizado);
+    socket.on(SOCKET_EVENTS.CAMPANA_COMENTARIO_CREADO, handleComentarioCreado);
 
     return () => {
       // Limpiar listeners al desmontar
@@ -184,6 +214,7 @@ export function useSocketCampana(campanaId: number | null) {
       socket.off(SOCKET_EVENTS.ARTE_APROBADO, handleArteAprobado);
       socket.off(SOCKET_EVENTS.ARTE_RECHAZADO, handleArteRechazado);
       socket.off(SOCKET_EVENTS.INVENTARIO_ACTUALIZADO, handleInventarioActualizado);
+      socket.off(SOCKET_EVENTS.CAMPANA_COMENTARIO_CREADO, handleComentarioCreado);
     };
   }, [campanaId, queryClient]);
 

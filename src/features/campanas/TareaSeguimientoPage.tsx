@@ -373,7 +373,14 @@ function getGroupKeyForField(item: InventoryRow, field: GroupByField): string {
     case 'aps':
       return `APS ${item.aps ?? 'Sin asignar'}`;
     case 'grupo':
-      return item.grupo_id ? `Grupo ${item.grupo_id}` : `Item ${item.id}`;
+      if (item.grupo_id) {
+        const parts: string[] = [];
+        if (item.mueble) parts.push(item.mueble.toUpperCase());
+        parts.push(`Grupo ${item.grupo_id}`);
+        if (item.ciudad) parts.push(item.ciudad);
+        return parts.join(' | ');
+      }
+      return `Item ${item.id}`;
     case 'estado_arte':
       return estadoArteLabels[item.estado_arte || 'sin_revisar'] || 'Sin estado';
     case 'estado_tarea':
@@ -894,7 +901,15 @@ function UploadArtModal({
           key = `Catorcena ${item.catorcena}`;
           break;
         case 'grupo':
-          key = `Grupo ${item.grupo_id || item.id}`;
+          if (item.grupo_id) {
+            const parts: string[] = [];
+            if (item.mueble) parts.push(item.mueble.toUpperCase());
+            parts.push(`Grupo ${item.grupo_id}`);
+            if (item.ciudad) parts.push(item.ciudad);
+            key = parts.join(' | ');
+          } else {
+            key = `Item ${item.id}`;
+          }
           break;
       }
       if (!groups[key]) groups[key] = [];
@@ -2859,7 +2874,16 @@ function TaskDetailModal({
     taskInventory.forEach(item => {
       const catorcenaKey = `Catorcena ${item.catorcena} - ${item.anio}`;
       const apsKey = `APS ${item.aps ?? 'Sin asignar'}`;
-      const grupoKey = item.grupo_id ? `Grupo ${item.grupo_id}` : `Item ${item.id}`;
+      let grupoKey: string;
+      if (item.grupo_id) {
+        const parts: string[] = [];
+        if (item.mueble) parts.push(item.mueble.toUpperCase());
+        parts.push(`Grupo ${item.grupo_id}`);
+        if (item.ciudad) parts.push(item.ciudad);
+        grupoKey = parts.join(' | ');
+      } else {
+        grupoKey = `Item ${item.id}`;
+      }
 
       if (!groups[catorcenaKey]) groups[catorcenaKey] = {};
       if (!groups[catorcenaKey][apsKey]) groups[catorcenaKey][apsKey] = {};
@@ -2949,7 +2973,15 @@ function TaskDetailModal({
       switch (field) {
         case 'catorcena': return `Catorcena ${item.catorcena} - ${item.anio}`;
         case 'aps': return `APS ${item.aps ?? 'Sin asignar'}`;
-        case 'grupo': return item.grupo_id ? `Grupo ${item.grupo_id}` : `Item ${item.id}`;
+        case 'grupo':
+          if (item.grupo_id) {
+            const parts: string[] = [];
+            if (item.mueble) parts.push(item.mueble.toUpperCase());
+            parts.push(`Grupo ${item.grupo_id}`);
+            if (item.ciudad) parts.push(item.ciudad);
+            return parts.join(' | ');
+          }
+          return `Item ${item.id}`;
         case 'plaza': return item.plaza || 'Sin plaza';
         case 'mueble': return item.mueble || 'Sin mueble';
         case 'ciudad': return item.ciudad || 'Sin ciudad';

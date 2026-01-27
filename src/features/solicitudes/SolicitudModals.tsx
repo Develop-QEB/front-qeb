@@ -1272,29 +1272,45 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
     };
   }, [isOpen]);
 
-  // Fetch users with team filtering
+  // Fetch ALL users (no team filtering) to include Tráfico users globally
   const { data: users } = useQuery({
-    queryKey: ['solicitudes-users', 'team-filtered', 'atender-modal'],
-    queryFn: () => solicitudesService.getUsers(undefined, true),
+    queryKey: ['solicitudes-users', 'all-users', 'atender-modal'],
+    queryFn: () => solicitudesService.getUsers(undefined, false),
     enabled: isOpen,
   });
 
-  // Pre-populate asignados from solicitud when modal opens
+  // Pre-populate asignados with: 1) Original assignees from solicitud + 2) All users from "Tráfico" area
   useEffect(() => {
-    if (isOpen && solicitud) {
-      const existingAsignados: { id: number; nombre: string }[] = [];
+    if (isOpen && solicitud && users) {
+      const combinedAsignados: { id: number; nombre: string }[] = [];
+      const addedIds = new Set<number>();
+
+      // 1. Add original assignees from solicitud
       if (solicitud.id_asignado && solicitud.asignado) {
         const ids = solicitud.id_asignado.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
         const nombres = solicitud.asignado.split(',').map(n => n.trim());
         ids.forEach((id, idx) => {
-          if (nombres[idx]) {
-            existingAsignados.push({ id, nombre: nombres[idx] });
+          if (nombres[idx] && !addedIds.has(id)) {
+            combinedAsignados.push({ id, nombre: nombres[idx] });
+            addedIds.add(id);
           }
         });
       }
-      setSelectedAsignados(existingAsignados);
+
+      // 2. Add all users from Tráfico area (if not already added)
+      const traficoUsers = users.filter(u =>
+        u.area?.toLowerCase() === 'tráfico' || u.area?.toLowerCase() === 'trafico'
+      );
+      traficoUsers.forEach(u => {
+        if (!addedIds.has(u.id)) {
+          combinedAsignados.push({ id: u.id, nombre: u.nombre });
+          addedIds.add(u.id);
+        }
+      });
+
+      setSelectedAsignados(combinedAsignados);
     }
-  }, [isOpen, solicitud]);
+  }, [isOpen, solicitud, users]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

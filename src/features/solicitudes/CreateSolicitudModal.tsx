@@ -9,6 +9,7 @@ import { formatCurrency } from '../../lib/utils';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS, getCacheTimestamp, clearSapCache } from '../../lib/sapCache';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useSocketEquipos } from '../../hooks/useSocket';
+import { useAuthStore } from '../../store/authStore';
 
 // Tarifa publica lookup map based on ItemCode (full SAP codes with tarifa_publica values)
 const TARIFA_PUBLICA_MAP: Record<string, number> = {
@@ -637,6 +638,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Socket para actualizar usuarios en tiempo real cuando cambian miembros de equipos
   useSocketEquipos();
 
+  // Current user for default asignado
+  const currentUser = useAuthStore((state) => state.user);
+
   // Toast notification state
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'warning' }>({
     show: false,
@@ -857,8 +861,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // Reset all form state for a fresh start
       setStep(1);
       setSelectedCuic(null);
-      // Start with empty asignados - user must select from their team
-      setSelectedAsignados([]);
+      // Pre-populate asignados with the current user (creator)
+      if (currentUser) {
+        setSelectedAsignados([{
+          id: currentUser.id,
+          nombre: currentUser.nombre,
+          area: currentUser.area,
+          puesto: currentUser.puesto
+        }]);
+      } else {
+        setSelectedAsignados([]);
+      }
       setNombreCampania('');
       setDescripcion('');
       setNotas('');
@@ -884,7 +897,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tarifaPublica: 0,
       });
     }
-  }, [isOpen, isEditMode]);
+  }, [isOpen, isEditMode, currentUser]);
 
   // Reset form state when switching between different solicitudes in edit mode
   useEffect(() => {

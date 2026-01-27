@@ -18,6 +18,7 @@ type ViewType = 'tabla' | 'catorcena';
 import { formatDate } from '../../lib/utils';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { OrdenesMontajeModal } from './OrdenesMontajeModal';
+import { StatusCampanaModal } from './StatusCampanaModal';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 
@@ -522,6 +523,8 @@ export function CampanasPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedCampana, setSelectedCampana] = useState<Campana | null>(null);
   const [ordenesMontajeModalOpen, setOrdenesMontajeModalOpen] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [statusCampana, setStatusCampana] = useState<Campana | null>(null);
   const limit = 20;
 
   // Estado para la vista activa (tabs)
@@ -1160,9 +1163,15 @@ export function CampanasPage() {
         </td>
         {/* Status */}
         <td className="px-4 py-3">
-          <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+          <button
+            onClick={() => {
+              setStatusCampana(item);
+              setStatusModalOpen(true);
+            }}
+            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+          >
             {item.status}
-          </span>
+          </button>
         </td>
         {/* Cat. Inicio - Badge style */}
         <td className="px-4 py-3">
@@ -1906,7 +1915,14 @@ export function CampanasPage() {
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
                             {periodStatus}
                           </span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStatusCampana(campana);
+                              setStatusModalOpen(true);
+                            }}
+                            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+                          >
                             {campana.status}
                           </span>
                           {campana.has_aps ? (
@@ -2140,6 +2156,18 @@ export function CampanasPage() {
         onClose={() => setOrdenesMontajeModalOpen(false)}
         canExport={permissions.canExportOrdenesMontaje}
       />
+
+      {/* Status Campana Modal */}
+      {statusCampana && (
+        <StatusCampanaModal
+          isOpen={statusModalOpen}
+          onClose={() => {
+            setStatusModalOpen(false);
+            setStatusCampana(null);
+          }}
+          campana={statusCampana}
+        />
+      )}
     </div>
   );
 }

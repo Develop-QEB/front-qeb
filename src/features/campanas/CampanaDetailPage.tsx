@@ -12,6 +12,7 @@ import { UserAvatar } from '../../components/ui/user-avatar';
 import { formatDate } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
+import { useSocketCampana } from '../../hooks/useSocket';
 
 const statusVariants: Record<string, 'secondary' | 'success' | 'warning' | 'info'> = {
   activa: 'success',
@@ -545,6 +546,10 @@ export function CampanaDetailPage() {
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
   const campanaId = id ? parseInt(id, 10) : 1;
+
+  // WebSocket para actualizar comentarios en tiempo real
+  useSocketCampana(campanaId);
+
   const [showComments, setShowComments] = useState(false);
   const [comment, setComment] = useState('');
   const commentsEndRef = useRef<HTMLDivElement>(null);
@@ -1105,6 +1110,18 @@ export function CampanaDetailPage() {
     return grouped;
   }, [filteredInventarioAPS, activeGroupingsAPS]);
 
+  // Bloquear scroll del body cuando el modal de comentarios está abierto
+  useEffect(() => {
+    if (showComments) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showComments]);
+
   // Scroll al final cuando se abren comentarios o se agregan nuevos
   useEffect(() => {
     if (showComments && commentsEndRef.current) {
@@ -1114,10 +1131,40 @@ export function CampanaDetailPage() {
 
   const addCommentMutation = useMutation({
     mutationFn: (contenido: string) => campanasService.addComment(campanaId, contenido),
-    onSuccess: () => {
+    onMutate: async (contenido) => {
+      // Cancelar queries en curso
+      await queryClient.cancelQueries({ queryKey: ['campana', campanaId] });
+
+      // Snapshot del estado anterior
+      const previousCampana = queryClient.getQueryData(['campana', campanaId]);
+
+      // Optimistic update - agregar comentario inmediatamente
+      queryClient.setQueryData(['campana', campanaId], (old: any) => {
+        if (!old) return old;
+        const newComment = {
+          id: Date.now(), // ID temporal
+          autor_id: user?.id || 0,
+          autor_nombre: user?.nombre || 'Usuario',
+          autor_foto: user?.foto_perfil || null,
+          contenido,
+          fecha: new Date().toISOString(),
+        };
+        return {
+          ...old,
+          comentarios: [...(old.comentarios || []), newComment],
+        };
+      });
+
       setComment('');
-      queryClient.invalidateQueries({ queryKey: ['campana', campanaId] });
+      return { previousCampana };
     },
+    onError: (_err, _contenido, context) => {
+      // Revertir en caso de error
+      if (context?.previousCampana) {
+        queryClient.setQueryData(['campana', campanaId], context.previousCampana);
+      }
+    },
+    // No invalidamos - el socket se encarga de sincronizar
   });
 
   const assignAPSMutation = useMutation({
@@ -2910,7 +2957,7 @@ export function CampanaDetailPage() {
                   className="h-full"
                 />
               ) : (
-                [...comentarios].reverse().map((c) => (
+                comentarios.map((c) => (
                   <div key={c.id} className="flex gap-2 py-2">
                     <UserAvatar nombre={c.autor_nombre} foto_perfil={c.autor_foto} size="md" />
                     <div className="flex-1 min-w-0">
@@ -2942,7 +2989,11 @@ export function CampanaDetailPage() {
                     disabled={!comment.trim() || addCommentMutation.isPending}
                     className="p-1 rounded bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    <Send className="h-3.5 w-3.5" />
+                    {addCommentMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Send className="h-3.5 w-3.5" />
+                    )}
                   </button>
                 </div>
               </div>
