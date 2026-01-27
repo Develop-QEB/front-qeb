@@ -14163,7 +14163,7 @@ export function TareaSeguimientoPage() {
                               {task.tipo === 'Testigo' && task.archivo_testigo && (
                                 <button
                                   onClick={() => {
-                                    setSelectedTestigoFile(task.archivo_testigo);
+                                    setSelectedTestigoFile(task.archivo_testigo ?? null);
                                     setIsTestigoFileModalOpen(true);
                                   }}
                                   className="flex items-center gap-1 px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
