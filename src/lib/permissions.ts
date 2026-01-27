@@ -70,13 +70,15 @@ export interface RolePermissions {
   canSeeTabProgramacion: boolean;
   canSeeTabImpresiones: boolean;
   canSeeTabSubirArtes: boolean;
+  canSeeTabRevisarAprobar: boolean;
   canSeeTabTestigos: boolean;
   canSeeTabValidacionInstalacion: boolean;
   canCreateTareasGestionArtes: boolean; // Crear tareas en gestión de artes
   canResolveRevisionArtesTasks: boolean; // Resolver tareas de revisión de artes
   canOnlyOpenImpresionTasks: boolean; // Solo puede abrir tareas de tipo Impresión (oculta botón Abrir para otros tipos)
-  canOnlyOpenRecepcionTasks: boolean; // Solo puede abrir tareas de tipo Recepción (para Operaciones)
+  canOnlyOpenRecepcionTasks: boolean; // Solo puede abrir tareas de tipo Recepción, Instalación, Testigo y Programación (para Operaciones)
   canOpenTasks: boolean; // Puede abrir/ver detalle de tareas (false = solo visualización de la lista)
+  canCreateInstalacionFromRecibido: boolean; // Crear tareas de Instalación desde tab Impresiones con estado recibido (Operaciones)
 
   // Inventarios
   canCreateInventarios: boolean;
@@ -131,6 +133,7 @@ const defaultPermissions: RolePermissions = {
   canSeeTabProgramacion: true,
   canSeeTabImpresiones: true,
   canSeeTabSubirArtes: true,
+  canSeeTabRevisarAprobar: true,
   canSeeTabTestigos: true,
   canSeeTabValidacionInstalacion: true,
   canCreateTareasGestionArtes: true,
@@ -138,6 +141,7 @@ const defaultPermissions: RolePermissions = {
   canOnlyOpenImpresionTasks: false,
   canOnlyOpenRecepcionTasks: false,
   canOpenTasks: true,
+  canCreateInstalacionFromRecibido: false, // Default false - solo Operaciones
 
   canCreateInventarios: true,
   canEditInventarios: true,
@@ -505,6 +509,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabProgramacion: false,
     canSeeTabImpresiones: false,
     canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: true, // Sí pueden ver Revisar y Aprobar
     canSeeTabTestigos: false,
     canSeeTabValidacionInstalacion: false,
     canCreateTareasGestionArtes: false, // No pueden crear tareas
@@ -568,6 +573,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabProgramacion: false,
     canSeeTabImpresiones: false,
     canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: true, // Sí pueden ver Revisar y Aprobar
     canSeeTabTestigos: false,
     canSeeTabValidacionInstalacion: false,
     canCreateTareasGestionArtes: false, // No pueden crear tareas
@@ -631,6 +637,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabProgramacion: false, // Ocultar
     canSeeTabImpresiones: true, // VISIBLE - solo este tab
     canSeeTabSubirArtes: false, // Ocultar
+    canSeeTabRevisarAprobar: false, // Ocultar - Compradores solo ven Impresiones
     canSeeTabTestigos: false, // Ocultar
     canSeeTabValidacionInstalacion: false, // Ocultar
     canCreateTareasGestionArtes: false, // No pueden crear tareas
@@ -698,11 +705,13 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
     canSeeTabSubirArtes: false, // Oculto
+    canSeeTabRevisarAprobar: false, // Operaciones no ve Revisar y Aprobar
     canSeeTabTestigos: true,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false, // No pueden crear tareas
     canResolveRevisionArtesTasks: false, // No pueden resolver tareas de revisión
-    canOnlyOpenRecepcionTasks: true, // Solo pueden abrir tareas de tipo Recepción
+    canOnlyOpenRecepcionTasks: true, // Pueden abrir tareas de tipo Recepción, Instalación y Testigo
+    canCreateInstalacionFromRecibido: true, // Pueden crear tareas de Instalación desde Impresiones recibido
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -762,11 +771,13 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
     canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false, // Operaciones no ve Revisar y Aprobar
     canSeeTabTestigos: true,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false,
     canResolveRevisionArtesTasks: false,
     canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true, // Pueden crear tareas de Instalación desde Impresiones recibido
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -826,11 +837,13 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
     canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false, // Operaciones no ve Revisar y Aprobar
     canSeeTabTestigos: true,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false,
     canResolveRevisionArtesTasks: false,
     canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true, // Pueden crear tareas de Instalación desde Impresiones recibido
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -890,11 +903,13 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
     canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false, // Operaciones no ve Revisar y Aprobar
     canSeeTabTestigos: true,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false,
     canResolveRevisionArtesTasks: false,
     canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true, // Pueden crear tareas de Instalación desde Impresiones recibido
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -957,6 +972,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
     canSeeTabSubirArtes: false, // No pueden subir artes
+    canSeeTabRevisarAprobar: true,
     canSeeTabTestigos: true,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false, // No pueden crear tareas
@@ -1023,6 +1039,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
     canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: true,
     canSeeTabTestigos: true,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false,
@@ -1089,6 +1106,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
     canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: true,
     canSeeTabTestigos: true,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false,

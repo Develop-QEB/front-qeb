@@ -189,6 +189,7 @@ interface InventoryRow {
   alto?: number | string; // Alto del inventario
   latitud?: number; // Para mapa
   longitud?: number; // Para mapa
+  articulo?: string; // ItemCode de SAP (ej: RT-P1-COB-GD)
   // Para Atender arte
   estado_arte?: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado';
   estado_tarea?: 'sin_atender' | 'en_progreso' | 'atendido';
@@ -375,7 +376,7 @@ function getGroupKeyForField(item: InventoryRow, field: GroupByField): string {
     case 'grupo':
       if (item.grupo_id) {
         const parts: string[] = [];
-        if (item.mueble) parts.push(item.mueble.toUpperCase());
+        if (item.articulo) parts.push(item.articulo.toUpperCase());
         parts.push(`Grupo ${item.grupo_id}`);
         if (item.ciudad) parts.push(item.ciudad);
         return parts.join(' | ');
@@ -903,7 +904,7 @@ function UploadArtModal({
         case 'grupo':
           if (item.grupo_id) {
             const parts: string[] = [];
-            if (item.mueble) parts.push(item.mueble.toUpperCase());
+            if (item.articulo) parts.push(item.articulo.toUpperCase());
             parts.push(`Grupo ${item.grupo_id}`);
             if (item.ciudad) parts.push(item.ciudad);
             key = parts.join(' | ');
@@ -2621,13 +2622,20 @@ function TaskDetailModal({
     enabled: isOpen && (task?.tipo === 'Impresión' || task?.tipo === 'Recepción' || task?.tipo === 'Instalación'),
   });
 
-  // Query para usuarios (para asignar tarea de recepción)
-  const { data: usuariosData } = useQuery({
-    queryKey: ['campanas-usuarios'],
-    queryFn: () => campanasService.getUsuarios(),
+  // Query para usuarios (para asignar tarea de recepción) - TODOS los de área Operaciones
+  const { data: usuariosRecepcionData } = useQuery({
+    queryKey: ['solicitudes-users', 'all-users-recepcion'],
+    queryFn: () => solicitudesService.getUsers(undefined, false), // false = sin filtro de equipo
     enabled: isOpen && task?.tipo === 'Impresión',
   });
-  const usuarios = usuariosData || [];
+  // Filtrar usuarios del área de Operaciones O cuyo puesto contenga "Operaciones"
+  const usuarios = useMemo(() => {
+    if (!usuariosRecepcionData) return [];
+    return usuariosRecepcionData.filter(u =>
+      u.area?.toLowerCase() === 'operaciones' ||
+      u.puesto?.toLowerCase().includes('operaciones')
+    );
+  }, [usuariosRecepcionData]);
 
   // Función para obtener texto de catorcena desde fecha_fin
   const getCatorcenaFromFechaFin = useMemo(() => {
@@ -2976,7 +2984,7 @@ function TaskDetailModal({
         case 'grupo':
           if (item.grupo_id) {
             const parts: string[] = [];
-            if (item.mueble) parts.push(item.mueble.toUpperCase());
+            if (item.articulo) parts.push(item.articulo.toUpperCase());
             parts.push(`Grupo ${item.grupo_id}`);
             if (item.ciudad) parts.push(item.ciudad);
             return parts.join(' | ');
@@ -7375,12 +7383,29 @@ function CreateTaskModal({
   const catorcenas = catorcenasData?.data || [];
   const years = catorcenasData?.years || [];
 
-  // Query para usuarios (asignados)
+  // Query para usuarios (asignados) - básico para otros tipos de tarea
   const { data: usuariosData, isLoading: isLoadingUsuarios } = useQuery({
     queryKey: ['campanas-usuarios'],
     queryFn: () => campanasService.getUsuarios(),
   });
   const usuarios = usuariosData || [];
+
+  // Query para usuarios con área (filtrado por equipo) - para Revisión de artes
+  const { data: usuariosConArea } = useQuery({
+    queryKey: ['solicitudes-users', 'team-filtered-revision-artes'],
+    queryFn: () => solicitudesService.getUsers(undefined, true),
+    enabled: isOpen,
+  });
+
+  // Query para TODOS los usuarios (sin filtro de equipo) - para Impresión (área Compras)
+  const { data: todosUsuarios } = useQuery({
+    queryKey: ['solicitudes-users', 'all-users-impresion'],
+    queryFn: () => solicitudesService.getUsers(undefined, false),
+    enabled: isOpen,
+  });
+
+  // WebSocket para actualizar usuarios en tiempo real cuando cambia el equipo
+  useSocketEquipos();
 
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -7392,6 +7417,31 @@ function CreateTaskModal({
       setTipo(initialTipo);
     }
   }, [isOpen, initialTipo]);
+
+  // Pre-llenar asignados con usuarios de Mercadotecnia (de mi equipo) para Revisión de artes
+  useEffect(() => {
+    if (isOpen && tipo === 'Revisión de artes' && usuariosConArea) {
+      // Filtrar usuarios del área de Mercadotecnia
+      const mercadotecniaUsers = usuariosConArea.filter(u =>
+        u.area?.toLowerCase() === 'mercadotecnia'
+      );
+      // Pre-seleccionar todos
+      setSelectedAsignadosRevision(mercadotecniaUsers.map(u => ({ id: u.id, nombre: u.nombre })));
+    }
+  }, [isOpen, tipo, usuariosConArea]);
+
+  // Pre-llenar asignados con TODOS los usuarios de Compras para Impresión
+  useEffect(() => {
+    if (isOpen && tipo === 'Impresión' && todosUsuarios) {
+      // Filtrar usuarios del área de Compras
+      const comprasUsers = todosUsuarios.filter(u =>
+        u.area?.toLowerCase() === 'compras'
+      );
+      // Pre-seleccionar todos
+      setSelectedAsignadosImpresion(comprasUsers.map(u => ({ id: u.id, nombre: u.nombre })));
+    }
+  }, [isOpen, tipo, todosUsuarios]);
+
   const [proveedorId, setProveedorId] = useState<number | null>(null);
   const [fechaFin, setFechaFin] = useState('');
   const [estatus, setEstatus] = useState<string>('Pendiente');
@@ -7407,6 +7457,26 @@ function CreateTaskModal({
   const [asignadoNombre, setAsignadoNombre] = useState(''); // Nombre del usuario seleccionado
   const [asignadoSearch, setAsignadoSearch] = useState('');
   const [showAsignadoDropdown, setShowAsignadoDropdown] = useState(false);
+  // Para Revisión de artes - múltiples asignados
+  const [selectedAsignadosRevision, setSelectedAsignadosRevision] = useState<{ id: number; nombre: string }[]>([]);
+  const [asignadoSearchRevision, setAsignadoSearchRevision] = useState('');
+  const [showAsignadoDropdownRevision, setShowAsignadoDropdownRevision] = useState(false);
+  // Para Impresión - múltiples asignados (área Compras)
+  const [selectedAsignadosImpresion, setSelectedAsignadosImpresion] = useState<{ id: number; nombre: string }[]>([]);
+  const [asignadoSearchImpresion, setAsignadoSearchImpresion] = useState('');
+  const [showAsignadoDropdownImpresion, setShowAsignadoDropdownImpresion] = useState(false);
+  // Para Instalación - múltiples asignados (área Operaciones)
+  const [selectedAsignadosInstalacion, setSelectedAsignadosInstalacion] = useState<{ id: number; nombre: string }[]>([]);
+  const [asignadoSearchInstalacion, setAsignadoSearchInstalacion] = useState('');
+  const [showAsignadoDropdownInstalacion, setShowAsignadoDropdownInstalacion] = useState(false);
+  // Para Testigo - múltiples asignados (área Operaciones)
+  const [selectedAsignadosTestigo, setSelectedAsignadosTestigo] = useState<{ id: number; nombre: string }[]>([]);
+  const [asignadoSearchTestigo, setAsignadoSearchTestigo] = useState('');
+  const [showAsignadoDropdownTestigo, setShowAsignadoDropdownTestigo] = useState(false);
+  // Para Programación - múltiples asignados (área Operaciones)
+  const [selectedAsignadosProgramacion, setSelectedAsignadosProgramacion] = useState<{ id: number; nombre: string }[]>([]);
+  const [asignadoSearchProgramacion, setAsignadoSearchProgramacion] = useState('');
+  const [showAsignadoDropdownProgramacion, setShowAsignadoDropdownProgramacion] = useState(false);
   const [yearEntrega, setYearEntrega] = useState<number>(new Date().getFullYear());
   const [fechaCreacion, setFechaCreacion] = useState(() => {
     const now = new Date();
@@ -7493,6 +7563,92 @@ function CreateTaskModal({
     );
   }, [usuarios, asignadoSearch]);
 
+  // Filtrar usuarios de Mercadotecnia para Revisión de artes (excluyendo ya seleccionados)
+  const filteredUsuariosRevision = useMemo(() => {
+    if (!usuariosConArea) return [];
+    const selectedIds = new Set(selectedAsignadosRevision.map(u => u.id));
+    // Solo mostrar usuarios del área Mercadotecnia que no estén ya seleccionados
+    const mercadotecniaUsers = usuariosConArea.filter(u =>
+      u.area?.toLowerCase() === 'mercadotecnia' && !selectedIds.has(u.id)
+    );
+    if (!asignadoSearchRevision.trim()) return mercadotecniaUsers;
+    const search = asignadoSearchRevision.toLowerCase();
+    return mercadotecniaUsers.filter(u =>
+      u.nombre.toLowerCase().includes(search) ||
+      String(u.id).includes(search)
+    );
+  }, [usuariosConArea, asignadoSearchRevision, selectedAsignadosRevision]);
+
+  // Filtrar usuarios de Compras para Impresión (excluyendo ya seleccionados)
+  const filteredUsuariosImpresion = useMemo(() => {
+    if (!todosUsuarios) return [];
+    const selectedIds = new Set(selectedAsignadosImpresion.map(u => u.id));
+    // Solo mostrar usuarios del área Compras que no estén ya seleccionados
+    const comprasUsers = todosUsuarios.filter(u =>
+      u.area?.toLowerCase() === 'compras' && !selectedIds.has(u.id)
+    );
+    if (!asignadoSearchImpresion.trim()) return comprasUsers;
+    const search = asignadoSearchImpresion.toLowerCase();
+    return comprasUsers.filter(u =>
+      u.nombre.toLowerCase().includes(search) ||
+      String(u.id).includes(search)
+    );
+  }, [todosUsuarios, asignadoSearchImpresion, selectedAsignadosImpresion]);
+
+  // Filtrar usuarios de Operaciones para Instalación (excluir ya seleccionados)
+  const filteredUsuariosInstalacion = useMemo(() => {
+    if (!todosUsuarios) return [];
+    const selectedIds = new Set(selectedAsignadosInstalacion.map(u => u.id));
+    // Mostrar usuarios del área Operaciones O cuyo puesto contenga "Operaciones"
+    const operacionesUsers = todosUsuarios.filter(u =>
+      (u.area?.toLowerCase() === 'operaciones' ||
+       u.puesto?.toLowerCase().includes('operaciones')) &&
+      !selectedIds.has(u.id)
+    );
+    if (!asignadoSearchInstalacion.trim()) return operacionesUsers;
+    const search = asignadoSearchInstalacion.toLowerCase();
+    return operacionesUsers.filter(u =>
+      u.nombre.toLowerCase().includes(search) ||
+      String(u.id).includes(search)
+    );
+  }, [todosUsuarios, asignadoSearchInstalacion, selectedAsignadosInstalacion]);
+
+  // Filtrar usuarios de Operaciones para Testigo (excluir ya seleccionados)
+  const filteredUsuariosTestigo = useMemo(() => {
+    if (!todosUsuarios) return [];
+    const selectedIds = new Set(selectedAsignadosTestigo.map(u => u.id));
+    // Mostrar usuarios del área Operaciones O cuyo puesto contenga "Operaciones"
+    const operacionesUsers = todosUsuarios.filter(u =>
+      (u.area?.toLowerCase() === 'operaciones' ||
+       u.puesto?.toLowerCase().includes('operaciones')) &&
+      !selectedIds.has(u.id)
+    );
+    if (!asignadoSearchTestigo.trim()) return operacionesUsers;
+    const search = asignadoSearchTestigo.toLowerCase();
+    return operacionesUsers.filter(u =>
+      u.nombre.toLowerCase().includes(search) ||
+      String(u.id).includes(search)
+    );
+  }, [todosUsuarios, asignadoSearchTestigo, selectedAsignadosTestigo]);
+
+  // Filtrar usuarios de Operaciones para Programación (excluir ya seleccionados)
+  const filteredUsuariosProgramacion = useMemo(() => {
+    if (!todosUsuarios) return [];
+    const selectedIds = new Set(selectedAsignadosProgramacion.map(u => u.id));
+    // Mostrar usuarios del área Operaciones O cuyo puesto contenga "Operaciones"
+    const operacionesUsers = todosUsuarios.filter(u =>
+      (u.area?.toLowerCase() === 'operaciones' ||
+       u.puesto?.toLowerCase().includes('operaciones')) &&
+      !selectedIds.has(u.id)
+    );
+    if (!asignadoSearchProgramacion.trim()) return operacionesUsers;
+    const search = asignadoSearchProgramacion.toLowerCase();
+    return operacionesUsers.filter(u =>
+      u.nombre.toLowerCase().includes(search) ||
+      String(u.id).includes(search)
+    );
+  }, [todosUsuarios, asignadoSearchProgramacion, selectedAsignadosProgramacion]);
+
   const handleSubmit = () => {
     const payload: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<number, number> } = {
       titulo,
@@ -7512,20 +7668,24 @@ function CreateTaskModal({
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).contenido = identificador; // El identificador es el contenido
       (payload as any).listado_inventario = selectedIds.join(','); // Lista de IDs de inventario
-      // Asignado para Revisión usa usuarios
-      if (asignadoId && asignadoNombre) {
-        payload.asignado = asignadoNombre; // Usar solo el nombre del usuario
-        (payload as any).id_asignado = String(asignadoId); // ID del usuario asignado
+      // Asignados múltiples para Revisión de artes
+      if (selectedAsignadosRevision.length > 0) {
+        // Guardar IDs separados por coma
+        (payload as any).id_asignado = selectedAsignadosRevision.map(u => u.id).join(', ');
+        // Guardar nombres separados por coma
+        payload.asignado = selectedAsignadosRevision.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Instalación') {
       // Campos adicionales para Instalación
       (payload as any).catorcena_entrega = catorcenaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
-      // Asignado para Instalación usa usuarios
-      if (asignadoId && asignadoNombre) {
-        payload.asignado = asignadoNombre;
-        (payload as any).id_asignado = String(asignadoId);
+      // Asignados múltiples para Instalación (área Operaciones)
+      if (selectedAsignadosInstalacion.length > 0) {
+        // Guardar IDs separados por coma
+        (payload as any).id_asignado = selectedAsignadosInstalacion.map(u => u.id).join(', ');
+        // Guardar nombres separados por coma
+        payload.asignado = selectedAsignadosInstalacion.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Impresión') {
       // Campos adicionales para Impresión
@@ -7541,20 +7701,24 @@ function CreateTaskModal({
         payload.proveedores_id = proveedorId;
         payload.nombre_proveedores = selectedProveedor.nombre;
       }
-      // Asignado
-      if (asignadoId && asignadoNombre) {
-        payload.asignado = asignadoNombre;
-        (payload as any).id_asignado = String(asignadoId);
+      // Asignados múltiples para Impresión (área Compras)
+      if (selectedAsignadosImpresion.length > 0) {
+        // Guardar IDs separados por coma
+        (payload as any).id_asignado = selectedAsignadosImpresion.map(u => u.id).join(', ');
+        // Guardar nombres separados por coma
+        payload.asignado = selectedAsignadosImpresion.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Testigo') {
       // Campos adicionales para Testigo
       (payload as any).catorcena_entrega = catorcenaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
-      // Asignado para Testigo usa usuarios
-      if (asignadoId && asignadoNombre) {
-        payload.asignado = asignadoNombre;
-        (payload as any).id_asignado = String(asignadoId);
+      // Asignados múltiples para Testigo (área Operaciones)
+      if (selectedAsignadosTestigo.length > 0) {
+        // Guardar IDs separados por coma
+        (payload as any).id_asignado = selectedAsignadosTestigo.map(u => u.id).join(', ');
+        // Guardar nombres separados por coma
+        payload.asignado = selectedAsignadosTestigo.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Programación') {
       // Campos adicionales para Programación
@@ -7572,10 +7736,12 @@ function CreateTaskModal({
           tipo: a.tipo,
         })),
       });
-      // Asignado para Programación usa usuarios
-      if (asignadoId && asignadoNombre) {
-        payload.asignado = asignadoNombre;
-        (payload as any).id_asignado = String(asignadoId);
+      // Asignados múltiples para Programación (área Operaciones)
+      if (selectedAsignadosProgramacion.length > 0) {
+        // Guardar IDs separados por coma
+        (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(', ');
+        // Guardar nombres separados por coma
+        payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
       }
     } else if (proveedorId && selectedProveedor) {
       // Para otros tipos usa proveedores
@@ -7607,12 +7773,32 @@ function CreateTaskModal({
     setAsignadoNombre('');
     setAsignadoSearch('');
     setShowAsignadoDropdown(false);
+    // Reset campos de Revisión de artes (múltiples asignados)
+    setSelectedAsignadosRevision([]);
+    setAsignadoSearchRevision('');
+    setShowAsignadoDropdownRevision(false);
     setFechaCreacion(new Date().toISOString().slice(0, 16));
     // Reset campos de Impresión
     setImpresiones({});
+    // Reset campos de Impresión (múltiples asignados)
+    setSelectedAsignadosImpresion([]);
+    setAsignadoSearchImpresion('');
+    setShowAsignadoDropdownImpresion(false);
+    // Reset campos de Instalación (múltiples asignados área Operaciones)
+    setSelectedAsignadosInstalacion([]);
+    setAsignadoSearchInstalacion('');
+    setShowAsignadoDropdownInstalacion(false);
+    // Reset campos de Testigo (múltiples asignados área Operaciones)
+    setSelectedAsignadosTestigo([]);
+    setAsignadoSearchTestigo('');
+    setShowAsignadoDropdownTestigo(false);
     // Reset campos de Programación
     setProgramacionIndicaciones({});
     setArchivosDigitalesProgramacion([]);
+    // Reset campos de Programación (múltiples asignados área Operaciones)
+    setSelectedAsignadosProgramacion([]);
+    setAsignadoSearchProgramacion('');
+    setShowAsignadoDropdownProgramacion(false);
     onClose();
   };
 
@@ -7748,54 +7934,67 @@ function CreateTaskModal({
                   </select>
                 </div>
 
-                {/* Asignado */}
+                {/* Asignados (área Operaciones) - Multi-select */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignado *</label>
-                  {isLoadingUsuarios ? (
-                    <div className="flex items-center gap-2 py-2 text-zinc-400">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-sm">Cargando...</span>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={asignadoSearch}
-                        onChange={(e) => {
-                          setAsignadoSearch(e.target.value);
-                          setShowAsignadoDropdown(true);
-                          if (!e.target.value) {
-                            setAsignadoId(null);
-                            setAsignadoNombre('');
-                          }
-                        }}
-                        onFocus={() => setShowAsignadoDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowAsignadoDropdown(false), 200)}
-                        placeholder="Buscar usuario..."
-                        disabled={isSubmitting}
-                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                      />
-                      {showAsignadoDropdown && filteredUsuarios.length > 0 && (
-                        <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                          {filteredUsuarios.map((u) => (
-                            <button
-                              key={u.id}
-                              type="button"
-                              onClick={() => {
-                                setAsignadoId(u.id);
-                                setAsignadoNombre(u.nombre);
-                                setAsignadoSearch(`${u.id}, ${u.nombre}`);
-                                setShowAsignadoDropdown(false);
-                              }}
-                              className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
-                            >
-                              {u.id}, {u.nombre}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados (Operaciones) *</label>
+                  {/* Chips de usuarios seleccionados */}
+                  {selectedAsignadosInstalacion.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {selectedAsignadosInstalacion.map((u) => (
+                        <span
+                          key={u.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full"
+                        >
+                          {u.id}, {u.nombre}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedAsignadosInstalacion(prev => prev.filter(x => x.id !== u.id))}
+                            className="hover:text-purple-100"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
                     </div>
                   )}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={asignadoSearchInstalacion}
+                      onChange={(e) => {
+                        setAsignadoSearchInstalacion(e.target.value);
+                        setShowAsignadoDropdownInstalacion(true);
+                      }}
+                      onFocus={() => setShowAsignadoDropdownInstalacion(true)}
+                      onBlur={() => setTimeout(() => setShowAsignadoDropdownInstalacion(false), 200)}
+                      placeholder="Buscar usuario de Operaciones..."
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    />
+                    {showAsignadoDropdownInstalacion && filteredUsuariosInstalacion.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {filteredUsuariosInstalacion.map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedAsignadosInstalacion(prev => [...prev, { id: u.id, nombre: u.nombre }]);
+                              setAsignadoSearchInstalacion('');
+                              setShowAsignadoDropdownInstalacion(false);
+                            }}
+                            className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
+                          >
+                            {u.id}, {u.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {showAsignadoDropdownInstalacion && filteredUsuariosInstalacion.length === 0 && asignadoSearchInstalacion && (
+                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg p-3 text-sm text-zinc-400">
+                        No se encontraron usuarios de Operaciones
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Fecha creación (solo lectura) */}
@@ -7893,54 +8092,76 @@ function CreateTaskModal({
                   </select>
                 </div>
 
-                {/* Asignado */}
+                {/* Asignados (múltiples) */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignado *</label>
-                  {isLoadingUsuarios ? (
-                    <div className="flex items-center gap-2 py-2 text-zinc-400">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-sm">Cargando...</span>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={asignadoSearch}
-                        onChange={(e) => {
-                          setAsignadoSearch(e.target.value);
-                          setShowAsignadoDropdown(true);
-                          if (!e.target.value) {
-                            setAsignadoId(null);
-                            setAsignadoNombre('');
-                          }
-                        }}
-                        onFocus={() => setShowAsignadoDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowAsignadoDropdown(false), 200)}
-                        placeholder="Buscar usuario..."
-                        disabled={isSubmitting}
-                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                      />
-                      {showAsignadoDropdown && filteredUsuarios.length > 0 && (
-                        <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                          {filteredUsuarios.map((u) => (
-                            <button
-                              key={u.id}
-                              type="button"
-                              onClick={() => {
-                                setAsignadoId(u.id);
-                                setAsignadoNombre(u.nombre);
-                                setAsignadoSearch(`${u.id}, ${u.nombre}`);
-                                setShowAsignadoDropdown(false);
-                              }}
-                              className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
-                            >
-                              {u.id}, {u.nombre}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados *</label>
+
+                  {/* Chips de usuarios seleccionados */}
+                  {selectedAsignadosRevision.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {selectedAsignadosRevision.map((u) => (
+                        <span
+                          key={u.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full"
+                        >
+                          {u.nombre}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedAsignadosRevision(prev => prev.filter(x => x.id !== u.id));
+                            }}
+                            disabled={isSubmitting}
+                            className="hover:text-purple-100 disabled:opacity-50"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
                     </div>
                   )}
+
+                  {/* Input para buscar y agregar usuarios */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={asignadoSearchRevision}
+                      onChange={(e) => {
+                        setAsignadoSearchRevision(e.target.value);
+                        setShowAsignadoDropdownRevision(true);
+                      }}
+                      onFocus={() => setShowAsignadoDropdownRevision(true)}
+                      onBlur={() => setTimeout(() => setShowAsignadoDropdownRevision(false), 200)}
+                      placeholder="Buscar usuario para agregar..."
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    />
+                    {showAsignadoDropdownRevision && filteredUsuariosRevision.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {filteredUsuariosRevision.map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedAsignadosRevision(prev => [...prev, { id: u.id, nombre: u.nombre }]);
+                              setAsignadoSearchRevision('');
+                              setShowAsignadoDropdownRevision(false);
+                            }}
+                            className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
+                          >
+                            {u.id}, {u.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {showAsignadoDropdownRevision && filteredUsuariosRevision.length === 0 && asignadoSearchRevision && (
+                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg p-3 text-sm text-zinc-400">
+                        No se encontraron usuarios
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {selectedAsignadosRevision.length} usuario(s) seleccionado(s)
+                  </p>
                 </div>
 
                 {/* Fecha creación (solo lectura) */}
@@ -8022,52 +8243,70 @@ function CreateTaskModal({
                   </select>
                 </div>
 
-                {/* Asignado */}
+                {/* Asignado - Multi-select para Operaciones */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignado *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignado (Operaciones) *</label>
                   {isLoadingUsuarios ? (
                     <div className="flex items-center gap-2 py-2 text-zinc-400">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       <span className="text-sm">Cargando...</span>
                     </div>
                   ) : (
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={asignadoSearch}
-                        onChange={(e) => {
-                          setAsignadoSearch(e.target.value);
-                          setShowAsignadoDropdown(true);
-                          if (!e.target.value) {
-                            setAsignadoId(null);
-                            setAsignadoNombre('');
-                          }
-                        }}
-                        onFocus={() => setShowAsignadoDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowAsignadoDropdown(false), 200)}
-                        placeholder="Buscar usuario..."
-                        disabled={isSubmitting}
-                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                      />
-                      {showAsignadoDropdown && filteredUsuarios.length > 0 && (
-                        <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                          {filteredUsuarios.map((u) => (
-                            <button
+                    <div className="space-y-2">
+                      {/* Chips de usuarios seleccionados */}
+                      {selectedAsignadosProgramacion.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {selectedAsignadosProgramacion.map((u) => (
+                            <span
                               key={u.id}
-                              type="button"
-                              onClick={() => {
-                                setAsignadoId(u.id);
-                                setAsignadoNombre(u.nombre);
-                                setAsignadoSearch(`${u.id}, ${u.nombre}`);
-                                setShowAsignadoDropdown(false);
-                              }}
-                              className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-600/30 text-purple-300 rounded-full"
                             >
-                              {u.id}, {u.nombre}
-                            </button>
+                              {u.nombre}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedAsignadosProgramacion(prev => prev.filter(x => x.id !== u.id))}
+                                className="hover:text-white"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
                           ))}
                         </div>
                       )}
+                      {/* Input de búsqueda */}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={asignadoSearchProgramacion}
+                          onChange={(e) => {
+                            setAsignadoSearchProgramacion(e.target.value);
+                            setShowAsignadoDropdownProgramacion(true);
+                          }}
+                          onFocus={() => setShowAsignadoDropdownProgramacion(true)}
+                          onBlur={() => setTimeout(() => setShowAsignadoDropdownProgramacion(false), 200)}
+                          placeholder="Buscar usuario de Operaciones..."
+                          disabled={isSubmitting}
+                          className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                        />
+                        {showAsignadoDropdownProgramacion && filteredUsuariosProgramacion.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {filteredUsuariosProgramacion.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedAsignadosProgramacion(prev => [...prev, { id: u.id, nombre: u.nombre }]);
+                                  setAsignadoSearchProgramacion('');
+                                  setShowAsignadoDropdownProgramacion(false);
+                                }}
+                                className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
+                              >
+                                {u.id}, {u.nombre}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -8362,54 +8601,76 @@ function CreateTaskModal({
                   </select>
                 </div>
 
-                {/* Asignado */}
+                {/* Asignados (múltiples - área Compras) */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignado *</label>
-                  {isLoadingUsuarios ? (
-                    <div className="flex items-center gap-2 py-2 text-zinc-400">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-sm">Cargando...</span>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={asignadoSearch}
-                        onChange={(e) => {
-                          setAsignadoSearch(e.target.value);
-                          setShowAsignadoDropdown(true);
-                          if (!e.target.value) {
-                            setAsignadoId(null);
-                            setAsignadoNombre('');
-                          }
-                        }}
-                        onFocus={() => setShowAsignadoDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowAsignadoDropdown(false), 200)}
-                        placeholder="Buscar usuario..."
-                        disabled={isSubmitting}
-                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                      />
-                      {showAsignadoDropdown && filteredUsuarios.length > 0 && (
-                        <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                          {filteredUsuarios.map((u) => (
-                            <button
-                              key={u.id}
-                              type="button"
-                              onClick={() => {
-                                setAsignadoId(u.id);
-                                setAsignadoNombre(u.nombre);
-                                setAsignadoSearch(`${u.id}, ${u.nombre}`);
-                                setShowAsignadoDropdown(false);
-                              }}
-                              className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
-                            >
-                              {u.id}, {u.nombre}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados (Compras) *</label>
+
+                  {/* Chips de usuarios seleccionados */}
+                  {selectedAsignadosImpresion.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {selectedAsignadosImpresion.map((u) => (
+                        <span
+                          key={u.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full"
+                        >
+                          {u.nombre}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedAsignadosImpresion(prev => prev.filter(x => x.id !== u.id));
+                            }}
+                            disabled={isSubmitting}
+                            className="hover:text-purple-100 disabled:opacity-50"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
                     </div>
                   )}
+
+                  {/* Input para buscar y agregar usuarios */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={asignadoSearchImpresion}
+                      onChange={(e) => {
+                        setAsignadoSearchImpresion(e.target.value);
+                        setShowAsignadoDropdownImpresion(true);
+                      }}
+                      onFocus={() => setShowAsignadoDropdownImpresion(true)}
+                      onBlur={() => setTimeout(() => setShowAsignadoDropdownImpresion(false), 200)}
+                      placeholder="Buscar usuario de Compras para agregar..."
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    />
+                    {showAsignadoDropdownImpresion && filteredUsuariosImpresion.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {filteredUsuariosImpresion.map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedAsignadosImpresion(prev => [...prev, { id: u.id, nombre: u.nombre }]);
+                              setAsignadoSearchImpresion('');
+                              setShowAsignadoDropdownImpresion(false);
+                            }}
+                            className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
+                          >
+                            {u.id}, {u.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {showAsignadoDropdownImpresion && filteredUsuariosImpresion.length === 0 && asignadoSearchImpresion && (
+                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg p-3 text-sm text-zinc-400">
+                        No se encontraron usuarios de Compras
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {selectedAsignadosImpresion.length} usuario(s) seleccionado(s)
+                  </p>
                 </div>
 
                 {/* Fecha creación (solo lectura) */}
@@ -8506,54 +8767,67 @@ function CreateTaskModal({
                   </select>
                 </div>
 
-                {/* Asignado */}
+                {/* Asignados (área Operaciones) - Multi-select */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignado *</label>
-                  {isLoadingUsuarios ? (
-                    <div className="flex items-center gap-2 py-2 text-zinc-400">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-sm">Cargando...</span>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={asignadoSearch}
-                        onChange={(e) => {
-                          setAsignadoSearch(e.target.value);
-                          setShowAsignadoDropdown(true);
-                          if (!e.target.value) {
-                            setAsignadoId(null);
-                            setAsignadoNombre('');
-                          }
-                        }}
-                        onFocus={() => setShowAsignadoDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowAsignadoDropdown(false), 200)}
-                        placeholder="Buscar usuario..."
-                        disabled={isSubmitting}
-                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                      />
-                      {showAsignadoDropdown && filteredUsuarios.length > 0 && (
-                        <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                          {filteredUsuarios.map((u) => (
-                            <button
-                              key={u.id}
-                              type="button"
-                              onClick={() => {
-                                setAsignadoId(u.id);
-                                setAsignadoNombre(u.nombre);
-                                setAsignadoSearch(`${u.id}, ${u.nombre}`);
-                                setShowAsignadoDropdown(false);
-                              }}
-                              className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
-                            >
-                              {u.id}, {u.nombre}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados (Operaciones) *</label>
+                  {/* Chips de usuarios seleccionados */}
+                  {selectedAsignadosTestigo.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {selectedAsignadosTestigo.map((u) => (
+                        <span
+                          key={u.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full"
+                        >
+                          {u.id}, {u.nombre}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedAsignadosTestigo(prev => prev.filter(x => x.id !== u.id))}
+                            className="hover:text-purple-100"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
                     </div>
                   )}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={asignadoSearchTestigo}
+                      onChange={(e) => {
+                        setAsignadoSearchTestigo(e.target.value);
+                        setShowAsignadoDropdownTestigo(true);
+                      }}
+                      onFocus={() => setShowAsignadoDropdownTestigo(true)}
+                      onBlur={() => setTimeout(() => setShowAsignadoDropdownTestigo(false), 200)}
+                      placeholder="Buscar usuario de Operaciones..."
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                    />
+                    {showAsignadoDropdownTestigo && filteredUsuariosTestigo.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {filteredUsuariosTestigo.map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedAsignadosTestigo(prev => [...prev, { id: u.id, nombre: u.nombre }]);
+                              setAsignadoSearchTestigo('');
+                              setShowAsignadoDropdownTestigo(false);
+                            }}
+                            className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
+                          >
+                            {u.id}, {u.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {showAsignadoDropdownTestigo && filteredUsuariosTestigo.length === 0 && asignadoSearchTestigo && (
+                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg p-3 text-sm text-zinc-400">
+                        No se encontraron usuarios de Operaciones
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Fecha inicio (solo lectura) */}
@@ -8598,7 +8872,7 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !catorcenaEntrega || !asignadoId) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !catorcenaEntrega || !asignadoId || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : !titulo.trim()) || isSubmitting}
+            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !catorcenaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !catorcenaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : !titulo.trim()) || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {(isSubmitting || (tipo === 'Programación' && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -9042,6 +9316,10 @@ export function TareaSeguimientoPage() {
   const [digitalGalleryImages, setDigitalGalleryImages] = useState<ImagenDigitalView[]>([]);
   const [isLoadingDigitalGallery, setIsLoadingDigitalGallery] = useState(false);
   const [digitalGalleryTitle, setDigitalGalleryTitle] = useState('');
+
+  // Testigo File Modal state
+  const [isTestigoFileModalOpen, setIsTestigoFileModalOpen] = useState(false);
+  const [selectedTestigoFile, setSelectedTestigoFile] = useState<string | null>(null);
 
   // Modal confirmación limpiar arte
   const [isConfirmClearModalOpen, setIsConfirmClearModalOpen] = useState(false);
@@ -9525,6 +9803,7 @@ export function TareaSeguimientoPage() {
       archivo_arte: item.archivo || undefined,
       arte_aprobado: item.arte_aprobado || '',
       imu: item.IMU || '',
+      articulo: item.articulo || '',
     };
   }, []);
 
@@ -10238,7 +10517,8 @@ export function TareaSeguimientoPage() {
         asignado: t.asignado || '',
         descripcion: t.descripcion || '',
         titulo: t.titulo || '',
-        inventario_ids: t.ids_reservas ? t.ids_reservas.split(',') : [],
+        inventario_ids: (t.ids_reservas || t.listado_inventario) ? (t.ids_reservas || t.listado_inventario)!.split(',') : [],
+        ids_reservas: t.ids_reservas || t.listado_inventario || undefined,
         campana_id: campanaId,
         nombre_proveedores: t.nombre_proveedores || undefined,
         proveedores_id: t.proveedores_id || undefined,
@@ -10262,12 +10542,14 @@ export function TareaSeguimientoPage() {
         asignado: t.asignado || '',
         descripcion: t.descripcion || '',
         titulo: t.titulo || '',
-        inventario_ids: t.ids_reservas ? t.ids_reservas.split(',') : [],
+        inventario_ids: (t.ids_reservas || t.listado_inventario) ? (t.ids_reservas || t.listado_inventario)!.split(',') : [],
+        ids_reservas: t.ids_reservas || t.listado_inventario || undefined,
         campana_id: campanaId,
         nombre_proveedores: t.nombre_proveedores || undefined,
         proveedores_id: t.proveedores_id || undefined,
         num_impresiones: t.num_impresiones || undefined,
         evidencia: t.evidencia || undefined,
+        archivo_testigo: t.archivo_testigo || undefined,
       }));
   }, [tareasAPI, campanaId]);
 
@@ -10662,8 +10944,16 @@ export function TareaSeguimientoPage() {
 
   // Get selected inventory items for modals
   const selectedInventoryItems = useMemo(() => {
+    // Para el tab de impresiones, usar filteredImpresionesData
+    if (activeMainTab === 'impresiones') {
+      return filteredImpresionesData.filter((item) => selectedInventoryIds.has(item.id));
+    }
+    // Para el tab de programación, usar filteredProgramacionData
+    if (activeMainTab === 'programacion') {
+      return filteredProgramacionData.filter((item) => selectedInventoryIds.has(item.id));
+    }
     return filteredInventory.filter((item) => selectedInventoryIds.has(item.id));
-  }, [filteredInventory, selectedInventoryIds]);
+  }, [filteredInventory, filteredImpresionesData, filteredProgramacionData, selectedInventoryIds, activeMainTab]);
 
   // Compute summary stats
   const summaryStats = useMemo((): SummaryStats => {
@@ -10721,6 +11011,11 @@ export function TareaSeguimientoPage() {
   const calculateTaskTiposConfig = useCallback(() => {
     // Si estamos en la tab de testigo, solo mostrar tipo Testigo
     if (activeMainTab === 'testigo') {
+      return { initialTipo: 'Testigo', availableTipos: ['Testigo'] };
+    }
+
+    // Si estamos en la tab de programación con subtab "programado", solo mostrar tipo Testigo
+    if (activeMainTab === 'programacion' && activeEstadoProgramacionTab === 'programado') {
       return { initialTipo: 'Testigo', availableTipos: ['Testigo'] };
     }
 
@@ -10803,7 +11098,7 @@ export function TareaSeguimientoPage() {
     }
 
     return { initialTipo, availableTipos };
-  }, [selectedInventoryItems, activeMainTab]);
+  }, [selectedInventoryItems, activeMainTab, activeEstadoProgramacionTab]);
 
   // Verificar si alguno de los items seleccionados tiene relación con instalación
   const hasSelectedItemsWithInstalacion = useMemo(() => {
@@ -11272,8 +11567,26 @@ export function TareaSeguimientoPage() {
     return (
       <tr
         key={item.id}
-        className="border-b border-border/50 hover:bg-purple-900/20 transition-colors"
+        className={`border-b border-border/50 hover:bg-purple-900/20 transition-colors ${
+          selectedInventoryIds.has(item.id) ? 'bg-purple-500/20' : ''
+        }`}
       >
+        {activeEstadoProgramacionTab === 'programado' && (
+          <td className="p-2">
+            <button
+              onClick={() => toggleInventorySelection(item.id)}
+              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                selectedInventoryIds.has(item.id)
+                  ? 'bg-purple-600 border-purple-600'
+                  : 'border-purple-500/50 hover:border-purple-400'
+              }`}
+            >
+              {selectedInventoryIds.has(item.id) && (
+                <Check className="h-3 w-3 text-white" />
+              )}
+            </button>
+          </td>
+        )}
         <td className="p-2 text-xs font-medium text-white">{item.id}</td>
         <td className="p-2">
           {digitalSummary ? (
@@ -11519,6 +11832,7 @@ export function TareaSeguimientoPage() {
               ] as { key: MainTab; label: string; icon: typeof Upload }[])
                 .filter(tab => tab.key !== 'impresiones' || shouldShowImpresionesTab)
                 .filter(tab => tab.key !== 'versionario' || permissions.canSeeTabSubirArtes)
+                .filter(tab => tab.key !== 'atender' || permissions.canSeeTabRevisarAprobar)
                 .filter(tab => tab.key !== 'programacion' || permissions.canSeeTabProgramacion)
                 .filter(tab => tab.key !== 'impresiones' || permissions.canSeeTabImpresiones)
                 .filter(tab => tab.key !== 'testigo' || permissions.canSeeTabValidacionInstalacion)
@@ -11926,11 +12240,52 @@ export function TareaSeguimientoPage() {
           {activeMainTab === 'programacion' && (
             <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-purple-900/10 to-transparent flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 text-zinc-400">
-                  <Info className="h-4 w-4" />
-                  <span className="text-xs">Items digitales en tareas de programación</span>
-                </div>
+                {activeEstadoProgramacionTab === 'programado' && selectedInventoryIds.size > 0 ? (
+                  <>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 rounded-lg border border-purple-500/30">
+                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
+                      <span className="text-sm font-medium text-purple-300">
+                        {selectedInventoryIds.size} item(s) seleccionado(s)
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setSelectedInventoryIds(new Set())}
+                      className="text-xs text-zinc-400 hover:text-zinc-300"
+                    >
+                      Limpiar selección
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2 text-zinc-400">
+                    <Info className="h-4 w-4" />
+                    <span className="text-xs">
+                      {activeEstadoProgramacionTab === 'programado'
+                        ? 'Selecciona items programados para crear tareas de Testigo'
+                        : 'Items digitales en tareas de programación'}
+                    </span>
+                  </div>
+                )}
               </div>
+              {activeEstadoProgramacionTab === 'programado' && permissions.canEditGestionArtes && permissions.canCreateTareasGestionArtes && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCreateTaskClick}
+                    disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      selectedInventoryIds.size > 0 && !isCheckingExistingTasks
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {isCheckingExistingTasks ? (
+                      <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5" />
+                    )}
+                    {isCheckingExistingTasks ? 'Verificando...' : 'Crear Tarea'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -12096,7 +12451,7 @@ export function TareaSeguimientoPage() {
                   </div>
                 )}
               </div>
-              {permissions.canEditGestionArtes && permissions.canCreateTareasGestionArtes && (
+              {((permissions.canEditGestionArtes && permissions.canCreateTareasGestionArtes) || permissions.canCreateInstalacionFromRecibido) && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleCreateTaskClick}
@@ -12913,6 +13268,35 @@ export function TareaSeguimientoPage() {
                             <ChevronRight className="h-4 w-4 text-purple-400" />
                           )}
                           <span className="text-sm font-bold text-white">{level1Key}</span>
+                          {activeEstadoProgramacionTab === 'programado' && (
+                            <div
+                              role="checkbox"
+                              tabIndex={0}
+                              aria-checked={getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const allItems = getAllLevel1Items();
+                                const allSelected = allItems.every(item => selectedInventoryIds.has(item.id));
+                                setSelectedInventoryIds(prev => {
+                                  const next = new Set(prev);
+                                  allItems.forEach(item => {
+                                    if (allSelected) next.delete(item.id);
+                                    else next.add(item.id);
+                                  });
+                                  return next;
+                                });
+                              }}
+                              className={`ml-2 w-4 h-4 rounded border flex items-center justify-center transition-colors cursor-pointer ${
+                                getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0
+                                  ? 'bg-purple-600 border-purple-600'
+                                  : 'border-purple-500/50 hover:border-purple-400'
+                              }`}
+                            >
+                              {getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0 && (
+                                <Check className="h-3 w-3 text-white" />
+                              )}
+                            </div>
+                          )}
                         </div>
                         <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
                           {level1ItemCount}
@@ -12937,6 +13321,35 @@ export function TareaSeguimientoPage() {
                                       <ChevronRight className="h-3 w-3 text-purple-400" />
                                     )}
                                     <span className="text-xs font-medium text-white">{level2Key}</span>
+                                    {activeEstadoProgramacionTab === 'programado' && (
+                                      <div
+                                        role="checkbox"
+                                        tabIndex={0}
+                                        aria-checked={getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const allItems = getAllLevel2Items();
+                                          const allSelected = allItems.every(item => selectedInventoryIds.has(item.id));
+                                          setSelectedInventoryIds(prev => {
+                                            const next = new Set(prev);
+                                            allItems.forEach(item => {
+                                              if (allSelected) next.delete(item.id);
+                                              else next.add(item.id);
+                                            });
+                                            return next;
+                                          });
+                                        }}
+                                        className={`ml-2 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors cursor-pointer ${
+                                          getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0
+                                            ? 'bg-purple-600 border-purple-600'
+                                            : 'border-purple-500/50 hover:border-purple-400'
+                                        }`}
+                                      >
+                                        {getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0 && (
+                                          <Check className="h-2.5 w-2.5 text-white" />
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                   <Badge className="bg-purple-500/30 text-purple-200 border-purple-500/20 text-[10px]">
                                     {level2ItemCount}
@@ -12959,6 +13372,34 @@ export function TareaSeguimientoPage() {
                                                 <ChevronRight className="h-3 w-3 text-purple-400/70" />
                                               )}
                                               <span className="text-[11px] text-zinc-300">{level3Key}</span>
+                                              {activeEstadoProgramacionTab === 'programado' && (
+                                                <div
+                                                  role="checkbox"
+                                                  tabIndex={0}
+                                                  aria-checked={items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0}
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const allSelected = items.every(item => selectedInventoryIds.has(item.id));
+                                                    setSelectedInventoryIds(prev => {
+                                                      const next = new Set(prev);
+                                                      items.forEach(item => {
+                                                        if (allSelected) next.delete(item.id);
+                                                        else next.add(item.id);
+                                                      });
+                                                      return next;
+                                                    });
+                                                  }}
+                                                  className={`ml-2 w-3 h-3 rounded border flex items-center justify-center transition-colors cursor-pointer ${
+                                                    items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0
+                                                      ? 'bg-purple-600 border-purple-600'
+                                                      : 'border-purple-500/50 hover:border-purple-400'
+                                                  }`}
+                                                >
+                                                  {items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0 && (
+                                                    <Check className="h-2 w-2 text-white" />
+                                                  )}
+                                                </div>
+                                              )}
                                             </div>
                                             <span className="text-[10px] text-zinc-500">{items.length}</span>
                                           </button>
@@ -12967,6 +13408,32 @@ export function TareaSeguimientoPage() {
                                               <table className="w-full text-xs">
                                                 <thead className="bg-purple-900/20">
                                                   <tr className="border-b border-border text-left">
+                                                    {activeEstadoProgramacionTab === 'programado' && (
+                                                      <th className="p-2 w-8">
+                                                        <button
+                                                          onClick={() => {
+                                                            const allSelected = items.every(item => selectedInventoryIds.has(item.id));
+                                                            setSelectedInventoryIds(prev => {
+                                                              const next = new Set(prev);
+                                                              items.forEach(item => {
+                                                                if (allSelected) next.delete(item.id);
+                                                                else next.add(item.id);
+                                                              });
+                                                              return next;
+                                                            });
+                                                          }}
+                                                          className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                                            items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0
+                                                              ? 'bg-purple-600 border-purple-600'
+                                                              : 'border-purple-500/50 hover:border-purple-400'
+                                                          }`}
+                                                        >
+                                                          {items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0 && (
+                                                            <Check className="h-3 w-3 text-white" />
+                                                          )}
+                                                        </button>
+                                                      </th>
+                                                    )}
                                                     <th className="p-2 font-medium text-purple-300">ID</th>
                                                     <th className="p-2 font-medium text-purple-300">Arte</th>
                                                     <th className="p-2 font-medium text-purple-300">Ubicación</th>
@@ -13002,6 +13469,32 @@ export function TareaSeguimientoPage() {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-purple-900/20 z-10">
                     <tr className="border-b border-border text-left">
+                      {activeEstadoProgramacionTab === 'programado' && (
+                        <th className="p-2 w-8">
+                          <button
+                            onClick={() => {
+                              const allSelected = filteredProgramacionData.every(item => selectedInventoryIds.has(item.id));
+                              setSelectedInventoryIds(prev => {
+                                const next = new Set(prev);
+                                filteredProgramacionData.forEach(item => {
+                                  if (allSelected) next.delete(item.id);
+                                  else next.add(item.id);
+                                });
+                                return next;
+                              });
+                            }}
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                              filteredProgramacionData.every(item => selectedInventoryIds.has(item.id)) && filteredProgramacionData.length > 0
+                                ? 'bg-purple-600 border-purple-600'
+                                : 'border-purple-500/50 hover:border-purple-400'
+                            }`}
+                          >
+                            {filteredProgramacionData.every(item => selectedInventoryIds.has(item.id)) && filteredProgramacionData.length > 0 && (
+                              <Check className="h-3 w-3 text-white" />
+                            )}
+                          </button>
+                        </th>
+                      )}
                       <th className="p-2 font-medium text-purple-300">ID</th>
                       <th className="p-2 font-medium text-purple-300">Arte</th>
                       <th className="p-2 font-medium text-purple-300">Ubicación</th>
@@ -13015,8 +13508,26 @@ export function TareaSeguimientoPage() {
                     {filteredProgramacionData.map((item) => (
                       <tr
                         key={item.id}
-                        className="border-b border-border/50 hover:bg-purple-900/10 transition-colors"
+                        className={`border-b border-border/50 hover:bg-purple-900/10 transition-colors ${
+                          selectedInventoryIds.has(item.id) ? 'bg-purple-500/20' : ''
+                        }`}
                       >
+                        {activeEstadoProgramacionTab === 'programado' && (
+                          <td className="p-2">
+                            <button
+                              onClick={() => toggleInventorySelection(item.id)}
+                              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                selectedInventoryIds.has(item.id)
+                                  ? 'bg-purple-600 border-purple-600'
+                                  : 'border-purple-500/50 hover:border-purple-400'
+                              }`}
+                            >
+                              {selectedInventoryIds.has(item.id) && (
+                                <Check className="h-3 w-3 text-white" />
+                              )}
+                            </button>
+                          </td>
+                        )}
                         <td className="p-2 text-zinc-300 font-mono">{item.id}</td>
                         <td className="p-2">
                           {item.archivo_arte ? (
@@ -13577,7 +14088,7 @@ export function TareaSeguimientoPage() {
                               {/* Solo mostrar botón Abrir si: canOpenTasks=true Y (no tiene restricción O es tarea del tipo permitido) */}
                               {permissions.canOpenTasks && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks) ||
                                 (permissions.canOnlyOpenImpresionTasks && task.tipo === 'Impresión') ||
-                                (permissions.canOnlyOpenRecepcionTasks && task.tipo === 'Recepción')) ? (
+                                (permissions.canOnlyOpenRecepcionTasks && (task.tipo === 'Recepción' || task.tipo === 'Instalación' || task.tipo === 'Testigo' || task.tipo === 'Programación'))) ? (
                                 <button
                                   onClick={() => {
                                     setSelectedTask(task);
@@ -13633,7 +14144,7 @@ export function TareaSeguimientoPage() {
                           <th className="p-2 font-medium text-purple-300">Creador</th>
                           <th className="p-2 font-medium text-purple-300">Asignado</th>
                           <th className="p-2 font-medium text-purple-300">Descripcion</th>
-                          <th className="p-2 font-medium text-purple-300">Contenido</th>
+                          <th className="p-2 font-medium text-purple-300">Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -13648,7 +14159,21 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300">{task.creador}</td>
                             <td className="p-2 text-zinc-300">{task.asignado}</td>
                             <td className="p-2 text-zinc-300 max-w-[150px] truncate">{task.descripcion}</td>
-                            <td className="p-2 text-zinc-300 max-w-[150px] truncate">{task.contenido}</td>
+                            <td className="p-2">
+                              {task.tipo === 'Testigo' && task.archivo_testigo && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedTestigoFile(task.archivo_testigo);
+                                    setIsTestigoFileModalOpen(true);
+                                  }}
+                                  className="flex items-center gap-1 px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                                  title="Ver archivo testigo"
+                                >
+                                  <Eye className="h-3 w-3" />
+                                  Ver
+                                </button>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -14071,6 +14596,58 @@ Por favor registra la cantidad de impresiones recibidas.`,
         canResolveRevisionArtesTasks={permissions.canResolveRevisionArtesTasks}
         digitalSummaryMap={digitalSummaryMap}
       />
+
+      {/* Modal para ver archivo testigo */}
+      {isTestigoFileModalOpen && selectedTestigoFile && (() => {
+        // Construir URL completa del archivo
+        const fileUrl = selectedTestigoFile.startsWith('http')
+          ? selectedTestigoFile
+          : `${STATIC_URL}${selectedTestigoFile}`;
+        const isPdf = selectedTestigoFile.toLowerCase().endsWith('.pdf');
+        const fileName = selectedTestigoFile.split('/').pop() || 'archivo';
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsTestigoFileModalOpen(false)} />
+            <div className="relative bg-card border border-border rounded-xl w-full max-w-md mx-4 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Eye className="h-5 w-5 text-purple-400" />
+                  Archivo Testigo
+                </h3>
+                <button
+                  onClick={() => setIsTestigoFileModalOpen(false)}
+                  className="p-1 hover:bg-purple-900/30 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-full p-4 bg-zinc-900/50 rounded-lg border border-border">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-purple-600/20 rounded-lg">
+                      {isPdf ? <FileText className="h-8 w-8 text-purple-400" /> : <Image className="h-8 w-8 text-purple-400" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{fileName}</p>
+                      <p className="text-xs text-zinc-400">{isPdf ? 'Documento PDF' : 'Imagen'}</p>
+                    </div>
+                  </div>
+                </div>
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                >
+                  <ExternalLink className="h-5 w-5" />
+                  Abrir archivo
+                </a>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
