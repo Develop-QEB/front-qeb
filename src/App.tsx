@@ -20,8 +20,12 @@ import { NotificacionesPage } from './features/notificaciones/NotificacionesPage
 import { CorreosPage } from './features/correos/CorreosPage';
 import { PerfilPage } from './features/perfil/PerfilPage';
 import { UsuariosAdminPage } from './features/admin/UsuariosAdminPage';
+import { DevTicketsPage } from './features/tickets/DevTicketsPage';
 import { useAuthStore } from './store/authStore';
 import { getPermissions } from './lib/permissions';
+
+// IDs de usuarios programadores con acceso a /dev/tickets
+const DEV_USERS_IDS = [1057460, 1057462]; // Mario, Jos
 
 // IDs de usuarios con acceso a Inventarios (Mario, Jos, Akary)
 const INVENTARIOS_ALLOWED_USER_IDS = [1057460, 1057462, 1057581];
@@ -71,6 +75,16 @@ function GestionArtesRoute() {
   }
   return <TareaSeguimientoPage />;
 }
+
+// Componente para proteger ruta de Dev Tickets (solo programadores)
+function DevTicketsRoute() {
+  const user = useAuthStore((state) => state.user);
+
+  if (!user || !DEV_USERS_IDS.includes(user.id)) {
+    return <Navigate to="/" replace />;
+  }
+  return <DevTicketsPage />;
+}
  
 function App() {
   return (
@@ -101,6 +115,7 @@ function App() {
             <Route path="/correos" element={<CorreosPage />} />
             <Route path="/perfil" element={<PerfilPage />} />
             <Route path="/admin/usuarios" element={<AdminUsuariosRoute />} />
+            <Route path="/dev/tickets" element={<DevTicketsRoute />} />
           </Route>
 
           {/* Public route for clients - no auth required */}
