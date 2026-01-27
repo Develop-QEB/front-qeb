@@ -394,6 +394,11 @@ export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote): Prom
     });
 
     const data = await response.json();
+    console.log('========== SAP RESPONSE ==========');
+    console.log('Status:', response.status);
+    console.log('Response data:', JSON.stringify(data, null, 2));
+    console.log('==================================');
+
     const environment = useEnvironmentStore.getState().environment;
     const envLabel = environment === 'test' ? 'pruebas' : 'producción';
 

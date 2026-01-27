@@ -693,14 +693,33 @@ interface ApproveModalProps {
   onSuccess: () => void;
 }
 
+// Puestos permitidos en el modal de aprobar propuesta
+const ALLOWED_PUESTOS_APROBAR = [
+  'Analista de Servicio al Cliente',
+  'Coordinador de Diseño',
+  'Diseñadores',
+  'Diseñador',
+];
+
 function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalProps) {
   const queryClient = useQueryClient();
   const [precio, setPrecio] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<{ id: number; nombre: string }[]>([]);
   const [userSearch, setUserSearch] = useState('');
 
-  const { data: users } = useQuery({
-    queryKey: ['solicitudes-users', 'team-filtered'],
+  // WebSocket para actualizar usuarios en tiempo real
+  useSocketEquipos();
+
+  // Fetch all users to identify Tráfico users for exclusion from pre-selection
+  const { data: allUsers } = useQuery({
+    queryKey: ['solicitudes-users', 'all-users-approve'],
+    queryFn: () => solicitudesService.getUsers(undefined, false),
+    enabled: isOpen,
+  });
+
+  // Fetch team-filtered users for the selectable list
+  const { data: teamUsers } = useQuery({
+    queryKey: ['solicitudes-users', 'team-filtered-approve'],
     queryFn: () => solicitudesService.getUsers(undefined, true),
     enabled: isOpen,
   });
@@ -720,29 +739,64 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
     },
   });
 
-  // Initialize with current assigned users
+  // Initialize with: 1) Original assignees (except Tráfico) + 2) All team users with allowed positions
   useEffect(() => {
-    if (propuesta && isOpen) {
+    if (propuesta && isOpen && allUsers && teamUsers) {
       setPrecio(propuesta.precio_simulado?.toString() || propuesta.precio?.toString() || '');
-      // Parse current assigned users
+
+      const combinedUsers: { id: number; nombre: string }[] = [];
+      const addedIds = new Set<number>();
+
+      // Get IDs of Tráfico area users to exclude them
+      const traficoUserIds = new Set(
+        allUsers
+          .filter(u => u.area?.toLowerCase() === 'tráfico' || u.area?.toLowerCase() === 'trafico')
+          .map(u => u.id)
+      );
+
+      // 1. Add original assigned users, excluding Tráfico
       if (propuesta.asignado && propuesta.id_asignado) {
         const nombres = propuesta.asignado.split(',').map(n => n.trim());
         const ids = propuesta.id_asignado.split(',').map(id => parseInt(id.trim()));
-        const current = nombres.map((nombre, idx) => ({ id: ids[idx] || 0, nombre }));
-        setSelectedUsers(current);
-      } else {
-        setSelectedUsers([]);
+        ids.forEach((id, idx) => {
+          if (!traficoUserIds.has(id) && !addedIds.has(id) && nombres[idx]) {
+            combinedUsers.push({ id, nombre: nombres[idx] });
+            addedIds.add(id);
+          }
+        });
       }
+
+      // 2. Add all team users with allowed positions (if not already added)
+      teamUsers.forEach(u => {
+        const hasAllowedPuesto = ALLOWED_PUESTOS_APROBAR.some(
+          puesto => u.puesto?.toLowerCase() === puesto.toLowerCase()
+        );
+        if (hasAllowedPuesto && !addedIds.has(u.id)) {
+          combinedUsers.push({ id: u.id, nombre: u.nombre });
+          addedIds.add(u.id);
+        }
+      });
+
+      setSelectedUsers(combinedUsers);
     }
-  }, [propuesta, isOpen]);
+  }, [propuesta, isOpen, allUsers, teamUsers]);
 
   const filteredUsers = useMemo(() => {
-    if (!users) return [];
-    return users.filter((u: UserOption) =>
-      u.nombre.toLowerCase().includes(userSearch.toLowerCase()) ||
-      u.area.toLowerCase().includes(userSearch.toLowerCase())
-    );
-  }, [users, userSearch]);
+    if (!teamUsers) return [];
+    // Filter by allowed positions (from MY TEAM) and apply search filter
+    return teamUsers.filter((u: UserOption) => {
+      // Check if user has an allowed position
+      const hasAllowedPuesto = ALLOWED_PUESTOS_APROBAR.some(
+        puesto => u.puesto?.toLowerCase() === puesto.toLowerCase()
+      );
+      if (!hasAllowedPuesto) return false; // Only show users with allowed positions
+
+      // Apply search filter
+      return u.nombre.toLowerCase().includes(userSearch.toLowerCase()) ||
+        u.area?.toLowerCase().includes(userSearch.toLowerCase()) ||
+        u.puesto?.toLowerCase().includes(userSearch.toLowerCase());
+    });
+  }, [teamUsers, userSearch]);
 
   const toggleUser = (user: UserOption) => {
     setSelectedUsers(prev => {

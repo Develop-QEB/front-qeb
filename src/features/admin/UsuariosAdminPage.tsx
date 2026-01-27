@@ -6,6 +6,7 @@ import { usuariosService, UsuarioAdmin, UpdateUsuarioInput, CreateUsuarioInput }
 import { equiposService, Equipo, CreateEquipoInput, MiembroEquipo } from '../../services/equipos.service';
 import { ticketsService, Ticket as TicketType, CreateTicketInput } from '../../services/tickets.service';
 import { UserAvatar } from '../../components/ui/user-avatar';
+import { useSocketEquipos } from '../../hooks/useSocket';
 
 type TabType = 'usuarios' | 'equipos' | 'tickets';
 
@@ -1769,6 +1770,9 @@ function ViewTicketModal({
 // Componente principal con tabs
 export function UsuariosAdminPage() {
   const [activeTab, setActiveTab] = useState<TabType>('usuarios');
+
+  // WebSocket para actualizar equipos en tiempo real
+  useSocketEquipos();
 
   const tabs = [
     { key: 'usuarios' as TabType, label: 'Usuarios', icon: Users },
