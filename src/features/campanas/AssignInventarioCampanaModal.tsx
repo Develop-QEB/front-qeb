@@ -1707,7 +1707,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         inv.plaza?.toLowerCase().includes(term) ||
         inv.ubicacion?.toLowerCase().includes(term) ||
         inv.tipo_de_cara?.toLowerCase().includes(term) ||
-        inv.nivel_socioeconomico?.toLowerCase().includes(term)
+        inv.nivel_socioeconomico?.toLowerCase().includes(term) ||
+        inv.tipo_de_mueble?.toLowerCase().includes(term)
       );
     }
 
@@ -2057,25 +2058,29 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           const flujoOrig = inventarioDisponible.find(i => i.id === inv.flujoId);
           const contraflujoOrig = inventarioDisponible.find(i => i.id === inv.contraflujoId);
 
-          if (flujoOrig && flujoCount < remainingToAssign.flujo) {
+          // For "completo" items, BOTH must have space to reserve either
+          const canReserveFlujo = flujoOrig && flujoCount < remainingToAssign.flujo;
+          const canReserveContraflujo = contraflujoOrig && contraflujoCount < remainingToAssign.contraflujo;
+
+          // Only reserve both if BOTH have space (to keep them paired)
+          if (canReserveFlujo && canReserveContraflujo) {
             newReservas.push({
               inventario_id: inv.flujoId!,
               tipo: 'Flujo',
-              latitud: flujoOrig.latitud || 0,
-              longitud: flujoOrig.longitud || 0,
+              latitud: flujoOrig!.latitud || 0,
+              longitud: flujoOrig!.longitud || 0,
             });
             flujoCount++;
-          }
 
-          if (contraflujoOrig && contraflujoCount < remainingToAssign.contraflujo) {
             newReservas.push({
               inventario_id: inv.contraflujoId!,
               tipo: 'Contraflujo',
-              latitud: contraflujoOrig.latitud || 0,
-              longitud: contraflujoOrig.longitud || 0,
+              latitud: contraflujoOrig!.latitud || 0,
+              longitud: contraflujoOrig!.longitud || 0,
             });
             contraflujoCount++;
           }
+          // If only one has space, skip this completo item entirely to maintain pairing
         } else {
           // Regular item - reserve based on tipo_de_cara
           const tipo = inv.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo';

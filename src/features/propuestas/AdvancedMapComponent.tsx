@@ -364,7 +364,12 @@ export function AdvancedMapComponent({
       if (!inRangeSet.has(inv.id)) return COLORS.fueraRango;
     }
 
-    // Priority 3: Traffic direction
+    // Priority 3: Handle "Completo" type (merged Flujo+Contraflujo from muebles completos filter)
+    if (inv.tipo_de_cara === 'Completo') {
+      return COLORS.ambos;  // Purple for complete pairs
+    }
+
+    // Priority 4: Traffic direction - check if both Flujo and Contraflujo exist at same location
     if (inv.latitud && inv.longitud) {
       const key = `${inv.latitud.toFixed(5)},${inv.longitud.toFixed(5)}`;
       const locationInfo = locationFlowMap.get(key);
@@ -755,7 +760,7 @@ export function AdvancedMapComponent({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-emerald-500 ring-1 ring-emerald-400/30" />
+              <div className="w-3 h-3 rounded-full bg-green-500 ring-1 ring-green-400/30" />
               <div>
                 <span className="text-zinc-300">Ya reservado</span>
                 <span className="text-zinc-500 text-[10px] ml-1">(otra cara)</span>

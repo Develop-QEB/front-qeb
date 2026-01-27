@@ -12,9 +12,7 @@ import {
   Filter,
   X,
   TrendingUp,
-  Users,
   Calendar,
-  Activity,
   ChevronRight,
   ChevronLeft,
   RotateCcw,
@@ -813,14 +811,14 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                           className="w-4 h-4 rounded border-purple-500/50 bg-transparent text-pink-500 focus:ring-pink-500/50 focus:ring-offset-0 cursor-pointer"
                         />
                       </th>
-                      {['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente'].map((h) => (
+                      {['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'].map((h) => (
                         <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {data.length === 0 ? (
-                      <tr><td colSpan={8} className="px-4 py-8 text-center text-zinc-500">No hay inventarios</td></tr>
+                      <tr><td colSpan={9} className="px-4 py-8 text-center text-zinc-500">No hay inventarios</td></tr>
                     ) : (
                       data.map((item, idx) => {
                         const isSelected = selectedIds.has(item.id);
@@ -860,6 +858,15 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-zinc-400 truncate max-w-[150px]">{item.cliente_nombre || '-'}</td>
+                            <td className="px-4 py-3">
+                              {item.APS ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                  {item.APS}
+                                </span>
+                              ) : (
+                                <span className="text-zinc-500">-</span>
+                              )}
+                            </td>
                           </tr>
                         );
                       })
@@ -992,10 +999,7 @@ export function DashboardPage() {
     }),
   });
 
-  const { data: activity } = useQuery({ queryKey: ['dashboard', 'activity'], queryFn: () => dashboardService.getRecentActivity() });
-  const { data: proximasCatorcenas } = useQuery({ queryKey: ['dashboard', 'catorcenas'], queryFn: () => dashboardService.getUpcomingCatorcenas() });
-  const { data: topClientes } = useQuery({ queryKey: ['dashboard', 'top-clientes'], queryFn: () => dashboardService.getTopClientes() });
-
+  
   const graficas = useMemo(() => activeEstatus !== 'total' && estatusStats ? estatusStats.graficas : stats?.graficas, [activeEstatus, estatusStats, stats]);
 
   const filteredCatorcena = useMemo(() => {
@@ -1119,68 +1123,6 @@ export function DashboardPage() {
           selectedIds={selectedInventoryIds}
           onSelectionChange={setSelectedInventoryIds}
         />
-
-        {/* Widgets */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <GlassCard>
-            <div className="p-4 border-b border-purple-500/20 flex items-center gap-2">
-              <Activity className="h-4 w-4 text-pink-400" />
-              <h3 className="text-sm font-medium text-white uppercase tracking-wider">Actividad Reciente</h3>
-            </div>
-            <div className="p-4 space-y-2">
-              {activity?.solicitudes.slice(0, 4).map((sol) => (
-                <div key={sol.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-purple-500/10 transition-colors">
-                  <div className="h-2 w-2 rounded-full bg-pink-500 mt-1.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white truncate">{sol.descripcion}</p>
-                    <p className="text-xs text-purple-400/60">{sol.razon_social || 'Sin cliente'} - {sol.status}</p>
-                  </div>
-                </div>
-              ))}
-              {!activity?.solicitudes.length && <p className="text-center text-purple-400/60 py-4">Sin actividad</p>}
-            </div>
-          </GlassCard>
-
-          <GlassCard>
-            <div className="p-4 border-b border-purple-500/20 flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-cyan-400" />
-              <h3 className="text-sm font-medium text-white uppercase tracking-wider">Próximas Catorcenas</h3>
-            </div>
-            <div className="p-4 space-y-2">
-              {proximasCatorcenas?.slice(0, 5).map((cat) => (
-                <div key={cat.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-purple-500/10 transition-colors">
-                  <div>
-                    <p className="text-sm text-white">Cat {cat.numero} - {cat.ano}</p>
-                    <p className="text-xs text-purple-400/60">
-                      {new Date(cat.fecha_inicio).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} - {new Date(cat.fecha_fin).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
-                    </p>
-                  </div>
-                  <span className="text-xs text-cyan-400">{Math.ceil((new Date(cat.fecha_inicio).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} días</span>
-                </div>
-              ))}
-              {!proximasCatorcenas?.length && <p className="text-center text-purple-400/60 py-4">Sin catorcenas</p>}
-            </div>
-          </GlassCard>
-
-          <GlassCard>
-            <div className="p-4 border-b border-purple-500/20 flex items-center gap-2">
-              <Users className="h-4 w-4 text-yellow-400" />
-              <h3 className="text-sm font-medium text-white uppercase tracking-wider">Top Clientes</h3>
-            </div>
-            <div className="p-4 space-y-2">
-              {topClientes?.map((cliente, index) => (
-                <div key={cliente.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-purple-500/10 transition-colors">
-                  <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold ${index === 0 ? 'bg-yellow-500 text-black' : index === 1 ? 'bg-gray-300 text-black' : index === 2 ? 'bg-orange-600 text-white' : 'bg-purple-800 text-white'}`}>
-                    {index + 1}
-                  </div>
-                  <p className="text-sm text-white flex-1 truncate">{cliente.nombre}</p>
-                  <span className="text-sm text-purple-300">{cliente.totalReservas}</span>
-                </div>
-              ))}
-              {!topClientes?.length && <p className="text-center text-purple-400/60 py-4">Sin datos</p>}
-            </div>
-          </GlassCard>
-        </div>
       </div>
     </div>
   );

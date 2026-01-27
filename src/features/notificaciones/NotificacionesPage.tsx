@@ -1192,6 +1192,7 @@ function TaskDrawer({
   tarea,
   onClose,
   onAddComment,
+  onUpdateFechaFin,
   onNavigate,
   isClosing = false,
   onAutorizacionAction,
@@ -1199,6 +1200,7 @@ function TaskDrawer({
   tarea: Notificacion & { comentarios?: ComentarioTarea[] };
   onClose: () => void;
   onAddComment: (contenido: string) => void;
+  onUpdateFechaFin?: (fecha_fin: string) => void;
   onNavigate?: (path: string) => void;
   isClosing?: boolean;
   onAutorizacionAction?: () => void;
@@ -1206,6 +1208,10 @@ function TaskDrawer({
   const [comment, setComment] = useState('');
   const [rechazoMotivo, setRechazoMotivo] = useState('');
   const [showRechazoInput, setShowRechazoInput] = useState(false);
+  const [isEditingFecha, setIsEditingFecha] = useState(false);
+  const [fechaFinEdit, setFechaFinEdit] = useState(
+    tarea.fecha_fin ? new Date(tarea.fecha_fin).toISOString().split('T')[0] : ''
+  );
   const user = useAuthStore((state) => state.user);
   const canNavigate = hasNavigationRoute(tarea);
 
@@ -1356,6 +1362,17 @@ function TaskDrawer({
         <div className="p-5 space-y-3">
           <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Detalles</h3>
 
+          {/* Cliente (si es tarea de autorización) */}
+          {carasPendientes.length > 0 && carasPendientes[0].cliente && (
+            <div className="flex items-center justify-between p-3 rounded-xl bg-purple-500/10 border border-purple-500/30">
+              <div className="flex items-center gap-2 text-purple-400">
+                <Building2 className="h-4 w-4" />
+                <span className="text-xs">Cliente</span>
+              </div>
+              <span className="text-sm text-white font-medium">{carasPendientes[0].cliente}</span>
+            </div>
+          )}
+
           {/* Asignado */}
           <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
             <div className="flex items-center gap-2 text-zinc-500">
@@ -1379,17 +1396,7 @@ function TaskDrawer({
             </div>
           )}
 
-          {/* Fechas */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
-            <div className="flex items-center gap-2 text-zinc-500">
-              <Calendar className="h-4 w-4" />
-              <span className="text-xs">Fecha límite</span>
-            </div>
-            <span className={`text-sm font-medium ${tarea.fecha_fin ? 'text-white' : 'text-zinc-600'}`}>
-              {tarea.fecha_fin ? formatDate(tarea.fecha_fin) : 'Sin fecha'}
-            </span>
-          </div>
-
+          {/* Fecha inicio (no editable) */}
           {tarea.fecha_inicio && (
             <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
               <div className="flex items-center gap-2 text-zinc-500">
@@ -1399,6 +1406,59 @@ function TaskDrawer({
               <span className="text-sm text-zinc-300">{formatDate(tarea.fecha_inicio)}</span>
             </div>
           )}
+
+          {/* Fecha límite - Editable */}
+          <div className="p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-zinc-500">
+                <Calendar className="h-4 w-4" />
+                <span className="text-xs">Fecha límite</span>
+              </div>
+              {!isEditingFecha && (
+                <span className="text-[10px] text-purple-400/60">click para editar</span>
+              )}
+            </div>
+            {isEditingFecha ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={fechaFinEdit}
+                  onChange={(e) => setFechaFinEdit(e.target.value)}
+                  className="flex-1 px-3 py-2 text-sm rounded-lg bg-zinc-900 border border-purple-500/50 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+                <button
+                  onClick={() => {
+                    if (fechaFinEdit && onUpdateFechaFin) {
+                      onUpdateFechaFin(fechaFinEdit);
+                    }
+                    setIsEditingFecha(false);
+                  }}
+                  className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    setFechaFinEdit(tarea.fecha_fin ? new Date(tarea.fecha_fin).toISOString().split('T')[0] : '');
+                    setIsEditingFecha(false);
+                  }}
+                  className="p-2 rounded-lg bg-zinc-700 text-zinc-400 hover:bg-zinc-600 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsEditingFecha(true)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 hover:border-purple-500/50 transition-all group"
+              >
+                <span className={`text-sm font-medium ${tarea.fecha_fin ? 'text-white' : 'text-zinc-500'}`}>
+                  {tarea.fecha_fin ? formatDate(tarea.fecha_fin) : 'Sin fecha asignada'}
+                </span>
+                <Pencil className="h-4 w-4 text-purple-400 group-hover:text-purple-300 transition-colors" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Panel de Autorización (solo si es tarea de autorización) */}
@@ -1427,32 +1487,14 @@ function TaskDrawer({
               </div>
             )}
 
-            {/* Info de contexto: Cliente, Campaña y Catorcena */}
-            {carasPendientes.length > 0 && (
+            {/* Catorcena */}
+            {carasPendientes.length > 0 && carasPendientes[0].catorcena && (
               <div className="mb-3 p-3 rounded-lg bg-zinc-800/30 border border-zinc-700/50">
-                <div className="grid grid-cols-2 gap-2">
-                  {carasPendientes[0].cliente && (
-                    <div className="flex items-center gap-2 text-xs">
-                      <Building2 className="h-3.5 w-3.5 text-zinc-500" />
-                      <span className="text-zinc-500">Cliente:</span>
-                      <span className="text-white font-medium truncate">{carasPendientes[0].cliente}</span>
-                    </div>
-                  )}
-                  {carasPendientes[0].catorcena && (
-                    <div className="flex items-center gap-2 text-xs">
-                      <Calendar className="h-3.5 w-3.5 text-zinc-500" />
-                      <span className="text-zinc-500">Catorcena:</span>
-                      <span className="text-cyan-300 font-medium">{carasPendientes[0].catorcena}</span>
-                    </div>
-                  )}
+                <div className="flex items-center gap-2 text-xs">
+                  <Calendar className="h-3.5 w-3.5 text-cyan-400" />
+                  <span className="text-zinc-500">Catorcena:</span>
+                  <span className="text-cyan-300 font-medium">{carasPendientes[0].catorcena}</span>
                 </div>
-                {carasPendientes[0].campana && (
-                  <div className="flex items-center gap-2 text-xs mt-2">
-                    <Tag className="h-3.5 w-3.5 text-zinc-500" />
-                    <span className="text-zinc-500">Campaña:</span>
-                    <span className="text-purple-300 font-medium">{carasPendientes[0].campana}</span>
-                  </div>
-                )}
               </div>
             )}
 
@@ -1715,6 +1757,19 @@ export function NotificacionesPage() {
         const updated = await notificacionesService.getById(selectedTarea.id);
         setSelectedTarea(updated);
       }
+    },
+  });
+
+  // Mutation para actualizar tarea (fecha_fin)
+  const updateTareaMutation = useMutation({
+    mutationFn: ({ id, fecha_fin }: { id: number; fecha_fin: string }) =>
+      notificacionesService.update(id, { fecha_fin }),
+    onSuccess: async () => {
+      if (selectedTarea) {
+        const updated = await notificacionesService.getById(selectedTarea.id);
+        setSelectedTarea(updated);
+      }
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
     },
   });
 
@@ -2399,6 +2454,7 @@ export function NotificacionesPage() {
             tarea={selectedTarea}
             onClose={handleCloseDrawer}
             onAddComment={(contenido) => addCommentMutation.mutate({ id: selectedTarea.id, contenido })}
+            onUpdateFechaFin={(fecha_fin) => updateTareaMutation.mutate({ id: selectedTarea.id, fecha_fin })}
             onNavigate={(path) => {
               handleCloseDrawer();
               setTimeout(() => navigate(path), 250);

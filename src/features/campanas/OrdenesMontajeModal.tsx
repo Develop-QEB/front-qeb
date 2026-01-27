@@ -873,7 +873,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           <input
                             type="date"
                             value={fechaInicio}
-                            onChange={(e) => setFechaInicio(e.target.value)}
+                            onChange={(e) => {
+                              setFechaInicio(e.target.value);
+                              // Clear catorcenas when using date range (mutually exclusive)
+                              if (e.target.value) setSelectedCatorcenas([]);
+                            }}
                             className={`w-full px-3 py-2 rounded-lg text-sm border text-white focus:outline-none ${
                               fechaInicio
                                 ? 'bg-purple-900/30 border-purple-500/50 focus:border-purple-400'
@@ -889,7 +893,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           <input
                             type="date"
                             value={fechaFin}
-                            onChange={(e) => setFechaFin(e.target.value)}
+                            onChange={(e) => {
+                              setFechaFin(e.target.value);
+                              // Clear catorcenas when using date range (mutually exclusive)
+                              if (e.target.value) setSelectedCatorcenas([]);
+                            }}
                             className={`w-full px-3 py-2 rounded-lg text-sm border text-white focus:outline-none ${
                               fechaFin
                                 ? 'bg-purple-900/30 border-purple-500/50 focus:border-purple-400'
@@ -914,18 +922,37 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
                     {/* Catorcenas */}
                     <div>
-                      <label className="text-xs font-medium text-zinc-400 mb-2 block">Catorcenas ({selectedCatorcenas.length} seleccionadas)</label>
-                      <div className="flex flex-wrap gap-1.5 max-h-[100px] overflow-y-auto p-2 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-medium text-zinc-400">Catorcenas ({selectedCatorcenas.length} seleccionadas)</label>
+                        {selectedCatorcenas.length > 0 && (
+                          <button
+                            onClick={() => setSelectedCatorcenas([])}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Limpiar
+                          </button>
+                        )}
+                      </div>
+                      {(fechaInicio || fechaFin) && (
+                        <div className="mb-2 px-2 py-1.5 bg-amber-900/20 border border-amber-500/30 rounded-lg">
+                          <span className="text-xs text-amber-400">Limpia el rango de fechas para seleccionar catorcenas</span>
+                        </div>
+                      )}
+                      <div className={`flex flex-wrap gap-1.5 max-h-[100px] overflow-y-auto p-2 bg-zinc-800/50 rounded-lg border border-zinc-700/50 ${(fechaInicio || fechaFin) ? 'opacity-50 pointer-events-none' : ''}`}>
                         {catorcenaOptions.map((option) => (
                           <button
                             key={option.id}
                             onClick={() => {
+                              // Clear date range when selecting catorcenas (mutually exclusive)
+                              setFechaInicio('');
+                              setFechaFin('');
                               setSelectedCatorcenas(prev =>
                                 prev.includes(option.id)
                                   ? prev.filter(id => id !== option.id)
                                   : [...prev, option.id]
                               );
                             }}
+                            disabled={!!(fechaInicio || fechaFin)}
                             className={`px-2 py-1 text-xs rounded transition-colors ${
                               selectedCatorcenas.includes(option.id)
                                 ? 'bg-purple-600 text-white'

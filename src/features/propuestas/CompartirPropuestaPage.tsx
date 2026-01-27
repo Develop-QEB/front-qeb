@@ -524,7 +524,6 @@ export function CompartirPropuestaPage() {
     y += 12;
 
     const clientFields = [
-      ['CUIC', details?.solicitud?.cuic || 'N/A'],
       ['Cliente', details?.solicitud?.cliente || 'N/A'],
       ['Razón Social', details?.solicitud?.razon_social || 'N/A'],
       ['Marca', details?.solicitud?.marca_nombre || 'N/A'],
@@ -667,16 +666,15 @@ export function CompartirPropuestaPage() {
 
           // === TABLE FOR THIS ARTICULO ===
           const tableData = items.map(i => [
-            i.codigo_unico || '',
-            i.plaza || '',
+            String(i.id),
+            (i.ubicacion || '').substring(0, 50),
             i.tipo_de_cara || '',
-            i.tipo_de_mueble || '',
-            String(i.caras_totales),
-            (i.ubicacion || '').substring(0, 40),
+            i.tipo_de_mueble || i.mueble || '',
+            i.municipio || '',
           ]);
 
           autoTable(doc, {
-            head: [['Código', 'Plaza', 'Tipo', 'Formato', 'Caras', 'Ubicación']],
+            head: [['ID', 'Ubicación', 'Tipo Cara', 'Mueble', 'Municipio']],
             body: tableData,
             startY: y,
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -684,8 +682,11 @@ export function CompartirPropuestaPage() {
             headStyles: { fillColor: [230, 240, 250], textColor: IMU_BLUE, fontStyle: 'bold', fontSize: 7 },
             alternateRowStyles: { fillColor: [250, 252, 255] },
             columnStyles: {
-              0: { cellWidth: 32 },
-              4: { halign: 'center', cellWidth: 14 },
+              0: { cellWidth: 18 },
+              1: { cellWidth: 80 },
+              2: { cellWidth: 25 },
+              3: { cellWidth: 40 },
+              4: { cellWidth: 40 },
             },
           });
 

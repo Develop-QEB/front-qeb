@@ -152,10 +152,17 @@ const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad
   // This prevents "MEXICO" from matching before "CIUDAD DE MEXICO"
   const sortedCities = Object.entries(CIUDAD_ESTADO_MAP).sort((a, b) => b[0].length - a[0].length);
 
+  // Ciudades que no existen como tal y solo deben poner el estado (Ciudad de México)
+  const CIUDADES_SIN_CIUDAD = ['CDMX', 'CIUDAD DE MEXICO', 'MEXICO', 'DF'];
+
   for (const [ciudad, estado] of sortedCities) {
     // Use word boundary check - city must be preceded and followed by non-letter chars
     const regex = new RegExp(`(^|[^A-Z])${ciudad.replace(/\s+/g, '\\s+')}([^A-Z]|$)`, 'i');
     if (regex.test(name)) {
+      // Si es una ciudad que no existe (CDMX, etc.), solo devolver estado sin ciudad
+      if (CIUDADES_SIN_CIUDAD.includes(ciudad)) {
+        return { estado, ciudad: '' };
+      }
       return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
     }
   }
@@ -562,6 +569,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Reservas state
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
 
+  // Check if the cara being edited has reservas (to block certain fields)
+  const editingCaraHasReservas = useMemo(() => {
+    if (!editingCaraId) return false;
+    const editingCara = caras.find(c => c.localId === editingCaraId);
+    if (!editingCara) return false;
+    // Check if there are any reservas for this cara
+    return reservas.some(r =>
+      r.id.startsWith(editingCaraId) || r.solicitudCaraId === editingCara.id
+    );
+  }, [editingCaraId, caras, reservas]);
+
   // Inventory search state
   const [searchFilters, setSearchFilters] = useState({
     plaza: '',
@@ -585,7 +603,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Reservas summary states - Advanced Filter System
   const [filtersReservas, setFiltersReservas] = useState<FilterCondition[]>([]);
   const [showFiltersReservas, setShowFiltersReservas] = useState(false);
-  const [activeGroupingsReservas, setActiveGroupingsReservas] = useState<GroupByFieldReservas[]>(['catorcena', 'grupo', 'articulo']);
+  const [activeGroupingsReservas, setActiveGroupingsReservas] = useState<GroupByFieldReservas[]>(['catorcena', 'articulo']);
   const [showGroupingConfigReservas, setShowGroupingConfigReservas] = useState(false);
   const [sortFieldReservas, setSortFieldReservas] = useState<string | null>(null);
   const [sortDirectionReservas, setSortDirectionReservas] = useState<'asc' | 'desc'>('asc');
@@ -1354,12 +1372,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
   };
 
-  // Handle edit cara
+  // Handle edit cara - permite edición parcial cuando hay reservas
   const handleEditCara = (cara: CaraItem) => {
-    if (caraHasReservas(cara.localId)) {
-      alert('No puedes editar una cara que tiene reservas. Primero elimina las reservas.');
-      return;
-    }
+    // Ya no bloqueamos completamente - permitimos edición de ciudad, formatos y NSE
     setEditingCaraId(cara.localId);
 
     // Find and set the selectedArticulo if we have the articulo code
@@ -1773,7 +1788,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         inv.plaza?.toLowerCase().includes(term) ||
         inv.ubicacion?.toLowerCase().includes(term) ||
         inv.tipo_de_cara?.toLowerCase().includes(term) ||
-        inv.nivel_socioeconomico?.toLowerCase().includes(term)
+        inv.nivel_socioeconomico?.toLowerCase().includes(term) ||
+        inv.tipo_de_mueble?.toLowerCase().includes(term)
       );
     }
 
@@ -2143,29 +2159,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           const flujoOrig = inventarioDisponible.find(i => i.id === inv.flujoId);
           const contraflujoOrig = inventarioDisponible.find(i => i.id === inv.contraflujoId);
 
-          if (flujoOrig && flujoCount < remainingToAssign.flujo) {
-            const isDigitalFlujo = flujoOrig.tradicional_digital === 'Digital' || (flujoOrig.total_espacios && flujoOrig.total_espacios > 0);
+          // For "completo" items, BOTH must have space to reserve either
+          const canReserveFlujo = flujoOrig && flujoCount < remainingToAssign.flujo;
+          const canReserveContraflujo = contraflujoOrig && contraflujoCount < remainingToAssign.contraflujo;
+
+          // Only reserve both if BOTH have space (to keep them paired)
+          if (canReserveFlujo && canReserveContraflujo) {
+            const isDigitalFlujo = flujoOrig!.tradicional_digital === 'Digital' || (flujoOrig!.total_espacios && flujoOrig!.total_espacios > 0);
             newReservas.push({
               inventario_id: inv.flujoId!,
-              espacio_id: isDigitalFlujo && flujoOrig.espacio_id ? flujoOrig.espacio_id : undefined,
+              espacio_id: isDigitalFlujo && flujoOrig!.espacio_id ? flujoOrig!.espacio_id : undefined,
               tipo: 'Flujo',
-              latitud: flujoOrig.latitud || 0,
-              longitud: flujoOrig.longitud || 0,
+              latitud: flujoOrig!.latitud || 0,
+              longitud: flujoOrig!.longitud || 0,
             });
             flujoCount++;
-          }
 
-          if (contraflujoOrig && contraflujoCount < remainingToAssign.contraflujo) {
-            const isDigitalContra = contraflujoOrig.tradicional_digital === 'Digital' || (contraflujoOrig.total_espacios && contraflujoOrig.total_espacios > 0);
+            const isDigitalContra = contraflujoOrig!.tradicional_digital === 'Digital' || (contraflujoOrig!.total_espacios && contraflujoOrig!.total_espacios > 0);
             newReservas.push({
               inventario_id: inv.contraflujoId!,
-              espacio_id: isDigitalContra && contraflujoOrig.espacio_id ? contraflujoOrig.espacio_id : undefined,
+              espacio_id: isDigitalContra && contraflujoOrig!.espacio_id ? contraflujoOrig!.espacio_id : undefined,
               tipo: 'Contraflujo',
-              latitud: contraflujoOrig.latitud || 0,
-              longitud: contraflujoOrig.longitud || 0,
+              latitud: contraflujoOrig!.latitud || 0,
+              longitud: contraflujoOrig!.longitud || 0,
             });
             contraflujoCount++;
           }
+          // If only one has space, skip this completo item entirely to maintain pairing
         } else {
           // Regular item - reserve based on tipo_de_cara
           const tipo = inv.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo';
@@ -2651,6 +2671,56 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const handleCancelEdit = () => {
     setEditingReserva(null);
     setEditingFormato('');
+  };
+
+  // Bulk delete selected reservas
+  const handleBulkDeleteReservas = () => {
+    // Get selected reservas
+    const selectedReservasList = reservas.filter(r => selectedReservados.has(r.id));
+    if (selectedReservasList.length === 0) return;
+
+    // Separate reservas with backend IDs from those without
+    const reservasWithBackendId = selectedReservasList.filter(r => r.reservaId);
+    const reservasLocalOnly = selectedReservasList.filter(r => !r.reservaId);
+    const backendIds = reservasWithBackendId.map(r => r.reservaId!);
+
+    // If all are local-only (not saved to DB yet), just remove from state
+    if (backendIds.length === 0) {
+      setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
+      setSelectedReservados(new Set());
+      showToast(`${selectedReservasList.length} reservas eliminadas`, 'success');
+      return;
+    }
+
+    // Show confirmation for backend deletion
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Reservas',
+      message: `¿Seguro que quieres eliminar ${selectedReservasList.length} reserva(s)?${reservasLocalOnly.length > 0 ? ` (${reservasLocalOnly.length} pendientes + ${backendIds.length} guardadas)` : ''}`,
+      confirmText: 'Eliminar',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          // Delete from backend if there are any with reservaId
+          if (backendIds.length > 0) {
+            await propuestasService.deleteReservas(propuesta.id, backendIds);
+            queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+            queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
+            handleRefetchDisponibles();
+          }
+
+          // Remove all selected from local state
+          setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
+          setSelectedReservados(new Set());
+          showToast(`${selectedReservasList.length} reserva(s) eliminada(s) correctamente`, 'success');
+        } catch (error) {
+          console.error('Error deleting reservas:', error);
+          showToast('Error al eliminar reservas', 'error');
+        } finally {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
   };
 
   if (!isOpen) return null;
@@ -3448,10 +3518,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           {selectedReservados.size} seleccionados
                         </span>
                         <button
-                          onClick={() => {
-                            setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
-                            setSelectedReservados(new Set());
-                          }}
+                          onClick={handleBulkDeleteReservas}
                           className="flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30 transition-colors"
                         >
                           <Trash2 className="h-3 w-3" />
@@ -3771,22 +3838,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                     </td>
                                                     {effectiveCanEdit && (
                                                       <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                                        <div className="flex items-center justify-center gap-1">
-                                                          <button
-                                                            onClick={() => handleEditReserva(reserva)}
-                                                            className="p-1.5 text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
-                                                            title="Editar formato"
-                                                          >
-                                                            <Pencil className="h-4 w-4" />
-                                                          </button>
-                                                          <button
-                                                            onClick={() => handleRemoveReserva(reserva.id)}
-                                                            className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                                            title="Quitar reserva"
-                                                          >
-                                                            <Trash2 className="h-4 w-4" />
-                                                          </button>
-                                                        </div>
+                                                        <button
+                                                          onClick={() => handleRemoveReserva(reserva.id)}
+                                                          className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                          title="Quitar reserva"
+                                                        >
+                                                          <Trash2 className="h-4 w-4" />
+                                                        </button>
                                                       </td>
                                                     )}
                                                   </tr>
@@ -4379,8 +4437,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className="text-xs text-zinc-500 mb-1 block">Artículo SAP</label>
-                      {canEditResumen ? (
+                      <label className="text-xs text-zinc-500 mb-1 block">Artículo SAP {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado - hay reservas)</span>}</label>
+                      {canEditResumen && !editingCaraHasReservas ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
                           options={articulosData || []}
@@ -4397,7 +4455,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               articulo: item.ItemCode,
                               tarifa_publica: tarifa,
                               estados: ciudadEstado?.estado || newCara.estados,
-                              ciudad: ciudadEstado?.ciudad || newCara.ciudad,
+                              // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
+                              ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
                               formato: formato || newCara.formato,
                               tipo: tipo || newCara.tipo,
                             });
@@ -4434,7 +4493,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <div className="mb-4">
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">
-                          Catorcena
+                          Catorcena {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
                           {propuesta.catorcena_inicio && propuesta.anio_inicio && propuesta.catorcena_fin && propuesta.anio_fin && (
                             <span className="text-zinc-600 ml-1">
                               (Rango: {propuesta.catorcena_inicio}/{propuesta.anio_inicio} - {propuesta.catorcena_fin}/{propuesta.anio_fin})
@@ -4444,7 +4503,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <select
                           value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
                           onChange={(e) => {
-                            if (!canEditResumen) return;
+                            if (!canEditResumen || editingCaraHasReservas) return;
                             if (e.target.value) {
                               const [year, cat] = e.target.value.split('-').map(Number);
                               const period = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
@@ -4469,8 +4528,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               });
                             }
                           }}
-                          disabled={!canEditResumen}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || editingCaraHasReservas}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar catorcena</option>
                           {catorcenasData?.data
@@ -4495,8 +4554,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Estados {newCara.estados && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen ? (
+                        <label className="text-xs text-zinc-500">Estados {newCara.estados && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>} {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas ? (
                           <MultiSelectDropdown
                             options={solicitudFilters?.estados || []}
                             selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
@@ -4536,12 +4595,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Tipo</label>
+                        <label className="text-xs text-zinc-500">Tipo {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, tipo: e.target.value })}
-                          disabled={!canEditResumen}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && !editingCaraHasReservas && setNewCara({ ...newCara, tipo: e.target.value })}
+                          disabled={!canEditResumen || editingCaraHasReservas}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
@@ -4551,43 +4610,43 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </div>
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras en Renta</label>
+                        <label className="text-xs text-zinc-500">Caras en Renta {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}</label>
                         <input
                           type="number"
                           value={newCara.caras || ''}
                           onChange={(e) => {
-                            if (!canEditResumen) return;
+                            if (!canEditResumen || editingCaraHasReservas) return;
                             const val = parseInt(e.target.value) || 0;
                             // Auto-calculate flujo and contraflujo (half and half)
                             const flujo = Math.ceil(val / 2);
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || editingCaraHasReservas}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras Bonificadas</label>
+                        <label className="text-xs text-zinc-500">Caras Bonificadas {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
-                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                          disabled={!canEditResumen}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && !editingCaraHasReservas && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                          disabled={!canEditResumen || editingCaraHasReservas}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Tarifa Pública</label>
+                        <label className="text-xs text-zinc-500">Tarifa Pública {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}</label>
                         <input
                           type="number"
                           value={newCara.tarifa_publica || ''}
-                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          disabled={!canEditResumen}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && !editingCaraHasReservas && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
+                          disabled={!canEditResumen || editingCaraHasReservas}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -4601,7 +4660,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         />
                       </div>
                     </div>
-                    <div className="flex justify-end gap-2">
+
+                    {/* Preview calculation - Resumen y cálculos */}
+                    {(newCara.caras || 0) > 0 && (newCara.tarifa_publica || 0) > 0 && (
+                      <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/30 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-400">Inversión (Tarifa Cliente):</span>
+                          <span className="text-zinc-300">
+                            {newCara.caras} caras × {formatCurrency(newCara.tarifa_publica)} = <span className="text-emerald-400 font-medium">{formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))}</span>
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-400">Caras Totales:</span>
+                          <span className="text-zinc-300">
+                            {newCara.caras || 0} caras + {newCara.bonificacion || 0} bonif. = <span className="text-blue-400 font-medium">{(newCara.caras || 0) + (newCara.bonificacion || 0)} caras totales</span>
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-400">Tarifa Efectiva:</span>
+                          <span className="text-zinc-300">
+                            {formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))} ÷ {(newCara.caras || 0) + (newCara.bonificacion || 0)} = <span className="text-purple-400 font-medium">{formatCurrency(((newCara.caras || 0) + (newCara.bonificacion || 0)) > 0 ? ((newCara.caras || 0) * (newCara.tarifa_publica || 0)) / ((newCara.caras || 0) + (newCara.bonificacion || 0)) : 0)}</span>
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 mt-4">
                       <button
                         onClick={handleCancelCaraForm}
                         className="px-4 py-2 bg-zinc-700 text-zinc-300 rounded-lg text-sm hover:bg-zinc-600 transition-colors"
