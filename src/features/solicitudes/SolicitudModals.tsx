@@ -842,21 +842,38 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                                           <tbody className="divide-y divide-violet-500/10">
                                             {articuloGroup.caras.map((cara, idx) => {
                                               const inversion = (cara.tarifa_publica || 0) * (Number(cara.caras) || 0);
-                                              const estadoAuth = cara.estado_autorizacion || 'aprobado';
-                                              const authBadgeColors: Record<string, { bg: string; text: string; border: string }> = {
-                                                'aprobado': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-                                                'pendiente_dcm': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-                                                'pendiente_dg': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
-                                                'rechazado': { bg: 'bg-zinc-500/20', text: 'text-zinc-400', border: 'border-zinc-500/30' },
-                                              };
-                                              const authLabels: Record<string, string> = {
-                                                'aprobado': 'Aprobado',
-                                                'pendiente_dcm': 'Pend. DCM',
-                                                'pendiente_dg': 'Pend. DG',
-                                                'rechazado': 'Rechazado',
-                                              };
-                                              const authColor = authBadgeColors[estadoAuth] || authBadgeColors['aprobado'];
-                                              const authLabel = authLabels[estadoAuth] || estadoAuth;
+                                              // Compute combined authorization state from both columns
+                                              const authDg = cara.autorizacion_dg || 'aprobado';
+                                              const authDcm = cara.autorizacion_dcm || 'aprobado';
+
+                                              // Build authorization badges array
+                                              const authBadges: { label: string; color: { bg: string; text: string; border: string } }[] = [];
+
+                                              if (authDg === 'rechazado' || authDcm === 'rechazado') {
+                                                authBadges.push({
+                                                  label: 'Rechazado',
+                                                  color: { bg: 'bg-zinc-500/20', text: 'text-zinc-400', border: 'border-zinc-500/30' }
+                                                });
+                                              } else if (authDg === 'aprobado' && authDcm === 'aprobado') {
+                                                authBadges.push({
+                                                  label: 'Aprobado',
+                                                  color: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' }
+                                                });
+                                              } else {
+                                                if (authDg === 'pendiente') {
+                                                  authBadges.push({
+                                                    label: 'Pend. DG',
+                                                    color: { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' }
+                                                  });
+                                                }
+                                                if (authDcm === 'pendiente') {
+                                                  authBadges.push({
+                                                    label: 'Pend. DCM',
+                                                    color: { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' }
+                                                  });
+                                                }
+                                              }
+
                                               return (
                                                 <tr key={idx} className="hover:bg-violet-600/10 transition-colors">
                                                   <td className="px-3 py-2 text-zinc-200">{cara.ciudad || '-'}</td>
@@ -869,9 +886,13 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                                                   <td className="px-3 py-2 text-right text-amber-300 font-medium">{formatCurrency(cara.tarifa_publica || 0)}</td>
                                                   <td className="px-3 py-2 text-right text-emerald-300 font-medium">{formatCurrency(inversion)}</td>
                                                   <td className="px-3 py-2 text-center">
-                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${authColor.bg} ${authColor.text} border ${authColor.border}`}>
-                                                      {authLabel}
-                                                    </span>
+                                                    <div className="flex flex-col gap-0.5 items-center">
+                                                      {authBadges.map((badge, badgeIdx) => (
+                                                        <span key={badgeIdx} className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${badge.color.bg} ${badge.color.text} border ${badge.color.border}`}>
+                                                          {badge.label}
+                                                        </span>
+                                                      ))}
+                                                    </div>
                                                   </td>
                                                 </tr>
                                               );

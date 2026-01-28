@@ -166,7 +166,8 @@ export interface CaraAutorizacion {
   bonificacion: number;
   costo: number;
   tarifa_publica: number;
-  estado_autorizacion: string;
+  autorizacion_dg: string;
+  autorizacion_dcm: string;
   total_caras: number;
   tarifa_efectiva: number;
   articulo?: string;

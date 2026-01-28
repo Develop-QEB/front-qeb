@@ -287,7 +287,8 @@ export interface SolicitudCara {
   caras_contraflujo: number;
   articulo: string;
   descuento: number;
-  estado_autorizacion?: string;
+  autorizacion_dg?: string;
+  autorizacion_dcm?: string;
 }
 
 export interface Comentario {

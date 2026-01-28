@@ -169,7 +169,8 @@ export interface SolicitudCara {
   caras_contraflujo: number | null;
   articulo: string | null;
   descuento: number | null;
-  estado_autorizacion?: string | null;
+  autorizacion_dg?: string | null;
+  autorizacion_dcm?: string | null;
 }
 
 export interface CampanaUpdateData {

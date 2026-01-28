@@ -1268,11 +1268,15 @@ function TaskDrawer({
     rechazarMutation.mutate(rechazoMotivo);
   };
 
-  // Filtrar caras según tipo de autorización
+  // Filtrar caras según tipo de autorización (usando columnas separadas)
   const carasPendientes = useMemo(() => {
     if (!carasData || !tipoAutorizacion) return [];
-    const estadoFiltro = tipoAutorizacion === 'dg' ? 'pendiente_dg' : 'pendiente_dcm';
-    return carasData.filter(c => c.estado_autorizacion === estadoFiltro);
+    // Filtrar por la columna correspondiente: autorizacion_dg o autorizacion_dcm
+    if (tipoAutorizacion === 'dg') {
+      return carasData.filter(c => c.autorizacion_dg === 'pendiente');
+    } else {
+      return carasData.filter(c => c.autorizacion_dcm === 'pendiente');
+    }
   }, [carasData, tipoAutorizacion]);
 
   const handleNavigate = () => {
@@ -1535,18 +1539,24 @@ function TaskDrawer({
                         ${cara.tarifa_efectiva?.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
                       </td>
                       <td className="px-2 py-2 text-center">
-                        {cara.estado_autorizacion === 'aprobado' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">OK</span>
-                        )}
-                        {cara.estado_autorizacion === 'pendiente_dcm' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">DCM</span>
-                        )}
-                        {cara.estado_autorizacion === 'pendiente_dg' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">DG</span>
-                        )}
-                        {cara.estado_autorizacion === 'rechazado' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rech.</span>
-                        )}
+                        <div className="flex flex-col gap-0.5 items-center">
+                          {/* Mostrar OK si ambos están aprobados */}
+                          {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">OK</span>
+                          )}
+                          {/* Mostrar rechazado si cualquiera está rechazado */}
+                          {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rech.</span>
+                          )}
+                          {/* Mostrar DG si está pendiente (y no rechazado) */}
+                          {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && cara.autorizacion_dcm !== 'rechazado' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">DG</span>
+                          )}
+                          {/* Mostrar DCM si está pendiente (y no rechazado) */}
+                          {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && cara.autorizacion_dcm !== 'rechazado' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">DCM</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

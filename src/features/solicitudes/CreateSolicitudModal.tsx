@@ -383,7 +383,8 @@ interface CaraEntry {
   tarifaPublica: number;
   descuento: number;
   precioTotal: number;
-  estado_autorizacion?: 'aprobado' | 'pendiente_dcm' | 'pendiente_dg' | 'rechazado';
+  autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado';
+  autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado';
 }
 
 interface Props {
@@ -1006,7 +1007,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const precioTotal = newCara.tarifaPublica * newCara.renta;
 
     // Evaluar estado de autorización con el backend
-    let estadoAutorizacion: CaraEntry['estado_autorizacion'] = undefined;
+    let autorizacion_dg: CaraEntry['autorizacion_dg'] = undefined;
+    let autorizacion_dcm: CaraEntry['autorizacion_dcm'] = undefined;
     try {
       const ciudadesStr = newCara.ciudades.length > 0
         ? newCara.ciudades.join(', ')
@@ -1032,7 +1034,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tarifa_publica: newCara.tarifaPublica
       });
       console.log('[handleAddCara] Resultado autorización:', resultado);
-      estadoAutorizacion = resultado.estado;
+      autorizacion_dg = resultado.autorizacion_dg;
+      autorizacion_dcm = resultado.autorizacion_dcm;
     } catch (error: any) {
       console.error('[handleAddCara] Error evaluando autorización:', error?.response?.data || error?.message || error);
       // Si falla, dejamos sin estado (se evaluará al guardar)
@@ -1055,7 +1058,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tarifaPublica: newCara.tarifaPublica,
       descuento: descuento * 100, // Store as percentage
       precioTotal,
-      estado_autorizacion: estadoAutorizacion,
+      autorizacion_dg,
+      autorizacion_dcm,
     };
 
     if (editingCaraId) {
@@ -1438,7 +1442,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             tarifaPublica: Number(cara.tarifa_publica) || 0,
             descuento: Number(cara.descuento) || 0,
             precioTotal: Number(cara.costo) || 0,
-            estado_autorizacion: cara.estado_autorizacion as CaraEntry['estado_autorizacion'],
+            autorizacion_dg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
+            autorizacion_dcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
           };
         });
         setCaras(loadedCaras);
@@ -2136,31 +2141,38 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-right text-zinc-300">{formatCurrency(cara.tarifaPublica)}</td>
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
-                                          {cara.estado_autorizacion === 'aprobado' && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
-                                              Aprobado
-                                            </span>
-                                          )}
-                                          {cara.estado_autorizacion === 'pendiente_dcm' && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
-                                              Pend. DCM
-                                            </span>
-                                          )}
-                                          {cara.estado_autorizacion === 'pendiente_dg' && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
-                                              Pend. DG
-                                            </span>
-                                          )}
-                                          {cara.estado_autorizacion === 'rechazado' && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">
-                                              Rechazado
-                                            </span>
-                                          )}
-                                          {!cara.estado_autorizacion && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-600/30 text-zinc-400">
-                                              Por evaluar
-                                            </span>
-                                          )}
+                                          <div className="flex flex-col gap-0.5">
+                                            {/* Si ambos están aprobados, mostrar "Aprobado" */}
+                                            {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                                                Aprobado
+                                              </span>
+                                            )}
+                                            {/* Si cualquiera está rechazado */}
+                                            {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">
+                                                Rechazado
+                                              </span>
+                                            )}
+                                            {/* Si DG está pendiente (y no rechazado) */}
+                                            {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && cara.autorizacion_dcm !== 'rechazado' && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
+                                                Pend. DG
+                                              </span>
+                                            )}
+                                            {/* Si DCM está pendiente (y no rechazado) */}
+                                            {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && cara.autorizacion_dcm !== 'rechazado' && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
+                                                Pend. DCM
+                                              </span>
+                                            )}
+                                            {/* Si ninguno tiene estado */}
+                                            {!cara.autorizacion_dg && !cara.autorizacion_dcm && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-600/30 text-zinc-400">
+                                                Por evaluar
+                                              </span>
+                                            )}
+                                          </div>
                                         </td>
                                         <td className="px-2 py-2 text-center">
                                           <div className="flex items-center justify-center gap-1">
