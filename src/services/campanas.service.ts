@@ -27,7 +27,6 @@ export interface SAPDocumentLine {
 }
 
 export interface SAPDeliveryNote {
-  Series: number;
   CardCode: string;
   NumAtCard: string;
   Comments: string;
@@ -357,7 +356,6 @@ export function buildDeliveryNote(
 
   // Construir el objeto DeliveryNote completo
   const deliveryNote: SAPDeliveryNote = {
-    Series: 162,
     CardCode: campana.card_code || 'IMU00351',
     NumAtCard: campana.id?.toString() || '',
     Comments: campana.comentario_cambio_status || '',
