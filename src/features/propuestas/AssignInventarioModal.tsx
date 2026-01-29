@@ -521,6 +521,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta;
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
+  const resumenReservasMapRef = useRef<google.maps.Map | null>(null);
 
   // Load Google Maps with required libraries
   const { isLoaded: mapsLoaded } = useLoadScript({
@@ -693,11 +694,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     return () => document.body.classList.remove('modal-open');
   }, [isOpen]);
 
-  // Fetch solicitud full details
+  // Fetch solicitud full details - refetch always on mount to get fresh authorization status
   const { data: solicitudDetails, isLoading: detailsLoading } = useQuery({
     queryKey: ['solicitud-full-details', propuesta.solicitud_id],
     queryFn: () => solicitudesService.getFullDetails(propuesta.solicitud_id),
     enabled: isOpen && !!propuesta.solicitud_id,
+    refetchOnMount: 'always',
   });
 
   // Fetch users
@@ -731,11 +733,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch existing reservas for this propuesta
+  // Fetch existing reservas for this propuesta - refetch always on mount for real-time data
   const { data: existingReservas, isLoading: reservasLoading } = useQuery({
     queryKey: ['propuesta-reservas-modal', propuesta.id],
     queryFn: () => propuestasService.getReservasForModal(propuesta.id),
     enabled: isOpen && !!propuesta.id,
+    refetchOnMount: 'always',
   });
 
   // Load existing reservas into state when data arrives
@@ -1188,6 +1191,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   }, [reservasMerged, filtersReservas, sortFieldReservas, sortDirectionReservas]);
   // ============ END ADVANCED FILTER FUNCTIONS ============
 
+  // Effect to re-fit map bounds when filtered reservas change (for "Resumen de Reservas" map)
+  useEffect(() => {
+    if (resumenReservasMapRef.current && filteredReservasData.length > 0 && mapsLoaded && typeof google !== 'undefined') {
+      const bounds = new google.maps.LatLngBounds();
+      let hasValidCoords = false;
+      filteredReservasData.forEach(r => {
+        if (r.latitud && r.longitud) {
+          bounds.extend({ lat: r.latitud, lng: r.longitud });
+          hasValidCoords = true;
+        }
+      });
+      if (hasValidCoords && !bounds.isEmpty()) {
+        resumenReservasMapRef.current.fitBounds(bounds, 50);
+      }
+    }
+  }, [filteredReservasData, mapsLoaded]);
+
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0, bonificacion: 0 };
@@ -1224,9 +1244,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const contraflujoRequerido = cara.caras_contraflujo || 0;
     const bonificacionRequerido = cara.bonificacion || 0;
 
-    const flujoCompleto = flujoReservado >= flujoRequerido;
-    const contraflujoCompleto = contraflujoReservado >= contraflujoRequerido;
-    const bonificacionCompleto = bonificacionReservado >= bonificacionRequerido;
+    // Complete means EXACT match - not under, not over
+    const flujoCompleto = flujoReservado === flujoRequerido;
+    const contraflujoCompleto = contraflujoReservado === contraflujoRequerido;
+    const bonificacionCompleto = bonificacionReservado === bonificacionRequerido;
 
     const totalRequerido = flujoRequerido + contraflujoRequerido + bonificacionRequerido;
     const totalReservado = flujoReservado + contraflujoReservado + bonificacionReservado;
@@ -1558,6 +1579,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
       queryClient.invalidateQueries({ queryKey: ['propuesta-caras', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
     } catch (error) {
       console.error('Error saving cara:', error);
       alert('Error al guardar la cara');
@@ -4676,43 +4698,43 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </div>
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className={`text-xs ${editingCaraHasReservas ? 'text-zinc-800' : 'text-zinc-500'}`}>Caras en Renta</label>
+                        <label className="text-xs text-zinc-500">Caras en Renta</label>
                         <input
                           type="number"
                           value={newCara.caras || ''}
                           onChange={(e) => {
-                            if (!canEditResumen || editingCaraHasReservas) return;
+                            if (!canEditResumen) return;
                             const val = parseInt(e.target.value) || 0;
                             // Auto-calculate flujo and contraflujo (half and half)
                             const flujo = Math.ceil(val / 2);
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen || editingCaraHasReservas}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${editingCaraHasReservas ? 'text-zinc-800' : 'text-zinc-500'}`}>Caras Bonificadas</label>
+                        <label className="text-xs text-zinc-500">Caras Bonificadas</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
-                          onChange={(e) => canEditResumen && !editingCaraHasReservas && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                          disabled={!canEditResumen || editingCaraHasReservas}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${editingCaraHasReservas ? 'text-zinc-800' : 'text-zinc-500'}`}>Tarifa Pública</label>
+                        <label className="text-xs text-zinc-500">Tarifa Pública</label>
                         <input
                           type="number"
                           value={newCara.tarifa_publica || ''}
-                          onChange={(e) => canEditResumen && !editingCaraHasReservas && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          disabled={!canEditResumen || editingCaraHasReservas}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -5514,6 +5536,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 zoomControl: true,
                               }}
                               onLoad={(map) => {
+                                resumenReservasMapRef.current = map;
                                 // Center map on reservas bounds
                                 if (filteredReservas.length > 0) {
                                   const bounds = new google.maps.LatLngBounds();
@@ -5643,19 +5666,35 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={!allCarasComplete || hasPendingAuthorization}
-                  onClick={() => {
-                    // TODO: Implement aprobar propuesta logic
-                    alert('Propuesta lista para aprobar');
+                  disabled={!allCarasComplete || hasPendingAuthorization || isSaving}
+                  onClick={async () => {
+                    setIsSaving(true);
+                    try {
+                      await propuestasService.updateStatus(propuesta.id, 'Pase a ventas');
+                      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+                      queryClient.invalidateQueries({ queryKey: ['propuesta', propuesta.id] });
+                      queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
+                      showToast('Propuesta aprobada y enviada a ventas', 'success');
+                      onClose();
+                    } catch (error) {
+                      console.error('Error al aprobar propuesta:', error);
+                      showToast(`Error al aprobar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+                    } finally {
+                      setIsSaving(false);
+                    }
                   }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    allCarasComplete && !hasPendingAuthorization
+                    allCarasComplete && !hasPendingAuthorization && !isSaving
                       ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
                       : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
                   }`}
                 >
-                  <Check className="h-4 w-4 inline-block mr-2" />
-                  Aprobar Propuesta
+                  {isSaving ? (
+                    <div className="h-4 w-4 inline-block mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4 inline-block mr-2" />
+                  )}
+                  {isSaving ? 'Aprobando...' : 'Aprobar Propuesta'}
                 </button>
               )}
             </div>

@@ -332,9 +332,14 @@ export function useSocketPropuesta(propuestaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['autorizacion-caras', data.idquote] });
       queryClient.invalidateQueries({ queryKey: ['autorizacion-resumen', data.idquote] });
       queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-full', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta-caras', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['tareas'] });
     };
 
     const handleAutorizacionRechazada = (data: { propuestaId: number; idquote: string }) => {
@@ -342,9 +347,14 @@ export function useSocketPropuesta(propuestaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['autorizacion-caras', data.idquote] });
       queryClient.invalidateQueries({ queryKey: ['autorizacion-resumen', data.idquote] });
       queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-full', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta-caras', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['tareas'] });
     };
 
     // Suscribirse a eventos
