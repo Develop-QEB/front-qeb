@@ -21,6 +21,7 @@ import { OrdenesMontajeModal } from './OrdenesMontajeModal';
 import { StatusCampanaModal } from './StatusCampanaModal';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
+import { useSocketCampanas } from '../../hooks/useSocket';
 
 // Colors for dynamic tags
 const TAG_COLORS = [
@@ -597,6 +598,10 @@ export function CampanasPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
+
+  // WebSocket para actualizaciones en tiempo real
+  useSocketCampanas();
+
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 

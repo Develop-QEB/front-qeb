@@ -10,6 +10,7 @@ import { clientesService } from '../../services/clientes.service';
 import { Cliente } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
+import { useSocketClientes } from '../../hooks/useSocket';
 
 // ============ TIPOS Y CONFIGURACIÓN DE FILTROS/ORDENAMIENTO ============
 type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
@@ -498,6 +499,10 @@ export function ClientesPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
+
+  // WebSocket para actualizaciones en tiempo real
+  useSocketClientes();
+
   const [activeTab, setActiveTab] = useState<'db' | 'sap'>('db');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');

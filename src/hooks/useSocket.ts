@@ -302,20 +302,28 @@ export function useSocketPropuesta(propuestaId: number | null) {
     const handleReservaCreada = (data: { propuestaId: number }) => {
       console.log('[Socket] Reserva creada:', data);
       queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-full', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['inventario'] });
     };
 
     const handleReservaEliminada = (data: { propuestaId: number }) => {
       console.log('[Socket] Reserva eliminada:', data);
       queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-full', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['inventario'] });
     };
 
     const handlePropuestaActualizada = (data: { propuestaId: number }) => {
       console.log('[Socket] Propuesta actualizada:', data);
       queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-full', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuestas'] });
     };
 
@@ -389,6 +397,76 @@ export function useSocketEquipos() {
 }
 
 /**
+ * Hook para escuchar eventos de una solicitud específica
+ */
+export function useSocketSolicitud(solicitudId: number | null) {
+  const queryClient = useQueryClient();
+  const socketRef = useRef<Socket | null>(null);
+  const joinedRoomRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!solicitudId || solicitudId <= 0) return;
+
+    const socket = getSocket();
+    socketRef.current = socket;
+
+    // Unirse al room de la solicitud
+    if (joinedRoomRef.current !== solicitudId) {
+      if (joinedRoomRef.current) {
+        socket.emit('leave-solicitud', joinedRoomRef.current);
+      }
+      socket.emit('join-solicitud', solicitudId);
+      joinedRoomRef.current = solicitudId;
+      console.log('[Socket] Unido a solicitud:', solicitudId);
+    }
+
+    const handleSolicitudActualizada = (data: { solicitudId: number }) => {
+      console.log('[Socket] Solicitud actualizada:', data);
+      queryClient.invalidateQueries({ queryKey: ['solicitud', data.solicitudId] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', data.solicitudId] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-comments', data.solicitudId] });
+    };
+
+    const handleSolicitudStatusChanged = (data: { solicitudId: number }) => {
+      console.log('[Socket] Status de solicitud cambiado:', data);
+      queryClient.invalidateQueries({ queryKey: ['solicitud', data.solicitudId] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', data.solicitudId] });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
+    };
+
+    const handleAutorizacionAprobada = (data: { solicitudId?: number; propuestaId: number; idquote: string }) => {
+      console.log('[Socket] Autorización aprobada (solicitud):', data);
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras'] });
+    };
+
+    const handleAutorizacionRechazada = (data: { solicitudId?: number; propuestaId: number; idquote: string }) => {
+      console.log('[Socket] Autorización rechazada (solicitud):', data);
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras'] });
+    };
+
+    socket.on(SOCKET_EVENTS.SOLICITUD_ACTUALIZADA, handleSolicitudActualizada);
+    socket.on(SOCKET_EVENTS.SOLICITUD_STATUS_CHANGED, handleSolicitudStatusChanged);
+    socket.on(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobada);
+    socket.on(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazada);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.SOLICITUD_ACTUALIZADA, handleSolicitudActualizada);
+      socket.off(SOCKET_EVENTS.SOLICITUD_STATUS_CHANGED, handleSolicitudStatusChanged);
+      socket.off(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobada);
+      socket.off(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazada);
+    };
+  }, [solicitudId, queryClient]);
+
+  const emit = useCallback((event: string, data: unknown) => {
+    socketRef.current?.emit(event, data);
+  }, []);
+
+  return { emit };
+}
+
+/**
  * Hook para escuchar eventos de solicitudes
  */
 export function useSocketSolicitudes() {
@@ -411,23 +489,28 @@ export function useSocketSolicitudes() {
       console.log('[Socket] Solicitud creada');
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     };
 
     const handleSolicitudActualizada = () => {
       console.log('[Socket] Solicitud actualizada');
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
     };
 
     const handleSolicitudEliminada = () => {
       console.log('[Socket] Solicitud eliminada');
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     };
 
     const handleSolicitudStatusChanged = () => {
       console.log('[Socket] Status de solicitud cambiado');
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     };
 
     socket.on(SOCKET_EVENTS.SOLICITUD_CREADA, handleSolicitudCreada);

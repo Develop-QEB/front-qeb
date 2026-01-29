@@ -7,7 +7,7 @@ import {
   ChevronDown, ChevronRight, Layers, Tag, TrendingUp, BarChart3, Users
 } from 'lucide-react';
 import { solicitudesService, SolicitudFullDetails, Comentario, SolicitudCara, UserOption } from '../../services/solicitudes.service';
-import { useSocketEquipos } from '../../hooks/useSocket';
+import { useSocketEquipos, useSocketSolicitud } from '../../hooks/useSocket';
 import { notificacionesService, ResumenAutorizacion } from '../../services/notificaciones.service';
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
@@ -173,6 +173,9 @@ interface ViewSolicitudModalProps {
 
 export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicitudModalProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // WebSocket para actualizaciones en tiempo real
+  useSocketSolicitud(isOpen ? solicitudId : null);
 
   // Bloquear scroll del body cuando el modal está abierto
   useEffect(() => {

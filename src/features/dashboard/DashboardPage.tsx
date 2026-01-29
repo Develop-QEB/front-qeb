@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { GoogleMap, useLoadScript, Circle, InfoWindow } from '@react-google-maps/api';
 import { usePrefetch } from '../../hooks/usePrefetch';
+import { useSocketDashboard } from '../../hooks/useSocket';
 import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer';
 import {
   Package,
@@ -964,6 +965,9 @@ export function DashboardPage() {
   const [selectedPlaza, setSelectedPlaza] = useState<string | null>(null);
   const [inventoryPage, setInventoryPage] = useState(1);
   const [selectedInventoryIds, setSelectedInventoryIds] = useState<Set<number>>(new Set());
+
+  // WebSocket para actualizaciones en tiempo real
+  useSocketDashboard();
 
   // Prefetch todas las vistas al cargar el dashboard
   const { prefetchAll } = usePrefetch();

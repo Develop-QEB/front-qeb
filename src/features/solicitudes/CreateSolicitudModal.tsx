@@ -694,7 +694,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     tipo: '' as 'Tradicional' | 'Digital' | '',
     nse: [] as string[],
     periodo: '',
-    renta: 1,
+    renta: 0,
     bonificacion: 0,
     tarifaPublica: 0,
   });
@@ -893,7 +893,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tipo: '',
         nse: [],
         periodo: '',
-        renta: 1,
+        renta: 0,
         bonificacion: 0,
         tarifaPublica: 0,
       });
@@ -1080,7 +1080,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setNewCara({
       ...newCara,
       periodo: '',
-      renta: 1,
+      renta: 0,
       bonificacion: 0,
       // Keep articulo, estado, ciudades, formato, tipo, nse, tarifaPublica
     });
@@ -1096,7 +1096,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tipo: '',
       nse: [],
       periodo: '',
-      renta: 1,
+      renta: 0,
       bonificacion: 0,
       tarifaPublica: 0,
     });
@@ -1139,7 +1139,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tipo: '',
       nse: [],
       periodo: '',
-      renta: 1,
+      renta: 0,
       bonificacion: 0,
       tarifaPublica: 0,
     });
@@ -1439,7 +1439,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             catorcenaYear: catYear,
             periodoInicio: cara.inicio_periodo || '',
             periodoFin: cara.fin_periodo || '',
-            renta: Number(cara.caras) || 1,
+            renta: Number(cara.caras) || 0,
             bonificacion: Number(cara.bonificacion) || 0,
             tarifaPublica: Number(cara.tarifa_publica) || 0,
             descuento: Number(cara.descuento) || 0,
@@ -1951,9 +1951,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <label className="text-xs text-zinc-500">Renta</label>
                     <input
                       type="number"
-                      min={1}
+                      min={0}
                       value={newCara.renta}
-                      onChange={(e) => setNewCara({ ...newCara, renta: parseInt(e.target.value) || 1 })}
+                      onChange={(e) => setNewCara({ ...newCara, renta: parseInt(e.target.value) || 0 })}
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     />
                   </div>
