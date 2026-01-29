@@ -1169,6 +1169,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     return caraReservas.filter(r => r.aps && r.aps > 0).length;
   };
 
+  // Get unique APS numbers for a cara
+  const getCaraAPSNumbers = (localId: string, caraId?: number): number[] => {
+    const caraReservas = reservas.filter(r => r.id.startsWith(localId) || r.solicitudCaraId === caraId);
+    const apsNumbers = caraReservas
+      .filter(r => r.aps && r.aps > 0)
+      .map(r => r.aps as number);
+    return [...new Set(apsNumbers)].sort((a, b) => a - b);
+  };
+
   // Get cara completion status
   const getCaraCompletionStatus = (cara: CaraItem) => {
     const caraReservas = reservas.filter(r =>
@@ -4405,6 +4414,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const hasReservas = caraReservas.length > 0;
                             const hasAPS = caraHasAPS(cara.localId, cara.id);
                             const apsCount = getCaraAPSCount(cara.localId, cara.id);
+                            const apsNumbers = getCaraAPSNumbers(cara.localId, cara.id);
                             const status = getCaraCompletionStatus(cara);
                             const totalCaras = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
                             const carasFaltantes = status.totalRequerido - status.totalReservado;
@@ -4438,7 +4448,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
-                                  <div className="flex-1 grid grid-cols-6 gap-3 text-sm">
+                                  <div className="flex-1 grid grid-cols-7 gap-3 text-sm">
                                     <div>
                                       <span className="text-zinc-500 text-xs">Formato</span>
                                       <p className="text-white font-medium">{cara.formato || '-'}</p>
@@ -4467,6 +4477,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           </span>
                                         )}
                                       </div>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">APS</span>
+                                      {hasAPS ? (
+                                        <div className="flex flex-wrap gap-1">
+                                          {apsNumbers.map(aps => (
+                                            <span key={aps} className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-medium">
+                                              {aps}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-zinc-500 text-xs">-</p>
+                                      )}
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Autorización</span>
@@ -4502,9 +4526,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       <Search className="h-4 w-4" />
                                     </button>
                                     <button
-                                      onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
-                                      className="p-2 rounded-lg border transition-colors bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
-                                      title="Editar"
+                                      onClick={(e) => { e.stopPropagation(); if (!hasAPS) handleEditCara(cara); }}
+                                      disabled={hasAPS}
+                                      className={`p-2 rounded-lg border transition-colors ${
+                                        hasAPS
+                                          ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                                      }`}
+                                      title={hasAPS ? 'Bloqueado - tiene APS asignado' : 'Editar'}
                                     >
                                       <Pencil className="h-4 w-4" />
                                     </button>
