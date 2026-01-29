@@ -5,7 +5,7 @@ import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
   ArrowUpDown, Calendar, DollarSign, FileText, Building2, MessageSquare,
   CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock,
-  Pencil, Trash2, Package, MapPin, Eye, Plus
+  Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -517,6 +517,18 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   const [selectedStatus, setSelectedStatus] = useState('');
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
+  // Query para obtener las caras de la propuesta y verificar autorizaciones pendientes
+  const { data: caras } = useQuery({
+    queryKey: ['propuesta-caras', propuesta?.id],
+    queryFn: () => propuestasService.getCaras(propuesta!.id),
+    enabled: isOpen && !!propuesta,
+  });
+
+  // Verificar si hay caras pendientes de autorización
+  const pendientesDg = caras?.filter(c => c.autorizacion_dg === 'pendiente').length || 0;
+  const pendientesDcm = caras?.filter(c => c.autorizacion_dcm === 'pendiente').length || 0;
+  const tienePendientes = pendientesDg > 0 || pendientesDcm > 0;
+
   const { data: comments, refetch: refetchComments } = useQuery({
     queryKey: ['propuesta-comments', propuesta?.id],
     queryFn: () => propuestasService.getComments(propuesta!.id),
@@ -593,6 +605,21 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
 
         {/* Status Selector */}
         <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-800/30">
+          {/* Alerta de autorizaciones pendientes */}
+          {tienePendientes && (
+            <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-amber-200 font-medium">Autorización pendiente</p>
+                <p className="text-xs text-amber-300/70 mt-1">
+                  Esta propuesta tiene {pendientesDg + pendientesDcm} cara(s) pendientes de autorización.
+                  {pendientesDg > 0 && ` DG: ${pendientesDg}.`}
+                  {pendientesDcm > 0 && ` DCM: ${pendientesDcm}.`}
+                  {' '}No se puede cambiar a "Por aprobar" o "Atendido" hasta que todas las caras sean autorizadas.
+                </p>
+              </div>
+            </div>
+          )}
           <label className="block text-sm text-zinc-400 mb-2">Cambiar estado a:</label>
           <div className="flex items-center gap-3">
             <select
@@ -604,13 +631,22 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
               {propuesta.status && !availableStatuses.includes(propuesta.status) && (
                 <option value={propuesta.status} disabled>{propuesta.status} (actual)</option>
               )}
-              {availableStatuses.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
+              {availableStatuses.map(s => {
+                const isBlockedByAuth = tienePendientes && (s === 'Por aprobar' || s === 'Atendido');
+                return (
+                  <option
+                    key={s}
+                    value={s}
+                    disabled={isBlockedByAuth}
+                  >
+                    {s}{isBlockedByAuth ? ' (Requiere autorización)' : ''}
+                  </option>
+                );
+              })}
             </select>
             <button
               onClick={handleChangeStatus}
-              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending}
+              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || (tienePendientes && (selectedStatus === 'Por aprobar' || selectedStatus === 'Atendido'))}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
             >
               {updateStatusMutation.isPending ? (

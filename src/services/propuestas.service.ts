@@ -307,6 +307,14 @@ export const propuestasService = {
       throw new Error(response.data.error || 'Error al eliminar cara');
     }
   },
+
+  async getCaras(propuestaId: number): Promise<SolicitudCara[]> {
+    const response = await api.get<ApiResponse<SolicitudCara[]>>(`/propuestas/${propuestaId}/caras`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener caras de propuesta');
+    }
+    return response.data.data;
+  },
 };
 
 export interface CaraUpdateData {

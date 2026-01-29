@@ -74,6 +74,8 @@ interface CaraItem {
   anio_inicio?: number;
   catorcena_fin?: number;
   anio_fin?: number;
+  autorizacion_dg?: string;
+  autorizacion_dcm?: string;
 }
 
 // SAP Articulo interface
@@ -926,6 +928,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             descuento: Number(cara.descuento) || 0,
             catorcena_inicio: catorcenaInicioCara,
             anio_inicio: anioInicioCara,
+            autorizacion_dg: cara.autorizacion_dg || 'aprobado',
+            autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
           };
         });
         setCaras(carasWithIds);
@@ -1452,6 +1456,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       ciudadToSave = allCitiesForEstado.join(', ');
     }
 
+    // Calcular costo como caras * tarifa_publica (inversión)
+    const costoCalculado = (newCara.caras || 0) * (newCara.tarifa_publica || 0);
+
     const caraData = {
       ciudad: ciudadToSave,
       estados: newCara.estados,
@@ -1461,7 +1468,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       caras: newCara.caras,
       nivel_socioeconomico: newCara.nivel_socioeconomico,
       formato: newCara.formato,
-      costo: newCara.costo,
+      costo: costoCalculado,
       tarifa_publica: newCara.tarifa_publica,
       inicio_periodo: newCara.inicio_periodo,
       fin_periodo: newCara.fin_periodo,
@@ -1489,11 +1496,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       } else {
         // Create new cara in database
         const createdCara = await propuestasService.createCara(propuesta.id, caraData);
-        // Add to local state with the database ID
+        // Add to local state with the database ID and authorization status from response
         const newCaraItem: CaraItem = {
           ...newCara,
           id: createdCara.id,
           localId: `cara-${createdCara.id}`,
+          costo: costoCalculado,
+          autorizacion_dg: createdCara.autorizacion_dg || 'aprobado',
+          autorizacion_dcm: createdCara.autorizacion_dcm || 'aprobado',
         };
         setCaras(prev => [...prev, newCaraItem]);
       }
@@ -4437,8 +4447,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className="text-xs text-zinc-500 mb-1 block">Artículo SAP {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado - hay reservas)</span>}</label>
-                      {canEditResumen && !editingCaraHasReservas ? (
+                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
+                      {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
                           options={articulosData || []}
@@ -4554,8 +4564,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Estados {newCara.estados && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>} {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}</label>
-                        {canEditResumen && !editingCaraHasReservas ? (
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Estados {newCara.estados && !editingCaraId && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
                           <MultiSelectDropdown
                             options={solicitudFilters?.estados || []}
                             selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
@@ -4569,38 +4579,50 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Ciudades {newCara.ciudad && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
-                        <MultiSelectDropdown
-                          options={
-                            solicitudFilters?.ciudades
-                              .filter(c => {
-                                if (!newCara.estados) return true;
-                                const selectedEstados = newCara.estados.split(',').map(s => s.trim());
-                                return selectedEstados.includes(c.estado);
-                              })
-                              .map(c => c.ciudad) || []
-                          }
-                          selected={newCara.ciudad ? newCara.ciudad.split(',').map(s => s.trim()).filter(Boolean) : []}
-                          onChange={(selected) => setNewCara({ ...newCara, ciudad: selected.join(', ') })}
-                          placeholder="Seleccionar ciudades..."
-                        />
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {newCara.ciudad && !editingCaraId && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                          <MultiSelectDropdown
+                            options={
+                              solicitudFilters?.ciudades
+                                .filter(c => {
+                                  if (!newCara.estados) return true;
+                                  const selectedEstados = newCara.estados.split(',').map(s => s.trim());
+                                  return selectedEstados.includes(c.estado);
+                                })
+                                .map(c => c.ciudad) || []
+                            }
+                            selected={newCara.ciudad ? newCara.ciudad.split(',').map(s => s.trim()).filter(Boolean) : []}
+                            onChange={(selected) => setNewCara({ ...newCara, ciudad: selected.join(', ') })}
+                            placeholder="Seleccionar ciudades..."
+                          />
+                        ) : (
+                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                            {newCara.ciudad || '-'}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Formatos {newCara.formato && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
-                        <MultiSelectDropdown
-                          options={solicitudFilters?.formatos || []}
-                          selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
-                          onChange={(selected) => setNewCara({ ...newCara, formato: selected.join(', ') })}
-                          placeholder="Seleccionar formatos..."
-                        />
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Formatos {newCara.formato && !editingCaraId && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                          <MultiSelectDropdown
+                            options={solicitudFilters?.formatos || []}
+                            selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
+                            onChange={(selected) => setNewCara({ ...newCara, formato: selected.join(', ') })}
+                            placeholder="Seleccionar formatos..."
+                          />
+                        ) : (
+                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                            {newCara.formato || '-'}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Tipo {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}</label>
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Tipo</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => canEditResumen && !editingCaraHasReservas && setNewCara({ ...newCara, tipo: e.target.value })}
-                          disabled={!canEditResumen || editingCaraHasReservas}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && !editingCaraHasReservas && !editingCaraId && setNewCara({ ...newCara, tipo: e.target.value })}
+                          disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
@@ -4610,43 +4632,43 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </div>
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras en Renta {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}</label>
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Caras en Renta</label>
                         <input
                           type="number"
                           value={newCara.caras || ''}
                           onChange={(e) => {
-                            if (!canEditResumen || editingCaraHasReservas) return;
+                            if (!canEditResumen || editingCaraHasReservas || editingCaraId) return;
                             const val = parseInt(e.target.value) || 0;
                             // Auto-calculate flujo and contraflujo (half and half)
                             const flujo = Math.ceil(val / 2);
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen || editingCaraHasReservas}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras Bonificadas {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}</label>
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Caras Bonificadas</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
-                          onChange={(e) => canEditResumen && !editingCaraHasReservas && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                          disabled={!canEditResumen || editingCaraHasReservas}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && !editingCaraHasReservas && !editingCaraId && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                          disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Tarifa Pública {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}</label>
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Tarifa Pública</label>
                         <input
                           type="number"
                           value={newCara.tarifa_publica || ''}
-                          onChange={(e) => canEditResumen && !editingCaraHasReservas && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          disabled={!canEditResumen || editingCaraHasReservas}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && !editingCaraHasReservas && !editingCaraId && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
+                          disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -4779,18 +4801,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     'bg-red-500 animate-pulse'
                                   }`} />
 
-                                  <div className="flex-1 grid grid-cols-4 gap-3 text-sm">
+                                  <div className="flex-1 grid grid-cols-6 gap-3 text-sm">
                                     <div>
                                       <span className="text-zinc-500 text-xs">Formato</span>
                                       <p className="text-white font-medium">{cara.formato || '-'}</p>
                                     </div>
                                     <div>
+                                      <span className="text-zinc-500 text-xs">Tipo</span>
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                                        {cara.tipo || '-'}
+                                      </span>
+                                    </div>
+                                    <div>
                                       <span className="text-zinc-500 text-xs">Ciudad</span>
-                                      <p className="text-zinc-300">{cara.ciudad || cara.estados || '-'}</p>
+                                      <p className="text-zinc-300 text-xs truncate" title={cara.ciudad || cara.estados}>{cara.ciudad || cara.estados || '-'}</p>
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Artículo</span>
-                                      <p className="text-zinc-300">{cara.articulo || '-'}</p>
+                                      <p className="text-zinc-300 text-xs">{cara.articulo || '-'}</p>
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Caras</span>
@@ -4803,20 +4831,52 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         )}
                                       </div>
                                     </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">Autorización</span>
+                                      <div className="flex flex-col gap-0.5">
+                                        {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Aprobado</span>
+                                        )}
+                                        {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rechazado</span>
+                                        )}
+                                        {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && cara.autorizacion_dcm !== 'rechazado' && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
+                                        )}
+                                        {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && cara.autorizacion_dcm !== 'rechazado' && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. DCM</span>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    {effectiveCanEdit && permissions.canBuscarInventarioEnModal && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); handleSearchInventory(cara); }}
-                                        className={`p-2 rounded-lg border transition-colors ${status.isComplete
-                                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
-                                          : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
+                                    {/* Botón Buscar Inventario - deshabilitado si hay autorizaciones pendientes */}
+                                    {effectiveCanEdit && permissions.canBuscarInventarioEnModal && (() => {
+                                      const tienePendientes = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
+                                      const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
+                                      const bloqueado = tienePendientes || tieneRechazado;
+
+                                      return (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); if (!bloqueado) handleSearchInventory(cara); }}
+                                          disabled={bloqueado}
+                                          className={`p-2 rounded-lg border transition-colors ${
+                                            bloqueado
+                                              ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                              : status.isComplete
+                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                                                : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
                                           }`}
-                                        title={status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
-                                      >
-                                        <Search className="h-4 w-4" />
-                                      </button>
-                                    )}
+                                          title={
+                                            tieneRechazado ? 'Cara rechazada - no se puede asignar inventario' :
+                                            tienePendientes ? 'Esta cara necesita autorización antes de asignar inventario' :
+                                            status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'
+                                          }
+                                        >
+                                          <Search className="h-4 w-4" />
+                                        </button>
+                                      );
+                                    })()}
                                     {effectiveCanEdit && (
                                       <>
                                         <button
