@@ -1261,6 +1261,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     };
   };
 
+  // Check if all caras are complete (for "Aprobar propuesta" button)
+  const allCarasComplete = useMemo(() => {
+    if (caras.length === 0) return false;
+    return caras.every(cara => {
+      const status = getCaraCompletionStatus(cara);
+      return status.isComplete;
+    });
+  }, [caras, reservas]);
+
+  // Check if any cara has pending authorization
+  const hasPendingAuthorization = useMemo(() => {
+    return caras.some(cara =>
+      cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente'
+    );
+  }, [caras]);
+
   // Group caras by catorcena period with catorcena info
   const carasGroupedByCatorcena = useMemo(() => {
     const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
@@ -1483,15 +1499,42 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         // Find the cara being edited to get its database ID
         const caraToEdit = caras.find(c => c.localId === editingCaraId);
         if (caraToEdit?.id) {
-          // Update in database
-          await propuestasService.updateCara(propuesta.id, caraToEdit.id, caraData);
+          // Evaluar autorización antes de actualizar
+          let autorizacion_dg = 'aprobado';
+          let autorizacion_dcm = 'aprobado';
+          try {
+            const resultado = await solicitudesService.evaluarAutorizacion({
+              ciudad: ciudadToSave,
+              estado: newCara.estados,
+              formato: newCara.formato,
+              tipo: newCara.tipo,
+              caras: newCara.caras,
+              bonificacion: newCara.bonificacion,
+              costo: costoCalculado,
+              tarifa_publica: newCara.tarifa_publica
+            });
+            autorizacion_dg = resultado.autorizacion_dg || 'aprobado';
+            autorizacion_dcm = resultado.autorizacion_dcm || 'aprobado';
+          } catch (error) {
+            console.error('Error evaluando autorización:', error);
+          }
+
+          // Update in database with authorization status
+          const updatedCara = await propuestasService.updateCara(propuesta.id, caraToEdit.id, caraData);
+
+          // Update local state with new authorization status
+          setCaras(prev => prev.map(c =>
+            c.localId === editingCaraId
+              ? {
+                  ...c,
+                  ...newCara,
+                  costo: costoCalculado,
+                  autorizacion_dg: updatedCara?.autorizacion_dg || autorizacion_dg,
+                  autorizacion_dcm: updatedCara?.autorizacion_dcm || autorizacion_dcm
+                }
+              : c
+          ));
         }
-        // Update local state
-        setCaras(prev => prev.map(c =>
-          c.localId === editingCaraId
-            ? { ...c, ...newCara }
-            : c
-        ));
         setEditingCaraId(null);
       } else {
         // Create new cara in database
@@ -1514,6 +1557,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
       // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', propuesta.id] });
     } catch (error) {
       console.error('Error saving cara:', error);
       alert('Error al guardar la cara');
@@ -4632,43 +4676,43 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </div>
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Caras en Renta</label>
+                        <label className={`text-xs ${editingCaraHasReservas ? 'text-zinc-800' : 'text-zinc-500'}`}>Caras en Renta</label>
                         <input
                           type="number"
                           value={newCara.caras || ''}
                           onChange={(e) => {
-                            if (!canEditResumen || editingCaraHasReservas || editingCaraId) return;
+                            if (!canEditResumen || editingCaraHasReservas) return;
                             const val = parseInt(e.target.value) || 0;
                             // Auto-calculate flujo and contraflujo (half and half)
                             const flujo = Math.ceil(val / 2);
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || editingCaraHasReservas}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Caras Bonificadas</label>
+                        <label className={`text-xs ${editingCaraHasReservas ? 'text-zinc-800' : 'text-zinc-500'}`}>Caras Bonificadas</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
-                          onChange={(e) => canEditResumen && !editingCaraHasReservas && !editingCaraId && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                          disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && !editingCaraHasReservas && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                          disabled={!canEditResumen || editingCaraHasReservas}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Tarifa Pública</label>
+                        <label className={`text-xs ${editingCaraHasReservas ? 'text-zinc-800' : 'text-zinc-500'}`}>Tarifa Pública</label>
                         <input
                           type="number"
                           value={newCara.tarifa_publica || ''}
-                          onChange={(e) => canEditResumen && !editingCaraHasReservas && !editingCaraId && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && !editingCaraHasReservas && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
+                          disabled={!canEditResumen || editingCaraHasReservas}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -4774,31 +4818,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const carasFaltantes = status.totalRequerido - status.totalReservado;
 
                             // Determine status color and indicator
-                            // Green = complete, Red = missing (need to add), Amber = excess (need to remove)
-                            const statusColor = status.totalDiff === 0
-                              ? 'emerald' // Exact match - complete
-                              : status.totalDiff < 0
-                                ? 'red' // Under-reserved (missing, need to add)
-                                : 'amber'; // Over-reserved (excess, need to remove)
+                            // Green = complete (reservado >= requerido), Amber = incomplete (reservado < requerido)
+                            const statusColor = status.isComplete ? 'emerald' : 'amber';
 
                             // Display text for diff:
-                            // - Missing (totalDiff < 0): show positive "150" (faltan 150)
-                            // - Excess (totalDiff > 0): show negative "-251" (sobran 251, quitar)
+                            // - Missing (totalDiff < 0): show "faltan X"
+                            // - Excess (totalDiff > 0): show "quitar X"
                             const diffDisplay = status.totalDiff === 0
                               ? null
                               : status.totalDiff > 0
-                                ? `-${status.totalDiff}` // Excess: need to remove
-                                : `${Math.abs(status.totalDiff)}`; // Missing: need to add
+                                ? `quitar ${status.totalDiff}`
+                                : `faltan ${Math.abs(status.totalDiff)}`;
 
                             return (
-                              <div key={cara.localId} className={`${statusColor === 'emerald' ? 'bg-emerald-500/5' : statusColor === 'amber' ? 'bg-amber-500/5' : 'bg-red-500/5'}`}>
+                              <div key={cara.localId} className={`${statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
                                 {/* Cara row */}
                                 <div className="flex items-center gap-3 px-5 py-3 hover:bg-zinc-800/30 transition-colors">
                                   {/* Completion indicator */}
                                   <div className={`w-2 h-2 rounded-full ${
-                                    statusColor === 'emerald' ? 'bg-emerald-500' :
-                                    statusColor === 'amber' ? 'bg-amber-500 animate-pulse' :
-                                    'bg-red-500 animate-pulse'
+                                    statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
                                   <div className="flex-1 grid grid-cols-6 gap-3 text-sm">
@@ -4825,7 +4863,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       <div className="flex items-center gap-1">
                                         <p className="text-white font-medium">{status.totalReservado}/{totalCaras}</p>
                                         {diffDisplay && (
-                                          <span className={`text-xs font-medium ${statusColor === 'amber' ? 'text-amber-400' : 'text-red-400'}`}>
+                                          <span className={`text-xs font-medium ${status.totalDiff > 0 ? 'text-red-400' : 'text-amber-400'}`}>
                                             ({diffDisplay})
                                           </span>
                                         )}
@@ -5569,6 +5607,60 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             </>
           )}
         </div>
+
+        {/* Footer with Aprobar button */}
+        {caras.length > 0 && (
+          <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-900/80 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {/* Status summary */}
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${allCarasComplete ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                  <span className="text-zinc-400">
+                    {allCarasComplete ? (
+                      <span className="text-emerald-400">Todas las caras completas</span>
+                    ) : (
+                      <span className="text-amber-400">
+                        {caras.filter(c => !getCaraCompletionStatus(c).isComplete).length} cara(s) incompleta(s)
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {hasPendingAuthorization && (
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    Autorizaciones pendientes
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+              >
+                Cerrar
+              </button>
+              {effectiveCanEdit && (
+                <button
+                  disabled={!allCarasComplete || hasPendingAuthorization}
+                  onClick={() => {
+                    // TODO: Implement aprobar propuesta logic
+                    alert('Propuesta lista para aprobar');
+                  }}
+                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
+                    allCarasComplete && !hasPendingAuthorization
+                      ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
+                      : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                  }`}
+                >
+                  <Check className="h-4 w-4 inline-block mr-2" />
+                  Aprobar Propuesta
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       {/* Confirmation Modal */}
       {confirmModalJSX}
