@@ -71,6 +71,8 @@ interface CaraItem {
   anio_inicio?: number;
   catorcena_fin?: number;
   anio_fin?: number;
+  autorizacion_dg?: string;
+  autorizacion_dcm?: string;
 }
 
 // SAP Articulo interface
@@ -839,6 +841,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Initialize caras from API
   useEffect(() => {
     if (carasData && isOpen) {
+      console.log('[AssignInventarioCampana] carasData recibida:', carasData.length, 'caras');
       const carasWithIds: CaraItem[] = carasData.map((cara, idx) => ({
         localId: `cara-${cara.id || idx}-${Date.now()}`,
         id: cara.id,
@@ -858,6 +861,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         caras_contraflujo: Number(cara.caras_contraflujo) || 0,
         articulo: cara.articulo || '',
         descuento: Number(cara.descuento) || 0,
+        autorizacion_dg: cara.autorizacion_dg || 'aprobado',
+        autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
       }));
       setCaras(carasWithIds);
     }
