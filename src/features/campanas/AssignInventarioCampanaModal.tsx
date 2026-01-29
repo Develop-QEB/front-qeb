@@ -4512,16 +4512,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <button
-                                      onClick={(e) => { e.stopPropagation(); if (!needsAuthorization) handleSearchInventory(cara); }}
-                                      disabled={needsAuthorization}
+                                      onClick={(e) => { e.stopPropagation(); if (!needsAuthorization && !hasAPS) handleSearchInventory(cara); }}
+                                      disabled={needsAuthorization || hasAPS}
                                       className={`p-2 rounded-lg border transition-colors ${
-                                        needsAuthorization
+                                        needsAuthorization || hasAPS
                                           ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                           : status.isComplete
                                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
                                             : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
                                         }`}
-                                      title={needsAuthorization ? 'Esta cara requiere autorización' : status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
+                                      title={hasAPS ? 'Bloqueado - tiene APS asignado' : needsAuthorization ? 'Esta cara requiere autorización' : status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
                                     >
                                       <Search className="h-4 w-4" />
                                     </button>
