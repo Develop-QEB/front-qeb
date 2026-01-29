@@ -1016,6 +1016,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
       console.log('[handleAddCara] Evaluando autorización:', {
         ciudad: ciudadesStr,
+        estado: newCara.estado,
         formato: newCara.formato,
         tipo: newCara.tipo,
         caras: newCara.renta,
@@ -1026,6 +1027,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
       const resultado = await solicitudesService.evaluarAutorizacion({
         ciudad: ciudadesStr,
+        estado: newCara.estado,
         formato: newCara.formato,
         tipo: newCara.tipo,
         caras: newCara.renta,

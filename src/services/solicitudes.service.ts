@@ -242,6 +242,7 @@ export const solicitudesService = {
 
   async evaluarAutorizacion(data: {
     ciudad?: string;
+    estado?: string;
     formato: string;
     tipo?: string;
     caras: number;
