@@ -13,7 +13,7 @@ import { inventariosService, InventarioDisponible } from '../../services/inventa
 import { campanasService, ReservaModalItem } from '../../services/campanas.service';
 import { formatCurrency } from '../../lib/utils';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
-import { useSocketEquipos } from '../../hooks/useSocket';
+import { useSocketEquipos, useSocketCampana } from '../../hooks/useSocket';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
@@ -501,6 +501,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
+  // Socket para escuchar cambios en la campaña (autorizaciones, reservas, etc.)
+  useSocketCampana(campana?.id || null);
 
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
@@ -4337,6 +4339,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const totalCaras = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
                             const carasFaltantes = status.totalRequerido - status.totalReservado;
 
+                            // Verificar estado de autorización
+                            const needsAuthDG = cara.autorizacion_dg === 'pendiente';
+                            const needsAuthDCM = cara.autorizacion_dcm === 'pendiente';
+                            const isRejected = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
+                            const needsAuthorization = needsAuthDG || needsAuthDCM;
+                            const isFullyApproved = cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado';
+
                             // Determine status color and indicator
                             // Green = complete, Red = missing (need to add), Amber = excess (need to remove)
                             const statusColor = status.totalDiff === 0
@@ -4366,7 +4375,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     'bg-red-500 animate-pulse'
                                   }`} />
 
-                                  <div className="flex-1 grid grid-cols-4 gap-3 text-sm">
+                                  <div className="flex-1 grid grid-cols-6 gap-3 text-sm">
                                     <div>
                                       <span className="text-zinc-500 text-xs">Formato</span>
                                       <div className="flex items-center gap-2">
@@ -4379,12 +4388,39 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       </div>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Ciudad</span>
-                                      <p className="text-zinc-300">{cara.ciudad || cara.estados || '-'}</p>
+                                      <span className="text-zinc-500 text-xs">Tipo</span>
+                                      <p className="text-zinc-300">{cara.tipo || '-'}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">Autorización</span>
+                                      <div className="flex items-center gap-1">
+                                        {isFullyApproved ? (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded text-[10px] font-medium">
+                                            Aprobado
+                                          </span>
+                                        ) : isRejected ? (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded text-[10px] font-medium">
+                                            Rechazado
+                                          </span>
+                                        ) : (
+                                          <>
+                                            {needsAuthDG && (
+                                              <span className="inline-flex items-center px-1.5 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded text-[10px] font-medium">
+                                                DG
+                                              </span>
+                                            )}
+                                            {needsAuthDCM && (
+                                              <span className="inline-flex items-center px-1.5 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded text-[10px] font-medium">
+                                                DCM
+                                              </span>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Artículo</span>
-                                      <p className="text-zinc-300">{cara.articulo || '-'}</p>
+                                      <p className="text-zinc-300 text-xs truncate max-w-[120px]" title={cara.articulo || '-'}>{cara.articulo || '-'}</p>
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Caras</span>
@@ -4400,16 +4436,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <button
-                                      onClick={(e) => { e.stopPropagation(); if (!hasAPS) handleSearchInventory(cara); }}
-                                      disabled={hasAPS}
+                                      onClick={(e) => { e.stopPropagation(); if (!hasAPS && !needsAuthorization) handleSearchInventory(cara); }}
+                                      disabled={hasAPS || needsAuthorization}
                                       className={`p-2 rounded-lg border transition-colors ${
-                                        hasAPS
+                                        hasAPS || needsAuthorization
                                           ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                           : status.isComplete
                                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
                                             : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
                                         }`}
-                                      title={hasAPS ? 'Bloqueado - tiene APS asignado' : status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
+                                      title={hasAPS ? 'Bloqueado - tiene APS asignado' : needsAuthorization ? 'Esta cara requiere autorización' : status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
                                     >
                                       <Search className="h-4 w-4" />
                                     </button>

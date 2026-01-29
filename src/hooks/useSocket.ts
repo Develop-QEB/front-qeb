@@ -167,6 +167,19 @@ export function useSocketCampana(campanaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes', data.campanaId] });
     };
 
+    const handleAutorizacionAprobadaCampana = (data: { propuestaId: number; idquote: string }) => {
+      console.log('[Socket] Autorización aprobada (campaña):', data);
+      // Invalidar caras de la campaña para refrescar estados de autorización
+      queryClient.invalidateQueries({ queryKey: ['campana-caras'] });
+      queryClient.invalidateQueries({ queryKey: ['campana-full'] });
+    };
+
+    const handleAutorizacionRechazadaCampana = (data: { propuestaId: number; idquote: string }) => {
+      console.log('[Socket] Autorización rechazada (campaña):', data);
+      queryClient.invalidateQueries({ queryKey: ['campana-caras'] });
+      queryClient.invalidateQueries({ queryKey: ['campana-full'] });
+    };
+
     const handleComentarioCreado = (data: { campanaId: number; comentario: { id: number; autor_id: number; autor_nombre: string; autor_foto?: string | null; contenido: string; fecha: string } }) => {
       console.log('[Socket] Comentario creado:', data);
       // Agregar comentario al cache sin recargar toda la campaña
@@ -204,6 +217,8 @@ export function useSocketCampana(campanaId: number | null) {
     socket.on(SOCKET_EVENTS.ARTE_RECHAZADO, handleArteRechazado);
     socket.on(SOCKET_EVENTS.INVENTARIO_ACTUALIZADO, handleInventarioActualizado);
     socket.on(SOCKET_EVENTS.CAMPANA_COMENTARIO_CREADO, handleComentarioCreado);
+    socket.on(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobadaCampana);
+    socket.on(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazadaCampana);
 
     return () => {
       // Limpiar listeners al desmontar
@@ -215,6 +230,8 @@ export function useSocketCampana(campanaId: number | null) {
       socket.off(SOCKET_EVENTS.ARTE_RECHAZADO, handleArteRechazado);
       socket.off(SOCKET_EVENTS.INVENTARIO_ACTUALIZADO, handleInventarioActualizado);
       socket.off(SOCKET_EVENTS.CAMPANA_COMENTARIO_CREADO, handleComentarioCreado);
+      socket.off(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobadaCampana);
+      socket.off(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazadaCampana);
     };
   }, [campanaId, queryClient]);
 
