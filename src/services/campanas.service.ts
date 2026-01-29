@@ -103,6 +103,9 @@ export interface InventarioReservado {
 
 export interface InventarioConAPS extends InventarioReservado {
   aps: number;
+  arte_aprobado?: string | null;
+  instalado?: boolean | null;
+  estatus_arte?: 'Carga Artes' | 'Revision Artes' | 'Artes Aprobados' | 'En Impresion' | 'Artes Recibidos' | 'Instalado' | null;
 }
 
 export interface InventarioConArte {
