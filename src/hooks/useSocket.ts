@@ -307,6 +307,8 @@ export function useSocketPropuesta(propuestaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['autorizacion-caras', data.idquote] });
       queryClient.invalidateQueries({ queryKey: ['autorizacion-resumen', data.idquote] });
       queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
     };
 
@@ -315,6 +317,8 @@ export function useSocketPropuesta(propuestaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['autorizacion-caras', data.idquote] });
       queryClient.invalidateQueries({ queryKey: ['autorizacion-resumen', data.idquote] });
       queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
     };
 
@@ -462,14 +466,32 @@ export function useSocketPropuestas() {
       queryClient.invalidateQueries({ queryKey: ['propuestas'] });
     };
 
+    const handleAutorizacionAprobada = (data: { propuestaId: number; idquote: string }) => {
+      console.log('[Socket] Autorización aprobada (global):', data);
+      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
+    };
+
+    const handleAutorizacionRechazada = (data: { propuestaId: number; idquote: string }) => {
+      console.log('[Socket] Autorización rechazada (global):', data);
+      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', data.propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
+    };
+
     socket.on(SOCKET_EVENTS.PROPUESTA_CREADA, handlePropuestaCreada);
     socket.on(SOCKET_EVENTS.PROPUESTA_ACTUALIZADA, handlePropuestaActualizada);
     socket.on(SOCKET_EVENTS.PROPUESTA_STATUS_CHANGED, handlePropuestaStatusChanged);
+    socket.on(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobada);
+    socket.on(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazada);
 
     return () => {
       socket.off(SOCKET_EVENTS.PROPUESTA_CREADA, handlePropuestaCreada);
       socket.off(SOCKET_EVENTS.PROPUESTA_ACTUALIZADA, handlePropuestaActualizada);
       socket.off(SOCKET_EVENTS.PROPUESTA_STATUS_CHANGED, handlePropuestaStatusChanged);
+      socket.off(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobada);
+      socket.off(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazada);
     };
   }, [queryClient]);
 

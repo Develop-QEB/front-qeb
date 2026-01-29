@@ -17,7 +17,7 @@ import { AssignInventarioModal } from './AssignInventarioModal';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
-import { useSocketEquipos } from '../../hooks/useSocket';
+import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 
 // Status badge colors
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -975,6 +975,8 @@ export function PropuestasPage() {
 
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
+  // Socket para actualizar propuestas cuando cambian autorizaciones
+  useSocketPropuestas();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
