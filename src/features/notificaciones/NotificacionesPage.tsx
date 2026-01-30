@@ -1136,7 +1136,15 @@ function NestedTableSection({
 
 // Función para verificar si hay navegación disponible
 function hasNavigationRoute(tarea: Notificacion): boolean {
-  return !!(tarea.referencia_tipo && tarea.referencia_id && tarea.referencia_tipo !== 'sistema');
+  // Si tiene referencia_tipo y referencia_id válidos
+  if (tarea.referencia_tipo && tarea.referencia_id && tarea.referencia_tipo !== 'sistema') {
+    return true;
+  }
+  // Si es tarea de autorización o rechazo con id_solicitud, también puede navegar
+  if (tarea.id_solicitud && (tarea.tipo?.includes('Autorización') || tarea.tipo?.includes('Rechazo'))) {
+    return true;
+  }
+  return false;
 }
 
 // Función para obtener la etiqueta del botón
@@ -1280,9 +1288,21 @@ function TaskDrawer({
   }, [carasData, tipoAutorizacion]);
 
   const handleNavigate = () => {
-    if (!tarea.referencia_tipo || !tarea.referencia_id || !onNavigate) return;
-    const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '');
-    onNavigate(path);
+    if (!onNavigate) return;
+    // Si tiene referencia_tipo y referencia_id, usar esos
+    if (tarea.referencia_tipo && tarea.referencia_id) {
+      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '');
+      onNavigate(path);
+      return;
+    }
+    // Si es tarea de autorización/rechazo con id_solicitud, navegar a solicitud
+    if (tarea.id_solicitud && (tarea.tipo?.includes('Autorización') || tarea.tipo?.includes('Rechazo'))) {
+      const solicitudId = parseInt(tarea.id_solicitud);
+      if (!isNaN(solicitudId)) {
+        const path = getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '');
+        onNavigate(path);
+      }
+    }
   };
 
   const statusConfig = getStatusConfig(tarea.estatus);
