@@ -167,7 +167,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente'],
     canBuscarInventarioEnModal: false,
 
-    canEditCampanas: false,
+    canEditCampanas: true,
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
     canEditGestionArtes: false,
