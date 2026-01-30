@@ -251,12 +251,16 @@ export const solicitudesService = {
     tarifa_publica?: number;
   }): Promise<{
     estado: 'aprobado' | 'pendiente_dcm' | 'pendiente_dg';
+    autorizacion_dg: 'aprobado' | 'pendiente' | 'rechazado';
+    autorizacion_dcm: 'aprobado' | 'pendiente' | 'rechazado';
     motivo?: string;
     tarifa_efectiva?: number;
     total_caras?: number;
   }> {
     const response = await api.post<ApiResponse<{
       estado: 'aprobado' | 'pendiente_dcm' | 'pendiente_dg';
+      autorizacion_dg: 'aprobado' | 'pendiente' | 'rechazado';
+      autorizacion_dcm: 'aprobado' | 'pendiente' | 'rechazado';
       motivo?: string;
       tarifa_efectiva?: number;
       total_caras?: number;

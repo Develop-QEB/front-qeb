@@ -1548,12 +1548,12 @@ function TaskDrawer({
                           {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rech.</span>
                           )}
-                          {/* Mostrar DG si está pendiente (y no rechazado) */}
-                          {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && cara.autorizacion_dcm !== 'rechazado' && (
+                          {/* Mostrar DG si está pendiente (y ninguno rechazado) */}
+                          {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dcm !== 'rechazado' && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">DG</span>
                           )}
-                          {/* Mostrar DCM si está pendiente (y no rechazado) */}
-                          {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && cara.autorizacion_dcm !== 'rechazado' && (
+                          {/* Mostrar DCM si está pendiente (y ninguno rechazado) */}
+                          {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">DCM</span>
                           )}
                         </div>

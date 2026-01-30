@@ -2156,14 +2156,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                                 Rechazado
                                               </span>
                                             )}
-                                            {/* Si DG está pendiente (y no rechazado) */}
-                                            {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && cara.autorizacion_dcm !== 'rechazado' && (
+                                            {/* Si DG está pendiente (y ninguno rechazado) */}
+                                            {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dcm !== 'rechazado' && (
                                               <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
                                                 Pend. DG
                                               </span>
                                             )}
-                                            {/* Si DCM está pendiente (y no rechazado) */}
-                                            {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && cara.autorizacion_dcm !== 'rechazado' && (
+                                            {/* Si DCM está pendiente (y ninguno rechazado) */}
+                                            {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && (
                                               <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
                                                 Pend. DCM
                                               </span>
