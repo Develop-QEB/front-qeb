@@ -3725,7 +3725,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer ${
                                 selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : ''
                               } ${selectedMapReservas.has(reserva.id) ? 'ring-1 ring-purple-500' : ''}`}
-                              onClick={() => handleReservaClick(reserva)}
+                              onClick={() => handleToggleReservadoSelection(reserva.id)}
                             >
                               <td className="px-3 py-2 text-center">
                                 <input
@@ -3733,7 +3733,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   checked={selectedReservados.has(reserva.id)}
                                   onChange={(e) => {
                                     e.stopPropagation();
-                                    toggleReservadoSelection(reserva.id);
+                                    handleToggleReservadoSelection(reserva.id);
                                   }}
                                   onClick={(e) => e.stopPropagation()}
                                   className="checkbox-purple"
@@ -3751,11 +3751,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 </span>
                               </td>
                               <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
-                              <td className="px-4 py-2 text-sm text-zinc-400">{reserva.ciudad}</td>
+                              <td className="px-4 py-2 text-sm text-zinc-400">{reserva.plaza}</td>
                               {effectiveCanEdit && (
                                 <td className="px-4 py-2 text-center">
                                   <button
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteReserva(reserva); }}
+                                    onClick={(e) => { e.stopPropagation(); handleRemoveReserva(reserva.id); }}
                                     className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
                                     title="Eliminar"
                                   >
