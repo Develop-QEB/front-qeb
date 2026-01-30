@@ -14,6 +14,8 @@ import { campanasService, ReservaModalItem } from '../../services/campanas.servi
 import { formatCurrency } from '../../lib/utils';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useSocketEquipos, useSocketCampana } from '../../hooks/useSocket';
+import { useAuthStore } from '../../store/authStore';
+import { usePermissions } from '../../lib/permissions';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
@@ -498,6 +500,8 @@ const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const permissions = usePermissions(user?.rol);
 
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
@@ -4511,20 +4515,22 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); if (!needsAuthorization && !hasAPS) handleSearchInventory(cara); }}
-                                      disabled={needsAuthorization || hasAPS}
-                                      className={`p-2 rounded-lg border transition-colors ${
-                                        needsAuthorization || hasAPS
-                                          ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
-                                          : status.isComplete
-                                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
-                                            : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
-                                        }`}
-                                      title={hasAPS ? 'Bloqueado - tiene APS asignado' : needsAuthorization ? 'Esta cara requiere autorización' : status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
-                                    >
-                                      <Search className="h-4 w-4" />
-                                    </button>
+                                    {permissions.canBuscarInventarioEnModal && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); if (!needsAuthorization && !hasAPS) handleSearchInventory(cara); }}
+                                        disabled={needsAuthorization || hasAPS}
+                                        className={`p-2 rounded-lg border transition-colors ${
+                                          needsAuthorization || hasAPS
+                                            ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                            : status.isComplete
+                                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                                              : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
+                                          }`}
+                                        title={hasAPS ? 'Bloqueado - tiene APS asignado' : needsAuthorization ? 'Esta cara requiere autorización' : status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
+                                      >
+                                        <Search className="h-4 w-4" />
+                                      </button>
+                                    )}
                                     <button
                                       onClick={(e) => { e.stopPropagation(); if (!hasAPS) handleEditCara(cara); }}
                                       disabled={hasAPS}
