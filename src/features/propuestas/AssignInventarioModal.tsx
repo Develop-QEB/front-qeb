@@ -602,6 +602,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [editingReserva, setEditingReserva] = useState<ReservaItem | null>(null);
   const [editingFormato, setEditingFormato] = useState('');
   const [reservadosTipoFilter, setReservadosTipoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo' | 'Bonificacion'>('Todos');
+  const [showReservasFlatList, setShowReservasFlatList] = useState(false); // Toggle for flat list vs grouped
   const [reservadosSortColumn, setReservadosSortColumn] = useState<'codigo' | 'tipo' | 'formato' | 'ciudad'>('ciudad');
   // Reservas summary states - Advanced Filter System
   const [filtersReservas, setFiltersReservas] = useState<FilterCondition[]>([]);
@@ -3606,17 +3607,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                   {/* Row 2: Filters and Tools */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    {/* Type Filter */}
-                    <select
-                      value={reservadosTipoFilter}
-                      onChange={(e) => setReservadosTipoFilter(e.target.value as any)}
-                      className="px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                    >
-                      <option value="Todos">Todos los tipos</option>
-                      <option value="Flujo">Flujo</option>
-                      <option value="Contraflujo">Contraflujo</option>
-                      <option value="Bonificacion">Bonificación</option>
-                    </select>
+                    {/* Type Filter - Toggle Buttons */}
+                    <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                      {(['Todos', 'Flujo', 'Contraflujo', 'Bonificacion'] as const).map(opt => (
+                        <button
+                          key={opt}
+                          onClick={() => setReservadosTipoFilter(opt)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${reservadosTipoFilter === opt
+                            ? opt === 'Todos' ? 'bg-zinc-600 text-white shadow'
+                              : opt === 'Flujo' ? 'bg-blue-500 text-white shadow'
+                              : opt === 'Contraflujo' ? 'bg-amber-500 text-white shadow'
+                              : 'bg-emerald-500 text-white shadow'
+                            : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
+                          }`}
+                        >
+                          {opt === 'Bonificacion' ? 'Bonif.' : opt}
+                        </button>
+                      ))}
+                    </div>
 
                     {/* Sort */}
                     <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1">
@@ -3641,23 +3649,39 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </button>
                     </div>
 
-                    {/* Expand/Collapse All */}
+                    {/* Toggle Grouped/Flat View */}
                     <button
-                      onClick={toggleAllReservadosHierarchy}
-                      className="flex items-center gap-1 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-400 hover:text-white transition-colors"
+                      onClick={() => setShowReservasFlatList(!showReservasFlatList)}
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                        showReservasFlatList
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                          : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white'
+                      }`}
+                      title={showReservasFlatList ? 'Mostrar agrupado' : 'Mostrar lista plana'}
                     >
-                      {expandedReservadosHierarchy.size > 0 ? (
-                        <>
-                          <ChevronUp className="h-3 w-3" />
-                          Colapsar
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="h-3 w-3" />
-                          Expandir
-                        </>
-                      )}
+                      <Layers className="h-3 w-3" />
+                      {showReservasFlatList ? 'Agrupar' : 'Lista Plana'}
                     </button>
+
+                    {/* Expand/Collapse All - Only show when grouped */}
+                    {!showReservasFlatList && (
+                      <button
+                        onClick={toggleAllReservadosHierarchy}
+                        className="flex items-center gap-1 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-400 hover:text-white transition-colors"
+                      >
+                        {expandedReservadosHierarchy.size > 0 ? (
+                          <>
+                            <ChevronUp className="h-3 w-3" />
+                            Colapsar
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="h-3 w-3" />
+                            Expandir
+                          </>
+                        )}
+                      </button>
+                    )}
 
                     {/* Results count */}
                     <span className="text-xs text-zinc-500 ml-auto">
@@ -3693,56 +3717,105 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         </tr>
                       </thead>
                       <tbody>
-                        {/* Hierarchical: Catorcena > Artículo > Plaza > Formato */}
-                        {catorcenaKeys.map((catKey) => {
-                          const catItems = flattenHierarchy(groupedReservadosHierarchy[catKey]);
-                          const catBreakdown = getReservadosBreakdown(catItems);
-                          const catExpanded = expandedReservadosHierarchy.has(catKey);
-
-                          return (
-                            <React.Fragment key={catKey}>
-                              {/* Level 0: Catorcena Header */}
-                              <tr
-                                className="bg-zinc-800/90 cursor-pointer hover:bg-zinc-800"
-                                onClick={() => toggleReservadosHierarchy(catKey)}
-                              >
-                                <td colSpan={6} className="px-3 py-2">
-                                  <div className="flex items-center gap-3">
-                                    {catExpanded ? (
-                                      <ChevronDown className="h-4 w-4 text-purple-400" />
-                                    ) : (
-                                      <ChevronRight className="h-4 w-4 text-purple-400" />
-                                    )}
-                                    <Calendar className="h-4 w-4 text-purple-400" />
-                                    <span className="text-sm font-semibold text-white">{catKey}</span>
-                                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
-                                      {catBreakdown.total} caras
-                                    </span>
-                                    <div className="flex gap-1 ml-2">
-                                      {catBreakdown.flujo > 0 && (
-                                        <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
-                                          F:{catBreakdown.flujo}
-                                        </span>
-                                      )}
-                                      {catBreakdown.contraflujo > 0 && (
-                                        <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
-                                          C:{catBreakdown.contraflujo}
-                                        </span>
-                                      )}
-                                      {catBreakdown.bonificacion > 0 && (
-                                        <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
-                                          B:{catBreakdown.bonificacion}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
+                        {/* Flat List View */}
+                        {showReservasFlatList ? (
+                          filteredReservados.map((reserva) => (
+                            <tr
+                              key={reserva.id}
+                              className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer ${
+                                selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : ''
+                              } ${selectedMapReservas.has(reserva.id) ? 'ring-1 ring-purple-500' : ''}`}
+                              onClick={() => handleReservaClick(reserva)}
+                            >
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedReservados.has(reserva.id)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleReservadoSelection(reserva.id);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="checkbox-purple"
+                                />
+                              </td>
+                              <td className="px-4 py-2">
+                                <span className="text-sm text-white font-medium">{reserva.codigo_unico}</span>
+                              </td>
+                              <td className="px-4 py-2">
+                                <span className={`px-2 py-1 rounded-full text-xs ${
+                                  reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
+                                  reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+                                }`}>
+                                  {reserva.tipo}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
+                              <td className="px-4 py-2 text-sm text-zinc-400">{reserva.ciudad}</td>
+                              {effectiveCanEdit && (
+                                <td className="px-4 py-2 text-center">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteReserva(reserva); }}
+                                    className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
                                 </td>
-                              </tr>
+                              )}
+                            </tr>
+                          ))
+                        ) : (
+                          /* Hierarchical: Catorcena > Artículo > Plaza > Formato */
+                          catorcenaKeys.map((catKey) => {
+                            const catItems = flattenHierarchy(groupedReservadosHierarchy[catKey]);
+                            const catBreakdown = getReservadosBreakdown(catItems);
+                            const catExpanded = expandedReservadosHierarchy.has(catKey);
 
-                              {/* Level 1: Artículos */}
-                              {catExpanded && Object.entries(groupedReservadosHierarchy[catKey]).map(([artKey, plazas]) => {
-                                const artKeyFull = `${catKey}|${artKey}`;
-                                const artItems = flattenHierarchy(plazas);
+                            return (
+                              <React.Fragment key={catKey}>
+                                {/* Level 0: Catorcena Header */}
+                                <tr
+                                  className="bg-zinc-800/90 cursor-pointer hover:bg-zinc-800"
+                                  onClick={() => toggleReservadosHierarchy(catKey)}
+                                >
+                                  <td colSpan={6} className="px-3 py-2">
+                                    <div className="flex items-center gap-3">
+                                      {catExpanded ? (
+                                        <ChevronDown className="h-4 w-4 text-purple-400" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4 text-purple-400" />
+                                      )}
+                                      <Calendar className="h-4 w-4 text-purple-400" />
+                                      <span className="text-sm font-semibold text-white">{catKey}</span>
+                                      <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                                        {catBreakdown.total} caras
+                                      </span>
+                                      <div className="flex gap-1 ml-2">
+                                        {catBreakdown.flujo > 0 && (
+                                          <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                            F:{catBreakdown.flujo}
+                                          </span>
+                                        )}
+                                        {catBreakdown.contraflujo > 0 && (
+                                          <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                            C:{catBreakdown.contraflujo}
+                                          </span>
+                                        )}
+                                        {catBreakdown.bonificacion > 0 && (
+                                          <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                            B:{catBreakdown.bonificacion}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+
+                                {/* Level 1: Artículos */}
+                                {catExpanded && Object.entries(groupedReservadosHierarchy[catKey]).map(([artKey, plazas]) => {
+                                  const artKeyFull = `${catKey}|${artKey}`;
+                                  const artItems = flattenHierarchy(plazas);
                                 const artBreakdown = getReservadosBreakdown(artItems);
                                 const artExpanded = expandedReservadosHierarchy.has(artKeyFull);
 
@@ -3936,7 +4009,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               })}
                             </React.Fragment>
                           );
-                        })}
+                        })
+                        )}
                       </tbody>
                     </table>
                   </div>

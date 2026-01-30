@@ -28,6 +28,7 @@ export const SOCKET_EVENTS = {
   // Reservas y Propuestas
   RESERVA_CREADA: 'reserva:creada',
   RESERVA_ELIMINADA: 'reserva:eliminada',
+  RESERVA_PROGRESO: 'reserva:progreso',
   PROPUESTA_ACTUALIZADA: 'propuesta:actualizada',
   PROPUESTA_CREADA: 'propuesta:creada',
   PROPUESTA_ELIMINADA: 'propuesta:eliminada',
@@ -834,6 +835,59 @@ export function useSocketDashboard() {
   }, []);
 
   return { emit };
+}
+
+/**
+ * Hook para escuchar progreso de creación de reservas
+ */
+export function useSocketReservaProgreso(
+  propuestaId: number | null,
+  onProgress?: (data: {
+    propuestaId: number;
+    procesadas: number;
+    total: number;
+    creadas: number;
+    porcentaje: number;
+  }) => void
+) {
+  const socketRef = useRef<Socket | null>(null);
+  const joinedRoomRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!propuestaId || propuestaId <= 0 || !onProgress) return;
+
+    const socket = getSocket();
+    socketRef.current = socket;
+
+    // Unirse al room de la propuesta
+    if (joinedRoomRef.current !== propuestaId) {
+      if (joinedRoomRef.current) {
+        socket.emit('leave-propuesta', joinedRoomRef.current);
+      }
+      socket.emit('join-propuesta', propuestaId);
+      joinedRoomRef.current = propuestaId;
+      console.log('[Socket] Unido a propuesta para progreso:', propuestaId);
+    }
+
+    const handleReservaProgreso = (data: {
+      propuestaId: number;
+      procesadas: number;
+      total: number;
+      creadas: number;
+      porcentaje: number;
+    }) => {
+      if (data.propuestaId === propuestaId) {
+        console.log('[Socket] Progreso de reserva:', data);
+        onProgress(data);
+      }
+    };
+
+    socket.on(SOCKET_EVENTS.RESERVA_PROGRESO, handleReservaProgreso);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.RESERVA_PROGRESO, handleReservaProgreso);
+    };
+  }, [propuestaId, onProgress]);
 }
 
 /**

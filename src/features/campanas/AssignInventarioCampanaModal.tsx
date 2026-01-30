@@ -1364,12 +1364,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
   };
 
-  // Handle edit cara
+  // Handle edit cara - permite edición parcial cuando hay reservas (caras y tarifa)
   const handleEditCara = (cara: CaraItem) => {
-    if (caraHasReservas(cara.localId)) {
-      alert('No puedes editar una cara que tiene reservas. Primero elimina las reservas.');
-      return;
-    }
+    // Ya no bloqueamos completamente - permitimos edición de caras y tarifa
     setEditingCaraId(cara.localId);
 
     // Find and set the selectedArticulo if we have the articulo code

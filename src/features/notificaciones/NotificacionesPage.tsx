@@ -1170,7 +1170,7 @@ function isCommentNotification(titulo: string): boolean {
 // Función para verificar si es una tarea de rechazo que requiere edición
 function isRejectionTask(titulo: string): boolean {
   const lower = titulo.toLowerCase();
-  return lower.includes('rechazad') || lower.includes('requiere edición');
+  return lower.includes('rechazad') || lower.includes('rechazo') || lower.includes('requiere edición');
 }
 
 // Función para obtener la ruta de navegación directa al detalle
@@ -1228,7 +1228,35 @@ function TaskDrawer({
   const tipoAutorizacion = tarea.tipo?.includes('DG') ? 'dg' : tarea.tipo?.includes('DCM') ? 'dcm' : null;
 
   // Obtener idquote de la propuesta (id_propuesta es el idquote en solicitudCaras)
-  const idPropuesta = tarea.id_propuesta;
+  // Si no hay id_propuesta, intentar obtenerlo desde la solicitud
+  const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
+
+  // Si no hay id_propuesta pero hay id_solicitud, buscar la propuesta
+  useEffect(() => {
+    if (!tarea.id_propuesta && tarea.id_solicitud && isAutorizacionTask) {
+      // Buscar propuesta por solicitud_id
+      const fetchPropuesta = async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/propuestas?solicitudId=${tarea.id_solicitud}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          const data = await response.json();
+          if (data.success && data.data && data.data.length > 0) {
+            setIdPropuestaState(data.data[0].id.toString());
+          }
+        } catch (error) {
+          console.error('Error buscando propuesta:', error);
+        }
+      };
+      fetchPropuesta();
+    } else if (tarea.id_propuesta) {
+      setIdPropuestaState(tarea.id_propuesta);
+    }
+  }, [tarea.id_propuesta, tarea.id_solicitud, isAutorizacionTask]);
+
+  const idPropuesta = idPropuestaState;
 
   // Query para obtener caras pendientes si es tarea de autorización
   const { data: carasData, refetch: refetchCaras } = useQuery({
@@ -2425,14 +2453,25 @@ export function NotificacionesPage() {
 
                         {/* Acciones */}
                         <div className="flex items-center gap-1 flex-shrink-0 mt-1">
-                          {/* Botón Ir a ver - solo si tiene referencia */}
+                          {/* Botón Ir a ver - solo si tiene referencia o id_solicitud para tareas de autorización/rechazo */}
                           {hasNavigationRoute(tarea) && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (!tarea.referencia_tipo || !tarea.referencia_id) return;
-                                const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '');
-                                navigate(path);
+                                // Si tiene referencia_tipo y referencia_id, usar esos
+                                if (tarea.referencia_tipo && tarea.referencia_id) {
+                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '');
+                                  navigate(path);
+                                  return;
+                                }
+                                // Si es tarea de autorización/rechazo con id_solicitud, navegar a solicitud
+                                if (tarea.id_solicitud && (tarea.tipo?.includes('Autorización') || tarea.tipo?.includes('Rechazo'))) {
+                                  const solicitudId = parseInt(tarea.id_solicitud);
+                                  if (!isNaN(solicitudId)) {
+                                    const path = getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '');
+                                    navigate(path);
+                                  }
+                                }
                               }}
                               className="p-1.5 rounded-lg text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 transition-all opacity-0 group-hover:opacity-100"
                               title={`Ir a ${tarea.referencia_tipo === 'propuesta' ? 'Propuesta' : tarea.referencia_tipo === 'campana' ? 'Campaña' : 'Solicitud'}`}
