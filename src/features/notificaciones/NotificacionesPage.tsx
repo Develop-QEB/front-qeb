@@ -1219,26 +1219,26 @@ function TaskDrawer({
   const isAutorizacionTask = tarea.tipo?.includes('Autorización');
   const tipoAutorizacion = tarea.tipo?.includes('DG') ? 'dg' : tarea.tipo?.includes('DCM') ? 'dcm' : null;
 
-  // Obtener idquote de la solicitud
-  const idSolicitud = tarea.id_solicitud;
+  // Obtener idquote de la propuesta (id_propuesta es el idquote en solicitudCaras)
+  const idPropuesta = tarea.id_propuesta;
 
   // Query para obtener caras pendientes si es tarea de autorización
   const { data: carasData, refetch: refetchCaras } = useQuery({
-    queryKey: ['autorizacion-caras', idSolicitud],
-    queryFn: () => notificacionesService.getCarasAutorizacion(idSolicitud || ''),
-    enabled: isAutorizacionTask && !!idSolicitud,
+    queryKey: ['autorizacion-caras', idPropuesta],
+    queryFn: () => notificacionesService.getCarasAutorizacion(idPropuesta || ''),
+    enabled: isAutorizacionTask && !!idPropuesta,
   });
 
   // Query para resumen de autorización
   const { data: resumenData, refetch: refetchResumen } = useQuery({
-    queryKey: ['autorizacion-resumen', idSolicitud],
-    queryFn: () => notificacionesService.getResumenAutorizacion(idSolicitud || ''),
-    enabled: isAutorizacionTask && !!idSolicitud,
+    queryKey: ['autorizacion-resumen', idPropuesta],
+    queryFn: () => notificacionesService.getResumenAutorizacion(idPropuesta || ''),
+    enabled: isAutorizacionTask && !!idPropuesta,
   });
 
   // Mutation para aprobar
   const aprobarMutation = useMutation({
-    mutationFn: () => notificacionesService.aprobarAutorizacion(idSolicitud || '', tipoAutorizacion as 'dg' | 'dcm'),
+    mutationFn: () => notificacionesService.aprobarAutorizacion(idPropuesta || '', tipoAutorizacion as 'dg' | 'dcm'),
     onSuccess: () => {
       refetchCaras();
       refetchResumen();
@@ -1248,7 +1248,7 @@ function TaskDrawer({
 
   // Mutation para rechazar
   const rechazarMutation = useMutation({
-    mutationFn: (motivo: string) => notificacionesService.rechazarAutorizacion(idSolicitud || '', motivo),
+    mutationFn: (motivo: string) => notificacionesService.rechazarAutorizacion(idPropuesta || '', motivo),
     onSuccess: () => {
       refetchCaras();
       refetchResumen();
