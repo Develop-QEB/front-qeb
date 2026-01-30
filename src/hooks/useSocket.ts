@@ -264,12 +264,36 @@ export function useSocketNotificaciones() {
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
     };
 
+    const handleTareaCreada = () => {
+      console.log('[Socket] Tarea creada');
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+    };
+
+    const handleTareaActualizada = () => {
+      console.log('[Socket] Tarea actualizada');
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+    };
+
+    const handleTareaEliminada = () => {
+      console.log('[Socket] Tarea eliminada');
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+    };
+
     socket.on(SOCKET_EVENTS.NOTIFICACION_NUEVA, handleNotificacionNueva);
     socket.on(SOCKET_EVENTS.NOTIFICACION_LEIDA, handleNotificacionLeida);
+    socket.on(SOCKET_EVENTS.TAREA_CREADA, handleTareaCreada);
+    socket.on(SOCKET_EVENTS.TAREA_ACTUALIZADA, handleTareaActualizada);
+    socket.on(SOCKET_EVENTS.TAREA_ELIMINADA, handleTareaEliminada);
 
     return () => {
       socket.off(SOCKET_EVENTS.NOTIFICACION_NUEVA, handleNotificacionNueva);
       socket.off(SOCKET_EVENTS.NOTIFICACION_LEIDA, handleNotificacionLeida);
+      socket.off(SOCKET_EVENTS.TAREA_CREADA, handleTareaCreada);
+      socket.off(SOCKET_EVENTS.TAREA_ACTUALIZADA, handleTareaActualizada);
+      socket.off(SOCKET_EVENTS.TAREA_ELIMINADA, handleTareaEliminada);
     };
   }, [queryClient]);
 }
