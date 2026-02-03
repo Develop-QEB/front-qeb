@@ -370,6 +370,7 @@ export interface ReservaModalItem {
   plaza: string;
   formato: string;
   ubicacion: string | null;
+  isla: string | null;
   estatus: string;
   grupo_completo_id: number | null;
   solicitud_cara_id: number;

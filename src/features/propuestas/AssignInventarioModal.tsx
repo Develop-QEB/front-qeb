@@ -183,6 +183,7 @@ interface ReservaItem {
   plaza: string;
   formato: string;
   ubicacion?: string | null;
+  isla?: string | null; // Isla from inventory
   solicitudCaraId?: number; // For linking to cara
   reservaId?: number; // For existing reservas from DB
   grupo_completo_id?: number | null; // For grouping complete groups
@@ -602,6 +603,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [editingReserva, setEditingReserva] = useState<ReservaItem | null>(null);
   const [editingFormato, setEditingFormato] = useState('');
   const [reservadosTipoFilter, setReservadosTipoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo' | 'Bonificacion'>('Todos');
+  const [showOnlyIslaReservados, setShowOnlyIslaReservados] = useState(false);
   const [showReservasFlatList, setShowReservasFlatList] = useState(false); // Toggle for flat list vs grouped
   const [reservadosSortColumn, setReservadosSortColumn] = useState<'codigo' | 'tipo' | 'formato' | 'ciudad'>('ciudad');
   // Reservas summary states - Advanced Filter System
@@ -624,6 +626,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
+  const [showOnlyIsla, setShowOnlyIsla] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
@@ -764,6 +767,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           plaza: r.plaza || '',
           formato: r.formato || '',
           ubicacion: r.ubicacion,
+          isla: r.isla,
           solicitudCaraId: r.solicitud_cara_id,
           reservaId: r.reserva_id,
           grupo_completo_id: r.grupo_completo_id,
@@ -1895,6 +1899,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       data = filterUnicosDigitales(data);
     }
 
+    // Filter by isla - only show items that have "ISLA" in the isla column
+    if (showOnlyIsla) {
+      data = data.filter(inv => inv.isla?.toUpperCase().includes('ISLA'));
+    }
+
     // Apply distance grouping
     if (groupByDistance) {
       data = groupByDistanceFunc(data);
@@ -1918,6 +1927,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           aVal = a.plaza || '';
           bVal = b.plaza || '';
           break;
+        case 'isla':
+          aVal = a.isla || '';
+          bVal = b.isla || '';
+          break;
         case 'nivel_socioeconomico':
           aVal = a.nivel_socioeconomico || '';
           bVal = b.nivel_socioeconomico || '';
@@ -1939,7 +1952,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, groupByDistance, filterUnicos, filterCompletos, filterUnicosDigitales, groupByDistanceFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showOnlyIsla, groupByDistance, filterUnicos, filterCompletos, filterUnicosDigitales, groupByDistanceFunc, sortColumn, sortDirection, reservas]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -1971,6 +1984,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setShowOnlyUnicos(false);
     setShowOnlyCompletos(false);
     setShowOnlyUnicosDigitales(false);
+    setShowOnlyIsla(false);
     setGroupByDistance(false);
     setPoiFilterIds(null);
     setDisponiblesSearchTerm('');
@@ -2519,6 +2533,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       data = data.filter(r => r.tipo === reservadosTipoFilter);
     }
 
+    // Filter by isla - only show items that have "ISLA" in the isla column
+    if (showOnlyIslaReservados) {
+      data = data.filter(r => r.isla?.toUpperCase().includes('ISLA'));
+    }
+
     // Filter by search term
     if (reservadosSearchTerm.trim()) {
       const term = reservadosSearchTerm.toLowerCase();
@@ -2527,7 +2546,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         r.plaza?.toLowerCase().includes(term) ||
         r.ubicacion?.toLowerCase().includes(term) ||
         r.tipo?.toLowerCase().includes(term) ||
-        r.formato?.toLowerCase().includes(term)
+        r.formato?.toLowerCase().includes(term) ||
+        r.isla?.toLowerCase().includes(term)
       );
     }
 
@@ -2545,7 +2565,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     return data;
-  }, [currentCaraReservasMerged, reservadosSearchTerm, reservadosTipoFilter, reservadosSortColumn, reservadosSortDirection]);
+  }, [currentCaraReservasMerged, reservadosSearchTerm, reservadosTipoFilter, showOnlyIslaReservados, reservadosSortColumn, reservadosSortDirection]);
 
   // Group reservados by Catorcena > Artículo > Plaza > Formato (hierarchical)
   const groupedReservadosHierarchy = useMemo(() => {
@@ -3085,6 +3105,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </button>
                   )}
 
+                  {/* Isla filter */}
+                  <button
+                    onClick={() => {
+                      setShowOnlyIsla(!showOnlyIsla);
+                      // When activating isla filter, auto-sort by codigo ascending
+                      if (!showOnlyIsla) {
+                        setSortColumn('codigo_unico');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyIsla
+                      ? 'bg-teal-500 text-white shadow'
+                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                      }`}
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                    Isla
+                    {showOnlyIsla && (
+                      <X className="h-3 w-3 ml-0.5 hover:text-teal-200" onClick={(e) => { e.stopPropagation(); setShowOnlyIsla(false); }} />
+                    )}
+                  </button>
+
                   {/* Distance grouping */}
                   <button
                     onClick={() => setGroupByDistance(!groupByDistance)}
@@ -3193,7 +3235,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </span>
 
                     {/* Clear all filters */}
-                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicos || showOnlyUnicosDigitales || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
+                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicos || showOnlyUnicosDigitales || showOnlyIsla || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
                       <button
                         onClick={clearAllFilters}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -3345,6 +3387,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             </th>
                             <th
                               className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              onClick={() => handleSort('isla')}
+                            >
+                              <div className="flex items-center gap-1">
+                                Isla
+                                {sortColumn === 'isla' && (
+                                  sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                                )}
+                                {sortColumn !== 'isla' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                              </div>
+                            </th>
+                            <th
+                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
                               onClick={() => handleSort('nivel_socioeconomico')}
                             >
                               <div className="flex items-center gap-1">
@@ -3379,7 +3433,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
                                   onClick={() => toggleGroupExpansion(groupName)}
                                 >
-                                  <td colSpan={hasDigitalInventory ? 7 : 6} className="px-3 py-2">
+                                  <td colSpan={hasDigitalInventory ? 8 : 7} className="px-3 py-2">
                                     <div className="flex items-center gap-3">
                                       {expandedGroups.has(groupName) ? (
                                         <ChevronDown className="h-4 w-4 text-purple-400" />
@@ -3444,6 +3498,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       </span>
                                     </td>
                                     <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
+                                    <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
                                       {inv.ubicacion}
@@ -3495,6 +3550,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   </span>
                                 </td>
                                 <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
+                                <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
                                   {inv.ubicacion}
@@ -3626,6 +3682,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       ))}
                     </div>
 
+                    {/* Isla filter */}
+                    <button
+                      onClick={() => {
+                        setShowOnlyIslaReservados(!showOnlyIslaReservados);
+                        // When activating isla filter, auto-sort by codigo ascending
+                        if (!showOnlyIslaReservados) {
+                          setReservadosSortColumn('codigo');
+                          setReservadosSortDirection('asc');
+                        }
+                      }}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyIslaReservados
+                        ? 'bg-teal-500 text-white shadow'
+                        : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white'
+                        }`}
+                    >
+                      <MapPin className="h-3 w-3" />
+                      Isla
+                      {showOnlyIslaReservados && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-teal-200" onClick={(e) => { e.stopPropagation(); setShowOnlyIslaReservados(false); }} />
+                      )}
+                    </button>
+
                     {/* Sort */}
                     <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1">
                       <span className="text-xs text-zinc-500">Ordenar:</span>
@@ -3712,6 +3790,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Código</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Tipo</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Formato</th>
+                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Isla</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Ubicación</th>
                           {effectiveCanEdit && <th className="px-4 py-3 text-center text-xs text-zinc-400 font-medium">Acciones</th>}
                         </tr>
@@ -3751,6 +3830,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 </span>
                               </td>
                               <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
+                              <td className="px-4 py-2 text-sm text-zinc-400">{reserva.isla || '-'}</td>
                               <td className="px-4 py-2 text-sm text-zinc-400">{reserva.plaza}</td>
                               {effectiveCanEdit && (
                                 <td className="px-4 py-2 text-center">
@@ -3779,7 +3859,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   className="bg-zinc-800/90 cursor-pointer hover:bg-zinc-800"
                                   onClick={() => toggleReservadosHierarchy(catKey)}
                                 >
-                                  <td colSpan={6} className="px-3 py-2">
+                                  <td colSpan={7} className="px-3 py-2">
                                     <div className="flex items-center gap-3">
                                       {catExpanded ? (
                                         <ChevronDown className="h-4 w-4 text-purple-400" />
@@ -3825,7 +3905,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       className="bg-zinc-800/60 cursor-pointer hover:bg-zinc-800/80"
                                       onClick={() => toggleReservadosHierarchy(artKeyFull)}
                                     >
-                                      <td colSpan={6} className="px-3 py-2 pl-8">
+                                      <td colSpan={7} className="px-3 py-2 pl-8">
                                         <div className="flex items-center gap-3">
                                           {artExpanded ? (
                                             <ChevronDown className="h-4 w-4 text-indigo-400" />
@@ -3871,7 +3951,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             className="bg-zinc-800/40 cursor-pointer hover:bg-zinc-800/60"
                                             onClick={() => toggleReservadosHierarchy(plzKeyFull)}
                                           >
-                                            <td colSpan={6} className="px-3 py-2 pl-14">
+                                            <td colSpan={7} className="px-3 py-2 pl-14">
                                               <div className="flex items-center gap-3">
                                                 {plzExpanded ? (
                                                   <ChevronDown className="h-4 w-4 text-cyan-400" />
@@ -3916,7 +3996,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                   className="bg-zinc-800/20 cursor-pointer hover:bg-zinc-800/40"
                                                   onClick={() => toggleReservadosHierarchy(fmtKeyFull)}
                                                 >
-                                                  <td colSpan={6} className="px-3 py-2 pl-20">
+                                                  <td colSpan={7} className="px-3 py-2 pl-20">
                                                     <div className="flex items-center gap-3">
                                                       {fmtExpanded ? (
                                                         <ChevronDown className="h-4 w-4 text-zinc-500" />
