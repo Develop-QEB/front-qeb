@@ -1303,19 +1303,19 @@ export function PropuestasPage() {
                 ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
                 : 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
                 }`}
-              title={item.status === 'Activa' ? 'No disponible para propuestas activas' : (permissions.canAsignarInventario ? 'Asignar a Inventario' : 'Ver Inventario')}
+              title={item.status === 'Activa' ? 'No disponible para propuestas activas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : (permissions.canAsignarInventario ? 'Asignar a Inventario' : 'Ver Inventario'))}
             >
-              {permissions.canAsignarInventario ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              {permissions.canAsignarInventario && item.status !== 'Pase a ventas' ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
             {permissions.canCompartirPropuesta && (
               <button
-                disabled={item.status !== 'Atendido'}
-                onClick={() => item.status === 'Atendido' && navigate(`/propuestas/compartir/${item.id}`)}
-                className={`p-2 rounded-lg border transition-all ${item.status === 'Atendido'
+                disabled={item.status !== 'Atendido' && item.status !== 'Pase a ventas'}
+                onClick={() => (item.status === 'Atendido' || item.status === 'Pase a ventas') && navigate(`/propuestas/compartir/${item.id}`)}
+                className={`p-2 rounded-lg border transition-all ${item.status === 'Atendido' || item.status === 'Pase a ventas'
                   ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40'
                   : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
                   }`}
-                title={item.status === 'Atendido' ? 'Compartir propuesta' : 'Solo disponible en status Atendido'}
+                title={item.status === 'Atendido' || item.status === 'Pase a ventas' ? 'Compartir propuesta' : 'Solo disponible en status Atendido o Pase a ventas'}
               >
                 <Share2 className="h-3.5 w-3.5" />
               </button>
@@ -1794,7 +1794,7 @@ export function PropuestasPage() {
           isOpen={showAssignModal}
           onClose={() => { setShowAssignModal(false); setSelectedPropuestaForAssign(null); }}
           propuesta={selectedPropuestaForAssign}
-          readOnly={!permissions.canAsignarInventario}
+          readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas'}
         />
       )}
     </div>
