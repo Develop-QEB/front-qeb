@@ -15,7 +15,9 @@ const inputClasses =
 const labelClasses = 'block text-sm font-medium text-purple-300 mb-2';
 
 const AREAS_DISPONIBLES = [
+  'Dirección',
   'Comercial',
+  'Aeropuerto',
   'Tráfico',
   'Mercadotecnia',
   'Compras',
@@ -25,10 +27,23 @@ const AREAS_DISPONIBLES = [
 
 // Mapeo de puestos por área
 const PUESTOS_POR_AREA: Record<string, string[]> = {
+  'Dirección': [
+    'Director General',
+    'Director Comercial',
+  ],
   'Comercial': [
     'Asesor Comercial',
     'Gerente Digital Programático',
     'Analista de Servicio al Cliente',
+    'Jefe Digital Comercial',
+    'Especialista de BI',
+    'Director de Desarrollo Digital',
+  ],
+  'Aeropuerto': [
+    'Director Comercial Aeropuerto',
+    'Gerente Comercial Aeropuerto',
+    'Asesor Comercial Aeropuerto',
+    'Analista de Aeropuerto',
   ],
   'Tráfico': [
     'Gerente de Tráfico',
@@ -45,6 +60,9 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   ],
   'Operaciones': [
     'Director de Operaciones',
+    'Call Center CON',
+    'Gerente de Operaciones CON',
+    'Jefe de Operaciones Digital',
     'Gerentes de Operaciones Plazas y CON',
     'Jefes de Operaciones Plazas y CON',
     'Supervisores de Operaciones',
