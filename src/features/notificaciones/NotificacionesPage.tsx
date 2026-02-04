@@ -26,6 +26,8 @@ type ViewType = 'tablero' | 'lista' | 'calendario' | 'notas';
 type GroupByType = 'estatus' | 'tipo' | 'fecha' | 'responsable' | 'asignado';
 type OrderByType = 'fecha_fin' | 'fecha_inicio' | 'titulo' | 'estatus';
 type DateFilterType = 'all' | 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month';
+type QuickFilter = 'all' | 'pendientes' | 'finalizadas'| null;
+
 
 // Tipos para filtros avanzados (estilo Proveedores)
 type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
@@ -42,6 +44,17 @@ interface FilterFieldConfig {
   label: string;
   type: 'string' | 'number';
 }
+
+type QuickFilterKey =
+  | 'all'
+  | 'pendientes'
+  | 'finalizadas';
+
+const QUICK_FILTERS: { key: QuickFilterKey; label: string }[] = [
+  { key: 'all', label: 'Todas' },
+  { key: 'pendientes', label: 'Sin finalizar' },
+  { key: 'finalizadas', label: 'Finalizadas' },
+];
 
 // Campos disponibles para filtrar/ordenar
 const FILTER_FIELDS: FilterFieldConfig[] = [
@@ -113,7 +126,6 @@ interface NestedGroup {
   tareas: Notificacion[];
   subgroups?: NestedGroup[];
 }
-
 // ============ CONSTANTES ============
 
 const DATE_FILTER_OPTIONS: { value: DateFilterType; label: string }[] = [
@@ -1753,6 +1765,9 @@ export function NotificacionesPage() {
   const [orderDir, setOrderDir] = useState<'asc' | 'desc'>('desc');
   const [filterEstatus, setFilterEstatus] = useState<string>('');
   const [filterFecha, setFilterFecha] = useState<DateFilterType>('all');
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
 
   // Estados para filtros avanzados (estilo Proveedores)
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -1832,7 +1847,7 @@ export function NotificacionesPage() {
   });
 
   // Filtrar por fecha y usuario según el tipo de contenido
-  const filteredTareas = useMemo(() => {
+  const baseTareas = useMemo(() => {
     if (!data?.data || !user) return [];
     let items = data.data;
     const userId = String(user.id);
@@ -1892,6 +1907,23 @@ export function NotificacionesPage() {
 
     return items;
   }, [data?.data, filterFecha, user?.id, contentType, filters, sortField, sortDirection]);
+    const tareasConQuickFilter = useMemo(() => {
+      if (quickFilter === 'all') return baseTareas;
+
+      return baseTareas.filter(item => {
+        if (quickFilter === 'pendientes') {
+          return item.estatus !== 'Atendido';
+        }
+
+        if (quickFilter === 'finalizadas') {
+          return item.estatus === 'Atendido';
+        }
+
+        return true;
+      });
+    }, [baseTareas, quickFilter]);
+
+  const filteredTareas = tareasConQuickFilter;
 
   // Agrupar tareas (soporta múltiples agrupaciones anidadas)
   const nestedGroups = useMemo<NestedGroup[]>(() => {
@@ -1958,10 +1990,11 @@ export function NotificacionesPage() {
   }, []);
 
   // Verificar si hay filtros activos
-  const hasActiveFilters = filters.length > 0 || activeGroupings.length > 0 || sortField !== null || filterFecha !== 'all' || search;
+  const hasActiveFilters = filters.length > 0 || activeGroupings.length > 0 || sortField !== null || filterFecha !== 'all' || search || quickFilter !== null;
 
   // Limpiar todos los filtros
   const clearAllFilters = useCallback(() => {
+    setQuickFilter(null);
     setFilters([]);
     setActiveGroupings([]);
     setSortField('fecha_creacion');
@@ -2112,6 +2145,34 @@ export function NotificacionesPage() {
                 </button>
                 {showFilterPopup && (
                   <div className="absolute right-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                    {/* Filtros rápidos */}
+                    <div className="mb-3">
+                      <span className="text-[11px] font-medium text-purple-400 uppercase tracking-wide">
+                        Filtros rápidos
+                      </span>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {QUICK_FILTERS.map(f => (
+                          <button
+                            key={f.key}
+                            onClick={() => {
+                              setQuickFilter(f.key);
+                              setShowFilterPopup(false);
+                            }}
+                            className={`px-2 py-1 rounded-md text-[11px] border transition-colors ${
+                              quickFilter === f.key
+                                ? 'bg-purple-600 text-white border-purple-500'
+                                : 'bg-purple-900/40 text-purple-300 border-purple-700/40 hover:bg-purple-800/60'
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-purple-900/30 my-3" />
+
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
                       <button onClick={() => setShowFilterPopup(false)} className="text-zinc-400 hover:text-white">
