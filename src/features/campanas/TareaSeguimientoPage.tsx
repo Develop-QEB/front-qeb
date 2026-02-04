@@ -7374,14 +7374,8 @@ function CreateTaskModal({
   initialTipo?: string;
   availableTipos?: string[];
 }) {
-  // Obtener usuario actual y catorcenas
+  // Obtener usuario actual
   const { user } = useAuthStore();
-  const { data: catorcenasData } = useQuery({
-    queryKey: ['catorcenas-modal'],
-    queryFn: () => solicitudesService.getCatorcenas(),
-  });
-  const catorcenas = catorcenasData?.data || [];
-  const years = catorcenasData?.years || [];
 
   // Query para usuarios (asignados) - básico para otros tipos de tarea
   const { data: usuariosData, isLoading: isLoadingUsuarios } = useQuery({
@@ -7452,7 +7446,11 @@ function CreateTaskModal({
   const [telefonoContacto, setTelefonoContacto] = useState('');
   // Campos específicos para Revisión de artes
   const [identificador, setIdentificador] = useState('');
-  const [catorcenaEntrega, setCatorcenaEntrega] = useState<string | null>(null);
+  const [fechaEntrega, setFechaEntrega] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  });
   const [asignadoId, setAsignadoId] = useState<number | null>(null);
   const [asignadoNombre, setAsignadoNombre] = useState(''); // Nombre del usuario seleccionado
   const [asignadoSearch, setAsignadoSearch] = useState('');
@@ -7477,7 +7475,6 @@ function CreateTaskModal({
   const [selectedAsignadosProgramacion, setSelectedAsignadosProgramacion] = useState<{ id: number; nombre: string }[]>([]);
   const [asignadoSearchProgramacion, setAsignadoSearchProgramacion] = useState('');
   const [showAsignadoDropdownProgramacion, setShowAsignadoDropdownProgramacion] = useState(false);
-  const [yearEntrega, setYearEntrega] = useState<number>(new Date().getFullYear());
   const [fechaCreacion, setFechaCreacion] = useState(() => {
     const now = new Date();
     return now.toISOString().slice(0, 16);
@@ -7547,11 +7544,6 @@ function CreateTaskModal({
   }, [isOpen, selectedInventory, tipo, campanaId]);
 
   const selectedProveedor = proveedores.find(p => p.id === proveedorId);
-
-  // Filtrar catorcenas por año seleccionado
-  const catorcenasOptions = useMemo(() => {
-    return catorcenas.filter(c => c.a_o === yearEntrega);
-  }, [catorcenas, yearEntrega]);
 
   // Filtrar usuarios por búsqueda
   const filteredUsuarios = useMemo(() => {
@@ -7664,7 +7656,7 @@ function CreateTaskModal({
 
     // Campos adicionales para Revisión de artes
     if (tipo === 'Revisión de artes') {
-      (payload as any).catorcena_entrega = catorcenaEntrega;
+      (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).contenido = identificador; // El identificador es el contenido
       (payload as any).listado_inventario = selectedIds.join(','); // Lista de IDs de inventario
@@ -7677,7 +7669,7 @@ function CreateTaskModal({
       }
     } else if (tipo === 'Instalación') {
       // Campos adicionales para Instalación
-      (payload as any).catorcena_entrega = catorcenaEntrega;
+      (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
       // Asignados múltiples para Instalación (área Operaciones)
@@ -7689,7 +7681,7 @@ function CreateTaskModal({
       }
     } else if (tipo === 'Impresión') {
       // Campos adicionales para Impresión
-      (payload as any).catorcena_entrega = catorcenaEntrega;
+      (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).contenido = identificador;
       (payload as any).listado_inventario = selectedIds.join(',');
@@ -7710,7 +7702,7 @@ function CreateTaskModal({
       }
     } else if (tipo === 'Testigo') {
       // Campos adicionales para Testigo
-      (payload as any).catorcena_entrega = catorcenaEntrega;
+      (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
       // Asignados múltiples para Testigo (área Operaciones)
@@ -7722,7 +7714,7 @@ function CreateTaskModal({
       }
     } else if (tipo === 'Programación') {
       // Campos adicionales para Programación
-      (payload as any).catorcena_entrega = catorcenaEntrega;
+      (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
       // Guardar indicaciones de programación como JSON en evidencia
@@ -7768,7 +7760,11 @@ function CreateTaskModal({
     setTelefonoContacto('');
     // Reset campos de Revisión
     setIdentificador('');
-    setCatorcenaEntrega(null);
+    setFechaEntrega(() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      return d.toISOString().slice(0, 10);
+    });
     setAsignadoId(null);
     setAsignadoNombre('');
     setAsignadoSearch('');
@@ -7914,24 +7910,16 @@ function CreateTaskModal({
                   />
                 </div>
 
-                {/* Catorcena de entrega */}
+                {/* Fecha de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega</label>
-                  <select
-                    value={catorcenaEntrega || ''}
-                    onChange={(e) => setCatorcenaEntrega(e.target.value || null)}
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega</label>
+                  <input
+                    type="date"
+                    value={fechaEntrega}
+                    onChange={(e) => setFechaEntrega(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                  >
-                    <option value="">Seleccionar</option>
-                    {[2024, 2025, 2026].flatMap(year =>
-                      Array.from({ length: 26 }, (_, i) => i + 1).map(num => (
-                        <option key={`${num}-${year}`} value={`Catorcena ${num}, ${year}`}>
-                          Catorcena {num}, {year}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                  />
                 </div>
 
                 {/* Asignados (área Operaciones) - Multi-select */}
@@ -8056,40 +8044,16 @@ function CreateTaskModal({
                   />
                 </div>
 
-                {/* Catorcena de entrega */}
+                {/* Fecha de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega</label>
-                  <select
-                    value={catorcenaEntrega || ''}
-                    onChange={(e) => {
-                      const value = e.target.value || null;
-                      setCatorcenaEntrega(value);
-                      // Buscar la catorcena y establecer fecha_fin
-                      if (value) {
-                        const match = value.match(/Catorcena (\d+), (\d+)/);
-                        if (match) {
-                          const numCatorcena = parseInt(match[1]);
-                          const year = parseInt(match[2]);
-                          const catorcenaFound = catorcenas.find(c => c.numero_catorcena === numCatorcena && c.a_o === year);
-                          if (catorcenaFound) {
-                            setFechaFin(catorcenaFound.fecha_fin.split('T')[0]);
-                          }
-                        }
-                      }
-                    }}
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega</label>
+                  <input
+                    type="date"
+                    value={fechaEntrega}
+                    onChange={(e) => setFechaEntrega(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                  >
-                    <option value="">Seleccionar</option>
-                    {/* Catorcenas desde 1, 2024 hasta 26, 2026 */}
-                    {[2024, 2025, 2026].flatMap(year =>
-                      Array.from({ length: 26 }, (_, i) => i + 1).map(num => (
-                        <option key={`${num}-${year}`} value={`Catorcena ${num}, ${year}`}>
-                          Catorcena {num}, {year}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                  />
                 </div>
 
                 {/* Asignados (múltiples) */}
@@ -8223,24 +8187,16 @@ function CreateTaskModal({
                   />
                 </div>
 
-                {/* Catorcena de entrega */}
+                {/* Fecha de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega *</label>
-                  <select
-                    value={catorcenaEntrega || ''}
-                    onChange={(e) => setCatorcenaEntrega(e.target.value || null)}
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega *</label>
+                  <input
+                    type="date"
+                    value={fechaEntrega}
+                    onChange={(e) => setFechaEntrega(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                  >
-                    <option value="">Seleccionar</option>
-                    {[2024, 2025, 2026].flatMap(year =>
-                      Array.from({ length: 26 }, (_, i) => i + 1).map(num => (
-                        <option key={`${num}-${year}`} value={`Catorcena ${num}, ${year}`}>
-                          Catorcena {num}, {year}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                  />
                 </div>
 
                 {/* Asignado - Multi-select para Operaciones */}
@@ -8566,39 +8522,16 @@ function CreateTaskModal({
                   />
                 </div>
 
-                {/* Catorcena de entrega */}
+                {/* Fecha de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega *</label>
-                  <select
-                    value={catorcenaEntrega || ''}
-                    onChange={(e) => {
-                      const value = e.target.value || null;
-                      setCatorcenaEntrega(value);
-                      // Buscar la catorcena y establecer fecha_fin
-                      if (value) {
-                        const match = value.match(/Catorcena (\d+), (\d+)/);
-                        if (match) {
-                          const numCatorcena = parseInt(match[1]);
-                          const year = parseInt(match[2]);
-                          const catorcenaFound = catorcenas.find(c => c.numero_catorcena === numCatorcena && c.a_o === year);
-                          if (catorcenaFound) {
-                            setFechaFin(catorcenaFound.fecha_fin.split('T')[0]);
-                          }
-                        }
-                      }
-                    }}
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega *</label>
+                  <input
+                    type="date"
+                    value={fechaEntrega}
+                    onChange={(e) => setFechaEntrega(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                  >
-                    <option value="">Seleccionar</option>
-                    {[2024, 2025, 2026].flatMap(year =>
-                      Array.from({ length: 26 }, (_, i) => i + 1).map(num => (
-                        <option key={`${num}-${year}`} value={`Catorcena ${num}, ${year}`}>
-                          Catorcena {num}, {year}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                  />
                 </div>
 
                 {/* Asignados (múltiples - área Compras) */}
@@ -8732,39 +8665,16 @@ function CreateTaskModal({
                   />
                 </div>
 
-                {/* Catorcena de entrega */}
+                {/* Fecha de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Catorcena de entrega *</label>
-                  <select
-                    value={catorcenaEntrega || ''}
-                    onChange={(e) => {
-                      const value = e.target.value || null;
-                      setCatorcenaEntrega(value);
-                      // Buscar la catorcena y establecer fecha_fin
-                      if (value) {
-                        const match = value.match(/Catorcena (\d+), (\d+)/);
-                        if (match) {
-                          const numCatorcena = parseInt(match[1]);
-                          const year = parseInt(match[2]);
-                          const catorcenaFound = catorcenas.find(c => c.numero_catorcena === numCatorcena && c.a_o === year);
-                          if (catorcenaFound) {
-                            setFechaFin(catorcenaFound.fecha_fin.split('T')[0]);
-                          }
-                        }
-                      }
-                    }}
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega *</label>
+                  <input
+                    type="date"
+                    value={fechaEntrega}
+                    onChange={(e) => setFechaEntrega(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                  >
-                    <option value="">Seleccionar</option>
-                    {[2024, 2025, 2026].flatMap(year =>
-                      Array.from({ length: 26 }, (_, i) => i + 1).map(num => (
-                        <option key={`${num}-${year}`} value={`Catorcena ${num}, ${year}`}>
-                          Catorcena {num}, {year}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                  />
                 </div>
 
                 {/* Asignados (área Operaciones) - Multi-select */}
@@ -8872,7 +8782,7 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !catorcenaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !catorcenaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : !titulo.trim()) || isSubmitting}
+            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !fechaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : !titulo.trim()) || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {(isSubmitting || (tipo === 'Programación' && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
