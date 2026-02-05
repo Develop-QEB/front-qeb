@@ -24,10 +24,14 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     // Si el token expiró (401), limpiar sesión y redirigir a login
+    // No redirigir si ya estamos en login o register (para mostrar el error en el form)
     if (error.response?.status === 401) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/register';
+      if (!isAuthPage) {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      }
     }
 
     return Promise.reject(error);

@@ -43,8 +43,9 @@ export function LoginPage() {
       queryClient.clear();
       setAuth(response.user, response.accessToken, response.refreshToken);
       navigate('/');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al iniciar sesion');
+    } catch (err: any) {
+      const message = err?.response?.data?.error || err?.message || 'Error al iniciar sesion';
+      setError(message);
     } finally {
       setIsLoading(false);
     }
