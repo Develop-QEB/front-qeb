@@ -21,12 +21,13 @@ import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 
 // Status badge colors
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Por aprobar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Atendido': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
   'Abierto': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
   'Ajuste Cto-Cliente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
   'Pase a ventas': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'Atendido': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+  // Legacy (datos históricos)
+  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+  'Por aprobar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
   'Activa': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
   'Aprobada': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
   'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
@@ -632,7 +633,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
                 <option value={propuesta.status} disabled>{propuesta.status} (actual)</option>
               )}
               {availableStatuses.map(s => {
-                const isBlockedByAuth = tienePendientes && (s === 'Por aprobar' || s === 'Atendido' || s === 'Pase a ventas');
+                const isBlockedByAuth = tienePendientes && (s === 'Atendido' || s === 'Pase a ventas');
                 return (
                   <option
                     key={s}
@@ -646,7 +647,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
             </select>
             <button
               onClick={handleChangeStatus}
-              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || (tienePendientes && (selectedStatus === 'Por aprobar' || selectedStatus === 'Atendido' || selectedStatus === 'Pase a ventas'))}
+              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || (tienePendientes && (selectedStatus === 'Atendido' || selectedStatus === 'Pase a ventas'))}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
             >
               {updateStatusMutation.isPending ? (
@@ -1298,12 +1299,12 @@ export function PropuestasPage() {
             )}
             <button
               onClick={() => { setSelectedPropuestaForAssign(item); setShowAssignModal(true); }}
-              disabled={item.status === 'Activa'}
-              className={`p-2 rounded-lg border transition-all ${item.status === 'Activa'
+              disabled={item.status === 'Atendido'}
+              className={`p-2 rounded-lg border transition-all ${item.status === 'Atendido'
                 ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
                 : 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
                 }`}
-              title={item.status === 'Activa' ? 'No disponible para propuestas activas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : (permissions.canAsignarInventario ? 'Asignar a Inventario' : 'Ver Inventario'))}
+              title={item.status === 'Atendido' ? 'No disponible para propuestas atendidas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : (permissions.canAsignarInventario ? 'Asignar a Inventario' : 'Ver Inventario'))}
             >
               {permissions.canAsignarInventario && item.status !== 'Pase a ventas' ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
