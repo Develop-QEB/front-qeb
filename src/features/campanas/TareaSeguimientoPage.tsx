@@ -366,6 +366,62 @@ const estadoArteLabels: Record<string, string> = {
   rechazado: 'Rechazado',
 };
 
+const flujoLabels: Record<string, string> = {
+  carga_artes: 'Carga Artes',
+  revision_artes: 'Revisión Artes',
+  artes_aprobados: 'Artes Aprobados',
+  en_impresion: 'En Impresión',
+  artes_recibidos: 'Artes Recibidos',
+  instalado: 'Instalado',
+};
+
+const flujoColors: Record<string, string> = {
+  carga_artes: 'bg-zinc-500/20 text-zinc-400',
+  revision_artes: 'bg-amber-500/20 text-amber-400',
+  artes_aprobados: 'bg-green-500/20 text-green-400',
+  en_impresion: 'bg-blue-500/20 text-blue-400',
+  artes_recibidos: 'bg-cyan-500/20 text-cyan-400',
+  instalado: 'bg-emerald-500/20 text-emerald-400',
+};
+
+function getItemFlujoStatus(item: InventoryRow, tab: MainTab): string {
+  switch (tab) {
+    case 'versionario':
+      return 'carga_artes';
+    case 'atender':
+      if (item.estado_arte === 'aprobado') return 'artes_aprobados';
+      return 'revision_artes';
+    case 'impresiones':
+      if ((item as any).estado_impresion === 'recibido') return 'artes_recibidos';
+      return 'en_impresion';
+    case 'testigo': {
+      const st = (item as any).tarea_instalacion_estatus;
+      if (st === 'Atendido' || st === 'Completado') return 'instalado';
+      return 'artes_recibidos';
+    }
+    default:
+      return 'carga_artes';
+  }
+}
+
+function FlujoBadges({ items, tab }: { items: InventoryRow[]; tab: MainTab }) {
+  const counts: Record<string, number> = {};
+  items.forEach(item => {
+    const status = getItemFlujoStatus(item, tab);
+    counts[status] = (counts[status] || 0) + 1;
+  });
+
+  return (
+    <span className="inline-flex flex-wrap gap-1 ml-2">
+      {Object.entries(counts).map(([status, count]) => (
+        <span key={status} className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium ${flujoColors[status]}`}>
+          {count} {flujoLabels[status]}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 // Función para obtener la clave de agrupación basada en el campo
 function getGroupKeyForField(item: InventoryRow, field: GroupByField): string {
   switch (field) {
@@ -12750,9 +12806,12 @@ export function TareaSeguimientoPage() {
                             )}
                           </div>
                         </div>
-                        <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
-                          {level1ItemCount}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <FlujoBadges items={getAllLevel1Items()} tab={activeMainTab} />
+                          <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                            {level1ItemCount}
+                          </Badge>
+                        </div>
                       </button>
                       {level1Expanded && (
                         <div className="pl-4">
@@ -12803,9 +12862,12 @@ export function TareaSeguimientoPage() {
                                       )}
                                     </div>
                                   </div>
-                                  <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
-                                    {level2ItemCount}
-                                  </Badge>
+                                  <div className="flex items-center gap-1">
+                                    <FlujoBadges items={getAllLevel2Items()} tab={activeMainTab} />
+                                    <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
+                                      {level2ItemCount}
+                                    </Badge>
+                                  </div>
                                 </button>
                                 {level2Expanded && (
                                   <div className="pl-4">
@@ -12853,9 +12915,12 @@ export function TareaSeguimientoPage() {
                                                 )}
                                               </div>
                                             </div>
-                                            <Badge className="bg-amber-600/20 text-amber-300 border-amber-500/20 text-[10px]">
-                                              {items.length}
-                                            </Badge>
+                                            <div className="flex items-center gap-1">
+                                              <FlujoBadges items={items} tab={activeMainTab} />
+                                              <Badge className="bg-amber-600/20 text-amber-300 border-amber-500/20 text-[10px]">
+                                                {items.length}
+                                              </Badge>
+                                            </div>
                                           </button>
                                           {level3Expanded && (
                                             <div className="bg-card/50 ml-4">
@@ -12969,9 +13034,12 @@ export function TareaSeguimientoPage() {
                             )}
                           </button>
                         </div>
-                        <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
-                          {level1ItemCount} elemento{level1ItemCount !== 1 ? 's' : ''}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <FlujoBadges items={getAllLevel1Items()} tab={activeMainTab} />
+                          <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                            {level1ItemCount} elemento{level1ItemCount !== 1 ? 's' : ''}
+                          </Badge>
+                        </div>
                       </button>
                       {level1Expanded && (
                         <div className="pl-4">
@@ -13020,9 +13088,12 @@ export function TareaSeguimientoPage() {
                                       )}
                                     </button>
                                   </div>
-                                  <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
-                                    {level2ItemCount}
-                                  </Badge>
+                                  <div className="flex items-center gap-1">
+                                    <FlujoBadges items={getAllLevel2Items()} tab={activeMainTab} />
+                                    <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
+                                      {level2ItemCount}
+                                    </Badge>
+                                  </div>
                                 </button>
                                 {level2Expanded && (
                                   <div className="pl-4">
@@ -13068,9 +13139,12 @@ export function TareaSeguimientoPage() {
                                                 )}
                                               </button>
                                             </div>
-                                            <span className="text-[10px] text-zinc-500">
-                                              {items.length} cara{items.length !== 1 ? 's' : ''}
-                                            </span>
+                                            <div className="flex items-center gap-1">
+                                              <FlujoBadges items={items} tab={activeMainTab} />
+                                              <span className="text-[10px] text-zinc-500">
+                                                {items.length} cara{items.length !== 1 ? 's' : ''}
+                                              </span>
+                                            </div>
                                           </button>
                                           {level3Expanded && (
                                             <div className="bg-card/50 ml-4">
@@ -13629,7 +13703,7 @@ export function TareaSeguimientoPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {/* Etiquetas de estado de validación */}
+                          <FlujoBadges items={allItems} tab={activeMainTab} />
                           {pendientesCount > 0 && (
                             <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
                               {pendientesCount} sin validar
@@ -13694,9 +13768,12 @@ export function TareaSeguimientoPage() {
                                       )}
                                     </div>
                                   </div>
-                                  <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
-                                    {level2ItemCount}
-                                  </Badge>
+                                  <div className="flex items-center gap-1">
+                                    <FlujoBadges items={getAllLevel2Items()} tab={activeMainTab} />
+                                    <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
+                                      {level2ItemCount}
+                                    </Badge>
+                                  </div>
                                 </button>
                                 {level2Expanded && (
                                   <div className="pl-4">
@@ -13744,9 +13821,12 @@ export function TareaSeguimientoPage() {
                                                 )}
                                               </div>
                                             </div>
-                                            <Badge className="bg-amber-600/20 text-amber-300 border-amber-500/20 text-[10px]">
-                                              {items.length}
-                                            </Badge>
+                                            <div className="flex items-center gap-1">
+                                              <FlujoBadges items={items} tab={activeMainTab} />
+                                              <Badge className="bg-amber-600/20 text-amber-300 border-amber-500/20 text-[10px]">
+                                                {items.length}
+                                              </Badge>
+                                            </div>
                                           </button>
                                           {level3Expanded && (
                                             <div className="bg-card/50 ml-4">

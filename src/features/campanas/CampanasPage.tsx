@@ -5,7 +5,7 @@ import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, Layers,
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
-  ArrowUp, ArrowDown, Lock, SlidersHorizontal
+  ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -2096,6 +2096,35 @@ export function CampanasPage() {
                                                   <ClipboardList className="h-3 w-3 text-purple-400" />
                                                   <span className="text-[11px] text-zinc-300">{grupo.key}</span>
                                                   <span className="text-[10px] text-zinc-600">({grupo.items.length})</span>
+                                                  {/* 5 iconos de etapas de Gestión de Artes */}
+                                                  {(() => {
+                                                    const total = grupo.items.length;
+                                                    const flujoOrder = ['Carga Artes', 'Revision Artes', 'Artes Aprobados', 'En Impresion', 'Artes Recibidos', 'Instalado'];
+                                                    const getStageIndex = (estatus: string | null | undefined) => {
+                                                      const idx = flujoOrder.indexOf(estatus || 'Carga Artes');
+                                                      return idx >= 0 ? idx : 0;
+                                                    };
+                                                    const countAtOrPast = (minStage: number) => grupo.items.filter(i => getStageIndex((i as any).estatus_arte) >= minStage).length;
+                                                    const tabs = [
+                                                      { icon: Upload, label: 'Subir Artes', done: countAtOrPast(1) },
+                                                      { icon: Eye, label: 'Revisar y Aprobar', done: countAtOrPast(2) },
+                                                      { icon: Printer, label: 'Impresiones', done: countAtOrPast(4) },
+                                                      { icon: Monitor, label: 'Programación', done: countAtOrPast(3) },
+                                                      { icon: Camera, label: 'Validar Instalación', done: countAtOrPast(5) },
+                                                    ];
+                                                    return (
+                                                      <span className="inline-flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full bg-zinc-800/60 border border-zinc-700/40">
+                                                        {tabs.map(({ icon: Icon, label, done }, idx) => (
+                                                          <React.Fragment key={label}>
+                                                            {idx > 0 && <span className="w-px h-3 bg-zinc-700/60" />}
+                                                            <span title={`${label}: ${done}/${total}`}>
+                                                              <Icon className={`h-3.5 w-3.5 ${done === total ? 'text-green-400' : 'text-red-400/60'}`} />
+                                                            </span>
+                                                          </React.Fragment>
+                                                        ))}
+                                                      </span>
+                                                    );
+                                                  })()}
                                                   {estatusPredominante && estatusPredominante[0] !== 'Sin estatus' && (
                                                     <span className={`px-1.5 py-0.5 rounded text-[9px] ${estatusGrupoColor.bg} ${estatusGrupoColor.text} border ${estatusGrupoColor.border}`}>
                                                       {estatusPredominante[0]}
