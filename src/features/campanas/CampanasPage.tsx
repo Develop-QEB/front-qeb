@@ -2105,11 +2105,16 @@ export function CampanasPage() {
                                                       return idx >= 0 ? idx : 0;
                                                     };
                                                     const countAtOrPast = (minStage: number) => grupo.items.filter(i => getStageIndex((i as any).estatus_arte) >= minStage).length;
+                                                    // Determinar tipo del grupo (siempre homogéneo)
+                                                    const isDigital = grupo.items[0]?.tradicional_digital === 'Digital';
                                                     const tabs = [
                                                       { icon: Upload, label: 'Subir Artes', done: countAtOrPast(1) },
                                                       { icon: Eye, label: 'Revisar y Aprobar', done: countAtOrPast(2) },
-                                                      { icon: Printer, label: 'Impresiones', done: countAtOrPast(4) },
-                                                      { icon: Monitor, label: 'Programación', done: countAtOrPast(3) },
+                                                      // Tradicional → Impresiones, Digital → Programación
+                                                      ...(isDigital
+                                                        ? [{ icon: Monitor, label: 'Programación', done: countAtOrPast(3) }]
+                                                        : [{ icon: Printer, label: 'Impresiones', done: countAtOrPast(4) }]
+                                                      ),
                                                       { icon: Camera, label: 'Validar Instalación', done: countAtOrPast(5) },
                                                     ];
                                                     return (

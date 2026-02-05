@@ -422,6 +422,58 @@ function FlujoBadges({ items, tab }: { items: InventoryRow[]; tab: MainTab }) {
   );
 }
 
+// Iconos de flujo de gestión de artes por grupo
+// Muestra los 5 pasos del flujo con colores según el progreso de los items
+// Oculta Programación si el grupo es Tradicional, Impresiones si es Digital
+function FlowStepIcons({ items }: { items: InventoryRow[] }) {
+  if (items.length === 0) return null;
+
+  // Determinar tipo del grupo (siempre es homogéneo: o todo tradicional o todo digital)
+  const isDigital = items[0]?.tradicional_digital === 'Digital';
+
+  // Contar items por estado real del flujo (independiente del tab activo)
+  const conArte = items.filter(i => i.archivo_arte).length;
+  const aprobados = items.filter(i => i.estado_arte === 'aprobado').length;
+  const enRevision = items.filter(i => i.estado_arte === 'en_revision').length;
+  const enImpresion = items.filter(i => (i as any).estado_impresion === 'en_impresion' || (i as any).tarea_tipo === 'Impresión').length;
+  const enProgramacion = items.filter(i => (i as any).estado_programacion === 'programado' || (i as any).tarea_tipo === 'Programación').length;
+  const instalados = items.filter(i => {
+    const st = (i as any).tarea_instalacion_estatus;
+    return st === 'Atendido' || st === 'Completado' || (i as any).testigo_status === 'validado';
+  }).length;
+  const total = items.length;
+
+  // Determinar color de cada icono:
+  // verde = todos los items completaron este paso
+  // amber = algunos items están en este paso
+  // zinc = ningún item ha llegado a este paso
+  const getColor = (completed: number, inProgress: number) => {
+    if (completed === total) return 'text-green-400';
+    if (completed > 0 || inProgress > 0) return 'text-amber-400';
+    return 'text-zinc-600';
+  };
+
+  // 1. Subir Artes: verde si tienen arte asignado
+  const uploadColor = getColor(conArte, total - conArte > 0 ? total - conArte : 0);
+  // 2. Revisar y Aprobar: verde si aprobados, amber si en revisión
+  const eyeColor = getColor(aprobados, enRevision);
+  // 3. Programación (solo digital): verde si programados
+  const monitorColor = getColor(enProgramacion, 0);
+  // 4. Impresiones (solo tradicional): verde si en impresión o completado
+  const printerColor = getColor(enImpresion, 0);
+  // 5. Validar Instalación: verde si instalados
+  const cameraColor = getColor(instalados, 0);
+
+  return (
+    <span className="inline-flex items-center gap-1 ml-1">
+      <Upload className={`h-3 w-3 ${uploadColor}`} />
+      <Eye className={`h-3 w-3 ${eyeColor}`} />
+      {isDigital ? <Monitor className={`h-3 w-3 ${monitorColor}`} /> : <Printer className={`h-3 w-3 ${printerColor}`} />}
+      <Camera className={`h-3 w-3 ${cameraColor}`} />
+    </span>
+  );
+}
+
 // Función para obtener la clave de agrupación basada en el campo
 function getGroupKeyForField(item: InventoryRow, field: GroupByField): string {
   switch (field) {
@@ -10427,8 +10479,32 @@ export function TareaSeguimientoPage() {
     return data;
   }, [inventoryImpresionesData, activeFormat, activeEstadoImpresionTab]);
 
-  // Tab de Impresiones siempre visible
-  const shouldShowImpresionesTab = true;
+  // Determinar si la campaña tiene items tradicionales y/o digitales
+  // Combinar inventario sin arte + con arte para tener la visión completa
+  const campaignHasTradicional = useMemo(() => {
+    return inventorySinArteData.some(i => i.tradicional_digital === 'Tradicional') ||
+           inventoryArteData.some(i => i.tradicional_digital === 'Tradicional');
+  }, [inventorySinArteData, inventoryArteData]);
+
+  const campaignHasDigital = useMemo(() => {
+    return inventorySinArteData.some(i => i.tradicional_digital === 'Digital') ||
+           inventoryArteData.some(i => i.tradicional_digital === 'Digital');
+  }, [inventorySinArteData, inventoryArteData]);
+
+  // Tab de Impresiones: solo visible si hay inventarios tradicionales
+  const shouldShowImpresionesTab = campaignHasTradicional;
+  // Tab de Programación: solo visible si hay inventarios digitales
+  const shouldShowProgramacionTab = campaignHasDigital;
+
+  // Auto-switch si el tab activo fue ocultado por tipo de inventario
+  useEffect(() => {
+    if (activeMainTab === 'programacion' && !shouldShowProgramacionTab) {
+      setActiveMainTab('atender');
+    }
+    if (activeMainTab === 'impresiones' && !shouldShowImpresionesTab) {
+      setActiveMainTab('atender');
+    }
+  }, [activeMainTab, shouldShowProgramacionTab, shouldShowImpresionesTab]);
 
   // Obtener valores únicos para los selectores de filtros
   const getUniqueValuesVersionario = useMemo(() => {
@@ -11797,6 +11873,7 @@ export function TareaSeguimientoPage() {
                 { key: 'testigo', label: 'Validar Instalacion', icon: Camera },
               ] as { key: MainTab; label: string; icon: typeof Upload }[])
                 .filter(tab => tab.key !== 'impresiones' || shouldShowImpresionesTab)
+                .filter(tab => tab.key !== 'programacion' || shouldShowProgramacionTab)
                 .filter(tab => tab.key !== 'versionario' || permissions.canSeeTabSubirArtes)
                 .filter(tab => tab.key !== 'atender' || permissions.canSeeTabRevisarAprobar)
                 .filter(tab => tab.key !== 'programacion' || permissions.canSeeTabProgramacion)
@@ -12807,6 +12884,7 @@ export function TareaSeguimientoPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
+                          <FlowStepIcons items={getAllLevel1Items()} />
                           <FlujoBadges items={getAllLevel1Items()} tab={activeMainTab} />
                           <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
                             {level1ItemCount}
@@ -13035,6 +13113,7 @@ export function TareaSeguimientoPage() {
                           </button>
                         </div>
                         <div className="flex items-center gap-1">
+                          <FlowStepIcons items={getAllLevel1Items()} />
                           <FlujoBadges items={getAllLevel1Items()} tab={activeMainTab} />
                           <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
                             {level1ItemCount} elemento{level1ItemCount !== 1 ? 's' : ''}
@@ -13703,6 +13782,7 @@ export function TareaSeguimientoPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <FlowStepIcons items={allItems} />
                           <FlujoBadges items={allItems} tab={activeMainTab} />
                           {pendientesCount > 0 && (
                             <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
