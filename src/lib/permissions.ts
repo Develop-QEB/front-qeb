@@ -572,7 +572,13 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCampanas: true,
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
+
+    // Gestión de Artes: solo visualización, no puede resolver ni crear tareas
     canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+    canResolveRevisionArtesTasks: false,
+    canCreateTareasGestionArtes: false,
+    canOpenTasks: false,
 
     canCreateInventarios: false,
     canEditInventarios: false,
