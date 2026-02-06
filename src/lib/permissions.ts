@@ -707,7 +707,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canResolveProduccionTasks: false,
     canResolveRevisionArtesTasks: false,
     canResolveCorreccionTasks: true, // SÍ puede resolver tareas de corrección de artes
-    canCreateTareasGestionArtes: false,
+    canCreateTareasGestionArtes: true, // Puede crear tareas de Revisión de artes después de subir artes
     canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de corrección
 
     canCreateInventarios: false,
