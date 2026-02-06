@@ -554,62 +554,29 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   // AEROPUERTO
   // ============================================================================
   'Director Comercial Aeropuerto': {
-    // Similar a Director General: visualización + aprobar propuestas
+    // Mismos permisos que Asesor Comercial
     canSeeDashboard: false,
-    canSeeClientes: true,
-    canSeeProveedores: false,
-    canSeeSolicitudes: true,
-    canSeePropuestas: true,
-    canSeeCampanas: true,
     canSeeInventarios: false,
     canSeeAdminUsuarios: false,
 
-    canCreateClientes: false,
-    canEditClientes: true,
     canDeleteClientes: false,
 
     canCreateProveedores: false,
     canEditProveedores: false,
     canDeleteProveedores: false,
 
-    // Solicitudes: acceso total
-    canCreateSolicitudes: true,
-    canEditSolicitudes: true,
-    canDeleteSolicitudes: true,
-    canAtenderSolicitudes: true,
-    canChangeEstadoSolicitud: true,
-
-    canEditPropuestaStatus: false,
-    allowedPropuestaStatuses: [],
-    canAprobarPropuesta: true,
-    canAsignarInventario: false,
-    canEditResumenPropuesta: false,
-    canCompartirPropuesta: true,
+    // Puede cambiar estatus pero solo a estos valores
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente'],
     canBuscarInventarioEnModal: false,
 
-    canEditCampanas: false,
+    canEditCampanas: true,
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
-    canSeeGestionArtes: true,
     canEditGestionArtes: false,
-    canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
-
-    canSeeTabProgramacion: true,
-    canSeeTabImpresiones: true,
-    canSeeTabSubirArtes: false,
-    canSeeTabRevisarAprobar: true,
-    canSeeTabTestigos: true,
-    canSeeTabValidacionInstalacion: true,
-    canCreateTareasGestionArtes: false,
-    canResolveRevisionArtesTasks: false,
-    canOpenTasks: false,
 
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,
-
-    canExportOrdenesMontaje: false,
   },
   'Gerente Comercial Aeropuerto': {
     // Mismo perfil que Asesor Comercial
