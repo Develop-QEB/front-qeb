@@ -14162,9 +14162,10 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300">{task.titulo}</td>
                             <td className="p-2">
                               {/* Solo mostrar botón Abrir si: canOpenTasks=true Y (no tiene restricción O es tarea del tipo permitido) */}
-                              {permissions.canOpenTasks && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks) ||
+                              {permissions.canOpenTasks && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks && !permissions.canOnlyOpenCorreccionTasks) ||
                                 (permissions.canOnlyOpenImpresionTasks && task.tipo === 'Impresión') ||
-                                (permissions.canOnlyOpenRecepcionTasks && (task.tipo === 'Recepción' || task.tipo === 'Instalación' || task.tipo === 'Testigo' || task.tipo === 'Programación'))) ? (
+                                (permissions.canOnlyOpenRecepcionTasks && (task.tipo === 'Recepción' || task.tipo === 'Instalación' || task.tipo === 'Testigo' || task.tipo === 'Programación')) ||
+                                (permissions.canOnlyOpenCorreccionTasks && task.tipo === 'Correccion')) ? (
                                 <button
                                   onClick={() => {
                                     setSelectedTask(task);
