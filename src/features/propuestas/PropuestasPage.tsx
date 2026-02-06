@@ -1304,12 +1304,12 @@ export function PropuestasPage() {
             )}
             <button
               onClick={() => { setSelectedPropuestaForAssign(item); setShowAssignModal(true); }}
-              disabled={item.status === 'Atendido' || isLocked}
-              className={`p-2 rounded-lg border transition-all ${item.status === 'Atendido' || isLocked
+              disabled={permissions.canAsignarInventario && (item.status === 'Atendido' || isLocked)}
+              className={`p-2 rounded-lg border transition-all ${permissions.canAsignarInventario && (item.status === 'Atendido' || isLocked)
                 ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
                 : 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
                 }`}
-              title={isLocked ? 'No disponible en este estatus' : (item.status === 'Atendido' ? 'No disponible para propuestas atendidas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : (permissions.canAsignarInventario ? 'Asignar a Inventario' : 'Ver Inventario')))}
+              title={permissions.canAsignarInventario ? (isLocked ? 'No disponible en este estatus' : (item.status === 'Atendido' ? 'No disponible para propuestas atendidas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : 'Asignar a Inventario'))) : 'Ver Propuesta'}
             >
               {permissions.canAsignarInventario && item.status !== 'Pase a ventas' ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
