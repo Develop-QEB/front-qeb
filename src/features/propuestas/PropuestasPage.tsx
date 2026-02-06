@@ -1219,8 +1219,11 @@ export function PropuestasPage() {
 
   const renderPropuestaRow = (item: Propuesta & any, index: number) => {
     const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
+    // Bloquear todas las acciones cuando el status es "Activa" (para todos los usuarios)
+    const isActiva = item.status === 'Activa';
     // Asesor Comercial: bloquear acciones cuando el status es "Abierto"
     const isLockedByAbierto = user?.rol === 'Asesor Comercial' && item.status === 'Abierto';
+    const isLocked = isActiva || isLockedByAbierto;
 
     return (
       <tr key={`prop-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
@@ -1271,7 +1274,7 @@ export function PropuestasPage() {
           )}
         </td>
         <td className="px-4 py-3">
-          {permissions.canEditPropuestaStatus && !isLockedByAbierto ? (
+          {permissions.canEditPropuestaStatus && !isLocked ? (
             <button
               onClick={() => setStatusPropuesta(item)}
               className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
@@ -1289,36 +1292,36 @@ export function PropuestasPage() {
             {permissions.canAprobarPropuesta && (
               <button
                 onClick={() => setApprovePropuesta(item)}
-                disabled={item.status !== 'Pase a ventas' || isLockedByAbierto}
-                className={`p-2 rounded-lg border transition-all ${item.status !== 'Pase a ventas' || isLockedByAbierto
+                disabled={item.status !== 'Pase a ventas' || isLocked}
+                className={`p-2 rounded-lg border transition-all ${item.status !== 'Pase a ventas' || isLocked
                   ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
                   : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40'
                   }`}
-                title={isLockedByAbierto ? 'No disponible en estatus Abierto' : (item.status !== 'Pase a ventas' ? 'Solo disponible con estatus Pase a ventas' : 'Aprobar propuesta')}
+                title={isLocked ? 'No disponible en este estatus' : (item.status !== 'Pase a ventas' ? 'Solo disponible con estatus Pase a ventas' : 'Aprobar propuesta')}
               >
                 <CheckCircle className="h-3.5 w-3.5" />
               </button>
             )}
             <button
               onClick={() => { setSelectedPropuestaForAssign(item); setShowAssignModal(true); }}
-              disabled={item.status === 'Atendido' || isLockedByAbierto}
-              className={`p-2 rounded-lg border transition-all ${item.status === 'Atendido' || isLockedByAbierto
+              disabled={item.status === 'Atendido' || isLocked}
+              className={`p-2 rounded-lg border transition-all ${item.status === 'Atendido' || isLocked
                 ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
                 : 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
                 }`}
-              title={isLockedByAbierto ? 'No disponible en estatus Abierto' : (item.status === 'Atendido' ? 'No disponible para propuestas atendidas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : (permissions.canAsignarInventario ? 'Asignar a Inventario' : 'Ver Inventario')))}
+              title={isLocked ? 'No disponible en este estatus' : (item.status === 'Atendido' ? 'No disponible para propuestas atendidas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : (permissions.canAsignarInventario ? 'Asignar a Inventario' : 'Ver Inventario')))}
             >
               {permissions.canAsignarInventario && item.status !== 'Pase a ventas' ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
             {permissions.canCompartirPropuesta && (
               <button
-                disabled={(item.status !== 'Atendido' && item.status !== 'Pase a ventas') || isLockedByAbierto}
-                onClick={() => !isLockedByAbierto && (item.status === 'Atendido' || item.status === 'Pase a ventas') && navigate(`/propuestas/compartir/${item.id}`)}
-                className={`p-2 rounded-lg border transition-all ${(item.status === 'Atendido' || item.status === 'Pase a ventas') && !isLockedByAbierto
+                disabled={(item.status !== 'Atendido' && item.status !== 'Pase a ventas') || isLocked}
+                onClick={() => !isLocked && (item.status === 'Atendido' || item.status === 'Pase a ventas') && navigate(`/propuestas/compartir/${item.id}`)}
+                className={`p-2 rounded-lg border transition-all ${(item.status === 'Atendido' || item.status === 'Pase a ventas') && !isLocked
                   ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40'
                   : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
                   }`}
-                title={isLockedByAbierto ? 'No disponible en estatus Abierto' : (item.status === 'Atendido' || item.status === 'Pase a ventas' ? 'Compartir propuesta' : 'Solo disponible en status Atendido o Pase a ventas')}
+                title={isLocked ? 'No disponible en este estatus' : (item.status === 'Atendido' || item.status === 'Pase a ventas' ? 'Compartir propuesta' : 'Solo disponible en status Atendido o Pase a ventas')}
               >
                 <Share2 className="h-3.5 w-3.5" />
               </button>
