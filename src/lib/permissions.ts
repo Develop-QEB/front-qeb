@@ -634,11 +634,12 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditProveedores: false,
     canDeleteProveedores: false,
 
-    canCreateSolicitudes: false,
-    canEditSolicitudes: false,
-    canDeleteSolicitudes: false,
-    canAtenderSolicitudes: false,
-    canChangeEstadoSolicitud: false,
+    // Solicitudes: acceso total
+    canCreateSolicitudes: true,
+    canEditSolicitudes: true,
+    canDeleteSolicitudes: true,
+    canAtenderSolicitudes: true,
+    canChangeEstadoSolicitud: true,
 
     canEditPropuestaStatus: false,
     allowedPropuestaStatuses: [],
