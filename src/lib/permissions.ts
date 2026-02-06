@@ -641,12 +641,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: true,
     canChangeEstadoSolicitud: true,
 
-    canEditPropuestaStatus: false,
-    allowedPropuestaStatuses: [],
-    canAprobarPropuesta: false,
-    canAsignarInventario: false,
-    canEditResumenPropuesta: false,
-    canCompartirPropuesta: false,
+    // Propuestas: mismos permisos que Asesor Comercial
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente'],
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: false,

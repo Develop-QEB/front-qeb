@@ -1221,8 +1221,9 @@ export function PropuestasPage() {
     const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
     // Bloquear todas las acciones cuando el status es "Activa" (para todos los usuarios)
     const isActiva = item.status === 'Activa';
-    // Asesor Comercial y Director Comercial Aeropuerto: bloquear acciones cuando el status es "Abierto"
-    const isLockedByAbierto = (user?.rol === 'Asesor Comercial' || user?.rol === 'Director Comercial Aeropuerto') && item.status === 'Abierto';
+    // Roles comerciales: bloquear acciones cuando el status es "Abierto"
+    const rolesLockedByAbierto = ['Asesor Comercial', 'Director Comercial Aeropuerto', 'Asesor Comercial Aeropuerto'];
+    const isLockedByAbierto = rolesLockedByAbierto.includes(user?.rol || '') && item.status === 'Abierto';
     const isLocked = isActiva || isLockedByAbierto;
 
     return (
