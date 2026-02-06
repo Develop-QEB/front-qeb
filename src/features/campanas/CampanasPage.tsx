@@ -2310,7 +2310,7 @@ export function CampanasPage() {
             setStatusCampana(null);
           }}
           campana={statusCampana}
-          statusReadOnly={!permissions.canEditCampanas}
+          statusReadOnly={!permissions.canEditCampanaStatus}
         />
       )}
     </div>

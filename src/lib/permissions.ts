@@ -71,6 +71,7 @@ export interface RolePermissions {
 
   // Campañas
   canEditCampanas: boolean;
+  canEditCampanaStatus: boolean; // Cambiar estatus en modal de campaña
   canEditDetalleCampana: boolean;
   canDeleteDetalleCampana: boolean;
   canSeeGestionArtes: boolean; // Ver página de Gestión de Artes
@@ -135,6 +136,7 @@ const defaultPermissions: RolePermissions = {
   canBuscarInventarioEnModal: true,
 
   canEditCampanas: true,
+  canEditCampanaStatus: true,
   canEditDetalleCampana: true,
   canDeleteDetalleCampana: true,
   canSeeGestionArtes: true,
@@ -570,6 +572,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: true,
+    canEditCampanaStatus: false, // No puede cambiar status en modal de campaña
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
 
