@@ -1485,30 +1485,31 @@ function TaskDrawer({
             </h3>
             <div className="space-y-2 bg-purple-500/5 rounded-xl p-4 border border-purple-500/20">
               {tarea.contenido.split('\n').map((linea, idx) => {
-                if (!linea.trim()) return null;
+                const lineaTrim = linea.trim();
+                if (!lineaTrim) return null;
                 
                 // Si es el título "CATORCENAS INCLUIDAS"
-                if (linea.includes('CATORCENAS INCLUIDAS:')) {
+                if (lineaTrim.includes('CATORCENAS INCLUIDAS')) {
                   return (
                     <h4 key={idx} className="font-semibold text-purple-300 mt-4 mb-2 text-sm">
-                      {linea.trim()}
+                      📅 {lineaTrim}
                     </h4>
                   );
                 }
                 
-                // Si es una línea de catorcena (contiene "Cat" y "caras")
-                if (linea.includes('Cat ') && linea.includes('caras')) {
+                // línea de catorcena - formato: "Cat 5 - 2026: 3/3/2026 a 16/3/2026 (0 caras)"
+                if (lineaTrim.match(/^Cat\s+\d+\s+-\s+\d{4}:/)) {
                   return (
                     <div key={idx} className="flex items-center gap-2 py-2 px-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
-                      <Calendar className="h-3.5 w-3.5 text-purple-400 flex-shrink-0" />
-                      <span className="text-xs text-zinc-300">{linea.trim()}</span>
+                      <Calendar className="h-3.5 w-3.5 text-cyan-400 flex-shrink-0" />
+                      <span className="text-xs text-zinc-300">{lineaTrim}</span>
                     </div>
                   );
                 }
                 
                 // Si es el link a la campaña
-                if (linea.includes('https://')) {
-                  const url = linea.replace('Ver campaña:', '').trim();
+                if (lineaTrim.includes('https://')) {
+                  const url = lineaTrim.replace('Ver campaña:', '').trim();
                   return (
                     <a 
                       key={idx}
@@ -1523,14 +1524,19 @@ function TaskDrawer({
                   );
                 }
                 
-                // Líneas normales (Cliente, Campaña, Fecha límite)
-                const parts = linea.split(':');
-                if (parts.length === 2) {
-                  const [label, value] = parts;
+                // Líneas normales (Cliente, Campaña)
+                const parts = lineaTrim.split(':');
+                if (parts.length >= 2) {
+                  const label = parts[0];
+                  const value = parts.slice(1).join(':').trim(); // Por si hay : en la fecha
+
+                  // Saltar: líneas vacías, sección de catorcenas, y "Fecha límite" (se muestra en la sección editable abajo)
+                  if (label === 'CATORCENAS INCLUIDAS' || label === 'Fecha límite' || !value) return null;
+
                   return (
                     <div key={idx} className="flex items-center justify-between py-1.5">
-                      <span className="text-xs text-zinc-500 font-medium">{label.trim()}:</span>
-                      <span className="text-sm text-white">{value.trim()}</span>
+                      <span className="text-xs text-zinc-500 font-medium">{label}:</span>
+                      <span className="text-sm text-white">{value}</span>
                     </div>
                   );
                 }
