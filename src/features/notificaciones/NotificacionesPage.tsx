@@ -26,7 +26,7 @@ type ViewType = 'tablero' | 'lista' | 'calendario' | 'notas';
 type GroupByType = 'estatus' | 'tipo' | 'fecha' | 'responsable' | 'asignado';
 type OrderByType = 'fecha_fin' | 'fecha_inicio' | 'titulo' | 'estatus';
 type DateFilterType = 'all' | 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month';
-type QuickFilter = 'all' | 'pendientes' | 'finalizadas'| null;
+type QuickFilter = 'all' | 'pendientes' | 'finalizadas' | 'leidas' | 'no_leidas' | null;
 
 
 // Tipos para filtros avanzados (estilo Proveedores)
@@ -48,9 +48,17 @@ interface FilterFieldConfig {
 type QuickFilterKey =
   | 'all'
   | 'pendientes'
-  | 'finalizadas';
+  | 'finalizadas'
+  | 'leidas'      
+  | 'no_leidas';  
 
-const QUICK_FILTERS: { key: QuickFilterKey; label: string }[] = [
+const QUICK_FILTERS_NOTIFICACIONES: { key: QuickFilter; label: string }[] = [
+  { key: 'all', label: 'Todas' },
+  { key: 'leidas', label: 'Leídas' },
+  { key: 'no_leidas', label: 'No leídas' },
+];
+
+const QUICK_FILTERS_TAREAS: { key: QuickFilter; label: string }[] = [
   { key: 'all', label: 'Todas' },
   { key: 'pendientes', label: 'Sin finalizar' },
   { key: 'finalizadas', label: 'Finalizadas' },
@@ -1216,6 +1224,7 @@ function TaskDrawer({
   onNavigate,
   isClosing = false,
   onAutorizacionAction,
+  contentType,
 }: {
   tarea: Notificacion & { comentarios?: ComentarioTarea[] };
   onClose: () => void;
@@ -1224,6 +1233,7 @@ function TaskDrawer({
   onNavigate?: (path: string) => void;
   isClosing?: boolean;
   onAutorizacionAction?: () => void;
+  contentType: ContentType;
 }) {
   const [comment, setComment] = useState('');
   const [rechazoMotivo, setRechazoMotivo] = useState('');
@@ -1234,6 +1244,17 @@ function TaskDrawer({
   );
   const user = useAuthStore((state) => state.user);
   const canNavigate = hasNavigationRoute(tarea);
+
+  const queryClient = useQueryClient();
+  const marcarLeidaMutation = useMutation({
+    mutationFn: (estatus: string) => notificacionesService.update(tarea.id, { estatus }),
+    onSuccess: async () => {
+      const updated = await notificacionesService.getById(tarea.id);
+      // Llamar al callback onClose para refrescar
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+    },
+  });
 
   // Detectar si es tarea de autorización
   const isAutorizacionTask = tarea.tipo?.includes('Autorización');
@@ -1398,6 +1419,39 @@ function TaskDrawer({
             )}
           </div>
 
+          {/* Botón marcar como leído */}
+          {contentType === 'notificaciones' && (
+            <div className="mt-3">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const nuevoEstatus = tarea.estatus === 'Atendido' ? 'Pendiente' : 'Atendido';
+                  marcarLeidaMutation.mutate(nuevoEstatus);
+                }}
+                disabled={marcarLeidaMutation.isPending}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                  tarea.estatus === 'Atendido'
+                    ? 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-700'
+                    : 'bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/40'
+                } disabled:opacity-50`}
+              >
+                {marcarLeidaMutation.isPending ? (
+                  'Actualizando...'
+                ) : tarea.estatus === 'Atendido' ? (
+                  <>
+                    <Circle className="h-4 w-4" />
+                    Marcar como no leída
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    Marcar como leída
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
           {/* Botón Ir a ver */}
           {canNavigate && onNavigate && (
             <button
@@ -1419,6 +1473,71 @@ function TaskDrawer({
             <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
               {tarea.mensaje}
             </p>
+          </div>
+        )}
+
+        {/*Contenido de Seguimiento Campaña */}
+        {tarea.tipo === 'Seguimiento Campaña' && tarea.contenido && (
+          <div className="p-5 border-b border-zinc-800/50">
+            <h3 className="text-xs font-medium text-purple-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Building2 className="h-3.5 w-3.5" />
+              Información de la Campaña
+            </h3>
+            <div className="space-y-2 bg-purple-500/5 rounded-xl p-4 border border-purple-500/20">
+              {tarea.contenido.split('\n').map((linea, idx) => {
+                if (!linea.trim()) return null;
+                
+                // Si es el título "CATORCENAS INCLUIDAS"
+                if (linea.includes('CATORCENAS INCLUIDAS:')) {
+                  return (
+                    <h4 key={idx} className="font-semibold text-purple-300 mt-4 mb-2 text-sm">
+                      {linea.trim()}
+                    </h4>
+                  );
+                }
+                
+                // Si es una línea de catorcena (contiene "Cat" y "caras")
+                if (linea.includes('Cat ') && linea.includes('caras')) {
+                  return (
+                    <div key={idx} className="flex items-center gap-2 py-2 px-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                      <Calendar className="h-3.5 w-3.5 text-purple-400 flex-shrink-0" />
+                      <span className="text-xs text-zinc-300">{linea.trim()}</span>
+                    </div>
+                  );
+                }
+                
+                // Si es el link a la campaña
+                if (linea.includes('https://')) {
+                  const url = linea.replace('Ver campaña:', '').trim();
+                  return (
+                    <a 
+                      key={idx}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 mt-4 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Ver Campaña
+                    </a>
+                  );
+                }
+                
+                // Líneas normales (Cliente, Campaña, Fecha límite)
+                const parts = linea.split(':');
+                if (parts.length === 2) {
+                  const [label, value] = parts;
+                  return (
+                    <div key={idx} className="flex items-center justify-between py-1.5">
+                      <span className="text-xs text-zinc-500 font-medium">{label.trim()}:</span>
+                      <span className="text-sm text-white">{value.trim()}</span>
+                    </div>
+                  );
+                }
+                
+                return null;
+              })}
+            </div>
           </div>
         )}
 
@@ -1919,6 +2038,14 @@ export function NotificacionesPage() {
           return item.estatus === 'Atendido';
         }
 
+        if (quickFilter === 'leidas') {
+          return item.estatus === 'Atendido';
+        }
+
+        if (quickFilter === 'no_leidas') {
+          return item.estatus !== 'Atendido';
+        }
+
         return true;
       });
     }, [baseTareas, quickFilter]);
@@ -2152,7 +2279,7 @@ export function NotificacionesPage() {
                       </span>
 
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {QUICK_FILTERS.map(f => (
+                        {(contentType === 'notificaciones' ? QUICK_FILTERS_NOTIFICACIONES : QUICK_FILTERS_TAREAS).map(f => (
                           <button
                             key={f.key}
                             onClick={() => {
@@ -2594,6 +2721,7 @@ export function NotificacionesPage() {
               queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
               queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
             }}
+            contentType={contentType}
           />
         </>
       )}
