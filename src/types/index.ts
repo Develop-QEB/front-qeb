@@ -190,6 +190,9 @@ export interface Solicitud {
   IMU: number;
   archivo: string | null;
   tipo_archivo: string | null;
+  card_code?: string | null;
+  salesperson_code?: number | null;
+  sap_database?: string | null;
 }
 
 export interface SolicitudStats {
@@ -308,6 +311,7 @@ export interface Campana {
   // SAP integration fields
   card_code?: string | null;
   salesperson_code?: number | null;
+  sap_database?: string | null;
 }
 
 export interface CampanaStats {
