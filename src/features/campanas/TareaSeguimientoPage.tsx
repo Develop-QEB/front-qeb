@@ -2563,6 +2563,7 @@ function TaskDetailModal({
   campanaId,
   canResolveProduccionTasks = true,
   canResolveRevisionArtesTasks = true,
+  canResolveCorreccionTasks = true,
   digitalSummaryMap,
 }: {
   isOpen: boolean;
@@ -2585,6 +2586,7 @@ function TaskDetailModal({
   campanaId: number;
   canResolveProduccionTasks?: boolean;
   canResolveRevisionArtesTasks?: boolean;
+  canResolveCorreccionTasks?: boolean;
   digitalSummaryMap: Map<number, DigitalFileSummary>;
 }) {
   // Socket para actualizar usuarios en tiempo real
@@ -2601,9 +2603,13 @@ function TaskDetailModal({
     if (task.tipo === 'Revisión de artes') {
       return canResolveRevisionArtesTasks;
     }
+    // Para tareas de "Corrección", usar canResolveCorreccionTasks
+    if (task.tipo === 'Correccion') {
+      return canResolveCorreccionTasks;
+    }
     // Para otras tareas (producción), usar canResolveProduccionTasks
     return canResolveProduccionTasks;
-  }, [task, canResolveRevisionArtesTasks, canResolveProduccionTasks]);
+  }, [task, canResolveRevisionArtesTasks, canResolveCorreccionTasks, canResolveProduccionTasks]);
 
   // Estados para la tabla agrupada del modal de Programación (Ver Tabla tab)
   const [filtersProgramacionModal, setFiltersProgramacionModal] = useState<FilterCondition[]>([]);
@@ -14156,9 +14162,10 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300">{task.titulo}</td>
                             <td className="p-2">
                               {/* Solo mostrar botón Abrir si: canOpenTasks=true Y (no tiene restricción O es tarea del tipo permitido) */}
-                              {permissions.canOpenTasks && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks) ||
+                              {permissions.canOpenTasks && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks && !permissions.canOnlyOpenCorreccionTasks) ||
                                 (permissions.canOnlyOpenImpresionTasks && task.tipo === 'Impresión') ||
-                                (permissions.canOnlyOpenRecepcionTasks && (task.tipo === 'Recepción' || task.tipo === 'Instalación' || task.tipo === 'Testigo' || task.tipo === 'Programación'))) ? (
+                                (permissions.canOnlyOpenRecepcionTasks && (task.tipo === 'Recepción' || task.tipo === 'Instalación' || task.tipo === 'Testigo' || task.tipo === 'Programación')) ||
+                                (permissions.canOnlyOpenCorreccionTasks && task.tipo === 'Correccion')) ? (
                                 <button
                                   onClick={() => {
                                     setSelectedTask(task);
@@ -14664,6 +14671,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
         campanaId={campanaId}
         canResolveProduccionTasks={permissions.canResolveProduccionTasks}
         canResolveRevisionArtesTasks={permissions.canResolveRevisionArtesTasks}
+        canResolveCorreccionTasks={permissions.canResolveCorreccionTasks}
         digitalSummaryMap={digitalSummaryMap}
       />
 

@@ -383,6 +383,7 @@ export interface Notificacion {
   usuario_id: number;
   titulo: string;
   mensaje: string;
+  contenido?: string | null;
   tipo: string;
   leida: boolean;
   referencia_tipo: 'solicitud' | 'propuesta' | 'campana' | 'sistema' | null;

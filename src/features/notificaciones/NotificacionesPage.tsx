@@ -26,7 +26,7 @@ type ViewType = 'tablero' | 'lista' | 'calendario' | 'notas';
 type GroupByType = 'estatus' | 'tipo' | 'fecha' | 'responsable' | 'asignado';
 type OrderByType = 'fecha_fin' | 'fecha_inicio' | 'titulo' | 'estatus';
 type DateFilterType = 'all' | 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month';
-type QuickFilter = 'all' | 'pendientes' | 'finalizadas'| null;
+type QuickFilter = 'all' | 'pendientes' | 'finalizadas' | 'leidas' | 'no_leidas' | null;
 
 
 // Tipos para filtros avanzados (estilo Proveedores)
@@ -48,9 +48,17 @@ interface FilterFieldConfig {
 type QuickFilterKey =
   | 'all'
   | 'pendientes'
-  | 'finalizadas';
+  | 'finalizadas'
+  | 'leidas'      
+  | 'no_leidas';  
 
-const QUICK_FILTERS: { key: QuickFilterKey; label: string }[] = [
+const QUICK_FILTERS_NOTIFICACIONES: { key: QuickFilter; label: string }[] = [
+  { key: 'all', label: 'Todas' },
+  { key: 'leidas', label: 'Leídas' },
+  { key: 'no_leidas', label: 'No leídas' },
+];
+
+const QUICK_FILTERS_TAREAS: { key: QuickFilter; label: string }[] = [
   { key: 'all', label: 'Todas' },
   { key: 'pendientes', label: 'Sin finalizar' },
   { key: 'finalizadas', label: 'Finalizadas' },
@@ -1216,6 +1224,7 @@ function TaskDrawer({
   onNavigate,
   isClosing = false,
   onAutorizacionAction,
+  contentType,
 }: {
   tarea: Notificacion & { comentarios?: ComentarioTarea[] };
   onClose: () => void;
@@ -1224,6 +1233,7 @@ function TaskDrawer({
   onNavigate?: (path: string) => void;
   isClosing?: boolean;
   onAutorizacionAction?: () => void;
+  contentType: ContentType;
 }) {
   const [comment, setComment] = useState('');
   const [rechazoMotivo, setRechazoMotivo] = useState('');
@@ -1234,6 +1244,17 @@ function TaskDrawer({
   );
   const user = useAuthStore((state) => state.user);
   const canNavigate = hasNavigationRoute(tarea);
+
+  const queryClient = useQueryClient();
+  const marcarLeidaMutation = useMutation({
+    mutationFn: (estatus: string) => notificacionesService.update(tarea.id, { estatus }),
+    onSuccess: async () => {
+      const updated = await notificacionesService.getById(tarea.id);
+      // Llamar al callback onClose para refrescar
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+    },
+  });
 
   // Detectar si es tarea de autorización
   const isAutorizacionTask = tarea.tipo?.includes('Autorización');
@@ -1398,6 +1419,39 @@ function TaskDrawer({
             )}
           </div>
 
+          {/* Botón marcar como leído */}
+          {contentType === 'notificaciones' && (
+            <div className="mt-3">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const nuevoEstatus = tarea.estatus === 'Atendido' ? 'Pendiente' : 'Atendido';
+                  marcarLeidaMutation.mutate(nuevoEstatus);
+                }}
+                disabled={marcarLeidaMutation.isPending}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                  tarea.estatus === 'Atendido'
+                    ? 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-700'
+                    : 'bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/40'
+                } disabled:opacity-50`}
+              >
+                {marcarLeidaMutation.isPending ? (
+                  'Actualizando...'
+                ) : tarea.estatus === 'Atendido' ? (
+                  <>
+                    <Circle className="h-4 w-4" />
+                    Marcar como no leída
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    Marcar como leída
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
           {/* Botón Ir a ver */}
           {canNavigate && onNavigate && (
             <button
@@ -1419,6 +1473,77 @@ function TaskDrawer({
             <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
               {tarea.mensaje}
             </p>
+          </div>
+        )}
+
+        {/*Contenido de Seguimiento Campaña */}
+        {tarea.tipo === 'Seguimiento Campaña' && tarea.contenido && (
+          <div className="p-5 border-b border-zinc-800/50">
+            <h3 className="text-xs font-medium text-purple-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Building2 className="h-3.5 w-3.5" />
+              Información de la Campaña
+            </h3>
+            <div className="space-y-2 bg-purple-500/5 rounded-xl p-4 border border-purple-500/20">
+              {tarea.contenido.split('\n').map((linea, idx) => {
+                const lineaTrim = linea.trim();
+                if (!lineaTrim) return null;
+                
+                // Si es el título "CATORCENAS INCLUIDAS"
+                if (lineaTrim.includes('CATORCENAS INCLUIDAS')) {
+                  return (
+                    <h4 key={idx} className="font-semibold text-purple-300 mt-4 mb-2 text-sm">
+                      📅 {lineaTrim}
+                    </h4>
+                  );
+                }
+                
+                // línea de catorcena - formato: "Cat 5 - 2026: 3/3/2026 a 16/3/2026 (0 caras)"
+                if (lineaTrim.match(/^Cat\s+\d+\s+-\s+\d{4}:/)) {
+                  return (
+                    <div key={idx} className="flex items-center gap-2 py-2 px-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                      <Calendar className="h-3.5 w-3.5 text-cyan-400 flex-shrink-0" />
+                      <span className="text-xs text-zinc-300">{lineaTrim}</span>
+                    </div>
+                  );
+                }
+                
+                // Si es el link a la campaña
+                if (lineaTrim.includes('https://')) {
+                  const url = lineaTrim.replace('Ver campaña:', '').trim();
+                  return (
+                    <a 
+                      key={idx}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 mt-4 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Ver Campaña
+                    </a>
+                  );
+                }
+                
+                // Líneas normales (Cliente, Campaña)
+                const parts = lineaTrim.split(':');
+                if (parts.length >= 2) {
+                  const label = parts[0];
+                  const value = parts.slice(1).join(':').trim(); // Por si hay : en la fecha
+
+                  // Saltar: líneas vacías, sección de catorcenas, y "Fecha límite" (se muestra en la sección editable abajo)
+                  if (label === 'CATORCENAS INCLUIDAS' || label === 'Fecha límite' || !value) return null;
+
+                  return (
+                    <div key={idx} className="flex items-center justify-between py-1.5">
+                      <span className="text-xs text-zinc-500 font-medium">{label}:</span>
+                      <span className="text-sm text-white">{value}</span>
+                    </div>
+                  );
+                }
+                
+                return null;
+              })}
+            </div>
           </div>
         )}
 
@@ -1919,6 +2044,14 @@ export function NotificacionesPage() {
           return item.estatus === 'Atendido';
         }
 
+        if (quickFilter === 'leidas') {
+          return item.estatus === 'Atendido';
+        }
+
+        if (quickFilter === 'no_leidas') {
+          return item.estatus !== 'Atendido';
+        }
+
         return true;
       });
     }, [baseTareas, quickFilter]);
@@ -2152,7 +2285,7 @@ export function NotificacionesPage() {
                       </span>
 
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {QUICK_FILTERS.map(f => (
+                        {(contentType === 'notificaciones' ? QUICK_FILTERS_NOTIFICACIONES : QUICK_FILTERS_TAREAS).map(f => (
                           <button
                             key={f.key}
                             onClick={() => {
@@ -2594,6 +2727,7 @@ export function NotificacionesPage() {
               queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
               queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
             }}
+            contentType={contentType}
           />
         </>
       )}

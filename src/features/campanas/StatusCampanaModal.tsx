@@ -12,6 +12,7 @@ interface StatusCampanaModalProps {
   isOpen: boolean;
   onClose: () => void;
   campana: Campana;
+  statusReadOnly?: boolean;
 }
 
 const STATUS_OPTIONS = [
@@ -20,7 +21,7 @@ const STATUS_OPTIONS = [
   { value: 'Aprobar', label: 'Aprobar', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
 ];
 
-export function StatusCampanaModal({ isOpen, onClose, campana }: StatusCampanaModalProps) {
+export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = false }: StatusCampanaModalProps) {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const [selectedStatus, setSelectedStatus] = useState(campana.status || '');
@@ -137,34 +138,36 @@ export function StatusCampanaModal({ isOpen, onClose, campana }: StatusCampanaMo
         {/* Content */}
         <div className="p-4 space-y-4">
           {/* Status Select */}
-          <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">
-              Estatus
-            </label>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-            >
-              <option value="">Seleccionar estatus...</option>
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+          {!statusReadOnly && (
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Estatus
+              </label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+              >
+                <option value="">Seleccionar estatus...</option>
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
 
-            {/* Status preview */}
-            {selectedStatus && (
-              <div className="mt-2">
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs border ${
-                  STATUS_OPTIONS.find(o => o.value === selectedStatus)?.color || 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
-                }`}>
-                  {selectedStatus}
-                </span>
-              </div>
-            )}
-          </div>
+              {/* Status preview */}
+              {selectedStatus && (
+                <div className="mt-2">
+                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs border ${
+                    STATUS_OPTIONS.find(o => o.value === selectedStatus)?.color || 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                  }`}>
+                    {selectedStatus}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Comentarios Section */}
@@ -240,29 +243,31 @@ export function StatusCampanaModal({ isOpen, onClose, campana }: StatusCampanaMo
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 p-4 border-t border-zinc-800">
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            className="px-4 py-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isLoading || !selectedStatus || selectedStatus === campana.status}
-            className="px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Guardando...
-              </>
-            ) : (
-              'Guardar Estatus'
-            )}
-          </button>
-        </div>
+        {!statusReadOnly && (
+          <div className="flex items-center justify-end gap-2 p-4 border-t border-zinc-800">
+            <button
+              onClick={onClose}
+              disabled={isLoading}
+              className="px-4 py-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isLoading || !selectedStatus || selectedStatus === campana.status}
+              className="px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                'Guardar Estatus'
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -71,6 +71,7 @@ export interface RolePermissions {
 
   // Campañas
   canEditCampanas: boolean;
+  canEditCampanaStatus: boolean; // Cambiar estatus en modal de campaña
   canEditDetalleCampana: boolean;
   canDeleteDetalleCampana: boolean;
   canSeeGestionArtes: boolean; // Ver página de Gestión de Artes
@@ -87,8 +88,10 @@ export interface RolePermissions {
   canSeeTabValidacionInstalacion: boolean;
   canCreateTareasGestionArtes: boolean; // Crear tareas en gestión de artes
   canResolveRevisionArtesTasks: boolean; // Resolver tareas de revisión de artes
+  canResolveCorreccionTasks: boolean; // Resolver tareas de corrección de artes
   canOnlyOpenImpresionTasks: boolean; // Solo puede abrir tareas de tipo Impresión (oculta botón Abrir para otros tipos)
   canOnlyOpenRecepcionTasks: boolean; // Solo puede abrir tareas de tipo Recepción, Instalación, Testigo y Programación (para Operaciones)
+  canOnlyOpenCorreccionTasks: boolean; // Solo puede abrir tareas de tipo Corrección
   canOpenTasks: boolean; // Puede abrir/ver detalle de tareas (false = solo visualización de la lista)
   canCreateInstalacionFromRecibido: boolean; // Crear tareas de Instalación desde tab Impresiones con estado recibido (Operaciones)
 
@@ -135,6 +138,7 @@ const defaultPermissions: RolePermissions = {
   canBuscarInventarioEnModal: true,
 
   canEditCampanas: true,
+  canEditCampanaStatus: true,
   canEditDetalleCampana: true,
   canDeleteDetalleCampana: true,
   canSeeGestionArtes: true,
@@ -150,8 +154,10 @@ const defaultPermissions: RolePermissions = {
   canSeeTabValidacionInstalacion: true,
   canCreateTareasGestionArtes: true,
   canResolveRevisionArtesTasks: true,
+  canResolveCorreccionTasks: true,
   canOnlyOpenImpresionTasks: false,
   canOnlyOpenRecepcionTasks: false,
+  canOnlyOpenCorreccionTasks: false,
   canOpenTasks: true,
   canCreateInstalacionFromRecibido: false, // Default false - solo Operaciones
 
@@ -554,61 +560,36 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   // AEROPUERTO
   // ============================================================================
   'Director Comercial Aeropuerto': {
-    // Similar a Director General: visualización + aprobar propuestas
+    // Mismos permisos que Asesor Comercial
     canSeeDashboard: false,
-    canSeeClientes: true,
-    canSeeProveedores: false,
-    canSeeSolicitudes: true,
-    canSeePropuestas: true,
-    canSeeCampanas: true,
     canSeeInventarios: false,
     canSeeAdminUsuarios: false,
 
-    canCreateClientes: false,
-    canEditClientes: true,
     canDeleteClientes: false,
 
     canCreateProveedores: false,
     canEditProveedores: false,
     canDeleteProveedores: false,
 
-    canCreateSolicitudes: false,
-    canEditSolicitudes: false,
-    canDeleteSolicitudes: false,
-    canAtenderSolicitudes: false,
-    canChangeEstadoSolicitud: false,
-
-    canEditPropuestaStatus: false,
-    allowedPropuestaStatuses: [],
-    canAprobarPropuesta: true,
-    canAsignarInventario: false,
-    canEditResumenPropuesta: false,
-    canCompartirPropuesta: true,
+    // Puede cambiar estatus pero solo a estos valores
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente'],
     canBuscarInventarioEnModal: false,
 
-    canEditCampanas: false,
+    canEditCampanas: true,
+    canEditCampanaStatus: false, // No puede cambiar status en modal de campaña
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
-    canSeeGestionArtes: true,
+
+    // Gestión de Artes: solo visualización, no puede resolver ni crear tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
-
-    canSeeTabProgramacion: true,
-    canSeeTabImpresiones: true,
-    canSeeTabSubirArtes: false,
-    canSeeTabRevisarAprobar: true,
-    canSeeTabTestigos: true,
-    canSeeTabValidacionInstalacion: true,
-    canCreateTareasGestionArtes: false,
     canResolveRevisionArtesTasks: false,
+    canCreateTareasGestionArtes: false,
     canOpenTasks: false,
 
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,
-
-    canExportOrdenesMontaje: false,
   },
   'Gerente Comercial Aeropuerto': {
     // Mismo perfil que Asesor Comercial
@@ -621,6 +602,13 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateProveedores: false,
     canEditProveedores: false,
     canDeleteProveedores: false,
+
+    // Solicitudes: acceso total
+    canCreateSolicitudes: true,
+    canEditSolicitudes: true,
+    canDeleteSolicitudes: true,
+    canAtenderSolicitudes: true,
+    canChangeEstadoSolicitud: true,
 
     allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente'],
     canBuscarInventarioEnModal: false,
@@ -653,18 +641,15 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditProveedores: false,
     canDeleteProveedores: false,
 
-    canCreateSolicitudes: false,
-    canEditSolicitudes: false,
-    canDeleteSolicitudes: false,
-    canAtenderSolicitudes: false,
-    canChangeEstadoSolicitud: false,
+    // Solicitudes: acceso total
+    canCreateSolicitudes: true,
+    canEditSolicitudes: true,
+    canDeleteSolicitudes: true,
+    canAtenderSolicitudes: true,
+    canChangeEstadoSolicitud: true,
 
-    canEditPropuestaStatus: false,
-    allowedPropuestaStatuses: [],
-    canAprobarPropuesta: false,
-    canAsignarInventario: false,
-    canEditResumenPropuesta: false,
-    canCompartirPropuesta: false,
+    // Propuestas: mismos permisos que Asesor Comercial
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente'],
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: false,
@@ -720,6 +705,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     canEditCampanas: false,
     canResolveProduccionTasks: false,
+    canResolveRevisionArtesTasks: false,
+    canResolveCorreccionTasks: true, // SÍ puede resolver tareas de corrección de artes
+    canCreateTareasGestionArtes: true, // Puede crear tareas de Revisión de artes después de subir artes
+    canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de corrección
 
     canCreateInventarios: false,
     canEditInventarios: false,
