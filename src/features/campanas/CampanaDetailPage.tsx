@@ -1636,22 +1636,6 @@ export function CampanaDetailPage() {
               {/* Header con botón de agrupación */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 flex-shrink-0">
                 <div className="flex items-center gap-1.5 sm:gap-2">
-                  <button
-                    onClick={toggleSelectAll}
-                    className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-1 text-[10px] sm:text-xs font-medium rounded-lg transition-colors ${
-                      selectedItems.size === filteredInventarioReservado.length && filteredInventarioReservado.length > 0
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
-                    }`}
-                  >
-                    <Check className="h-3 w-3" />
-                    <span className="hidden sm:inline">
-                      {selectedItems.size === filteredInventarioReservado.length && filteredInventarioReservado.length > 0
-                        ? 'Deseleccionar todo'
-                        : 'Seleccionar todo'}
-                    </span>
-                    <span className="sm:hidden">Todo</span>
-                  </button>
                   {selectedItems.size > 0 && (
                     <span className="text-[10px] sm:text-xs text-purple-300">
                       {selectedItems.size} sel.
