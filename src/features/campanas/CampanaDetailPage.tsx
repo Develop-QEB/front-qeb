@@ -1063,6 +1063,21 @@ export function CampanaDetailPage() {
     }
   };
 
+  // Seleccionar/deseleccionar un grupo completo (APS)
+  const toggleGroupSelectionAPS = (groupItems: InventarioConAPS[]) => {
+    setSelectedItemsAPS(prev => {
+      const next = new Set(prev);
+      const groupIds = groupItems.map(i => String(i.rsv_ids));
+      const allSelected = groupIds.every(id => next.has(id));
+      if (allSelected) {
+        groupIds.forEach(id => next.delete(id));
+      } else {
+        groupIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
   // Toggle grupo expandido (APS)
   const toggleGroupAPS = (groupKey: string) => {
     setExpandedGroupsAPS(prev => {
@@ -2324,22 +2339,6 @@ export function CampanaDetailPage() {
               {/* Header con botón de agrupación */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 flex-shrink-0">
                 <div className="flex items-center gap-1.5 sm:gap-2">
-                  <button
-                    onClick={toggleSelectAllAPS}
-                    className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-1 text-[10px] sm:text-xs font-medium rounded-lg transition-colors ${
-                      selectedItemsAPS.size === filteredInventarioAPS.length && filteredInventarioAPS.length > 0
-                        ? 'bg-cyan-600 text-white'
-                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
-                    }`}
-                  >
-                    <Check className="h-3 w-3" />
-                    <span className="hidden sm:inline">
-                      {selectedItemsAPS.size === filteredInventarioAPS.length && filteredInventarioAPS.length > 0
-                        ? 'Deseleccionar todo'
-                        : 'Seleccionar todo'}
-                    </span>
-                    <span className="sm:hidden">Todo</span>
-                  </button>
                   {selectedItemsAPS.size > 0 && (
                     <span className="text-[10px] sm:text-xs text-cyan-300">
                       {selectedItemsAPS.size} sel.
@@ -2710,26 +2709,54 @@ export function CampanaDetailPage() {
                     };
                     const totalItems = countItems(groupData);
 
+                    // Collect all items flat for group selection
+                    const collectAllItems = (data: unknown): InventarioConAPS[] => {
+                      if (Array.isArray(data)) return data;
+                      if (typeof data === 'object' && data !== null) {
+                        return Object.values(data).flatMap(val => collectAllItems(val));
+                      }
+                      return [];
+                    };
+                    const allGroupItemsAPS = collectAllItems(groupData);
+                    const allGroupIdsAPS = allGroupItemsAPS.map(i => String(i.rsv_ids));
+                    const allGroupSelectedAPS = allGroupIdsAPS.length > 0 && allGroupIdsAPS.every(id => selectedItemsAPS.has(id));
+                    const someGroupSelectedAPS = !allGroupSelectedAPS && allGroupIdsAPS.some(id => selectedItemsAPS.has(id));
+
                     return (
                       <div key={groupKey} className="border border-purple-900/30 rounded-lg overflow-hidden">
                         {/* Cabecera del grupo nivel 1 */}
-                        <button
-                          onClick={() => toggleGroupAPS(groupKey)}
-                          className="w-full flex items-center gap-2 px-3 py-2 bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
-                        >
-                          {isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-purple-400" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-purple-400" />
-                          )}
-                          <span className="text-xs font-medium text-purple-300">
-                            {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[0])?.label}:
-                          </span>
-                          <span className="text-xs text-white">{groupKey}</span>
-                          <span className="ml-auto text-[10px] text-muted-foreground">
-                            {totalItems} items
-                          </span>
-                        </button>
+                        <div className="flex items-center gap-2 px-3 py-2 bg-purple-900/20 hover:bg-purple-900/30 transition-colors">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleGroupSelectionAPS(allGroupItemsAPS); }}
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                              allGroupSelectedAPS
+                                ? 'bg-cyan-600 border-cyan-600'
+                                : someGroupSelectedAPS
+                                  ? 'bg-cyan-600/50 border-cyan-600'
+                                  : 'border-purple-500/50 hover:border-purple-400'
+                            }`}
+                          >
+                            {allGroupSelectedAPS && <Check className="h-3 w-3 text-white" />}
+                            {someGroupSelectedAPS && <Minus className="h-3 w-3 text-white" />}
+                          </button>
+                          <button
+                            onClick={() => toggleGroupAPS(groupKey)}
+                            className="flex items-center gap-2 flex-1 min-w-0"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-purple-400" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-purple-400" />
+                            )}
+                            <span className="text-xs font-medium text-purple-300">
+                              {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[0])?.label}:
+                            </span>
+                            <span className="text-xs text-white">{groupKey}</span>
+                            <span className="ml-auto text-[10px] text-muted-foreground">
+                              {totalItems} items
+                            </span>
+                          </button>
+                        </div>
 
                         {/* Contenido expandido */}
                         {isExpanded && (
@@ -2797,25 +2824,45 @@ export function CampanaDetailPage() {
                                   const isLevel2Array = Array.isArray(subGroupData);
                                   const subTotalItems = countItems(subGroupData);
 
+                                  const allSubItemsAPS = collectAllItems(subGroupData);
+                                  const allSubIdsAPS = allSubItemsAPS.map(i => String(i.rsv_ids));
+                                  const allSubSelectedAPS = allSubIdsAPS.length > 0 && allSubIdsAPS.every(id => selectedItemsAPS.has(id));
+                                  const someSubSelectedAPS = !allSubSelectedAPS && allSubIdsAPS.some(id => selectedItemsAPS.has(id));
+
                                   return (
                                     <div key={subGroupKey} className="border border-purple-900/20 rounded-lg overflow-hidden ml-2">
-                                      <button
-                                        onClick={() => toggleGroupAPS(subGroupFullKey)}
-                                        className="w-full flex items-center gap-2 px-2 py-1.5 bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
-                                      >
-                                        {isSubExpanded ? (
-                                          <ChevronDown className="h-3 w-3 text-pink-400" />
-                                        ) : (
-                                          <ChevronRight className="h-3 w-3 text-pink-400" />
-                                        )}
-                                        <span className="text-[10px] font-medium text-pink-300">
-                                          {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[1])?.label}:
-                                        </span>
-                                        <span className="text-[10px] text-white">{subGroupKey}</span>
-                                        <span className="ml-auto text-[10px] text-muted-foreground">
-                                          {subTotalItems}
-                                        </span>
-                                      </button>
+                                      <div className="flex items-center gap-2 px-2 py-1.5 bg-purple-900/10 hover:bg-purple-900/20 transition-colors">
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); toggleGroupSelectionAPS(allSubItemsAPS); }}
+                                          className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                                            allSubSelectedAPS
+                                              ? 'bg-pink-600 border-pink-600'
+                                              : someSubSelectedAPS
+                                                ? 'bg-pink-600/50 border-pink-600'
+                                                : 'border-pink-500/50 hover:border-pink-400'
+                                          }`}
+                                        >
+                                          {allSubSelectedAPS && <Check className="h-2.5 w-2.5 text-white" />}
+                                          {someSubSelectedAPS && <Minus className="h-2.5 w-2.5 text-white" />}
+                                        </button>
+                                        <button
+                                          onClick={() => toggleGroupAPS(subGroupFullKey)}
+                                          className="flex items-center gap-2 flex-1 min-w-0"
+                                        >
+                                          {isSubExpanded ? (
+                                            <ChevronDown className="h-3 w-3 text-pink-400" />
+                                          ) : (
+                                            <ChevronRight className="h-3 w-3 text-pink-400" />
+                                          )}
+                                          <span className="text-[10px] font-medium text-pink-300">
+                                            {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[1])?.label}:
+                                          </span>
+                                          <span className="text-[10px] text-white">{subGroupKey}</span>
+                                          <span className="ml-auto text-[10px] text-muted-foreground">
+                                            {subTotalItems}
+                                          </span>
+                                        </button>
+                                      </div>
                                       {isSubExpanded && (
                                         <div className="px-2 py-1">
                                           {isLevel2Array ? (
@@ -2879,25 +2926,44 @@ export function CampanaDetailPage() {
                                                 const thirdGroupFullKey = `${subGroupFullKey}-${thirdGroupKey}`;
                                                 const isThirdExpanded = expandedGroupsAPS.has(thirdGroupFullKey);
 
+                                                const thirdIdsAPS = thirdItems.map(i => String(i.rsv_ids));
+                                                const allThirdSelectedAPS = thirdIdsAPS.length > 0 && thirdIdsAPS.every(id => selectedItemsAPS.has(id));
+                                                const someThirdSelectedAPS = !allThirdSelectedAPS && thirdIdsAPS.some(id => selectedItemsAPS.has(id));
+
                                                 return (
                                                   <div key={thirdGroupKey} className="border border-cyan-900/20 rounded-lg overflow-hidden ml-2">
-                                                    <button
-                                                      onClick={() => toggleGroupAPS(thirdGroupFullKey)}
-                                                      className="w-full flex items-center gap-2 px-2 py-1.5 bg-cyan-900/10 hover:bg-cyan-900/20 transition-colors"
-                                                    >
-                                                      {isThirdExpanded ? (
-                                                        <ChevronDown className="h-3 w-3 text-cyan-400" />
-                                                      ) : (
-                                                        <ChevronRight className="h-3 w-3 text-cyan-400" />
-                                                      )}
-                                                      <span className="text-[10px] font-medium text-cyan-300">
-                                                        {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[2])?.label}:
-                                                      </span>
-                                                      <span className="text-[10px] text-white">{thirdGroupKey}</span>
-                                                      <span className="ml-auto text-[10px] text-muted-foreground">
-                                                        {thirdItems.length}
-                                                      </span>
-                                                    </button>
+                                                    <div className="flex items-center gap-2 px-2 py-1.5 bg-cyan-900/10 hover:bg-cyan-900/20 transition-colors">
+                                                      <button
+                                                        onClick={(e) => { e.stopPropagation(); toggleGroupSelectionAPS(thirdItems); }}
+                                                        className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                                                          allThirdSelectedAPS
+                                                            ? 'bg-cyan-600 border-cyan-600'
+                                                            : someThirdSelectedAPS
+                                                              ? 'bg-cyan-600/50 border-cyan-600'
+                                                              : 'border-cyan-500/50 hover:border-cyan-400'
+                                                        }`}
+                                                      >
+                                                        {allThirdSelectedAPS && <Check className="h-2.5 w-2.5 text-white" />}
+                                                        {someThirdSelectedAPS && <Minus className="h-2.5 w-2.5 text-white" />}
+                                                      </button>
+                                                      <button
+                                                        onClick={() => toggleGroupAPS(thirdGroupFullKey)}
+                                                        className="flex items-center gap-2 flex-1 min-w-0"
+                                                      >
+                                                        {isThirdExpanded ? (
+                                                          <ChevronDown className="h-3 w-3 text-cyan-400" />
+                                                        ) : (
+                                                          <ChevronRight className="h-3 w-3 text-cyan-400" />
+                                                        )}
+                                                        <span className="text-[10px] font-medium text-cyan-300">
+                                                          {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[2])?.label}:
+                                                        </span>
+                                                        <span className="text-[10px] text-white">{thirdGroupKey}</span>
+                                                        <span className="ml-auto text-[10px] text-muted-foreground">
+                                                          {thirdItems.length}
+                                                        </span>
+                                                      </button>
+                                                    </div>
                                                     {isThirdExpanded && (
                                                       <table className="w-full text-xs">
                                                         <thead>
