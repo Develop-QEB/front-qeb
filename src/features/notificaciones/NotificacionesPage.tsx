@@ -1168,7 +1168,10 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
 }
 
 // Función para obtener la etiqueta del botón
-function getNavigationLabel(tipo: string): string {
+function getNavigationLabel(tipo: string, tipoTarea?: string): string {
+  if (tipo === 'campana' && tipoTarea === 'Correccion') {
+    return 'Ver Tarea';
+  }
   switch (tipo) {
     case 'propuesta':
       return 'Ver Propuesta';
@@ -1194,7 +1197,7 @@ function isRejectionTask(titulo: string): boolean {
 }
 
 // Función para obtener la ruta de navegación directa al detalle
-function getDirectNavigationPath(tipo: string, id: number, titulo: string): string {
+function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string): string {
   const isComment = isCommentNotification(titulo);
   const isRejection = isRejectionTask(titulo);
 
@@ -1202,6 +1205,9 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string): stri
     case 'propuesta':
       return `/propuestas?viewId=${id}`;
     case 'campana':
+      if (tipoTarea === 'Correccion') {
+        return `/campanas/${id}/tareas`;
+      }
       return `/campanas/detail/${id}`;
     case 'solicitud':
       // Si es tarea de rechazo, abrir modal de edición directamente
@@ -1352,7 +1358,7 @@ function TaskDrawer({
     if (!onNavigate) return;
     // Si tiene referencia_tipo y referencia_id, usar esos
     if (tarea.referencia_tipo && tarea.referencia_id) {
-      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '');
+      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined);
       onNavigate(path);
       return;
     }
@@ -1459,7 +1465,7 @@ function TaskDrawer({
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
             >
               <ExternalLink className="h-4 w-4" />
-              {getNavigationLabel(tarea.referencia_tipo || '')}
+              {getNavigationLabel(tarea.referencia_tipo || '', tarea.tipo || undefined)}
             </button>
           )}
         </div>
@@ -2335,19 +2341,48 @@ export function NotificacionesPage() {
                               <option key={op.value} value={op.value}>{op.label}</option>
                             ))}
                           </select>
-                          <input
-                            type="text"
-                            list={`datalist-${filter.id}`}
+                          {(filter.field === 'fecha_creacion' || filter.field === 'fecha_inicio' || filter.field === 'fecha_fin') ? (
+                          <select
                             value={filter.value}
                             onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-                            placeholder="Escribe o selecciona..."
-                            className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
-                          />
-                          <datalist id={`datalist-${filter.id}`}>
-                            {getUniqueValues[filter.field]?.map((val) => (
-                              <option key={val} value={val} />
-                            ))}
-                          </datalist>
+                            className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-purple-500"
+                          >
+                            <option value="">Selecciona fecha...</option>
+                            {getUniqueValues[filter.field]?.map((val) => {
+                              const date = new Date(val);
+                              const formatted = !isNaN(date.getTime())
+                                ? date.toLocaleDateString('es-MX', {
+                                    year: 'numeric',
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })
+                                : val;
+                              return (
+                                <option key={val} value={formatted}>
+                                  {formatted}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              list={`datalist-${filter.id}`}
+                              value={filter.value}
+                              onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                              placeholder="Escribe o selecciona..."
+                              className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
+                            />
+                            <datalist id={`datalist-${filter.id}`}>
+                              {getUniqueValues[filter.field]?.map((val) => (
+                                <option key={val} value={val} />
+                              ))}
+                            </datalist>
+                          </>
+                        )}
                           <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
                             <Trash2 className="h-3 w-3" />
                           </button>
@@ -2654,7 +2689,7 @@ export function NotificacionesPage() {
                                 e.stopPropagation();
                                 // Si tiene referencia_tipo y referencia_id, usar esos
                                 if (tarea.referencia_tipo && tarea.referencia_id) {
-                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '');
+                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined);
                                   navigate(path);
                                   return;
                                 }
@@ -2668,7 +2703,7 @@ export function NotificacionesPage() {
                                 }
                               }}
                               className="p-1.5 rounded-lg text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 transition-all opacity-0 group-hover:opacity-100"
-                              title={`Ir a ${tarea.referencia_tipo === 'propuesta' ? 'Propuesta' : tarea.referencia_tipo === 'campana' ? 'Campaña' : 'Solicitud'}`}
+                              title={`Ir a ${tarea.referencia_tipo === 'campana' && tarea.tipo === 'Correccion' ? 'Tarea' : tarea.referencia_tipo === 'propuesta' ? 'Propuesta' : tarea.referencia_tipo === 'campana' ? 'Campaña' : 'Solicitud'}`}
                             >
                               <ExternalLink className="h-4 w-4" />
                             </button>
