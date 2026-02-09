@@ -1277,9 +1277,18 @@ export function CampanasPage() {
         </td>
         {/* Cliente - Simple text */}
         <td className="px-4 py-3">
-          <span className="text-zinc-300 text-sm max-w-[180px] truncate block" title={item.cliente_nombre || item.cliente_razon_social || '-'}>
-            {item.cliente_nombre || item.cliente_razon_social || '-'}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-zinc-300 text-sm max-w-[180px] truncate" title={item.cliente_nombre || item.cliente_razon_social || '-'}>
+              {item.cliente_nombre || item.cliente_razon_social || '-'}
+            </span>
+            {item.sap_database && (
+              <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
+                item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+              }`}>{item.sap_database}</span>
+            )}
+          </div>
         </td>
         {/* Status */}
         <td className="px-4 py-3">

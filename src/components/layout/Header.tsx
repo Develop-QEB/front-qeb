@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Bell, FlaskConical, Settings } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
-import { useEnvironmentStore } from '../../store/environmentStore';
 import { notificacionesService } from '../../services/notificaciones.service';
 import { UserAvatar } from '../ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
@@ -13,9 +12,6 @@ interface HeaderProps {
 
 export function Header({ title }: HeaderProps) {
   const user = useAuthStore((state) => state.user);
-  const environment = useEnvironmentStore((state) => state.environment);
-  const isTestMode = environment === 'test';
-
   // Suscribirse a WebSocket para actualizaciones en tiempo real
   useSocketNotificaciones();
 
@@ -35,13 +31,11 @@ export function Header({ title }: HeaderProps) {
       <h1 className="text-lg font-light text-purple-200 tracking-wide uppercase">{title}</h1>
 
       <div className="ml-auto flex items-center gap-4">
-        {/* Indicador de ambiente (solo si es pruebas) */}
-        {isTestMode && (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30">
-            <FlaskConical className="h-3 w-3" />
-            PRUEBAS
-          </span>
-        )}
+        {/* Indicador de ambiente */}
+        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-amber-500/20 text-amber-300 border-amber-500/30">
+          <FlaskConical className="h-3 w-3" />
+          BETA
+        </span>
 
         {/* Admin - Configuración de usuarios (solo Administrador) */}
         {user?.rol === 'Administrador' && (

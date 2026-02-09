@@ -144,6 +144,16 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
                   <span className="font-mono text-sm px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30">
                     CUIC: {cliente.CUIC || '-'}
                   </span>
+                  {cliente.sap_database && (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-lg border ${
+                      cliente.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                      cliente.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                      cliente.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                      'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                    }`}>
+                      {cliente.sap_database}
+                    </span>
+                  )}
                 </div>
                 <p className="text-zinc-400 text-sm">{cliente.T0_U_Cliente || 'Sin nombre'}</p>
               </div>
@@ -503,7 +513,7 @@ export function ClientesPage() {
   // WebSocket para actualizaciones en tiempo real
   useSocketClientes();
 
-  const [activeTab, setActiveTab] = useState<'db' | 'sap'>('db');
+  const [activeTab, setActiveTab] = useState<'db' | 'CIMU' | 'TEST' | 'TRADE'>('db');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -532,6 +542,7 @@ export function ClientesPage() {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
       setPage(1);
+      setSapPage(1);
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
@@ -556,15 +567,40 @@ export function ClientesPage() {
     enabled: needsFullData,
   });
 
-  // Fetch SAP clients
-  const { data: sapData, isLoading: sapLoading, refetch: refetchSap, isFetching: sapFetching } = useQuery({
-    queryKey: ['clientes-sap', debouncedSearch],
-    queryFn: () => clientesService.getSAPClientes(debouncedSearch || undefined),
+  // SAP pagination
+  const [sapPage, setSapPage] = useState(1);
+  const sapLimit = 100;
+
+  // Fetch SAP clients per database - all prefetch on mount (no wait for tab click)
+  const { data: cimuData, isLoading: cimuLoading, refetch: refetchCimu, isFetching: cimuFetching } = useQuery({
+    queryKey: ['clientes-sap-CIMU', debouncedSearch],
+    queryFn: () => clientesService.getSAPClientesByDB('CIMU', debouncedSearch || undefined),
+    staleTime: 10 * 60 * 1000,
   });
+
+  const { data: testData, isLoading: testLoading, refetch: refetchTest, isFetching: testFetching } = useQuery({
+    queryKey: ['clientes-sap-TEST', debouncedSearch],
+    queryFn: () => clientesService.getSAPClientesByDB('TEST', debouncedSearch || undefined),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: tradeData, isLoading: tradeLoading, refetch: refetchTrade, isFetching: tradeFetching } = useQuery({
+    queryKey: ['clientes-sap-TRADE', debouncedSearch],
+    queryFn: () => clientesService.getSAPClientesByDB('TRADE', debouncedSearch || undefined),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Helper to get the active SAP query data/refetch
+  const activeSapData = activeTab === 'CIMU' ? cimuData : activeTab === 'TEST' ? testData : activeTab === 'TRADE' ? tradeData : null;
+  const activeSapLoading = activeTab === 'CIMU' ? cimuLoading : activeTab === 'TEST' ? testLoading : activeTab === 'TRADE' ? tradeLoading : false;
+  const activeSapFetching = activeTab === 'CIMU' ? cimuFetching : activeTab === 'TEST' ? testFetching : activeTab === 'TRADE' ? tradeFetching : false;
+  const activeSapRefetch = activeTab === 'CIMU' ? refetchCimu : activeTab === 'TEST' ? refetchTest : activeTab === 'TRADE' ? refetchTrade : null;
 
   // Refresh SAP data (clear cache on backend)
   const handleRefreshSap = async () => {
-    await refetchSap();
+    if (activeSapRefetch) {
+      await activeSapRefetch();
+    }
   };
 
   // Create client mutation
@@ -573,7 +609,9 @@ export function ClientesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-full'] });
-      queryClient.invalidateQueries({ queryKey: ['clientes-sap'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-CIMU'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-TEST'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-TRADE'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-stats'] });
     },
   });
@@ -584,24 +622,43 @@ export function ClientesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-full'] });
-      queryClient.invalidateQueries({ queryKey: ['clientes-sap'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-CIMU'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-TEST'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-TRADE'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-stats'] });
     },
   });
 
   // Get current data based on tab and filters
+  const isDb = activeTab === 'db';
+  const isSapTab = activeTab === 'CIMU' || activeTab === 'TEST' || activeTab === 'TRADE';
+
+  // All SAP data (for total count + filtering)
+  const allSapData = useMemo(() => {
+    if (!isSapTab) return [];
+    return activeSapData?.data || [];
+  }, [isSapTab, activeSapData]);
+
+  // Paginated SAP data
+  const paginatedSapData = useMemo(() => {
+    const start = (sapPage - 1) * sapLimit;
+    return allSapData.slice(start, start + sapLimit);
+  }, [allSapData, sapPage]);
+
+  const sapTotalPages = Math.max(1, Math.ceil(allSapData.length / sapLimit));
+
   const currentData = useMemo(() => {
-    if (activeTab === 'sap') {
-      return sapData?.data || [];
+    if (isSapTab) {
+      return paginatedSapData;
     }
     if (needsFullData && fullDbData?.data) {
       return fullDbData.data;
     }
     return dbData?.data || [];
-  }, [activeTab, sapData, fullDbData, dbData, needsFullData]);
+  }, [isSapTab, paginatedSapData, fullDbData, dbData, needsFullData]);
 
-  const isLoading = activeTab === 'sap'
-    ? sapLoading
+  const isLoading = isSapTab
+    ? activeSapLoading
     : (needsFullData ? fullDbLoading : dbLoading);
 
   // Obtener valores únicos para cada campo de filtro
@@ -747,11 +804,22 @@ export function ClientesPage() {
     });
   };
 
+  const [addingCuic, setAddingCuic] = useState<number | null>(null);
+
   const handleAddToDatabase = async (cliente: Cliente) => {
     try {
-      await createMutation.mutateAsync(cliente);
+      setAddingCuic(cliente.CUIC ?? null);
+      const payload: Partial<Cliente> = { ...cliente };
+      if (isSapTab) {
+        payload.sap_database = activeTab;
+        payload.card_code = cliente.ACA_U_SAPCode || null;
+        payload.salesperson_code = cliente.ASESOR_U_SAPCode_Original ? Number(cliente.ASESOR_U_SAPCode_Original) : null;
+      }
+      await createMutation.mutateAsync(payload);
     } catch (error) {
       console.error('Error adding cliente:', error);
+    } finally {
+      setAddingCuic(null);
     }
   };
 
@@ -773,10 +841,23 @@ export function ClientesPage() {
     setExpandedGroups(new Set());
   };
 
-  const renderClientRow = (item: Cliente, isDb: boolean, index: number) => (
-    <tr key={isDb ? `db-${item.id}` : `sap-${index}-${item.CUIC}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+  const sapDatabaseBadgeClasses: Record<string, string> = {
+    CIMU: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+    TEST: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    TRADE: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  };
+
+  const renderClientRow = (item: Cliente, isDbRow: boolean, index: number) => (
+    <tr key={isDbRow ? `db-${item.id}` : `sap-${index}-${item.CUIC}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
       <td className="px-2 py-2">
-        <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300">{item.CUIC || '-'}</span>
+        <div className="flex items-center gap-1">
+          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300">{item.CUIC || '-'}</span>
+          {isDbRow && item.sap_database && (
+            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${sapDatabaseBadgeClasses[item.sap_database] || 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'}`}>
+              {item.sap_database}
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-2 py-2">
         <span className="font-semibold text-white text-xs truncate block max-w-[120px]">{item.T0_U_Cliente || '-'}</span>
@@ -801,7 +882,7 @@ export function ClientesPage() {
           {item.T2_U_Categoria || '-'}
         </span>
       </td>
-      {isDb && (
+      {isDbRow && (
         <td className="px-2 py-2 hidden xl:table-cell">
           <span className="inline-flex items-center gap-1 max-w-[100px]">
             <Package className="h-3 w-3 text-amber-400 flex-shrink-0" />
@@ -818,7 +899,7 @@ export function ClientesPage() {
           >
             <Eye className="h-3 w-3" />
           </button>
-          {isDb && permissions.canDeleteClientes && (
+          {isDbRow && permissions.canDeleteClientes && (
             <button
               onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
               disabled={deleteMutation.isPending}
@@ -828,14 +909,18 @@ export function ClientesPage() {
               <Trash2 className="h-3 w-3" />
             </button>
           )}
-          {!isDb && (
+          {!isDbRow && (
             <button
               onClick={(e) => { e.stopPropagation(); handleAddToDatabase(item); }}
-              disabled={createMutation.isPending}
+              disabled={addingCuic !== null}
               className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 transition-all disabled:opacity-50"
               title="Agregar a BD"
             >
-              <Plus className="h-3 w-3" />
+              {addingCuic === item.CUIC ? (
+                <RefreshCw className="h-3 w-3 animate-spin" />
+              ) : (
+                <Plus className="h-3 w-3" />
+              )}
             </button>
           )}
         </div>
@@ -844,7 +929,9 @@ export function ClientesPage() {
   );
 
   const dbTotalPages = dbData?.pagination?.totalPages || 1;
-  const sapTotal = sapData?.total ?? 0;
+  const cimuTotal = cimuData?.total ?? 0;
+  const testTotal = testData?.total ?? 0;
+  const tradeTotal = tradeData?.total ?? 0;
   const dbTotal = dbData?.pagination?.total ?? 0;
 
   return (
@@ -890,7 +977,7 @@ export function ClientesPage() {
             {/* Top Row: Tabs + Search */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
               {/* Tabs */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <TabButton
                   active={activeTab === 'db'}
                   onClick={() => { setActiveTab('db'); setPage(1); clearAllFilters(); }}
@@ -900,21 +987,37 @@ export function ClientesPage() {
                   loading={dbLoading}
                 />
                 <TabButton
-                  active={activeTab === 'sap'}
-                  onClick={() => { setActiveTab('sap'); clearAllFilters(); }}
+                  active={activeTab === 'CIMU'}
+                  onClick={() => { setActiveTab('CIMU'); setSapPage(1); clearAllFilters(); }}
                   icon={Cloud}
-                  label="SAP"
-                  count={sapTotal}
-                  loading={sapLoading}
+                  label="CIMU"
+                  count={cimuTotal}
+                  loading={activeTab === 'CIMU' && cimuLoading}
                 />
-                {activeTab === 'sap' && (
+                <TabButton
+                  active={activeTab === 'TEST'}
+                  onClick={() => { setActiveTab('TEST'); setSapPage(1); clearAllFilters(); }}
+                  icon={Cloud}
+                  label="TEST"
+                  count={testTotal}
+                  loading={activeTab === 'TEST' && testLoading}
+                />
+                <TabButton
+                  active={activeTab === 'TRADE'}
+                  onClick={() => { setActiveTab('TRADE'); setSapPage(1); clearAllFilters(); }}
+                  icon={Cloud}
+                  label="TRADE"
+                  count={tradeTotal}
+                  loading={activeTab === 'TRADE' && tradeLoading}
+                />
+                {isSapTab && (
                   <button
                     onClick={handleRefreshSap}
-                    disabled={sapFetching}
+                    disabled={activeSapFetching}
                     className="p-2 rounded-lg bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200 transition-all disabled:opacity-50"
                     title="Refrescar SAP"
                   >
-                    <RefreshCw className={`h-4 w-4 ${sapFetching ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`h-4 w-4 ${activeSapFetching ? 'animate-spin' : ''}`} />
                   </button>
                 )}
               </div>
@@ -1193,7 +1296,7 @@ export function ClientesPage() {
                       <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider hidden md:table-cell">Agencia</th>
                       <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
                       <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider hidden xl:table-cell">Categoría</th>
-                      {activeTab === 'db' && (
+                      {isDb && (
                         <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider hidden xl:table-cell">Producto</th>
                       )}
                       <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider"></th>
@@ -1227,24 +1330,24 @@ export function ClientesPage() {
                                   />
                                   {/* Level 2 Content */}
                                   {expandedGroups.has(`${group.name}|${subgroup.name}`) &&
-                                    subgroup.items.map((item, idx) => renderClientRow(item, activeTab === 'db', idx))
+                                    subgroup.items.map((item, idx) => renderClientRow(item, isDb, idx))
                                   }
                                 </React.Fragment>
                               ))
                             ) : (
                               // No subgroups (1 level grouping)
-                              group.items.map((item, idx) => renderClientRow(item, activeTab === 'db', idx))
+                              group.items.map((item, idx) => renderClientRow(item, isDb, idx))
                             )
                           )}
                         </React.Fragment>
                       ))
                     ) : (
-                      filteredData.map((item, idx) => renderClientRow(item, activeTab === 'db', idx))
+                      filteredData.map((item, idx) => renderClientRow(item, isDb, idx))
                     )}
                     {filteredData.length === 0 && !groupedData && (
                       <tr>
-                        <td colSpan={activeTab === 'db' ? 8 : 7} className="px-4 py-12 text-center text-zinc-500">
-                          {activeTab === 'sap' ? "No hay clientes nuevos en SAP" : "No se encontraron clientes"}
+                        <td colSpan={isDb ? 8 : 7} className="px-4 py-12 text-center text-zinc-500">
+                          {isSapTab ? `No hay clientes nuevos en SAP (${activeTab})` : "No se encontraron clientes"}
                         </td>
                       </tr>
                     )}
@@ -1253,7 +1356,7 @@ export function ClientesPage() {
               </div>
 
               {/* Pagination for DB only (when not filtering/grouping) */}
-              {activeTab === 'db' && !needsFullData && dbData?.pagination && dbTotalPages > 1 && (
+              {isDb && !needsFullData && dbData?.pagination && dbTotalPages > 1 && (
                 <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
                   <span className="text-sm text-purple-300/70">
                     Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{dbTotalPages}</span>
@@ -1279,7 +1382,7 @@ export function ClientesPage() {
               )}
 
               {/* Full data info when filtering/grouping */}
-              {activeTab === 'db' && needsFullData && (
+              {isDb && needsFullData && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
                   <span className="text-xs text-zinc-500">
                     Mostrando {filteredData.length} clientes filtrados
@@ -1287,13 +1390,30 @@ export function ClientesPage() {
                 </div>
               )}
 
-              {/* SAP info */}
-              {activeTab === 'sap' && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
-                  <span className="text-xs text-zinc-500">
-                    {sapTotal} clientes de SAP disponibles
-                    {sapData?.cached && <span className="ml-2 text-emerald-400">(desde cache)</span>}
+              {/* SAP pagination + info */}
+              {isSapTab && (
+                <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
+                  <span className="text-sm text-purple-300/70">
+                    Página <span className="font-semibold text-purple-300">{sapPage}</span> de <span className="font-semibold text-purple-300">{sapTotalPages}</span>
+                    <span className="text-purple-300/50 ml-2">({allSapData.length} total)</span>
+                    {activeSapData?.cached && <span className="ml-2 text-emerald-400 text-xs">(cache)</span>}
                   </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSapPage(p => Math.max(1, p - 1))}
+                      disabled={sapPage === 1}
+                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      onClick={() => setSapPage(p => Math.min(sapTotalPages, p + 1))}
+                      disabled={sapPage === sapTotalPages}
+                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
                 </div>
               )}
             </>

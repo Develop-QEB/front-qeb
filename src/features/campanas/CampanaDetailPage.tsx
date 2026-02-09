@@ -892,13 +892,14 @@ export function CampanaDetailPage() {
 
     try {
       // Construir el payload
-      const deliveryNote = buildDeliveryNote(campana, inventarioConAPS);
+      const deliveryNote = buildDeliveryNote(campana, inventarioConAPS, campana.sap_database);
       console.log('========== DELIVERY NOTE JSON ==========');
+      console.log('SAP Database:', campana.sap_database);
       console.log(JSON.stringify(deliveryNote, null, 2));
       console.log('==========================================');
 
-      // Hacer POST a SAP
-      const result = await postDeliveryNoteToSAP(deliveryNote);
+      // Hacer POST a SAP (endpoint dinamico segun sap_database)
+      const result = await postDeliveryNoteToSAP(deliveryNote, campana.sap_database);
 
       if (result.success) {
         setPostSAPResult({
@@ -1415,6 +1416,17 @@ export function CampanaDetailPage() {
             <h3 className="text-xs md:text-sm font-semibold mb-2 md:mb-3 text-purple-300 uppercase tracking-wide">Cliente</h3>
             <div className="space-y-0">
               <InfoItem label="Cliente" value={campana.T0_U_Cliente} type="user" />
+              {campana.sap_database && (
+                <div className="flex items-center gap-2 px-3 py-1.5">
+                  <span className="text-zinc-500 text-xs">SAP BD:</span>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                    campana.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                    campana.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                    campana.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                    'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                  }`}>{campana.sap_database}</span>
+                </div>
+              )}
               <InfoItem label="Razon Social" value={campana.T0_U_RazonSocial} type="default" />
               <InfoItem label="CUIC" value={campana.cuic} type="id" />
               <InfoItem label="Agencia" value={campana.T0_U_Agencia} type="category" />

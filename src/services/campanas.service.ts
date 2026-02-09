@@ -1,7 +1,8 @@
 import api from '../lib/api';
 import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea, CampanaWithComments } from '../types';
 
-import { useEnvironmentStore, getEndpoints } from '../store/environmentStore';
+import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase } from '../store/environmentStore';
+import type { SapDatabase } from '../store/environmentStore';
 export type { CampanaWithComments };
 
 // SAP Configuration
@@ -27,6 +28,7 @@ export interface SAPDocumentLine {
 }
 
 export interface SAPDeliveryNote {
+  Series?: number;
   CardCode: string;
   NumAtCard: string;
   Comments: string;
@@ -318,7 +320,8 @@ export interface ComentarioRevisionArte {
 // Función para construir el payload de DeliveryNote para SAP
 export function buildDeliveryNote(
   campana: CampanaWithComments,
-  inventarioAPS: InventarioConAPS[]
+  inventarioAPS: InventarioConAPS[],
+  sapDatabase?: string | null
 ): SAPDeliveryNote {
   // Obtener valores únicos de APS
   const uniqueAPS = [...new Set(inventarioAPS.map(item => item.aps))];
@@ -359,7 +362,9 @@ export function buildDeliveryNote(
   });
 
   // Construir el objeto DeliveryNote completo
+  const series = sapDatabase ? getSeriesForSapDatabase(sapDatabase as SapDatabase) : 4;
   const deliveryNote: SAPDeliveryNote = {
+    Series: series,
     CardCode: campana.card_code || 'IMU00351',
     NumAtCard: campana.id?.toString() || '',
     Comments: campana.comentario_cambio_status || '',
@@ -385,9 +390,13 @@ export function buildDeliveryNote(
 }
 
 // Función para hacer POST a SAP
-export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote): Promise<SAPPostResponse> {
+export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote, sapDatabase?: string | null): Promise<SAPPostResponse> {
   try {
-    const response = await fetch(`${SAP_BASE_URL}/delivery-notes-test`, {
+    const endpoint = sapDatabase
+      ? getDeliveryNotesEndpoint(sapDatabase as SapDatabase)
+      : `${SAP_BASE_URL}/delivery-notes-test`;
+
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -398,11 +407,12 @@ export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote): Prom
     const data = await response.json();
     console.log('========== SAP RESPONSE ==========');
     console.log('Status:', response.status);
+    console.log('Endpoint:', endpoint);
+    console.log('Series:', deliveryNote.Series);
     console.log('Response data:', JSON.stringify(data, null, 2));
     console.log('==================================');
 
-    const environment = useEnvironmentStore.getState().environment;
-    const envLabel = environment === 'test' ? 'pruebas' : 'producción';
+    const envLabel = sapDatabase || 'TEST';
 
     // Extraer mensaje de error detallado de SAP
     
@@ -411,7 +421,7 @@ export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote): Prom
         const sapError = data.details.error.message.value;
         if (sapError.includes('Invalid BP code')) {
           const cardCode = sapError.match(/'([^']+)'/)?.[1] || '';
-          return `El CardCode '${cardCode}' no existe en el ambiente de ${envLabel} de SAP`;
+          return `El CardCode '${cardCode}' no existe en el ambiente ${envLabel} de SAP`;
         }
         if (sapError.includes('is inactive')) {
           return `Error SAP: ${sapError}`;
