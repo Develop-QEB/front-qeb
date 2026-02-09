@@ -620,7 +620,7 @@ export function CampanasPage() {
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
   // Estados para filtros/ordenamiento/agrupación con popups
-  const [sortField, setSortField] = useState<string | null>('fecha_inicio');
+  const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
   const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
@@ -1133,7 +1133,7 @@ export function CampanasPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || debouncedSearch || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== 'fecha_inicio');
+  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || debouncedSearch || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null);
 
   // Get unique values for each field (for advanced filter dropdowns)
   const getUniqueFieldValues = useMemo(() => {
@@ -1171,7 +1171,7 @@ export function CampanasPage() {
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
     setSelectedCatorcenaInicio('');
-    setSortField('fecha_inicio');
+    setSortField(null);
     setSortDirection('desc');
     setActiveGroupings([]);
     setExpandedGroups(new Set());
@@ -1708,7 +1708,7 @@ export function CampanasPage() {
                   options={['fecha_inicio', 'nombre', 'cliente_nombre', 'status']}
                   value={sortField || ''}
                   onChange={(val) => { setSortField(val); setPage(1); }}
-                  onClear={() => { setSortField('fecha_inicio'); setPage(1); }}
+                  onClear={() => { setSortField(null); setPage(1); }}
                 />
                 <button
                   onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
@@ -1792,7 +1792,7 @@ export function CampanasPage() {
                   | Agrupado por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
                 </span>
               )}
-              {sortField && sortField !== 'fecha_inicio' && (
+              {sortField && (
                 <span className="text-zinc-500">| Ordenado por {SORT_FIELDS.find(f => f.field === sortField)?.label} ({sortDirection === 'asc' ? '↑' : '↓'})</span>
               )}
             </div>
