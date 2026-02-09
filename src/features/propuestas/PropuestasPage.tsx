@@ -1235,7 +1235,16 @@ export function PropuestasPage() {
           <span className="text-zinc-400 text-sm">{formatDate(item.fecha)}</span>
         </td>
         <td className="px-4 py-3">
-          <span className="text-white text-sm font-medium">{item.marca_nombre || item.articulo || '-'}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-white text-sm font-medium">{item.marca_nombre || item.articulo || '-'}</span>
+            {item.sap_database && (
+              <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
+                item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+              }`}>{item.sap_database}</span>
+            )}
+          </div>
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-1.5 align-middle">

@@ -821,7 +821,16 @@ export function SolicitudesPage() {
         </td>
         <td className="px-4 py-3">
           <div>
-            <span className="font-semibold text-white">{item.razon_social || '-'}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-white">{item.razon_social || '-'}</span>
+              {item.sap_database && (
+                <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
+                  item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                  item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                  'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                }`}>{item.sap_database}</span>
+              )}
+            </div>
             {item.cuic && (
               <div className="text-xs text-zinc-500">CUIC: {item.cuic}</div>
             )}

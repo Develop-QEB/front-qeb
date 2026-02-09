@@ -73,6 +73,12 @@ export interface Cliente {
   T2_U_Producto: string | null;
   T2_U_ValidFrom: string | null;
   T2_U_ValidTo: string | null;
+  // SAP database origin
+  sap_database?: string | null;
+  card_code?: string | null;
+  salesperson_code?: number | null;
+  ACA_U_SAPCode?: string | null;
+  ASESOR_U_SAPCode_Original?: string | null;
 }
 
 // Proveedor - basado en tabla 'proveedores'
@@ -184,6 +190,9 @@ export interface Solicitud {
   IMU: number;
   archivo: string | null;
   tipo_archivo: string | null;
+  card_code?: string | null;
+  salesperson_code?: number | null;
+  sap_database?: string | null;
 }
 
 export interface SolicitudStats {
@@ -302,6 +311,7 @@ export interface Campana {
   // SAP integration fields
   card_code?: string | null;
   salesperson_code?: number | null;
+  sap_database?: string | null;
 }
 
 export interface CampanaStats {

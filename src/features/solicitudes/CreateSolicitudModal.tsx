@@ -5,9 +5,11 @@ import {
   Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw, AlertTriangle, Pencil
 } from 'lucide-react';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
+import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
-import { getSapCache, setSapCache, SAP_CACHE_KEYS, getCacheTimestamp, clearSapCache } from '../../lib/sapCache';
-import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
+import { getSapCache, setSapCache, SAP_CACHE_KEYS, clearSapCache } from '../../lib/sapCache';
+import { SAP_BASE_URL } from '../../store/environmentStore';
+import type { SapDatabase } from '../../store/environmentStore';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
 
@@ -348,7 +350,6 @@ interface SAPCuicItem {
   T0_U_Cliente: string;
   T1_U_UnidadNegocio: string;
   T0_U_Agencia: string;
-  // Usar los campos correctos de Asesor
   ASESOR_U_IDAsesor: string;
   ASESOR_U_Asesor: string;
   T1_U_IDMarca: number;
@@ -359,6 +360,7 @@ interface SAPCuicItem {
   T2_U_Categoria: string;
   ACA_U_SAPCode: string;
   ASESOR_U_SAPCode_Original?: number;
+  sap_database?: string | null;
 }
 
 interface SAPArticulo {
@@ -743,47 +745,44 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // State for forcing SAP refresh
   const [forceRefreshSap, setForceRefreshSap] = useState(0);
 
-  // Environment for SAP endpoints
-  const environment = useEnvironmentStore((state) => state.environment);
-  const endpoints = getEndpoints('test'); // Forzar test por ahora
-  const isTestMode = environment === 'test';
+  // SAP database filter for CUIC selector
+  const [sapDbFilter, setSapDbFilter] = useState<SapDatabase | 'ALL'>('ALL');
 
-  // Fetch ALL CUIC data from SAP with cache
-  const { data: cuicData, isLoading: cuicLoading, refetch: refetchCuic, isFetching: cuicFetching } = useQuery({
-    queryKey: ['sap-cuic-all', forceRefreshSap],
+  // Fetch CUIC data from local DB instead of SAP
+  const { data: cuicDataRaw, isLoading: cuicLoading, refetch: refetchCuic, isFetching: cuicFetching } = useQuery({
+    queryKey: ['clientes-full-for-solicitud'],
     queryFn: async () => {
-      // Try cache first (unless forcing refresh)
-      if (forceRefreshSap === 0) {
-        const cached = getSapCache<SAPCuicItem[]>(SAP_CACHE_KEYS.CUIC);
-        if (cached && cached.length > 0) {
-          return cached;
-        }
-      }
-      // Fetch from SAP
-      try {
-        const response = await fetch(endpoints.cuic);
-        if (!response.ok) throw new Error('Error fetching CUIC data');
-        const data = await response.json();
-        const items = (data.value || data) as SAPCuicItem[];
-        // Save to cache
-        if (items && items.length > 0) {
-          setSapCache(SAP_CACHE_KEYS.CUIC, items);
-        }
-        return items;
-      } catch (error) {
-        // If fetch fails, try to return cached data
-        const cached = getSapCache<SAPCuicItem[]>(SAP_CACHE_KEYS.CUIC);
-        if (cached && cached.length > 0) {
-          console.warn('SAP fetch failed, using cached data');
-          return cached;
-        }
-        throw error;
-      }
+      const result = await clientesService.getAllFull();
+      // Map to SAPCuicItem-compatible format
+      return (result.data || []).map(c => ({
+        CUIC: c.CUIC!,
+        T0_U_RazonSocial: c.T0_U_RazonSocial || '',
+        T0_U_Cliente: c.T0_U_Cliente || '',
+        T1_U_UnidadNegocio: c.T1_U_UnidadNegocio || '',
+        T0_U_Agencia: c.T0_U_Agencia || '',
+        ASESOR_U_IDAsesor: c.ASESOR_U_IDAsesor || '',
+        ASESOR_U_Asesor: c.ASESOR_U_Asesor || '',
+        T1_U_IDMarca: c.T1_U_IDMarca || 0,
+        T2_U_Marca: c.T2_U_Marca || '',
+        T2_U_IDProducto: c.T2_U_IDProducto || 0,
+        T2_U_Producto: c.T2_U_Producto || '',
+        T2_U_IDCategoria: c.T2_U_IDCategoria || 0,
+        T2_U_Categoria: c.T2_U_Categoria || '',
+        ACA_U_SAPCode: c.card_code || '',
+        ASESOR_U_SAPCode_Original: c.salesperson_code ?? undefined,
+        sap_database: c.sap_database || null,
+      }));
     },
     enabled: isOpen,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: 1,
+    staleTime: 2 * 60 * 1000,
   });
+
+  // Filter cuicData by selected SAP database
+  const cuicData = useMemo(() => {
+    if (!cuicDataRaw) return [];
+    if (sapDbFilter === 'ALL') return cuicDataRaw;
+    return cuicDataRaw.filter(c => c.sap_database === sapDbFilter);
+  }, [cuicDataRaw, sapDbFilter]);
 
   // Fetch ALL articulos from SAP with cache
   const { data: articulosData, isLoading: articulosLoading, refetch: refetchArticulos, isFetching: articulosFetching } = useQuery({
@@ -798,7 +797,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
       // Fetch from SAP
       try {
-        const response = await fetch(endpoints.articulos);
+        const response = await fetch(`${SAP_BASE_URL}/articulos`);
         if (!response.ok) throw new Error('Error fetching articulos data');
         const data = await response.json();
         const items = (data.value || data) as SAPArticulo[];
@@ -822,15 +821,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     retry: 1,
   });
 
-  // Function to force refresh SAP data
+  // Function to force refresh data
   const handleRefreshSap = () => {
     clearSapCache();
     setForceRefreshSap(prev => prev + 1);
+    queryClient.invalidateQueries({ queryKey: ['clientes-full-for-solicitud'] });
   };
-
-  // Get cache timestamps for display
-  const cuicCacheTime = getCacheTimestamp(SAP_CACHE_KEYS.CUIC);
-  const articulosCacheTime = getCacheTimestamp(SAP_CACHE_KEYS.ARTICULOS);
 
   // Fetch formatos based on selected ciudades
   const { data: formatosByCiudades } = useQuery({
@@ -1277,6 +1273,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       categoria_nombre: selectedCuic.T2_U_Categoria,
       card_code: selectedCuic.ACA_U_SAPCode,
       salesperson_code: selectedCuic.ASESOR_U_SAPCode_Original,
+      sap_database: (selectedCuic as any).sap_database || null,
       nombre_campania: nombreCampania,
       descripcion,
       notas,
@@ -1316,12 +1313,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Populate form when editing
   useEffect(() => {
-    if (isEditMode && editSolicitudData && cuicData && articulosData && catorcenasData?.data) {
+    if (isEditMode && editSolicitudData && cuicDataRaw && articulosData && catorcenasData?.data) {
       const sol = editSolicitudData.solicitud;
 
-      // Find the CUIC item from SAP data - cuic is stored as string, CUIC from SAP is number
+      // Find the CUIC item from local DB data - cuic is stored as string, CUIC is number
       const solCuic = sol.cuic ? parseInt(sol.cuic, 10) : null;
-      const cuicItem = cuicData.find(c => c.CUIC === solCuic);
+      const cuicItem = cuicDataRaw.find(c => c.CUIC === solCuic);
       if (cuicItem) {
         setSelectedCuic(cuicItem);
       }
@@ -1477,20 +1474,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold text-white flex items-center gap-3">
+            <h2 className="text-xl font-bold text-white">
               {isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud'}
-              {isTestMode && (
-                <span className="text-xs px-2 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">🧪 PRUEBAS</span>
-              )}
             </h2>
-            {/* SAP Status & Refresh */}
+            {/* Articulos status */}
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-800 rounded-lg text-[10px]">
-                <span className="text-zinc-500">CUIC:</span>
-                <span className={cuicData && cuicData.length > 0 ? 'text-emerald-400' : 'text-red-400'}>
-                  {cuicData?.length || 0}
-                </span>
-                <span className="text-zinc-600">|</span>
                 <span className="text-zinc-500">Art:</span>
                 <span className={articulosData && articulosData.length > 0 ? 'text-emerald-400' : 'text-red-400'}>
                   {articulosData?.length || 0}
@@ -1499,11 +1488,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               <button
                 type="button"
                 onClick={handleRefreshSap}
-                disabled={cuicFetching || articulosFetching}
+                disabled={articulosFetching}
                 className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
-                title={`Refrescar datos SAP${cuicCacheTime ? `\nÚltima actualización: ${cuicCacheTime.toLocaleString()}` : ''}`}
+                title="Refrescar artículos SAP"
               >
-                <RefreshCw className={`h-4 w-4 text-zinc-400 ${(cuicFetching || articulosFetching) ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 text-zinc-400 ${articulosFetching ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
@@ -1551,6 +1540,29 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <Building2 className="h-4 w-4 text-purple-400" />
                   CUIC / Cliente
                 </label>
+                {/* SAP Database filter buttons */}
+                <div className="flex items-center gap-1.5">
+                  {(['ALL', 'CIMU', 'TEST', 'TRADE'] as const).map(db => (
+                    <button
+                      key={db}
+                      type="button"
+                      onClick={() => { setSapDbFilter(db); setSelectedCuic(null); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                        sapDbFilter === db
+                          ? db === 'ALL' ? 'bg-purple-600 text-white border-purple-500'
+                          : db === 'CIMU' ? 'bg-blue-600 text-white border-blue-500'
+                          : db === 'TEST' ? 'bg-amber-600 text-white border-amber-500'
+                          : 'bg-emerald-600 text-white border-emerald-500'
+                          : 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'
+                      }`}
+                    >
+                      {db === 'ALL' ? 'Todos' : db}
+                    </button>
+                  ))}
+                  <span className="text-[10px] text-zinc-500 ml-2">
+                    {cuicData?.length || 0} clientes
+                  </span>
+                </div>
                 <SearchableSelect
                   label="Seleccionar CUIC"
                   options={cuicData || []}
@@ -1562,17 +1574,37 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   searchKeys={['T2_U_Marca', 'T2_U_Producto', 'T0_U_RazonSocial', 'CUIC']}
                   loading={cuicLoading}
                   renderOption={(item) => (
-                    <div>
-                      <div className="font-medium text-white">{item.T2_U_Marca || 'Sin marca'}</div>
-                      <div className="text-xs text-zinc-500">
-                        {item.CUIC} | {item.T2_U_Producto || 'Sin producto'}
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <div className="font-medium text-white">{item.T2_U_Marca || 'Sin marca'}</div>
+                        <div className="text-xs text-zinc-500">
+                          {item.CUIC} | {item.T2_U_Producto || 'Sin producto'}
+                        </div>
                       </div>
+                      {item.sap_database && (
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${
+                          item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                          item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                          item.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                        }`}>{item.sap_database}</span>
+                      )}
                     </div>
                   )}
                   renderSelected={(item) => (
-                    <div className="text-left">
-                      <div className="font-medium">{item.T2_U_Marca || 'Sin marca'}</div>
-                      <div className="text-[10px] text-zinc-500">{item.CUIC} | {item.T2_U_Producto || ''}</div>
+                    <div className="text-left flex items-center gap-2">
+                      <div className="flex-1">
+                        <div className="font-medium">{item.T2_U_Marca || 'Sin marca'}</div>
+                        <div className="text-[10px] text-zinc-500">{item.CUIC} | {item.T2_U_Producto || ''}</div>
+                      </div>
+                      {item.sap_database && (
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${
+                          item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                          item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                          item.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                        }`}>{item.sap_database}</span>
+                      )}
                     </div>
                   )}
                 />
@@ -1583,9 +1615,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
                   {/* Header con CUIC destacado */}
                   <div className="flex items-start justify-between mb-3 pb-3 border-b border-zinc-700/50">
-                    <div>
-                      <span className="text-[10px] text-purple-400 uppercase tracking-wider">CUIC</span>
-                      <div className="text-xl font-bold text-purple-400">{selectedCuic.CUIC}</div>
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <span className="text-[10px] text-purple-400 uppercase tracking-wider">CUIC</span>
+                        <div className="text-xl font-bold text-purple-400">{selectedCuic.CUIC}</div>
+                      </div>
+                      {selectedCuic.sap_database && (
+                        <span className={`text-[10px] font-semibold px-2 py-1 rounded-lg border ${
+                          selectedCuic.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                          selectedCuic.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                          selectedCuic.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                        }`}>{selectedCuic.sap_database}</span>
+                      )}
                     </div>
                     <div className="text-right">
                       <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Categoría</span>
