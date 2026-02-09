@@ -990,6 +990,21 @@ export function CampanaDetailPage() {
     }
   };
 
+  // Seleccionar/deseleccionar un grupo completo
+  const toggleGroupSelection = (groupItems: InventarioReservado[]) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      const groupIds = groupItems.map(i => i.rsv_ids);
+      const allSelected = groupIds.every(id => next.has(id));
+      if (allSelected) {
+        groupIds.forEach(id => next.delete(id));
+      } else {
+        groupIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
   // Toggle agrupación (sin APS)
   const toggleGrouping = (field: GroupByField) => {
     setActiveGroupings(prev => {
@@ -1984,26 +1999,49 @@ export function CampanaDetailPage() {
                         ? Object.values(nestedGroups!).reduce((sum, arr) => sum + arr.length, 0)
                         : items!.length;
 
+                      // Collect all items for this group (flat list for selection)
+                      const allGroupItems: InventarioReservado[] = isNested
+                        ? Object.values(nestedGroups!).flat()
+                        : items!;
+                      const allGroupIds = allGroupItems.map(i => i.rsv_ids);
+                      const allGroupSelected = allGroupIds.length > 0 && allGroupIds.every(id => selectedItems.has(id));
+                      const someGroupSelected = !allGroupSelected && allGroupIds.some(id => selectedItems.has(id));
+
                       return (
                         <div key={groupKey} className="border border-purple-900/30 rounded-lg overflow-hidden">
                           {/* Cabecera del grupo */}
-                          <button
-                            onClick={() => toggleGroup(groupKey)}
-                            className="w-full flex items-center gap-2 px-3 py-2 bg-purple-900/20 hover:bg-purple-900/30 transition-colors"
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="h-4 w-4 text-purple-400" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-purple-400" />
-                            )}
-                            <span className="text-xs font-medium text-purple-300">
-                              {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[0])?.label}:
-                            </span>
-                            <span className="text-xs text-white">{groupKey}</span>
-                            <span className="ml-auto text-[10px] text-muted-foreground">
-                              {totalItems} items
-                            </span>
-                          </button>
+                          <div className="flex items-center gap-2 px-3 py-2 bg-purple-900/20 hover:bg-purple-900/30 transition-colors">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleGroupSelection(allGroupItems); }}
+                              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                                allGroupSelected
+                                  ? 'bg-purple-600 border-purple-600'
+                                  : someGroupSelected
+                                    ? 'bg-purple-600/50 border-purple-600'
+                                    : 'border-purple-500/50 hover:border-purple-400'
+                              }`}
+                            >
+                              {allGroupSelected && <Check className="h-3 w-3 text-white" />}
+                              {someGroupSelected && <Minus className="h-3 w-3 text-white" />}
+                            </button>
+                            <button
+                              onClick={() => toggleGroup(groupKey)}
+                              className="flex items-center gap-2 flex-1 min-w-0"
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="h-4 w-4 text-purple-400" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-purple-400" />
+                              )}
+                              <span className="text-xs font-medium text-purple-300">
+                                {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[0])?.label}:
+                              </span>
+                              <span className="text-xs text-white">{groupKey}</span>
+                              <span className="ml-auto text-[10px] text-muted-foreground">
+                                {totalItems} items
+                              </span>
+                            </button>
+                          </div>
 
                           {/* Contenido expandido */}
                           {isExpanded && (
@@ -2014,26 +2052,44 @@ export function CampanaDetailPage() {
                                   {Object.entries(nestedGroups).map(([subGroupKey, subItems]) => {
                                     const subGroupFullKey = `${groupKey}-${subGroupKey}`;
                                     const isSubExpanded = expandedGroups.has(subGroupFullKey);
+                                    const subGroupIds = subItems.map(i => i.rsv_ids);
+                                    const allSubSelected = subGroupIds.length > 0 && subGroupIds.every(id => selectedItems.has(id));
+                                    const someSubSelected = !allSubSelected && subGroupIds.some(id => selectedItems.has(id));
 
                                     return (
                                       <div key={subGroupKey} className="border border-purple-900/20 rounded-lg overflow-hidden ml-2">
-                                        <button
-                                          onClick={() => toggleGroup(subGroupFullKey)}
-                                          className="w-full flex items-center gap-2 px-2 py-1.5 bg-purple-900/10 hover:bg-purple-900/20 transition-colors"
-                                        >
-                                          {isSubExpanded ? (
-                                            <ChevronDown className="h-3 w-3 text-pink-400" />
-                                          ) : (
-                                            <ChevronRight className="h-3 w-3 text-pink-400" />
-                                          )}
-                                          <span className="text-[10px] font-medium text-pink-300">
-                                            {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}:
+                                        <div className="flex items-center gap-2 px-2 py-1.5 bg-purple-900/10 hover:bg-purple-900/20 transition-colors">
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); toggleGroupSelection(subItems); }}
+                                            className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                                              allSubSelected
+                                                ? 'bg-pink-600 border-pink-600'
+                                                : someSubSelected
+                                                  ? 'bg-pink-600/50 border-pink-600'
+                                                  : 'border-pink-500/50 hover:border-pink-400'
+                                            }`}
+                                          >
+                                            {allSubSelected && <Check className="h-2.5 w-2.5 text-white" />}
+                                            {someSubSelected && <Minus className="h-2.5 w-2.5 text-white" />}
+                                          </button>
+                                          <button
+                                            onClick={() => toggleGroup(subGroupFullKey)}
+                                            className="flex items-center gap-2 flex-1 min-w-0"
+                                          >
+                                            {isSubExpanded ? (
+                                              <ChevronDown className="h-3 w-3 text-pink-400" />
+                                            ) : (
+                                              <ChevronRight className="h-3 w-3 text-pink-400" />
+                                            )}
+                                            <span className="text-[10px] font-medium text-pink-300">
+                                              {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}:
+                                            </span>
+                                            <span className="text-[10px] text-white">{subGroupKey}</span>
+                                            <span className="ml-auto text-[10px] text-muted-foreground">
+                                              {subItems.length}
                                           </span>
-                                          <span className="text-[10px] text-white">{subGroupKey}</span>
-                                          <span className="ml-auto text-[10px] text-muted-foreground">
-                                            {subItems.length}
-                                          </span>
-                                        </button>
+                                          </button>
+                                        </div>
                                         {isSubExpanded && (
                                           <table className="w-full text-xs">
                                             <thead>
