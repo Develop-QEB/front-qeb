@@ -10660,13 +10660,19 @@ export function TareaSeguimientoPage() {
 
   // Auto-switch si el tab activo fue ocultado por tipo de inventario
   useEffect(() => {
-    if (activeMainTab === 'programacion' && !shouldShowProgramacionTab) {
-      setActiveMainTab('atender');
+    const needsSwitch =
+      (activeMainTab === 'programacion' && !shouldShowProgramacionTab) ||
+      (activeMainTab === 'impresiones' && !shouldShowImpresionesTab);
+
+    if (needsSwitch) {
+      // Redirigir al primer tab disponible según permisos
+      if (permissions.canSeeTabSubirArtes) setActiveMainTab('versionario');
+      else if (permissions.canSeeTabRevisarAprobar) setActiveMainTab('atender');
+      else if (permissions.canSeeTabProgramacion && shouldShowProgramacionTab) setActiveMainTab('programacion');
+      else if (permissions.canSeeTabImpresiones && shouldShowImpresionesTab) setActiveMainTab('impresiones');
+      else if (permissions.canSeeTabValidacionInstalacion) setActiveMainTab('testigo');
     }
-    if (activeMainTab === 'impresiones' && !shouldShowImpresionesTab) {
-      setActiveMainTab('atender');
-    }
-  }, [activeMainTab, shouldShowProgramacionTab, shouldShowImpresionesTab]);
+  }, [activeMainTab, shouldShowProgramacionTab, shouldShowImpresionesTab, permissions]);
 
   // Obtener valores únicos para los selectores de filtros
   const getUniqueValuesVersionario = useMemo(() => {
