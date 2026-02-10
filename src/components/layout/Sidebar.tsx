@@ -25,8 +25,6 @@ type PrefetchKey = 'prefetchClientes' | 'prefetchProveedores' | 'prefetchSolicit
 
 type PermissionKey = 'canSeeDashboard' | 'canSeeClientes' | 'canSeeProveedores' | 'canSeeSolicitudes' | 'canSeePropuestas' | 'canSeeCampanas' | 'canSeeInventarios';
 
-// IDs de usuarios con acceso a Inventarios (Mario, Jos, Akary)
-const INVENTARIOS_ALLOWED_USER_IDS = [1057460, 1057462, 1057581];
 
 const navigation: { name: string; href: string; icon: React.ElementType; prefetchKey?: PrefetchKey; permissionKey: PermissionKey }[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, permissionKey: 'canSeeDashboard' },
@@ -64,10 +62,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     // Verificar permiso por rol
     if (!permissions[item.permissionKey]) {
       return false;
-    }
-    // Inventarios tiene restricción adicional por ID de usuario
-    if (item.href === '/inventarios') {
-      return user && INVENTARIOS_ALLOWED_USER_IDS.includes(user.id);
     }
     return true;
   });

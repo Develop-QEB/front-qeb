@@ -27,9 +27,6 @@ import { getPermissions } from './lib/permissions';
 // IDs de usuarios programadores con acceso a /dev/tickets
 const DEV_USERS_IDS = [1057460, 1057462]; // Mario, Jos
 
-// IDs de usuarios con acceso a Inventarios (Mario, Jos, Akary)
-const INVENTARIOS_ALLOWED_USER_IDS = [1057460, 1057462, 1057581];
-
 // Componente para la ruta principal - redirige según permisos
 function HomeRoute() {
   const user = useAuthStore((state) => state.user);
@@ -48,7 +45,7 @@ function InventariosRoute() {
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
 
-  if (!user || !permissions.canSeeInventarios || !INVENTARIOS_ALLOWED_USER_IDS.includes(user.id)) {
+  if (!user || !permissions.canSeeInventarios) {
     return <Navigate to="/solicitudes" replace />;
   }
   return <InventariosPage />;
