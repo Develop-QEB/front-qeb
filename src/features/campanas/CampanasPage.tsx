@@ -2069,17 +2069,17 @@ export function CampanasPage() {
                             ) : (
                               <div className="space-y-2">
                                 {apsAgrupados.map(apsGroup => {
-                                  const apsKey = `${campana.id}-${apsGroup.aps}`;
+                                  const apsKey = `${campana.id}-${apsGroup.aps ?? 'sin-aps'}`;
                                   const isAPSExpanded = expandedAPS.has(apsKey);
                                   return (
-                                    <div key={apsGroup.aps} className="border border-zinc-800/50 rounded-lg overflow-hidden">
+                                    <div key={apsGroup.aps ?? 'sin-aps'} className="border border-zinc-800/50 rounded-lg overflow-hidden">
                                       <button
                                         onClick={() => toggleAPS(campana.id, apsGroup.aps)}
                                         className="w-full flex items-center gap-2 px-3 py-2 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all"
                                       >
                                         {isAPSExpanded ? <ChevronDown className="h-3 w-3 text-zinc-400" /> : <ChevronRight className="h-3 w-3 text-zinc-400" />}
                                         <Package className="h-3 w-3 text-emerald-400" />
-                                        <span className="text-xs text-white font-medium">APS {apsGroup.aps}</span>
+                                        <span className="text-xs text-white font-medium">{apsGroup.aps ? `APS ${apsGroup.aps}` : 'Sin APS'}</span>
                                         <span className="text-[10px] text-zinc-500">{apsGroup.totalItems} ubicaciones</span>
                                       </button>
                                       {isAPSExpanded && (
