@@ -15,6 +15,7 @@ import { formatCurrency } from '../../lib/utils';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
+import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketPropuesta, useSocketEquipos } from '../../hooks/useSocket';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
@@ -728,7 +729,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         const response = await fetch(getEndpoints(useEnvironmentStore.getState().environment).articulos);
         if (!response.ok) throw new Error('Error fetching articulos');
         const data = await response.json();
-        return (data.value || data) as SAPArticulo[];
+        return filterAllowedArticulos((data.value || data) as SAPArticulo[]);
       } catch {
         return [] as SAPArticulo[];
       }

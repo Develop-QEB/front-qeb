@@ -9,6 +9,7 @@ import { inventariosService } from '../services/inventarios.service';
 import { campanasService } from '../services/campanas.service';
 import { propuestasService } from '../services/propuestas.service';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS } from '../lib/sapCache';
+import { filterAllowedArticulos } from '../config/allowedDigitalArticles';
 
 // SAP API URL
 const SAP_BASE_URL = 'https://binding-convinced-ride-foto.trycloudflare.com';
@@ -93,7 +94,8 @@ export function usePrefetch() {
         const response = await fetch(`${SAP_BASE_URL}/articulos`);
         if (!response.ok) throw new Error('Error fetching Articulos');
         const data = await response.json();
-        const items = (data.value || data) as SAPArticulo[];
+        const raw = (data.value || data) as SAPArticulo[];
+        const items = filterAllowedArticulos(raw);
         if (items && items.length > 0) {
           setSapCache(SAP_CACHE_KEYS.ARTICULOS, items);
         }

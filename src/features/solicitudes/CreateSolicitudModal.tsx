@@ -9,6 +9,7 @@ import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS, clearSapCache } from '../../lib/sapCache';
 import { SAP_BASE_URL } from '../../store/environmentStore';
+import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import type { SapDatabase } from '../../store/environmentStore';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
@@ -800,7 +801,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         const response = await fetch(`${SAP_BASE_URL}/articulos`);
         if (!response.ok) throw new Error('Error fetching articulos data');
         const data = await response.json();
-        const items = (data.value || data) as SAPArticulo[];
+        const raw = (data.value || data) as SAPArticulo[];
+        const items = filterAllowedArticulos(raw);
         // Save to cache
         if (items && items.length > 0) {
           setSapCache(SAP_CACHE_KEYS.ARTICULOS, items);
