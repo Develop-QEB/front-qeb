@@ -753,6 +753,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: false,
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
     canSeeGestionArtes: true,
