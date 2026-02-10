@@ -63,6 +63,7 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
     'Call Center CON',
     'Gerente de Operaciones CON',
     'Jefe de Operaciones Digital',
+    'Gerente Digital (Operaciones)',
     'Gerentes de Operaciones Plazas (GDL y MTY)',
     'Jefes de Operaciones Plazas',
     'Supervisores de Operaciones',

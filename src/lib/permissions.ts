@@ -24,6 +24,7 @@ export type UserRole =
   | 'Director de Operaciones'
   | 'Gerente de Operaciones CON'
   | 'Jefe de Operaciones Digital'
+  | 'Gerente Digital (Operaciones)'
   | 'Gerentes de Operaciones Plazas (GDL y MTY)'
   | 'Jefes de Operaciones Plazas'
   | 'Supervisores de Operaciones'
@@ -837,7 +838,6 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canExportOrdenesMontaje: false,
   },
   'Jefe de Operaciones Digital': {
-    // Solo lectura - permisos pendientes de validación de flujo
     canSeeDashboard: false,
     canSeeClientes: false,
     canSeeProveedores: false,
@@ -869,23 +869,85 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCompartirPropuesta: false,
     canBuscarInventarioEnModal: false,
 
+    // Campañas - solo visualización de estatus
     canEditCampanas: false,
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
+    canEditCampanaStatus: false,
     canSeeGestionArtes: true,
-    canEditGestionArtes: false,
-    canResolveProduccionTasks: false,
     canSeeOrdenesMontajeButton: false,
 
+    // Gestión de Artes - solo tab Programación, puede usarla y resolver tareas
+    canEditGestionArtes: true,
+    canResolveProduccionTasks: false,
     canSeeTabProgramacion: true,
-    canSeeTabImpresiones: true,
+    canSeeTabImpresiones: false,
     canSeeTabSubirArtes: false,
     canSeeTabRevisarAprobar: false,
-    canSeeTabTestigos: true,
-    canSeeTabValidacionInstalacion: true,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: false,
     canCreateTareasGestionArtes: false,
     canResolveRevisionArtesTasks: false,
-    canOpenTasks: false,
+    canOpenTasks: true,
+
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    canExportOrdenesMontaje: false,
+  },
+  'Gerente Digital (Operaciones)': {
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas - solo visualización de estatus
+    canEditCampanas: false,
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
+    canEditCampanaStatus: false,
+    canSeeGestionArtes: true,
+    canSeeOrdenesMontajeButton: false,
+
+    // Gestión de Artes - solo tab Programación, puede usarla y resolver tareas
+    canEditGestionArtes: true,
+    canResolveProduccionTasks: false,
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: false,
+    canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false,
+    canOpenTasks: true,
 
     canCreateInventarios: false,
     canEditInventarios: false,
