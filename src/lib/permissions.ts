@@ -812,6 +812,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: false,
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
     canSeeGestionArtes: true,
@@ -1386,6 +1387,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas
     canEditCampanas: false, // Ocultar botón editar
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false, // No pueden asignar APs
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Pueden ver gestión de artes
@@ -1452,6 +1454,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas
     canEditCampanas: false,
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
     canSeeGestionArtes: true,
@@ -1518,6 +1521,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas
     canEditCampanas: false,
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
     canSeeGestionArtes: true,
