@@ -567,7 +567,7 @@ export function CampanaDetailPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // Estado para agrupación (con APS)
-  const [activeGroupingsAPS, setActiveGroupingsAPS] = useState<GroupByField[]>(['inicio_periodo', 'articulo', 'aps']);
+  const [activeGroupingsAPS, setActiveGroupingsAPS] = useState<GroupByField[]>(['inicio_periodo', 'aps', 'articulo']);
   const [showGroupingConfigAPS, setShowGroupingConfigAPS] = useState(false);
   const [expandedGroupsAPS, setExpandedGroupsAPS] = useState<Set<string>>(new Set());
 

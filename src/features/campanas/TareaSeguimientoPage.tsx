@@ -239,6 +239,8 @@ interface ArteDecision {
   decision: DecisionArte;
   motivoRechazo?: string; // Usado para rechazo (obligatorio)
   comentarioAprobacion?: string; // Usado para aprobación (opcional)
+  imagenRechazoFile?: File; // Archivo local antes de subir (opcional)
+  imagenRechazoPreview?: string; // URL.createObjectURL para preview
 }
 
 type DecisionesState = Record<string, ArteDecision>;
@@ -423,29 +425,73 @@ function FlujoBadges({ items, tab }: { items: InventoryRow[]; tab: MainTab }) {
 }
 
 // Iconos de flujo de gestión de artes por grupo
-// Muestra los 5 pasos del flujo con colores según el progreso de los items
+// Muestra los pasos del flujo con colores según el progreso de los items
 // Oculta Programación si el grupo es Tradicional, Impresiones si es Digital
-function FlowStepIcons({ items }: { items: InventoryRow[] }) {
+// Recibe mapas de estado de impresión, programación e instalación para sincronizar
+// correctamente con los tabs de gestión de artes
+function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }: {
+  items: InventoryRow[];
+  impresionMap?: Map<string, { estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido'; titulo: string }>;
+  programacionMap?: Map<string, { estado: 'en_programacion' | 'programado' }>;
+  instalacionMap?: Map<string, { estado: 'en_proceso' | 'validar_instalacion' | 'instalado'; titulo: string; tareaId: number }>;
+}) {
   if (items.length === 0) return null;
 
-  // Determinar tipo del grupo (siempre es homogéneo: o todo tradicional o todo digital)
   const isDigital = items[0]?.tradicional_digital === 'Digital';
+  const total = items.length;
 
-  // Contar items por estado real del flujo (independiente del tab activo)
+  // Helper: obtener rsv_ids de un item
+  const getRsvIds = (item: InventoryRow): string[] =>
+    item.rsv_id?.split(',').map(id => id.trim()).filter(Boolean) || [];
+
+  // 1. Subir Artes: verde cuando NO quedan items sin arte (todos tienen archivo_arte)
   const conArte = items.filter(i => i.archivo_arte).length;
+  const sinArte = total - conArte;
+
+  // 2. Revisar y Aprobar: verde cuando TODOS están en 'aprobado'
   const aprobados = items.filter(i => i.estado_arte === 'aprobado').length;
   const enRevision = items.filter(i => i.estado_arte === 'en_revision').length;
-  const enImpresion = items.filter(i => (i as any).estado_impresion === 'en_impresion' || (i as any).tarea_tipo === 'Impresión').length;
-  const enProgramacion = items.filter(i => (i as any).estado_programacion === 'programado' || (i as any).tarea_tipo === 'Programación').length;
-  const instalados = items.filter(i => {
-    const st = (i as any).tarea_instalacion_estatus;
-    return st === 'Atendido' || st === 'Completado' || (i as any).testigo_status === 'validado';
-  }).length;
-  const total = items.length;
+  const rechazados = items.filter(i => i.estado_arte === 'rechazado').length;
+
+  // 3. Impresiones (tradicional): verde cuando TODOS están en 'recibido'
+  let impRecibidos = 0;
+  let impEnProceso = 0;
+  if (impresionMap) {
+    items.forEach(item => {
+      const rsvIds = getRsvIds(item);
+      const info = rsvIds.map(id => impresionMap.get(id)).find(i => i);
+      if (info?.estado === 'recibido') impRecibidos++;
+      else if (info) impEnProceso++;
+    });
+  }
+
+  // 4. Programación (digital): verde cuando TODOS están en 'programado'
+  let progProgramados = 0;
+  let progEnProceso = 0;
+  if (programacionMap) {
+    items.forEach(item => {
+      const rsvIds = getRsvIds(item);
+      const info = rsvIds.map(id => programacionMap.get(id)).find(i => i);
+      if (info?.estado === 'programado') progProgramados++;
+      else if (info) progEnProceso++;
+    });
+  }
+
+  // 5. Validar Instalación: verde cuando TODOS están en 'instalado'
+  let instInstalados = 0;
+  let instEnProceso = 0;
+  if (instalacionMap) {
+    items.forEach(item => {
+      const rsvIds = getRsvIds(item);
+      const info = rsvIds.map(id => instalacionMap.get(id)).find(i => i);
+      if (info?.estado === 'instalado') instInstalados++;
+      else if (info) instEnProceso++;
+    });
+  }
 
   // Determinar color de cada icono:
   // verde = todos los items completaron este paso
-  // amber = algunos items están en este paso
+  // amber = algunos items están en este paso (parcial)
   // zinc = ningún item ha llegado a este paso
   const getColor = (completed: number, inProgress: number) => {
     if (completed === total) return 'text-green-400';
@@ -453,16 +499,11 @@ function FlowStepIcons({ items }: { items: InventoryRow[] }) {
     return 'text-zinc-600';
   };
 
-  // 1. Subir Artes: verde si tienen arte asignado
-  const uploadColor = getColor(conArte, total - conArte > 0 ? total - conArte : 0);
-  // 2. Revisar y Aprobar: verde si aprobados, amber si en revisión
-  const eyeColor = getColor(aprobados, enRevision);
-  // 3. Programación (solo digital): verde si programados
-  const monitorColor = getColor(enProgramacion, 0);
-  // 4. Impresiones (solo tradicional): verde si en impresión o completado
-  const printerColor = getColor(enImpresion, 0);
-  // 5. Validar Instalación: verde si instalados
-  const cameraColor = getColor(instalados, 0);
+  const uploadColor = getColor(conArte, sinArte > 0 && conArte > 0 ? sinArte : 0);
+  const eyeColor = getColor(aprobados, enRevision + rechazados);
+  const printerColor = getColor(impRecibidos, impEnProceso);
+  const monitorColor = getColor(progProgramados, progEnProceso);
+  const cameraColor = getColor(instInstalados, instEnProceso);
 
   return (
     <span className="inline-flex items-center gap-1 ml-1">
@@ -2573,7 +2614,7 @@ function TaskDetailModal({
   artesExistentes: ArteExistente[];
   isLoadingArtes: boolean;
   onApprove: (reservaIds: number[], comentario?: string) => Promise<void>;
-  onReject: (reservaIds: number[], comentario: string) => Promise<void>;
+  onReject: (reservaIds: number[], comentario: string, imagenRechazoUrl?: string) => Promise<void>;
   onCorrect: (reservaIds: number[], instrucciones: string) => void;
   onUpdateArte: (reservaIds: number[], archivo: string) => void;
   onUpdateArteDigital: (reservaIds: number[], files: { file: File; spot: number }[], deleteArchivos?: string[]) => Promise<void>;
@@ -3463,14 +3504,23 @@ function TaskDetailModal({
 
   // === Funciones para el sistema de decisiones ===
   const handleDecisionChange = (key: string, decision: string) => {
-    setDecisiones(prev => ({
-      ...prev,
-      [key]: {
-        decision: (decision || null) as DecisionArte,
-        motivoRechazo: decision !== 'rechazar' ? undefined : prev[key]?.motivoRechazo,
-        comentarioAprobacion: decision !== 'aprobar' ? undefined : prev[key]?.comentarioAprobacion
+    setDecisiones(prev => {
+      const prevDecision = prev[key];
+      // Si cambia de rechazar a otra cosa, revocar y limpiar preview de imagen
+      if (prevDecision?.decision === 'rechazar' && decision !== 'rechazar' && prevDecision.imagenRechazoPreview) {
+        URL.revokeObjectURL(prevDecision.imagenRechazoPreview);
       }
-    }));
+      return {
+        ...prev,
+        [key]: {
+          decision: (decision || null) as DecisionArte,
+          motivoRechazo: decision !== 'rechazar' ? undefined : prevDecision?.motivoRechazo,
+          comentarioAprobacion: decision !== 'aprobar' ? undefined : prevDecision?.comentarioAprobacion,
+          imagenRechazoFile: decision !== 'rechazar' ? undefined : prevDecision?.imagenRechazoFile,
+          imagenRechazoPreview: decision !== 'rechazar' ? undefined : prevDecision?.imagenRechazoPreview,
+        }
+      };
+    });
     setValidationErrors([]);
   };
 
@@ -3486,6 +3536,24 @@ function TaskDetailModal({
       ...prev,
       [key]: { ...prev[key], comentarioAprobacion: comentario }
     }));
+  };
+
+  const handleImagenRechazoChange = (key: string, file: File | null) => {
+    setDecisiones(prev => {
+      const prevDecision = prev[key];
+      // Revocar objectURL previo para evitar memory leaks
+      if (prevDecision?.imagenRechazoPreview) {
+        URL.revokeObjectURL(prevDecision.imagenRechazoPreview);
+      }
+      return {
+        ...prev,
+        [key]: {
+          ...prevDecision,
+          imagenRechazoFile: file || undefined,
+          imagenRechazoPreview: file ? URL.createObjectURL(file) : undefined,
+        }
+      };
+    });
   };
 
   const validarDecisiones = (): boolean => {
@@ -3508,7 +3576,7 @@ function TaskDetailModal({
 
     try {
       const aprobados: { ids: number[]; comentario: string; items: InventoryRow[] }[] = [];
-      const rechazados: { ids: number[]; motivo: string; items: InventoryRow[] }[] = [];
+      const rechazados: { ids: number[]; motivo: string; items: InventoryRow[]; imagenFile?: File }[] = [];
 
       Object.entries(groupedInventory).forEach(([key, items]) => {
         const d = decisiones[key];
@@ -3520,7 +3588,7 @@ function TaskDetailModal({
           aprobados.push({ ids, comentario: d.comentarioAprobacion || '', items });
         }
         if (d?.decision === 'rechazar') {
-          rechazados.push({ ids, motivo: d.motivoRechazo || '', items });
+          rechazados.push({ ids, motivo: d.motivoRechazo || '', items, imagenFile: d.imagenRechazoFile });
         }
       });
 
@@ -3542,7 +3610,19 @@ function TaskDetailModal({
           `**${r.items.map(i => i.codigo_unico).join(', ')}:**\n${r.motivo}`
         ).join('\n\n---\n\n');
 
-        await onReject(todosIds, descripcion);
+        // Subir imagen de rechazo si existe (usar la primera que encuentre)
+        let imagenRechazoUrl: string | undefined;
+        const rechazoConImagen = rechazados.find(r => r.imagenFile);
+        if (rechazoConImagen?.imagenFile) {
+          try {
+            const uploaded = await campanasService.uploadArteFile(rechazoConImagen.imagenFile);
+            imagenRechazoUrl = uploaded.url;
+          } catch (err) {
+            console.warn('No se pudo subir la imagen de rechazo, continuando sin imagen:', err);
+          }
+        }
+
+        await onReject(todosIds, descripcion, imagenRechazoUrl);
       }
 
       // Marcar la tarea como completada (Atendido)
@@ -6222,6 +6302,30 @@ function TaskDetailModal({
                                 {motivoRechazo || 'Sin motivo especificado'}
                               </p>
                             </div>
+                            {/* Imagen de referencia del rechazo (si existe en evidencia) */}
+                            {(() => {
+                              try {
+                                const evidenciaData = task.evidencia ? JSON.parse(task.evidencia) : null;
+                                if (evidenciaData?.imagenRechazo) {
+                                  const imgUrl = getImageUrl(evidenciaData.imagenRechazo);
+                                  if (imgUrl) {
+                                    return (
+                                      <div>
+                                        <span className="text-zinc-400 text-xs uppercase tracking-wide">Imagen de referencia:</span>
+                                        <a href={imgUrl} target="_blank" rel="noopener noreferrer" className="block mt-1">
+                                          <img
+                                            src={imgUrl}
+                                            alt="Referencia del rechazo"
+                                            className="max-h-48 rounded-lg border border-red-500/30 hover:border-red-500/60 transition-colors cursor-pointer"
+                                          />
+                                        </a>
+                                      </div>
+                                    );
+                                  }
+                                }
+                              } catch { /* evidencia no es JSON válido, ignorar */ }
+                              return null;
+                            })()}
                             <p className="text-amber-400/80 text-xs mt-2">
                               ⚠️ Por favor corrige los artes y vuelve a enviar a revisión.
                             </p>
@@ -7196,9 +7300,9 @@ function TaskDetailModal({
                               />
                             </div>
                           )}
-                          {/* Textarea para motivo de rechazo (obligatorio) */}
+                          {/* Textarea para motivo de rechazo (obligatorio) + imagen opcional */}
                           {decisiones[groupKey]?.decision === 'rechazar' && (
-                            <div className="mt-2">
+                            <div className="mt-2 space-y-2">
                               <textarea
                                 placeholder="Escribe el motivo del rechazo (obligatorio)"
                                 value={decisiones[groupKey]?.motivoRechazo || ''}
@@ -7210,6 +7314,38 @@ function TaskDetailModal({
                                 }`}
                                 rows={2}
                               />
+                              {/* Input de imagen de referencia (opcional) */}
+                              <div>
+                                <label className="text-xs text-zinc-400 mb-1 block">Imagen de referencia (opcional)</label>
+                                {decisiones[groupKey]?.imagenRechazoPreview ? (
+                                  <div className="relative inline-block">
+                                    <img
+                                      src={decisiones[groupKey]?.imagenRechazoPreview}
+                                      alt="Preview rechazo"
+                                      className="h-24 rounded-lg border border-red-500/30 object-cover"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleImagenRechazoChange(groupKey, null)}
+                                      className="absolute -top-2 -right-2 bg-red-600 hover:bg-red-500 text-white rounded-full p-0.5"
+                                      title="Quitar imagen"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/gif,image/webp"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0] || null;
+                                      if (file) handleImagenRechazoChange(groupKey, file);
+                                      e.target.value = '';
+                                    }}
+                                    className="text-xs text-zinc-400 file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:bg-red-500/20 file:text-red-300 hover:file:bg-red-500/30"
+                                  />
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -10254,6 +10390,20 @@ export function TareaSeguimientoPage() {
     return map;
   }, [tareasAPI]);
 
+  // Mapa de rsv_id -> estado de programación (para FlowStepIcons)
+  const programacionStatusMap = useMemo(() => {
+    const map = new Map<string, { estado: 'en_programacion' | 'programado' }>();
+    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación');
+    tareasProgramacion.forEach(tarea => {
+      const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
+      const estado: 'en_programacion' | 'programado' = tarea.estatus === 'Completado' ? 'programado' : 'en_programacion';
+      ids.forEach(id => {
+        map.set(id, { estado });
+      });
+    });
+    return map;
+  }, [tareasAPI]);
+
   // Conteo de elementos por formato (Tradicional/Digital) para la tab activa
   const formatCounts = useMemo(() => {
     let data: InventoryRow[];
@@ -12890,7 +13040,6 @@ export function TareaSeguimientoPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <FlowStepIcons items={getAllLevel1Items()} />
                           <FlujoBadges items={getAllLevel1Items()} tab={activeMainTab} />
                           <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
                             {level1ItemCount}
@@ -13000,6 +13149,7 @@ export function TareaSeguimientoPage() {
                                               </div>
                                             </div>
                                             <div className="flex items-center gap-1">
+                                              <FlowStepIcons items={items} impresionMap={impresionStatusMap} programacionMap={programacionStatusMap} instalacionMap={instalacionStatusMap} />
                                               <FlujoBadges items={items} tab={activeMainTab} />
                                               <Badge className="bg-amber-600/20 text-amber-300 border-amber-500/20 text-[10px]">
                                                 {items.length}
@@ -13119,7 +13269,6 @@ export function TareaSeguimientoPage() {
                           </button>
                         </div>
                         <div className="flex items-center gap-1">
-                          <FlowStepIcons items={getAllLevel1Items()} />
                           <FlujoBadges items={getAllLevel1Items()} tab={activeMainTab} />
                           <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
                             {level1ItemCount} elemento{level1ItemCount !== 1 ? 's' : ''}
@@ -13225,6 +13374,7 @@ export function TareaSeguimientoPage() {
                                               </button>
                                             </div>
                                             <div className="flex items-center gap-1">
+                                              <FlowStepIcons items={items} impresionMap={impresionStatusMap} programacionMap={programacionStatusMap} instalacionMap={instalacionStatusMap} />
                                               <FlujoBadges items={items} tab={activeMainTab} />
                                               <span className="text-[10px] text-zinc-500">
                                                 {items.length} cara{items.length !== 1 ? 's' : ''}
@@ -13788,7 +13938,6 @@ export function TareaSeguimientoPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <FlowStepIcons items={allItems} />
                           <FlujoBadges items={allItems} tab={activeMainTab} />
                           {pendientesCount > 0 && (
                             <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
@@ -13908,6 +14057,7 @@ export function TareaSeguimientoPage() {
                                               </div>
                                             </div>
                                             <div className="flex items-center gap-1">
+                                              <FlowStepIcons items={items} impresionMap={impresionStatusMap} programacionMap={programacionStatusMap} instalacionMap={instalacionStatusMap} />
                                               <FlujoBadges items={items} tab={activeMainTab} />
                                               <Badge className="bg-amber-600/20 text-amber-300 border-amber-500/20 text-[10px]">
                                                 {items.length}
@@ -14467,22 +14617,26 @@ export function TareaSeguimientoPage() {
         onApprove={async (reservaIds, comentario) => {
           await updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Aprobado', comentario });
         }}
-        onReject={async (reservaIds, comentario) => {
+        onReject={async (reservaIds, comentario, imagenRechazoUrl) => {
           // Primero actualizar el estado a Rechazado
           await updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Rechazado', comentario });
           // Después de rechazar exitosamente, crear tarea de corrección para el creador original
           if (selectedTask && selectedTask.creador) {
-            await createTareaMutation.mutateAsync({
+            const tareaData: Parameters<typeof createTareaMutation.mutateAsync>[0] = {
               titulo: `Corrección de artes - Rechazo`,
               descripcion: `Artes rechazados con el siguiente motivo:
 
 ${comentario || 'Sin motivo especificado'}
 
 Por favor corrige los artes y vuelve a enviar a revisión.`,
-              tipo: 'Corrección',
+              tipo: 'Correccion',
               asignado: selectedTask.creador,
               ids_reservas: reservaIds.join(','),
-            });
+            };
+            if (imagenRechazoUrl) {
+              tareaData.evidencia = JSON.stringify({ tipo: 'correccion_rechazo', imagenRechazo: imagenRechazoUrl });
+            }
+            await createTareaMutation.mutateAsync(tareaData);
           }
         }}
         onCorrect={(reservaIds, instrucciones) => {
@@ -14498,7 +14652,7 @@ Por favor corrige los artes y vuelve a enviar a revisión.`,
 ${instrucciones || 'Sin instrucciones especificadas'}
 
 Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
-                  tipo: 'Corrección',
+                  tipo: 'Correccion',
                   asignado: selectedTask.creador,
                   ids_reservas: reservaIds.join(','),
                 });

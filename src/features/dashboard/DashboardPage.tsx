@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { GoogleMap, useLoadScript, Circle, InfoWindow } from '@react-google-maps/api';
 import { usePrefetch } from '../../hooks/usePrefetch';
@@ -22,6 +22,13 @@ import {
   ChevronDown,
   ChevronUp,
   MapPin,
+  Layers,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Plus,
+  Check,
+  Trash2,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { Skeleton } from '../../components/ui/skeleton';
@@ -717,42 +724,279 @@ function SimpleBarChart({ data, title }: { data: ChartData[]; title: string }) {
 }
 
 // Inventory Table with Pagination and Checkboxes
+// ============ TIPOS Y CONFIGURACIÓN DE FILTROS INVENTARIO ============
+type InvFilterOperator = '=' | '!=' | 'contains' | 'not_contains';
+
+interface InvFilterCondition {
+  id: string;
+  field: string;
+  operator: InvFilterOperator;
+  value: string;
+}
+
+interface InvFilterFieldConfig {
+  field: string;
+  label: string;
+  type: 'string' | 'number';
+}
+
+const INV_FILTER_FIELDS: InvFilterFieldConfig[] = [
+  { field: 'codigo_unico', label: 'ID', type: 'string' },
+  { field: 'plaza', label: 'Plaza', type: 'string' },
+  { field: 'municipio', label: 'Municipio', type: 'string' },
+  { field: 'mueble', label: 'Mueble', type: 'string' },
+  { field: 'tradicional_digital', label: 'Tipo', type: 'string' },
+  { field: 'estatus', label: 'Estatus', type: 'string' },
+  { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
+];
+
+type InvGroupByField = 'plaza' | 'municipio' | 'estatus' | 'tradicional_digital' | 'mueble';
+
+const INV_AVAILABLE_GROUPINGS: { field: InvGroupByField; label: string }[] = [
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'municipio', label: 'Municipio' },
+  { field: 'estatus', label: 'Estatus' },
+  { field: 'tradicional_digital', label: 'Tipo' },
+  { field: 'mueble', label: 'Mueble' },
+];
+
+const INV_OPERATORS: { value: InvFilterOperator; label: string }[] = [
+  { value: '=', label: 'Igual a' },
+  { value: '!=', label: 'Diferente de' },
+  { value: 'contains', label: 'Contiene' },
+  { value: 'not_contains', label: 'No contiene' },
+];
+
+function applyInventoryFilters(data: any[], filters: InvFilterCondition[]): any[] {
+  if (filters.length === 0) return data;
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = item[filter.field];
+      const filterValue = filter.value;
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+      switch (filter.operator) {
+        case '=': return strValue === strFilterValue;
+        case '!=': return strValue !== strFilterValue;
+        case 'contains': return strValue.includes(strFilterValue);
+        case 'not_contains': return !strValue.includes(strFilterValue);
+        default: return true;
+      }
+    });
+  });
+}
+
+function InvGroupHeader({ groupName, count, expanded, onToggle, level = 1 }: {
+  groupName: string; count: number; expanded: boolean; onToggle: () => void; level?: 1 | 2;
+}) {
+  const isLevel1 = level === 1;
+  return (
+    <tr
+      onClick={onToggle}
+      className={`border-b cursor-pointer transition-colors ${
+        isLevel1
+          ? 'bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20'
+          : 'bg-fuchsia-500/5 border-fuchsia-500/10 hover:bg-fuchsia-500/10'
+      }`}
+    >
+      <td colSpan={9} className={`px-5 py-3 ${isLevel1 ? '' : 'pl-10'}`}>
+        <div className="flex items-center gap-2">
+          {expanded ? (
+            <ChevronDown className={`h-4 w-4 ${isLevel1 ? 'text-purple-400' : 'text-fuchsia-400'}`} />
+          ) : (
+            <ChevronRight className={`h-4 w-4 ${isLevel1 ? 'text-purple-400' : 'text-fuchsia-400'}`} />
+          )}
+          <span className={`font-semibold ${isLevel1 ? 'text-white' : 'text-zinc-200 text-sm'}`}>
+            {groupName || 'Sin asignar'}
+          </span>
+          <span className={`px-2 py-0.5 rounded-full text-xs ${
+            isLevel1 ? 'bg-purple-500/20 text-purple-300' : 'bg-fuchsia-500/20 text-fuchsia-300'
+          }`}>
+            {count}
+          </span>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange, selectedIds, onSelectionChange }: {
   data: any[]; isLoading: boolean; page: number; totalPages: number; total: number; onPageChange: (p: number) => void;
   selectedIds: Set<number>; onSelectionChange: (ids: Set<number>) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
 
+  // Filter/Group/Sort state
+  const [invFilters, setInvFilters] = useState<InvFilterCondition[]>([]);
+  const [showInvFilterPopup, setShowInvFilterPopup] = useState(false);
+  const [invGroupings, setInvGroupings] = useState<InvGroupByField[]>([]);
+  const [showInvGroupPopup, setShowInvGroupPopup] = useState(false);
+  const [invSortField, setInvSortField] = useState<string | null>(null);
+  const [invSortDirection, setInvSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [showInvSortPopup, setShowInvSortPopup] = useState(false);
+  const [invExpandedGroups, setInvExpandedGroups] = useState<Set<string>>(new Set());
+
   const handleToggleItem = (id: number) => {
     const newSet = new Set(selectedIds);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
+    if (newSet.has(id)) newSet.delete(id); else newSet.add(id);
     onSelectionChange(newSet);
   };
 
+  const handleClearSelection = () => onSelectionChange(new Set());
+
+  // Filter functions
+  const addInvFilter = useCallback(() => {
+    setInvFilters(prev => [...prev, { id: `filter-${Date.now()}`, field: INV_FILTER_FIELDS[0].field, operator: '=', value: '' }]);
+  }, []);
+  const updateInvFilter = useCallback((id: string, updates: Partial<InvFilterCondition>) => {
+    setInvFilters(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+  }, []);
+  const removeInvFilter = useCallback((id: string) => {
+    setInvFilters(prev => prev.filter(f => f.id !== id));
+  }, []);
+  const clearInvFilters = useCallback(() => setInvFilters([]), []);
+  const toggleInvGrouping = useCallback((field: InvGroupByField) => {
+    setInvGroupings(prev => {
+      if (prev.includes(field)) return prev.filter(f => f !== field);
+      if (prev.length >= 2) return [prev[1], field];
+      return [...prev, field];
+    });
+  }, []);
+  const toggleInvGroup = (groupName: string) => {
+    setInvExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupName)) next.delete(groupName); else next.add(groupName);
+      return next;
+    });
+  };
+  const hasInvActiveFilters = invFilters.length > 0 || invGroupings.length > 0 || invSortField !== null;
+  const clearAllInvFilters = () => {
+    setInvFilters([]); setInvGroupings([]); setInvSortField(null); setInvSortDirection('asc'); setInvExpandedGroups(new Set());
+  };
+
+  // Unique values for autocomplete
+  const invUniqueValues = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    INV_FILTER_FIELDS.forEach(fc => {
+      const values = new Set<string>();
+      data.forEach(item => {
+        const val = item[fc.field];
+        if (val !== null && val !== undefined && val !== '') values.add(String(val));
+      });
+      valuesMap[fc.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [data]);
+
+  // Filtered + sorted data
+  const filteredData = useMemo(() => {
+    let result = applyInventoryFilters(data, invFilters);
+    if (invSortField) {
+      result = [...result].sort((a, b) => {
+        const aVal = a[invSortField]; const bVal = b[invSortField];
+        if (aVal === null || aVal === undefined) return invSortDirection === 'asc' ? 1 : -1;
+        if (bVal === null || bVal === undefined) return invSortDirection === 'asc' ? -1 : 1;
+        const comparison = String(aVal).localeCompare(String(bVal));
+        return invSortDirection === 'asc' ? comparison : -comparison;
+      });
+    }
+    return result;
+  }, [data, invFilters, invSortField, invSortDirection]);
+
+  // Grouped data (up to 2 levels)
+  interface InvGroupedLevel1 { name: string; items: any[]; subgroups?: { name: string; items: any[] }[] }
+  const groupedData = useMemo((): InvGroupedLevel1[] | null => {
+    if (invGroupings.length === 0) return null;
+    const gk1 = invGroupings[0];
+    const gk2 = invGroupings.length > 1 ? invGroupings[1] : null;
+    const groups: Record<string, any[]> = {};
+    filteredData.forEach(item => {
+      const key = String(item[gk1] || 'Sin asignar');
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+    const sortGroups = (entries: [string, any[]][]) => {
+      if (invSortField) return entries.sort((a, b) => invSortDirection === 'asc' ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0]));
+      return entries.sort((a, b) => b[1].length - a[1].length);
+    };
+    return sortGroups(Object.entries(groups)).map(([name, items]) => {
+      if (gk2) {
+        const subMap: Record<string, any[]> = {};
+        items.forEach(item => {
+          const sk = String(item[gk2] || 'Sin asignar');
+          if (!subMap[sk]) subMap[sk] = [];
+          subMap[sk].push(item);
+        });
+        const subgroups = sortGroups(Object.entries(subMap)).map(([sn, si]) => ({ name: sn, items: si }));
+        return { name, items, subgroups };
+      }
+      return { name, items };
+    });
+  }, [filteredData, invGroupings, invSortField, invSortDirection]);
+
   const handleToggleAll = () => {
-    if (data.every(item => selectedIds.has(item.id))) {
-      // Deselect all on current page
+    const displayItems = filteredData;
+    if (displayItems.every(item => selectedIds.has(item.id))) {
       const newSet = new Set(selectedIds);
-      data.forEach(item => newSet.delete(item.id));
+      displayItems.forEach(item => newSet.delete(item.id));
       onSelectionChange(newSet);
     } else {
-      // Select all on current page
       const newSet = new Set(selectedIds);
-      data.forEach(item => newSet.add(item.id));
+      displayItems.forEach(item => newSet.add(item.id));
       onSelectionChange(newSet);
     }
   };
+  const allCurrentPageSelected = filteredData.length > 0 && filteredData.every(item => selectedIds.has(item.id));
+  const someCurrentPageSelected = filteredData.some(item => selectedIds.has(item.id));
 
-  const handleClearSelection = () => {
-    onSelectionChange(new Set());
+  // Row renderer
+  const renderRow = (item: any, idx: number) => {
+    const isSelected = selectedIds.has(item.id);
+    return (
+      <tr
+        key={item.id || idx}
+        className={`border-b border-purple-500/10 hover:bg-purple-500/5 transition-colors cursor-pointer ${isSelected ? 'bg-pink-500/10' : ''}`}
+        onClick={() => handleToggleItem(item.id)}
+      >
+        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+          <input type="checkbox" checked={isSelected} onChange={() => handleToggleItem(item.id)}
+            className="w-4 h-4 rounded border-purple-500/50 bg-transparent text-pink-500 focus:ring-pink-500/50 focus:ring-offset-0 cursor-pointer" />
+        </td>
+        <td className="px-4 py-3">
+          <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">{item.codigo_unico || item.id}</span>
+        </td>
+        <td className="px-4 py-3 text-sm text-white">{item.plaza || '-'}</td>
+        <td className="px-4 py-3 text-sm text-zinc-400">{item.municipio || '-'}</td>
+        <td className="px-4 py-3 text-sm text-zinc-300">{item.mueble || item.tipo_de_mueble || '-'}</td>
+        <td className="px-4 py-3">
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${item.tradicional_digital === 'Digital' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-pink-500/20 text-pink-300 border border-pink-500/30'}`}>
+            {item.tradicional_digital || 'Tradicional'}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+            item.estatus === 'Vendido' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' :
+            item.estatus === 'Reservado' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
+            item.estatus === 'Bloqueado' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+            'bg-green-500/20 text-green-300 border border-green-500/30'
+          }`}>
+            {item.estatus || 'Disponible'}
+          </span>
+        </td>
+        <td className="px-4 py-3 text-sm text-zinc-400 truncate max-w-[150px]">{item.cliente_nombre || '-'}</td>
+        <td className="px-4 py-3">
+          {item.APS ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">{item.APS}</span>
+          ) : (
+            <span className="text-zinc-500">-</span>
+          )}
+        </td>
+      </tr>
+    );
   };
-
-  const allCurrentPageSelected = data.length > 0 && data.every(item => selectedIds.has(item.id));
-  const someCurrentPageSelected = data.some(item => selectedIds.has(item.id));
 
   return (
     <GlassCard className="overflow-hidden">
@@ -795,6 +1039,201 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
 
       {expanded && (
         <>
+          {/* Toolbar: Filtrar, Agrupar, Ordenar */}
+          <div className="px-4 py-2 border-b border-purple-500/20 flex items-center justify-between gap-2 relative z-[45]">
+            <div className="flex items-center gap-2">
+              {/* Filtros */}
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowInvFilterPopup(!showInvFilterPopup); }}
+                  className={`relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
+                    invFilters.length > 0 ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                  }`}
+                  title="Filtrar"
+                >
+                  <Filter className="h-3.5 w-3.5" />
+                  {invFilters.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 flex items-center justify-center rounded-full bg-pink-500 text-[9px] font-bold text-white px-0.5">
+                      {invFilters.length}
+                    </span>
+                  )}
+                </button>
+                {showInvFilterPopup && (
+                  <div className="absolute left-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+                      <button onClick={() => setShowInvFilterPopup(false)} className="text-zinc-400 hover:text-white"><X className="h-4 w-4" /></button>
+                    </div>
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                      {invFilters.map((filter, index) => (
+                        <div key={filter.id} className="flex items-center gap-2">
+                          {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
+                          {index === 0 && <span className="w-8"></span>}
+                          <select value={filter.field} onChange={(e) => updateInvFilter(filter.id, { field: e.target.value })}
+                            className="w-[130px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white">
+                            {INV_FILTER_FIELDS.map(f => <option key={f.field} value={f.field}>{f.label}</option>)}
+                          </select>
+                          <select value={filter.operator} onChange={(e) => updateInvFilter(filter.id, { operator: e.target.value as InvFilterOperator })}
+                            className="w-[110px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white">
+                            {INV_OPERATORS.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+                          </select>
+                          <input type="text" list={`inv-datalist-${filter.id}`} value={filter.value}
+                            onChange={(e) => updateInvFilter(filter.id, { value: e.target.value })}
+                            placeholder="Escribe o selecciona..."
+                            className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500" />
+                          <datalist id={`inv-datalist-${filter.id}`}>
+                            {invUniqueValues[filter.field]?.map(val => <option key={val} value={val} />)}
+                          </datalist>
+                          <button onClick={() => removeInvFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {invFilters.length === 0 && (
+                        <p className="text-[11px] text-zinc-500 text-center py-3">Sin filtros. Haz clic en "Añadir".</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-purple-900/30">
+                      <button onClick={addInvFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
+                        <Plus className="h-3 w-3" /> Añadir
+                      </button>
+                      <button onClick={clearInvFilters} disabled={invFilters.length === 0}
+                        className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        Limpiar
+                      </button>
+                    </div>
+                    {invFilters.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-purple-900/30">
+                        <span className="text-[10px] text-zinc-500">{filteredData.length} de {data.length} registros</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Agrupar */}
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowInvGroupPopup(!showInvGroupPopup); }}
+                  className={`relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
+                    invGroupings.length > 0 ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                  }`}
+                  title="Agrupar"
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  {invGroupings.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 flex items-center justify-center rounded-full bg-pink-500 text-[9px] font-bold text-white px-0.5">
+                      {invGroupings.length}
+                    </span>
+                  )}
+                </button>
+                {showInvGroupPopup && (
+                  <div className="absolute left-0 top-full mt-1 z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 2)</p>
+                    {INV_AVAILABLE_GROUPINGS.map(({ field, label }) => (
+                      <button key={field} onClick={() => toggleInvGrouping(field)}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
+                          invGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                        }`}>
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                          invGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
+                        }`}>
+                          {invGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
+                        </div>
+                        {label}
+                        {invGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
+                        {invGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+                      </button>
+                    ))}
+                    <div className="border-t border-purple-900/30 mt-2 pt-2">
+                      <button onClick={() => setInvGroupings([])} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                        Quitar agrupación
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Ordenar */}
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowInvSortPopup(!showInvSortPopup); }}
+                  className={`relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
+                    invSortField ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                  }`}
+                  title="Ordenar"
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                </button>
+                {showInvSortPopup && (
+                  <div className="absolute left-0 top-full mt-1 z-[60] w-[300px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-purple-300">Ordenar por</span>
+                      <button onClick={() => setShowInvSortPopup(false)} className="text-zinc-400 hover:text-white"><X className="h-4 w-4" /></button>
+                    </div>
+                    <div className="space-y-1">
+                      {INV_FILTER_FIELDS.map(field => (
+                        <div key={field.field}
+                          className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
+                            invSortField === field.field ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-purple-900/20'
+                          }`}>
+                          <span className={invSortField === field.field ? 'text-purple-300 font-medium' : 'text-zinc-300'}>{field.label}</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => { setInvSortField(field.field); setInvSortDirection('asc'); }}
+                              className={`p-1.5 rounded transition-colors ${
+                                invSortField === field.field && invSortDirection === 'asc' ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                              }`} title="Ascendente (A-Z)">
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button onClick={() => { setInvSortField(field.field); setInvSortDirection('desc'); }}
+                              className={`p-1.5 rounded transition-colors ${
+                                invSortField === field.field && invSortDirection === 'desc' ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                              }`} title="Descendente (Z-A)">
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {invSortField && (
+                      <div className="mt-3 pt-3 border-t border-purple-900/30">
+                        <button onClick={() => { setInvSortField(null); setInvSortDirection('asc'); }}
+                          className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors">
+                          Quitar ordenamiento
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Limpiar todo */}
+              {hasInvActiveFilters && (
+                <button onClick={(e) => { e.stopPropagation(); clearAllInvFilters(); }}
+                  className="flex items-center justify-center w-8 h-8 text-zinc-400 hover:text-white bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/50 transition-colors"
+                  title="Limpiar filtros">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Info badge */}
+            {hasInvActiveFilters && (
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[10px]">
+                <Filter className="h-3 w-3" />
+                {filteredData.length} resultados
+                {invGroupings.length > 0 && (
+                  <span className="text-zinc-500">
+                    | Agrupado por {invGroupings.map(g => INV_AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
+                  </span>
+                )}
+                {invSortField && (
+                  <span className="text-zinc-500">| Ordenado por {INV_FILTER_FIELDS.find(f => f.field === invSortField)?.label} ({invSortDirection === 'asc' ? '↑' : '↓'})</span>
+                )}
+              </div>
+            )}
+          </div>
+
           {isLoading ? (
             <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" /></div>
           ) : (
@@ -818,59 +1257,30 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                     </tr>
                   </thead>
                   <tbody>
-                    {data.length === 0 ? (
+                    {filteredData.length === 0 ? (
                       <tr><td colSpan={9} className="px-4 py-8 text-center text-zinc-500">No hay inventarios</td></tr>
+                    ) : groupedData ? (
+                      groupedData.map(group => (
+                        <React.Fragment key={`group-${group.name}`}>
+                          <InvGroupHeader groupName={group.name} count={group.items.length}
+                            expanded={invExpandedGroups.has(group.name)} onToggle={() => toggleInvGroup(group.name)} level={1} />
+                          {invExpandedGroups.has(group.name) && (
+                            group.subgroups ? (
+                              group.subgroups.map(subgroup => (
+                                <React.Fragment key={`sub-${group.name}-${subgroup.name}`}>
+                                  <InvGroupHeader groupName={subgroup.name} count={subgroup.items.length}
+                                    expanded={invExpandedGroups.has(`${group.name}|${subgroup.name}`)}
+                                    onToggle={() => toggleInvGroup(`${group.name}|${subgroup.name}`)} level={2} />
+                                  {invExpandedGroups.has(`${group.name}|${subgroup.name}`) &&
+                                    subgroup.items.map((item, idx) => renderRow(item, idx))}
+                                </React.Fragment>
+                              ))
+                            ) : group.items.map((item, idx) => renderRow(item, idx))
+                          )}
+                        </React.Fragment>
+                      ))
                     ) : (
-                      data.map((item, idx) => {
-                        const isSelected = selectedIds.has(item.id);
-                        return (
-                          <tr
-                            key={item.id || idx}
-                            className={`border-b border-purple-500/10 hover:bg-purple-500/5 transition-colors cursor-pointer ${isSelected ? 'bg-pink-500/10' : ''}`}
-                            onClick={() => handleToggleItem(item.id)}
-                          >
-                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => handleToggleItem(item.id)}
-                                className="w-4 h-4 rounded border-purple-500/50 bg-transparent text-pink-500 focus:ring-pink-500/50 focus:ring-offset-0 cursor-pointer"
-                              />
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">{item.codigo_unico || item.id}</span>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-white">{item.plaza || '-'}</td>
-                            <td className="px-4 py-3 text-sm text-zinc-400">{item.municipio || '-'}</td>
-                            <td className="px-4 py-3 text-sm text-zinc-300">{item.mueble || item.tipo_de_mueble || '-'}</td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${item.tradicional_digital === 'Digital' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-pink-500/20 text-pink-300 border border-pink-500/30'}`}>
-                                {item.tradicional_digital || 'Tradicional'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                                item.estatus === 'Vendido' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' :
-                                item.estatus === 'Reservado' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
-                                item.estatus === 'Bloqueado' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
-                                'bg-green-500/20 text-green-300 border border-green-500/30'
-                              }`}>
-                                {item.estatus || 'Disponible'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-zinc-400 truncate max-w-[150px]">{item.cliente_nombre || '-'}</td>
-                            <td className="px-4 py-3">
-                              {item.APS ? (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                  {item.APS}
-                                </span>
-                              ) : (
-                                <span className="text-zinc-500">-</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
+                      filteredData.map((item, idx) => renderRow(item, idx))
                     )}
                   </tbody>
                 </table>
