@@ -218,6 +218,7 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
           </div>
 
           {/* Comment Input */}
+          {!statusReadOnly && (
           <div className="p-3 border-t border-zinc-800">
             <div className="flex items-center gap-2">
               <UserAvatar nombre={user?.nombre} foto_perfil={user?.foto_perfil} size="md" />
@@ -244,6 +245,7 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
               </div>
             </div>
           </div>
+          )}
         </div>
 
         {/* Footer */}
