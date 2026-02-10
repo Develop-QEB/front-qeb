@@ -765,7 +765,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabImpresiones: true,
     canSeeTabSubirArtes: false,
     canSeeTabRevisarAprobar: false,
-    canSeeTabTestigos: false,
+    canSeeTabTestigos: true,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false,
     canResolveRevisionArtesTasks: false,
