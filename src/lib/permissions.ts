@@ -937,6 +937,16 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
+    // Tabs de gestión de artes - solo visualización
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canOpenTasks: false,
+
     // Inventarios - solo visualización
     canCreateInventarios: false,
     canEditInventarios: false,
@@ -986,6 +996,16 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
+
+    // Tabs de gestión de artes - solo visualización
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canOpenTasks: false,
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -1040,6 +1060,16 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
+    // Tabs de gestión de artes - solo visualización
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canOpenTasks: false,
+
     // Inventarios - oculto
     canCreateInventarios: false,
     canEditInventarios: false,
@@ -1092,6 +1122,16 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
+
+    // Tabs de gestión de artes - solo visualización
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canOpenTasks: false,
 
     // Inventarios - oculto
     canCreateInventarios: false,
