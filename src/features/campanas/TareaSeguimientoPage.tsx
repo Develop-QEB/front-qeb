@@ -11970,9 +11970,12 @@ export function TareaSeguimientoPage() {
           <div className="flex items-start gap-4">
             {/* Step indicator */}
             <div className="hidden sm:flex items-center gap-2">
-              {(['versionario', 'atender', 'impresiones', 'testigo'] as MainTab[])
+              {(['versionario', 'atender', 'programacion', 'impresiones', 'testigo'] as MainTab[])
                 .filter(step => step !== 'impresiones' || shouldShowImpresionesTab)
+                .filter(step => step !== 'programacion' || shouldShowProgramacionTab)
                 .filter(step => step !== 'versionario' || permissions.canSeeTabSubirArtes)
+                .filter(step => step !== 'atender' || permissions.canSeeTabRevisarAprobar)
+                .filter(step => step !== 'programacion' || permissions.canSeeTabProgramacion)
                 .filter(step => step !== 'impresiones' || permissions.canSeeTabImpresiones)
                 .filter(step => step !== 'testigo' || permissions.canSeeTabValidacionInstalacion)
                 .map((step, idx, arr) => {
