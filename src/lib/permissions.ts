@@ -900,7 +900,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeSolicitudes: false,
     canSeePropuestas: true,
     canSeeCampanas: true,
-    canSeeInventarios: false,
+    canSeeInventarios: true,
     canSeeAdminUsuarios: true,
 
     // Clientes - oculto
@@ -937,7 +937,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
-    // Inventarios - oculto
+    // Inventarios - solo visualización
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,
