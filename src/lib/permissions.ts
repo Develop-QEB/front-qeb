@@ -1281,7 +1281,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Secciones visibles
     canSeeDashboard: false, // Oculto
     canSeeClientes: false, // Oculto
-    canSeeProveedores: false, // Oculto
+    canSeeProveedores: true, // Visible
     canSeeSolicitudes: false, // Oculto
     canSeePropuestas: false, // Oculto
     canSeeCampanas: true, // Visible
@@ -1293,10 +1293,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditClientes: false,
     canDeleteClientes: false,
 
-    // Proveedores - oculto
-    canCreateProveedores: false,
-    canEditProveedores: false,
-    canDeleteProveedores: false,
+    // Proveedores - acceso completo
+    canCreateProveedores: true,
+    canEditProveedores: true,
+    canDeleteProveedores: true,
 
     // Solicitudes - oculto
     canCreateSolicitudes: false,
