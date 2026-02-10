@@ -72,6 +72,7 @@ export interface RolePermissions {
   // Campañas
   canEditCampanas: boolean;
   canEditCampanaStatus: boolean; // Cambiar estatus en modal de campaña
+  allowedCampanaStatuses: string[] | null; // null = todos los estatus permitidos, array = solo esos
   canEditDetalleCampana: boolean;
   canDeleteDetalleCampana: boolean;
   canSeeGestionArtes: boolean; // Ver página de Gestión de Artes
@@ -139,6 +140,7 @@ const defaultPermissions: RolePermissions = {
 
   canEditCampanas: true,
   canEditCampanaStatus: true,
+  allowedCampanaStatuses: null, // null = todos
   canEditDetalleCampana: true,
   canDeleteDetalleCampana: true,
   canSeeGestionArtes: true,
@@ -931,6 +933,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden hacer todo excepto detalle
     canEditCampanas: true,
+    allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
@@ -991,6 +994,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden hacer todo excepto detalle
     canEditCampanas: true,
+    allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
@@ -1054,6 +1058,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden hacer todo excepto detalle
     canEditCampanas: true,
+    allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
@@ -1117,6 +1122,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden hacer todo excepto detalle
     canEditCampanas: true,
+    allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas

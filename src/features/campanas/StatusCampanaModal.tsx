@@ -7,6 +7,7 @@ import { UserAvatar } from '../../components/ui/user-avatar';
 import { formatDate } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import { useSocketCampana } from '../../hooks/useSocket';
+import { getPermissions } from '../../lib/permissions';
 
 interface StatusCampanaModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ const STATUS_OPTIONS = [
 export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = false }: StatusCampanaModalProps) {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
   const [selectedStatus, setSelectedStatus] = useState(campana.status || '');
   const [comment, setComment] = useState('');
   const commentsEndRef = useRef<HTMLDivElement>(null);
@@ -149,7 +151,9 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
                 className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
               >
                 <option value="">Seleccionar estatus...</option>
-                {STATUS_OPTIONS.map((option) => (
+                {STATUS_OPTIONS
+                  .filter((option) => !permissions.allowedCampanaStatuses || permissions.allowedCampanaStatuses.includes(option.value))
+                  .map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
