@@ -24,7 +24,7 @@ export type UserRole =
   | 'Director de Operaciones'
   | 'Gerente de Operaciones CON'
   | 'Jefe de Operaciones Digital'
-  | 'Gerentes de Operaciones Plazas y CON'
+  | 'Gerentes de Operaciones Plazas (GDL y MTY)'
   | 'Jefes de Operaciones Plazas y CON'
   | 'Supervisores de Operaciones'
   | 'Coordinador de Facturación y Cobranza'
@@ -1415,7 +1415,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Órdenes de Montaje
     canExportOrdenesMontaje: false,
   },
-  'Gerentes de Operaciones Plazas y CON': {
+  'Gerentes de Operaciones Plazas (GDL y MTY)': {
     // Secciones visibles
     canSeeDashboard: false,
     canSeeClientes: false,

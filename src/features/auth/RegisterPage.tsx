@@ -41,7 +41,7 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   ],
   'Operaciones': [
     'Director de Operaciones',
-    'Gerentes de Operaciones Plazas y CON',
+    'Gerentes de Operaciones Plazas (GDL y MTY)',
     'Jefes de Operaciones Plazas y CON',
     'Supervisores de Operaciones',
   ],
