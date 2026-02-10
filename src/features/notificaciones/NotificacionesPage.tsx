@@ -1983,9 +1983,13 @@ export function NotificacionesPage() {
     let items = data.data;
     const userId = String(user.id);
 
+    // Coordinador de Diseño ve tareas/notificaciones propias + de Diseñadores (backend ya las trae)
+    const isCoordinadorDiseno = user.rol === 'Coordinador de Diseño';
+
     if (contentType === 'notificaciones') {
       // Para notificaciones: filtrar donde soy el destinatario (id_responsable)
       items = items.filter(item => {
+        if (isCoordinadorDiseno) return true; // Ve todas las que devuelve el backend
         if (item.id_responsable !== undefined && item.id_responsable !== null) {
           return String(item.id_responsable) === userId;
         }
@@ -1996,6 +2000,7 @@ export function NotificacionesPage() {
       items = items.filter(item => {
         // Excluir notificaciones
         if (item.tipo === 'Notificación') return false;
+        if (isCoordinadorDiseno) return true; // Ve todas las tareas que devuelve el backend
         // Filtrar donde estoy asignado
         if (item.id_asignado !== undefined && item.id_asignado !== null) {
           const idAsignadoStr = String(item.id_asignado);
