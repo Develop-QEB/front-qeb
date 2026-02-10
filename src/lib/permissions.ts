@@ -933,7 +933,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCampanas: true,
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
-    canSeeGestionArtes: false, // Gestión de artes oculto
+    canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
@@ -983,7 +983,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCampanas: true,
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
-    canSeeGestionArtes: false, // Gestión de artes oculto
+    canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
@@ -1036,7 +1036,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCampanas: true,
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
-    canSeeGestionArtes: false, // Gestión de artes oculto
+    canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
@@ -1089,7 +1089,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCampanas: true,
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
-    canSeeGestionArtes: false, // Gestión de artes oculto
+    canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
