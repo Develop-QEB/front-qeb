@@ -960,7 +960,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeSolicitudes: false,
     canSeePropuestas: true,
     canSeeCampanas: true,
-    canSeeInventarios: false,
+    canSeeInventarios: true,
     canSeeAdminUsuarios: false,
 
     // Clientes - oculto
@@ -1023,7 +1023,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeSolicitudes: false,
     canSeePropuestas: true,
     canSeeCampanas: true,
-    canSeeInventarios: false,
+    canSeeInventarios: true,
     canSeeAdminUsuarios: false,
 
     // Clientes - oculto
@@ -1086,7 +1086,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeSolicitudes: false,
     canSeePropuestas: true,
     canSeeCampanas: true,
-    canSeeInventarios: false,
+    canSeeInventarios: true,
     canSeeAdminUsuarios: false,
 
     // Clientes - oculto
