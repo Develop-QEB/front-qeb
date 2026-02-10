@@ -14629,7 +14629,7 @@ export function TareaSeguimientoPage() {
 ${comentario || 'Sin motivo especificado'}
 
 Por favor corrige los artes y vuelve a enviar a revisión.`,
-              tipo: 'Corrección',
+              tipo: 'Correccion',
               asignado: selectedTask.creador,
               ids_reservas: reservaIds.join(','),
             };
@@ -14652,7 +14652,7 @@ Por favor corrige los artes y vuelve a enviar a revisión.`,
 ${instrucciones || 'Sin instrucciones especificadas'}
 
 Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
-                  tipo: 'Corrección',
+                  tipo: 'Correccion',
                   asignado: selectedTask.creador,
                   ids_reservas: reservaIds.join(','),
                 });
