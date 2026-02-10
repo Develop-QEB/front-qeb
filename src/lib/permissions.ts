@@ -1251,6 +1251,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas
     canEditCampanas: false, // No pueden editar campaña
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false, // No pueden asignar APs
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Sí pueden ver gestión de artes
