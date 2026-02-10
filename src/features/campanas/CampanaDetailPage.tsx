@@ -15,7 +15,7 @@ import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana } from '../../hooks/useSocket';
 
 const statusVariants: Record<string, 'secondary' | 'success' | 'warning' | 'info'> = {
-  activa: 'success',
+  Aprobada: 'success',
   Abierto: 'success',
   inactiva: 'secondary',
   Cerrado: 'secondary',

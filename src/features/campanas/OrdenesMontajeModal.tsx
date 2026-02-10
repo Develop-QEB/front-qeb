@@ -51,7 +51,7 @@ interface OrdenesMontajeModalProps {
 type TabType = 'cat' | 'digital' | 'invian';
 
 // Status options for filter
-const STATUS_OPTIONS = ['activa', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
+const STATUS_OPTIONS = ['Aprobada', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
 
 // Advanced Filter Types
 type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';

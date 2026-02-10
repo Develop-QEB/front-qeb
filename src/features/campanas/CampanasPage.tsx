@@ -47,7 +47,7 @@ function getTagColor(name: string) {
 
 // Status Colors - colores únicos por cada tipo de status
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'activa': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'Aprobada': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
   'inactiva': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
   'finalizada': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
   'por iniciar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
@@ -95,7 +95,7 @@ const PERIOD_COLORS: Record<string, { bg: string; text: string; border: string }
 // Colores para gráficas
 const CHART_COLORS = {
   status: {
-    'activa': '#10b981',        // emerald
+    'Aprobada': '#10b981',       // emerald
     'finalizada': '#3b82f6',    // blue
     'por iniciar': '#f59e0b',   // amber
     'inactiva': '#6b7280',      // gray
@@ -591,7 +591,7 @@ function GroupHeader({
 }
 
 // Status options
-const STATUS_OPTIONS = ['activa', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
+const STATUS_OPTIONS = ['Aprobada', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
 
 export function CampanasPage() {
   const navigate = useNavigate();
