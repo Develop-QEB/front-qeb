@@ -9582,15 +9582,18 @@ export function TareaSeguimientoPage() {
     // Pero respetando permisos
     if (inventarioSinArteAPI.length > 0 && permissions.canSeeTabSubirArtes) {
       setActiveMainTab('versionario');
-    } else if (inventarioArteAPI.length > 0) {
+    } else if (inventarioArteAPI.length > 0 && permissions.canSeeTabRevisarAprobar) {
       setActiveMainTab('atender');
     } else if (inventarioTestigosAPI.length > 0 && permissions.canSeeTabValidacionInstalacion) {
       setActiveMainTab('testigo');
-    } else if (!permissions.canSeeTabSubirArtes) {
-      // Si no puede ver versionario, default a atender
-      setActiveMainTab('atender');
+    } else {
+      // Fallback: seleccionar el primer tab disponible según permisos
+      if (permissions.canSeeTabSubirArtes) setActiveMainTab('versionario');
+      else if (permissions.canSeeTabRevisarAprobar) setActiveMainTab('atender');
+      else if (permissions.canSeeTabProgramacion) setActiveMainTab('programacion');
+      else if (permissions.canSeeTabImpresiones) setActiveMainTab('impresiones');
+      else if (permissions.canSeeTabValidacionInstalacion) setActiveMainTab('testigo');
     }
-    // Si ninguno tiene contenido y puede ver versionario, se queda en versionario por defecto
 
     setInitialTabDetermined(true);
   }, [
@@ -9602,6 +9605,9 @@ export function TareaSeguimientoPage() {
     inventarioArteAPI.length,
     inventarioTestigosAPI.length,
     permissions.canSeeTabSubirArtes,
+    permissions.canSeeTabRevisarAprobar,
+    permissions.canSeeTabProgramacion,
+    permissions.canSeeTabImpresiones,
     permissions.canSeeTabValidacionInstalacion,
   ]);
 
