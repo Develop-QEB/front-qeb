@@ -189,6 +189,7 @@ interface ReservaItem {
   reservaId?: number; // For existing reservas from DB
   grupo_completo_id?: number | null; // For grouping complete groups
   articulo?: string; // Artículo SAP de la cara
+  grupo?: string; // Distance group name
 }
 
 // ============ ADVANCED FILTERS SYSTEM (copied from CampanaDetailPage) ============
@@ -609,6 +610,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [reservadosTipoFilter, setReservadosTipoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo' | 'Bonificacion'>('Todos');
   const [showOnlyIslaReservados, setShowOnlyIslaReservados] = useState(false);
   const [showReservasFlatList, setShowReservasFlatList] = useState(false); // Toggle for flat list vs grouped
+  const [groupByDistanceReservados, setGroupByDistanceReservados] = useState(false);
+  const [distanciaGruposReservados, setDistanciaGruposReservados] = useState(500);
+  const [tamanoGrupoReservados, setTamanoGrupoReservados] = useState(10);
+  const [expandedGroupsReservados, setExpandedGroupsReservados] = useState<Set<string>>(new Set(['Grupo 1']));
   const [reservadosSortColumn, setReservadosSortColumn] = useState<'codigo' | 'tipo' | 'formato' | 'ciudad'>('ciudad');
   // Reservas summary states - Advanced Filter System
   const [filtersReservas, setFiltersReservas] = useState<FilterCondition[]>([]);
@@ -1805,6 +1810,75 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
   }, [tamanoGrupo, distanciaGrupos, haversineDistance]);
 
+  // Group reservados by distance (anti-cannibalization for reserved items)
+  const groupByDistanceFuncReservados = useCallback((items: ReservaItem[]): (ReservaItem & { grupo?: string })[] => {
+    if (items.length === 0) return [];
+
+    const withCoords = items.filter(r =>
+      r.latitud && r.longitud && typeof r.latitud === 'number' && typeof r.longitud === 'number' &&
+      !isNaN(r.latitud) && !isNaN(r.longitud)
+    );
+    const withoutCoords = items.filter(r =>
+      !r.latitud || !r.longitud || typeof r.latitud !== 'number' || typeof r.longitud !== 'number' ||
+      isNaN(r.latitud) || isNaN(r.longitud)
+    );
+
+    if (withCoords.length === 0) {
+      return items.map(r => ({ ...r, grupo: 'Grupo 1' }));
+    }
+
+    const grupos: ReservaItem[][] = [];
+    const remaining = [...withCoords];
+
+    while (remaining.length > 0) {
+      const grupo: ReservaItem[] = [remaining.shift()!];
+
+      while (grupo.length < tamanoGrupoReservados && remaining.length > 0) {
+        let bestIdx = -1;
+        let bestScore = Infinity;
+
+        for (let i = 0; i < remaining.length; i++) {
+          const candidate = remaining[i];
+          let minDist = Infinity;
+
+          for (const member of grupo) {
+            const dist = haversineDistance(
+              candidate.latitud, candidate.longitud,
+              member.latitud, member.longitud
+            );
+            if (dist < minDist) minDist = dist;
+          }
+
+          if (minDist >= distanciaGruposReservados) {
+            const score = Math.abs(minDist - distanciaGruposReservados * 1.2);
+            if (score < bestScore) {
+              bestScore = score;
+              bestIdx = i;
+            }
+          }
+        }
+
+        if (bestIdx >= 0) {
+          grupo.push(remaining.splice(bestIdx, 1)[0]);
+        } else {
+          break;
+        }
+      }
+
+      grupos.push(grupo);
+    }
+
+    if (withoutCoords.length > 0) {
+      grupos.push(withoutCoords);
+    }
+
+    return grupos.flatMap((grupo, idx) => {
+      const isLastGroup = idx === grupos.length - 1 && withoutCoords.length > 0;
+      const groupName = isLastGroup ? 'Sin ubicación' : `Grupo ${idx + 1}`;
+      return grupo.map(r => ({ ...r, grupo: groupName }));
+    });
+  }, [tamanoGrupoReservados, distanciaGruposReservados, haversineDistance]);
+
   // Handle search inventory - open search view and fetch disponibles
   const handleSearchInventory = async (cara: CaraItem) => {
     setSelectedCaraForSearch(cara);
@@ -2589,6 +2663,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       );
     }
 
+    // Apply distance grouping
+    if (groupByDistanceReservados) {
+      data = groupByDistanceFuncReservados(data);
+    }
+
     // Sort
     data.sort((a, b) => {
       let aVal = '', bVal = '';
@@ -2603,7 +2682,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     return data;
-  }, [currentCaraReservasMerged, reservadosSearchTerm, reservadosTipoFilter, showOnlyIslaReservados, reservadosSortColumn, reservadosSortDirection]);
+  }, [currentCaraReservasMerged, reservadosSearchTerm, reservadosTipoFilter, showOnlyIslaReservados, groupByDistanceReservados, groupByDistanceFuncReservados, reservadosSortColumn, reservadosSortDirection]);
+
+  // Group reservados by distance (computed from filteredReservados)
+  const groupedReservadosByDistance = useMemo(() => {
+    if (!groupByDistanceReservados) return null;
+
+    const groups: Record<string, ReservaItem[]> = {};
+    filteredReservados.forEach(r => {
+      const groupName = r.grupo || 'Sin grupo';
+      if (!groups[groupName]) groups[groupName] = [];
+      groups[groupName].push(r);
+    });
+
+    return Object.entries(groups).sort((a, b) => {
+      const numA = parseInt(a[0].replace('Grupo ', '')) || 999;
+      const numB = parseInt(b[0].replace('Grupo ', '')) || 999;
+      return numA - numB;
+    });
+  }, [filteredReservados, groupByDistanceReservados]);
 
   // Group reservados by Catorcena > Artículo > Plaza > Formato (hierarchical)
   const groupedReservadosHierarchy = useMemo(() => {
@@ -2738,6 +2835,30 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     } else {
       setSelectedReservados(new Set(filteredReservados.map(r => r.id)));
     }
+  };
+
+  // Toggle distance group expansion (reservados)
+  const toggleGroupExpansionReservados = (groupName: string) => {
+    setExpandedGroupsReservados(prev => {
+      const next = new Set(prev);
+      if (next.has(groupName)) next.delete(groupName);
+      else next.add(groupName);
+      return next;
+    });
+  };
+
+  // Toggle all items in a distance group (reservados)
+  const toggleAllInGroupReservados = (items: ReservaItem[]) => {
+    const allSelected = items.every(r => selectedReservados.has(r.id));
+    setSelectedReservados(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        items.forEach(r => next.delete(r.id));
+      } else {
+        items.forEach(r => next.add(r.id));
+      }
+      return next;
+    });
   };
 
   // Toggle single reservado selection
@@ -3768,6 +3889,43 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       )}
                     </button>
 
+                    {/* Distance grouping */}
+                    <button
+                      onClick={() => setGroupByDistanceReservados(!groupByDistanceReservados)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${groupByDistanceReservados
+                        ? 'bg-green-500 text-white shadow'
+                        : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white'
+                        }`}
+                    >
+                      <Ruler className="h-3.5 w-3.5" />
+                      Agrupar
+                      {groupByDistanceReservados && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-green-200" onClick={(e) => { e.stopPropagation(); setGroupByDistanceReservados(false); }} />
+                      )}
+                    </button>
+                    {groupByDistanceReservados && (
+                      <>
+                        <select
+                          value={distanciaGruposReservados}
+                          onChange={(e) => setDistanciaGruposReservados(parseInt(e.target.value))}
+                          className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        >
+                          <option value={100}>100m</option>
+                          <option value={200}>200m</option>
+                          <option value={500}>500m</option>
+                          <option value={1000}>1km</option>
+                        </select>
+                        <input
+                          type="number"
+                          value={tamanoGrupoReservados}
+                          onChange={(e) => setTamanoGrupoReservados(parseInt(e.target.value) || 10)}
+                          className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                          min={2}
+                          max={50}
+                        />
+                      </>
+                    )}
+
                     {/* Sort */}
                     <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1">
                       <span className="text-xs text-zinc-500">Ordenar:</span>
@@ -3860,8 +4018,90 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         </tr>
                       </thead>
                       <tbody>
-                        {/* Flat List View */}
-                        {showReservasFlatList ? (
+                        {/* Distance Grouped View */}
+                        {groupByDistanceReservados && groupedReservadosByDistance ? (
+                          groupedReservadosByDistance.map(([groupName, items]) => (
+                            <React.Fragment key={groupName}>
+                              {/* Group Header */}
+                              <tr
+                                className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
+                                onClick={() => toggleGroupExpansionReservados(groupName)}
+                              >
+                                <td colSpan={effectiveCanEdit ? 7 : 6} className="px-3 py-2">
+                                  <div className="flex items-center gap-3">
+                                    {expandedGroupsReservados.has(groupName) ? (
+                                      <ChevronDown className="h-4 w-4 text-green-400" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-green-400" />
+                                    )}
+                                    <span className="text-sm font-medium text-white">{groupName}</span>
+                                    <span className="px-2 py-0.5 bg-green-500/20 text-green-300 rounded-full text-xs">
+                                      {items.length} sitios
+                                    </span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleAllInGroupReservados(items);
+                                      }}
+                                      className="ml-auto text-xs text-green-400 hover:text-green-300"
+                                    >
+                                      {items.every(r => selectedReservados.has(r.id)) ? 'Deseleccionar' : 'Seleccionar todos'}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                              {/* Group Items */}
+                              {expandedGroupsReservados.has(groupName) && items.map((reserva) => (
+                                <tr
+                                  key={reserva.id}
+                                  className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer ${
+                                    selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : ''
+                                  }`}
+                                  onClick={() => handleToggleReservadoSelection(reserva.id)}
+                                >
+                                  <td className="px-3 py-2 pl-8">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedReservados.has(reserva.id)}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleReservadoSelection(reserva.id);
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="checkbox-purple"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <span className="text-sm text-white font-medium">{reserva.codigo_unico}</span>
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <span className={`px-2 py-1 rounded-full text-xs ${
+                                      reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
+                                      reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+                                    }`}>
+                                      {reserva.tipo}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
+                                  <td className="px-4 py-2 text-sm text-zinc-400">{reserva.isla || '-'}</td>
+                                  <td className="px-4 py-2 text-sm text-zinc-400">{reserva.plaza}</td>
+                                  {effectiveCanEdit && (
+                                    <td className="px-4 py-2 text-center">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleRemoveReserva(reserva.id); }}
+                                        className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                                        title="Eliminar"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          ))
+                        ) : showReservasFlatList ? (
+                          /* Flat List View */
                           filteredReservados.map((reserva) => (
                             <tr
                               key={reserva.id}
