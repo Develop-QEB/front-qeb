@@ -362,6 +362,9 @@ type ProcessedInventoryItem = InventarioDisponible & {
   flujoId?: number;
   contraflujoId?: number;
   grupo?: string;
+  // Spot único fields
+  spots_disponibles?: number;
+  isCollapsedSpot?: boolean;
 };
 
 // Empty cara template
@@ -623,6 +626,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [showOnlyUnicos, setShowOnlyUnicos] = useState(false);
   const [showOnlyCompletos, setShowOnlyCompletos] = useState(false);
   const [showOnlyUnicosDigitales, setShowOnlyUnicosDigitales] = useState(false);
+  const [showSpotUnico, setShowSpotUnico] = useState(false);
   const [groupByDistance, setGroupByDistance] = useState(false);
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
@@ -1657,6 +1661,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
   }, [reservas]);
 
+  // Filter for spot único - collapse digital inventories to 1 row per inventario with spots indicator
+  const filterSpotUnico = useCallback((inventarios: ProcessedInventoryItem[]): ProcessedInventoryItem[] => {
+    const digitalGroups = new Map<number, ProcessedInventoryItem[]>();
+    const result: ProcessedInventoryItem[] = [];
+
+    for (const inv of inventarios) {
+      const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
+      if (isDigital) {
+        const group = digitalGroups.get(inv.id) || [];
+        group.push(inv);
+        digitalGroups.set(inv.id, group);
+      } else {
+        result.push(inv);
+      }
+    }
+
+    // Per digital group, collapse to 1 row with first available espacio
+    for (const [, group] of digitalGroups) {
+      const representative = { ...group[0] } as ProcessedInventoryItem;
+      representative.spots_disponibles = group.length;
+      representative.isCollapsedSpot = true;
+      result.push(representative);
+    }
+
+    return result;
+  }, []);
+
   // Filter for complete inventories - MERGE flujo/contraflujo pairs into single "completo" rows
   const filterCompletos = useCallback((inventarios: InventarioDisponible[]): (InventarioDisponible & { isCompleto?: boolean; flujoId?: number; contraflujoId?: number })[] => {
     // Group by base code and location
@@ -1900,6 +1931,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       data = filterUnicosDigitales(data);
     }
 
+    // Spot único - collapse digital items to 1 row per inventario
+    if (showSpotUnico) {
+      data = filterSpotUnico(data);
+    }
+
     // Filter by isla - only show items that have "ISLA" in the isla column
     if (showOnlyIsla) {
       data = data.filter(inv => inv.isla?.toUpperCase().includes('ISLA'));
@@ -1953,7 +1989,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showOnlyIsla, groupByDistance, filterUnicos, filterCompletos, filterUnicosDigitales, groupByDistanceFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, showOnlyIsla, groupByDistance, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, sortColumn, sortDirection, reservas]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -1985,6 +2021,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setShowOnlyUnicos(false);
     setShowOnlyCompletos(false);
     setShowOnlyUnicosDigitales(false);
+    setShowSpotUnico(false);
     setShowOnlyIsla(false);
     setGroupByDistance(false);
     setPoiFilterIds(null);
@@ -3106,6 +3143,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </button>
                   )}
 
+                  {/* Spot único filter - only show when there are digital items */}
+                  {hasDigitalInventory && (
+                    <button
+                      onClick={() => setShowSpotUnico(!showSpotUnico)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showSpotUnico
+                        ? 'bg-violet-500 text-white shadow'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        }`}
+                      title="Mostrar inventarios digitales una sola vez con indicador de spots disponibles"
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      Spot único
+                      {showSpotUnico && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-violet-200" onClick={(e) => { e.stopPropagation(); setShowSpotUnico(false); }} />
+                      )}
+                    </button>
+                  )}
+
                   {/* Isla filter */}
                   <button
                     onClick={() => {
@@ -3236,7 +3291,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </span>
 
                     {/* Clear all filters */}
-                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicos || showOnlyUnicosDigitales || showOnlyIsla || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
+                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicos || showOnlyUnicosDigitales || showSpotUnico || showOnlyIsla || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
                       <button
                         onClick={clearAllFilters}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -3481,7 +3536,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
                                     {hasDigitalInventory && (
                                       <td className="px-3 py-2 text-zinc-400 text-xs">
-                                        {inv.numero_espacio && inv.total_espacios ? (
+                                        {inv.isCollapsedSpot ? (
+                                          <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
+                                            {inv.spots_disponibles}/{inv.total_espacios}
+                                          </span>
+                                        ) : inv.numero_espacio && inv.total_espacios ? (
                                           <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
                                             {inv.numero_espacio} de {inv.total_espacios}
                                           </span>
@@ -3533,7 +3592,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
                                 {hasDigitalInventory && (
                                   <td className="px-3 py-2 text-zinc-400 text-xs">
-                                    {inv.numero_espacio && inv.total_espacios ? (
+                                    {inv.isCollapsedSpot ? (
+                                      <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
+                                        {inv.spots_disponibles}/{inv.total_espacios}
+                                      </span>
+                                    ) : inv.numero_espacio && inv.total_espacios ? (
                                       <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
                                         {inv.numero_espacio} de {inv.total_espacios}
                                       </span>
