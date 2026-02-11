@@ -1184,7 +1184,7 @@ export function CampanasPage() {
     if (!filteredData.length) return;
 
     const headers = [
-      'Periodo', 'Creador', 'Campaña', 'Cliente', 'Estatus', 'Catorcena Inicio', 'Catorcena Fin', 'APS'
+      'Periodo', 'Creador', 'Campaña', 'Cliente', 'Estatus', 'Actividad', 'Catorcena Inicio', 'Catorcena Fin', 'APS'
     ];
     const rows = filteredData.map(c => {
       const periodStatus = getPeriodStatus(c.fecha_inicio, c.fecha_fin);
@@ -1200,6 +1200,7 @@ export function CampanasPage() {
         c.nombre || '',
         c.cliente_nombre || c.cliente_razon_social || '',
         c.status,
+        c.has_aps ? 'Activa' : 'Inactiva',
         catIni,
         catFin,
         c.has_aps ? 'Si' : 'No'
@@ -1301,6 +1302,18 @@ export function CampanasPage() {
           >
             {item.status}
           </button>
+        </td>
+        {/* Actividad */}
+        <td className="px-4 py-3">
+          {item.has_aps ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              Activa
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-300 border border-zinc-500/30">
+              Inactiva
+            </span>
+          )}
         </td>
         {/* Cat. Inicio - Badge style */}
         <td className="px-4 py-3">
@@ -1818,6 +1831,7 @@ export function CampanasPage() {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Actividad</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Inicio</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Fin</th>
                       <th className="px-4 py-3 text-center text-xs font-semibold text-purple-300 uppercase tracking-wider">APS</th>
@@ -1834,7 +1848,7 @@ export function CampanasPage() {
                             count={group.items.length}
                             expanded={expandedGroups.has(group.name)}
                             onToggle={() => toggleGroup(group.name)}
-                            colSpan={10}
+                            colSpan={11}
                           />
                           {/* Level 1 Content */}
                           {expandedGroups.has(group.name) && (
@@ -1847,7 +1861,7 @@ export function CampanasPage() {
                                     onClick={() => toggleGroup(`${group.name}|${subgroup.name}`)}
                                     className="bg-fuchsia-500/5 border-b border-fuchsia-500/10 cursor-pointer hover:bg-fuchsia-500/10 transition-colors"
                                   >
-                                    <td colSpan={10} className="px-4 py-2.5 pl-10">
+                                    <td colSpan={11} className="px-4 py-2.5 pl-10">
                                       <div className="flex items-center gap-2">
                                         {expandedGroups.has(`${group.name}|${subgroup.name}`) ? (
                                           <ChevronDown className="h-4 w-4 text-fuchsia-400" />
@@ -1879,7 +1893,7 @@ export function CampanasPage() {
                     )}
                     {filteredData.length === 0 && !groupedData && (
                       <tr>
-                        <td colSpan={10} className="px-4 py-12 text-center">
+                        <td colSpan={11} className="px-4 py-12 text-center">
                           <div className="flex flex-col items-center gap-3">
                             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-purple-500/10">
                               <Megaphone className="w-6 h-6 text-purple-400" />
