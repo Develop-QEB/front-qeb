@@ -76,11 +76,11 @@ function getEstatusArteColor(estatus: string | null | undefined) {
 
 function getStatusColor(status: string | null | undefined) {
   if (!status) return DEFAULT_STATUS_COLOR;
-  const normalized = status.toLowerCase().trim();
-  // Si existe en nuestro mapa, usar ese color
-  if (STATUS_COLORS[normalized]) {
-    return STATUS_COLORS[normalized];
-  }
+  const trimmed = status.trim();
+  // Buscar match exacto primero, luego lowercase
+  if (STATUS_COLORS[trimmed]) return STATUS_COLORS[trimmed];
+  const normalized = trimmed.toLowerCase();
+  if (STATUS_COLORS[normalized]) return STATUS_COLORS[normalized];
   // Si no, generar un color dinámico basado en el nombre
   return getTagColor(status);
 }
