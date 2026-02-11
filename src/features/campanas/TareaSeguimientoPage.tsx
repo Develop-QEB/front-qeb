@@ -9582,15 +9582,18 @@ export function TareaSeguimientoPage() {
     // Pero respetando permisos
     if (inventarioSinArteAPI.length > 0 && permissions.canSeeTabSubirArtes) {
       setActiveMainTab('versionario');
-    } else if (inventarioArteAPI.length > 0) {
+    } else if (inventarioArteAPI.length > 0 && permissions.canSeeTabRevisarAprobar) {
       setActiveMainTab('atender');
     } else if (inventarioTestigosAPI.length > 0 && permissions.canSeeTabValidacionInstalacion) {
       setActiveMainTab('testigo');
-    } else if (!permissions.canSeeTabSubirArtes) {
-      // Si no puede ver versionario, default a atender
-      setActiveMainTab('atender');
+    } else {
+      // Fallback: seleccionar el primer tab disponible según permisos
+      if (permissions.canSeeTabSubirArtes) setActiveMainTab('versionario');
+      else if (permissions.canSeeTabRevisarAprobar) setActiveMainTab('atender');
+      else if (permissions.canSeeTabProgramacion) setActiveMainTab('programacion');
+      else if (permissions.canSeeTabImpresiones) setActiveMainTab('impresiones');
+      else if (permissions.canSeeTabValidacionInstalacion) setActiveMainTab('testigo');
     }
-    // Si ninguno tiene contenido y puede ver versionario, se queda en versionario por defecto
 
     setInitialTabDetermined(true);
   }, [
@@ -9602,6 +9605,9 @@ export function TareaSeguimientoPage() {
     inventarioArteAPI.length,
     inventarioTestigosAPI.length,
     permissions.canSeeTabSubirArtes,
+    permissions.canSeeTabRevisarAprobar,
+    permissions.canSeeTabProgramacion,
+    permissions.canSeeTabImpresiones,
     permissions.canSeeTabValidacionInstalacion,
   ]);
 
@@ -10654,13 +10660,19 @@ export function TareaSeguimientoPage() {
 
   // Auto-switch si el tab activo fue ocultado por tipo de inventario
   useEffect(() => {
-    if (activeMainTab === 'programacion' && !shouldShowProgramacionTab) {
-      setActiveMainTab('atender');
+    const needsSwitch =
+      (activeMainTab === 'programacion' && !shouldShowProgramacionTab) ||
+      (activeMainTab === 'impresiones' && !shouldShowImpresionesTab);
+
+    if (needsSwitch) {
+      // Redirigir al primer tab disponible según permisos
+      if (permissions.canSeeTabSubirArtes) setActiveMainTab('versionario');
+      else if (permissions.canSeeTabRevisarAprobar) setActiveMainTab('atender');
+      else if (permissions.canSeeTabProgramacion && shouldShowProgramacionTab) setActiveMainTab('programacion');
+      else if (permissions.canSeeTabImpresiones && shouldShowImpresionesTab) setActiveMainTab('impresiones');
+      else if (permissions.canSeeTabValidacionInstalacion) setActiveMainTab('testigo');
     }
-    if (activeMainTab === 'impresiones' && !shouldShowImpresionesTab) {
-      setActiveMainTab('atender');
-    }
-  }, [activeMainTab, shouldShowProgramacionTab, shouldShowImpresionesTab]);
+  }, [activeMainTab, shouldShowProgramacionTab, shouldShowImpresionesTab, permissions]);
 
   // Obtener valores únicos para los selectores de filtros
   const getUniqueValuesVersionario = useMemo(() => {
@@ -11964,9 +11976,12 @@ export function TareaSeguimientoPage() {
           <div className="flex items-start gap-4">
             {/* Step indicator */}
             <div className="hidden sm:flex items-center gap-2">
-              {(['versionario', 'atender', 'impresiones', 'testigo'] as MainTab[])
+              {(['versionario', 'atender', 'programacion', 'impresiones', 'testigo'] as MainTab[])
                 .filter(step => step !== 'impresiones' || shouldShowImpresionesTab)
+                .filter(step => step !== 'programacion' || shouldShowProgramacionTab)
                 .filter(step => step !== 'versionario' || permissions.canSeeTabSubirArtes)
+                .filter(step => step !== 'atender' || permissions.canSeeTabRevisarAprobar)
+                .filter(step => step !== 'programacion' || permissions.canSeeTabProgramacion)
                 .filter(step => step !== 'impresiones' || permissions.canSeeTabImpresiones)
                 .filter(step => step !== 'testigo' || permissions.canSeeTabValidacionInstalacion)
                 .map((step, idx, arr) => {

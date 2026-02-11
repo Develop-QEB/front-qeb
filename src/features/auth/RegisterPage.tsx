@@ -23,7 +23,6 @@ const AREAS = [
 const PUESTOS_POR_AREA: Record<string, string[]> = {
   'Comercial': [
     'Asesor Comercial',
-    'Gerente Digital Programático',
     'Analista de Servicio al Cliente',
   ],
   'Tráfico': [
@@ -41,8 +40,9 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   ],
   'Operaciones': [
     'Director de Operaciones',
-    'Gerentes de Operaciones Plazas y CON',
-    'Jefes de Operaciones Plazas y CON',
+    'Gerente Digital (Operaciones)',
+    'Gerentes de Operaciones Plazas (GDL y MTY)',
+    'Jefes de Operaciones Plazas',
     'Supervisores de Operaciones',
   ],
   'Facturación': [

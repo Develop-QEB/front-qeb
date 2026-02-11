@@ -2,7 +2,6 @@
 
 export type UserRole =
   | 'Asesor Comercial'
-  | 'Gerente Digital Programático'
   | 'Analista de Servicio al Cliente'
   | 'Director General'
   | 'Director Comercial'
@@ -24,8 +23,9 @@ export type UserRole =
   | 'Director de Operaciones'
   | 'Gerente de Operaciones CON'
   | 'Jefe de Operaciones Digital'
-  | 'Gerentes de Operaciones Plazas y CON'
-  | 'Jefes de Operaciones Plazas y CON'
+  | 'Gerente Digital (Operaciones)'
+  | 'Gerentes de Operaciones Plazas (GDL y MTY)'
+  | 'Jefes de Operaciones Plazas'
   | 'Supervisores de Operaciones'
   | 'Coordinador de Facturación y Cobranza'
   | 'Mesa de Control'
@@ -72,6 +72,7 @@ export interface RolePermissions {
   // Campañas
   canEditCampanas: boolean;
   canEditCampanaStatus: boolean; // Cambiar estatus en modal de campaña
+  allowedCampanaStatuses: string[] | null; // null = todos los estatus permitidos, array = solo esos
   canEditDetalleCampana: boolean;
   canDeleteDetalleCampana: boolean;
   canSeeGestionArtes: boolean; // Ver página de Gestión de Artes
@@ -139,6 +140,7 @@ const defaultPermissions: RolePermissions = {
 
   canEditCampanas: true,
   canEditCampanaStatus: true,
+  allowedCampanaStatuses: null, // null = todos
   canEditDetalleCampana: true,
   canDeleteDetalleCampana: true,
   canSeeGestionArtes: true,
@@ -189,31 +191,6 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
     canEditGestionArtes: false,
-
-    canCreateInventarios: false,
-    canEditInventarios: false,
-    canDeleteInventarios: false,
-  },
-  'Gerente Digital Programático': {
-    canSeeDashboard: false,
-    canSeeInventarios: false,
-    canSeeAdminUsuarios: false,
-
-    canDeleteClientes: false,
-
-    canCreateProveedores: false,
-    canEditProveedores: false,
-    canDeleteProveedores: false,
-
-    // Puede cambiar estatus pero solo a estos valores
-    allowedPropuestaStatuses: ['Por aprobar', 'Pase a ventas', 'Ajuste Cto-Cliente'],
-    canBuscarInventarioEnModal: false,
-
-    canEditCampanas: false,
-    canEditDetalleCampana: false,
-    canDeleteDetalleCampana: false,
-    canEditGestionArtes: false,
-    canSeeOrdenesMontajeButton: false,
 
     canCreateInventarios: false,
     canEditInventarios: false,
@@ -751,6 +728,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: false,
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
     canSeeGestionArtes: true,
@@ -758,12 +736,12 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canResolveProduccionTasks: true,
     canSeeOrdenesMontajeButton: false,
 
-    canSeeTabProgramacion: false,
+    canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
     canSeeTabSubirArtes: false,
     canSeeTabRevisarAprobar: false,
-    canSeeTabTestigos: false,
-    canSeeTabValidacionInstalacion: false,
+    canSeeTabTestigos: true,
+    canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false,
     canResolveRevisionArtesTasks: false,
     canOnlyOpenRecepcionTasks: true,
@@ -809,6 +787,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: false,
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
     canSeeGestionArtes: true,
@@ -833,7 +812,6 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canExportOrdenesMontaje: false,
   },
   'Jefe de Operaciones Digital': {
-    // Solo lectura - permisos pendientes de validación de flujo
     canSeeDashboard: false,
     canSeeClientes: false,
     canSeeProveedores: false,
@@ -865,23 +843,85 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCompartirPropuesta: false,
     canBuscarInventarioEnModal: false,
 
+    // Campañas - solo visualización de estatus
     canEditCampanas: false,
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
+    canEditCampanaStatus: false,
     canSeeGestionArtes: true,
-    canEditGestionArtes: false,
-    canResolveProduccionTasks: false,
     canSeeOrdenesMontajeButton: false,
 
+    // Gestión de Artes - solo tab Programación, puede usarla y resolver tareas
+    canEditGestionArtes: true,
+    canResolveProduccionTasks: false,
     canSeeTabProgramacion: true,
-    canSeeTabImpresiones: true,
+    canSeeTabImpresiones: false,
     canSeeTabSubirArtes: false,
     canSeeTabRevisarAprobar: false,
-    canSeeTabTestigos: true,
-    canSeeTabValidacionInstalacion: true,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: false,
     canCreateTareasGestionArtes: false,
     canResolveRevisionArtesTasks: false,
-    canOpenTasks: false,
+    canOpenTasks: true,
+
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    canExportOrdenesMontaje: false,
+  },
+  'Gerente Digital (Operaciones)': {
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    // Campañas - solo visualización de estatus
+    canEditCampanas: false,
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
+    canEditCampanaStatus: false,
+    canSeeGestionArtes: true,
+    canSeeOrdenesMontajeButton: false,
+
+    // Gestión de Artes - solo tab Programación, puede usarla y resolver tareas
+    canEditGestionArtes: true,
+    canResolveProduccionTasks: false,
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: false,
+    canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false,
+    canOpenTasks: true,
 
     canCreateInventarios: false,
     canEditInventarios: false,
@@ -900,7 +940,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeSolicitudes: false,
     canSeePropuestas: true,
     canSeeCampanas: true,
-    canSeeInventarios: false,
+    canSeeInventarios: true,
     canSeeAdminUsuarios: true,
 
     // Clientes - oculto
@@ -931,13 +971,24 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden hacer todo excepto detalle
     canEditCampanas: true,
+    allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
-    canSeeGestionArtes: false, // Gestión de artes oculto
+    canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
-    // Inventarios - oculto
+    // Tabs de gestión de artes - solo visualización
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canOpenTasks: false,
+
+    // Inventarios - solo visualización
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,
@@ -950,7 +1001,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeSolicitudes: false,
     canSeePropuestas: true,
     canSeeCampanas: true,
-    canSeeInventarios: false,
+    canSeeInventarios: true,
     canSeeAdminUsuarios: false,
 
     // Clientes - oculto
@@ -981,11 +1032,22 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden hacer todo excepto detalle
     canEditCampanas: true,
+    allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
-    canSeeGestionArtes: false, // Gestión de artes oculto
+    canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
+
+    // Tabs de gestión de artes - solo visualización
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canOpenTasks: false,
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -1003,7 +1065,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeSolicitudes: false,
     canSeePropuestas: true,
     canSeeCampanas: true,
-    canSeeInventarios: false,
+    canSeeInventarios: true,
     canSeeAdminUsuarios: false,
 
     // Clientes - oculto
@@ -1034,11 +1096,22 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden hacer todo excepto detalle
     canEditCampanas: true,
+    allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
-    canSeeGestionArtes: false, // Gestión de artes oculto
+    canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
+
+    // Tabs de gestión de artes - solo visualización
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canOpenTasks: false,
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -1056,7 +1129,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeSolicitudes: false,
     canSeePropuestas: true,
     canSeeCampanas: true,
-    canSeeInventarios: false,
+    canSeeInventarios: true,
     canSeeAdminUsuarios: false,
 
     // Clientes - oculto
@@ -1087,11 +1160,22 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden hacer todo excepto detalle
     canEditCampanas: true,
+    allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: false, // Solo visualización en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
-    canSeeGestionArtes: false, // Gestión de artes oculto
+    canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
+
+    // Tabs de gestión de artes - solo visualización
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: false,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: false,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canOpenTasks: false,
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -1140,6 +1224,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas
     canEditCampanas: false, // No pueden editar campaña
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false, // No pueden asignar APs
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Sí pueden ver gestión de artes
@@ -1204,6 +1289,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas
     canEditCampanas: false, // No pueden editar campaña
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false, // No pueden asignar APs
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Sí pueden ver gestión de artes
@@ -1233,7 +1319,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Secciones visibles
     canSeeDashboard: false, // Oculto
     canSeeClientes: false, // Oculto
-    canSeeProveedores: false, // Oculto
+    canSeeProveedores: true, // Visible
     canSeeSolicitudes: false, // Oculto
     canSeePropuestas: false, // Oculto
     canSeeCampanas: true, // Visible
@@ -1245,10 +1331,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditClientes: false,
     canDeleteClientes: false,
 
-    // Proveedores - oculto
-    canCreateProveedores: false,
-    canEditProveedores: false,
-    canDeleteProveedores: false,
+    // Proveedores - acceso completo
+    canCreateProveedores: true,
+    canEditProveedores: true,
+    canDeleteProveedores: true,
 
     // Solicitudes - oculto
     canCreateSolicitudes: false,
@@ -1268,6 +1354,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas
     canEditCampanas: false, // Ocultar botón editar
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false, // No pueden asignar APS
     canDeleteDetalleCampana: false, // No pueden quitar APS
     canSeeGestionArtes: true, // Pueden ver gestión de artes
@@ -1336,6 +1423,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas
     canEditCampanas: false, // Ocultar botón editar
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false, // No pueden asignar APs
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Pueden ver gestión de artes
@@ -1363,7 +1451,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Órdenes de Montaje
     canExportOrdenesMontaje: false,
   },
-  'Gerentes de Operaciones Plazas y CON': {
+  'Gerentes de Operaciones Plazas (GDL y MTY)': {
     // Secciones visibles
     canSeeDashboard: false,
     canSeeClientes: false,
@@ -1402,6 +1490,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas
     canEditCampanas: false,
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
     canSeeGestionArtes: true,
@@ -1429,7 +1518,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Órdenes de Montaje
     canExportOrdenesMontaje: false,
   },
-  'Jefes de Operaciones Plazas y CON': {
+  'Jefes de Operaciones Plazas': {
     // Secciones visibles
     canSeeDashboard: false,
     canSeeClientes: false,
@@ -1468,6 +1557,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas
     canEditCampanas: false,
+    canEditCampanaStatus: false, // Solo visualización de estatus
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
     canSeeGestionArtes: true,
