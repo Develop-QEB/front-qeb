@@ -611,6 +611,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [showOnlyIslaReservados, setShowOnlyIslaReservados] = useState(false);
   const [showReservasFlatList, setShowReservasFlatList] = useState(false); // Toggle for flat list vs grouped
   const [groupByDistanceReservados, setGroupByDistanceReservados] = useState(false);
+  const [groupModeReservados, setGroupModeReservados] = useState<'distancia' | 'listado'>('distancia');
   const [distanciaGruposReservados, setDistanciaGruposReservados] = useState(500);
   const [tamanoGrupoReservados, setTamanoGrupoReservados] = useState(10);
   const [expandedGroupsReservados, setExpandedGroupsReservados] = useState<Set<string>>(new Set(['Grupo 1']));
@@ -633,6 +634,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [showOnlyUnicosDigitales, setShowOnlyUnicosDigitales] = useState(false);
   const [showSpotUnico, setShowSpotUnico] = useState(false);
   const [groupByDistance, setGroupByDistance] = useState(false);
+  const [groupMode, setGroupMode] = useState<'distancia' | 'listado'>('distancia');
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
@@ -1879,6 +1881,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
   }, [tamanoGrupoReservados, distanciaGruposReservados, haversineDistance]);
 
+  // Group by list order - chunk items sequentially (disponibles)
+  const groupByListFunc = useCallback((inventarios: ProcessedInventoryItem[]): ProcessedInventoryItem[] => {
+    if (inventarios.length === 0) return [];
+    return inventarios.map((inv, idx) => ({
+      ...inv,
+      grupo: `Grupo ${Math.floor(idx / tamanoGrupo) + 1}`,
+    }));
+  }, [tamanoGrupo]);
+
+  // Group by list order - chunk items sequentially (reservados)
+  const groupByListFuncReservados = useCallback((items: ReservaItem[]): (ReservaItem & { grupo?: string })[] => {
+    if (items.length === 0) return [];
+    return items.map((r, idx) => ({
+      ...r,
+      grupo: `Grupo ${Math.floor(idx / tamanoGrupoReservados) + 1}`,
+    }));
+  }, [tamanoGrupoReservados]);
+
   // Handle search inventory - open search view and fetch disponibles
   const handleSearchInventory = async (cara: CaraItem) => {
     setSelectedCaraForSearch(cara);
@@ -2015,9 +2035,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       data = data.filter(inv => inv.isla?.toUpperCase().includes('ISLA'));
     }
 
-    // Apply distance grouping
+    // Apply grouping (distance or list)
     if (groupByDistance) {
-      data = groupByDistanceFunc(data);
+      data = groupMode === 'distancia' ? groupByDistanceFunc(data) : groupByListFunc(data);
     }
 
     // Apply sorting
@@ -2063,7 +2083,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, showOnlyIsla, groupByDistance, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, showOnlyIsla, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -2663,9 +2683,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       );
     }
 
-    // Apply distance grouping
+    // Apply grouping (distance or list)
     if (groupByDistanceReservados) {
-      data = groupByDistanceFuncReservados(data);
+      data = groupModeReservados === 'distancia' ? groupByDistanceFuncReservados(data) : groupByListFuncReservados(data);
     }
 
     // Sort
@@ -2682,7 +2702,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     return data;
-  }, [currentCaraReservasMerged, reservadosSearchTerm, reservadosTipoFilter, showOnlyIslaReservados, groupByDistanceReservados, groupByDistanceFuncReservados, reservadosSortColumn, reservadosSortDirection]);
+  }, [currentCaraReservasMerged, reservadosSearchTerm, reservadosTipoFilter, showOnlyIslaReservados, groupByDistanceReservados, groupModeReservados, groupByDistanceFuncReservados, groupByListFuncReservados, reservadosSortColumn, reservadosSortDirection]);
 
   // Group reservados by distance (computed from filteredReservados)
   const groupedReservadosByDistance = useMemo(() => {
@@ -3304,7 +3324,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     )}
                   </button>
 
-                  {/* Distance grouping */}
+                  {/* Grouping */}
                   <button
                     onClick={() => setGroupByDistance(!groupByDistance)}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${groupByDistance
@@ -3320,16 +3340,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </button>
                   {groupByDistance && (
                     <>
-                      <select
-                        value={distanciaGrupos}
-                        onChange={(e) => setDistanciaGrupos(parseInt(e.target.value))}
-                        className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
-                      >
-                        <option value={100}>100m</option>
-                        <option value={200}>200m</option>
-                        <option value={500}>500m</option>
-                        <option value={1000}>1km</option>
-                      </select>
+                      <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                        <button
+                          onClick={() => setGroupMode('distancia')}
+                          className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupMode === 'distancia' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                        >
+                          Distancia
+                        </button>
+                        <button
+                          onClick={() => setGroupMode('listado')}
+                          className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupMode === 'listado' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                        >
+                          Listado
+                        </button>
+                      </div>
+                      {groupMode === 'distancia' && (
+                        <select
+                          value={distanciaGrupos}
+                          onChange={(e) => setDistanciaGrupos(parseInt(e.target.value))}
+                          className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        >
+                          <option value={100}>100m</option>
+                          <option value={200}>200m</option>
+                          <option value={500}>500m</option>
+                          <option value={1000}>1km</option>
+                        </select>
+                      )}
                       <input
                         type="number"
                         value={tamanoGrupo}
@@ -3337,6 +3373,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
                         min={2}
                         max={50}
+                        title="Tamaño de grupo"
                       />
                     </>
                   )}
@@ -3889,7 +3926,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       )}
                     </button>
 
-                    {/* Distance grouping */}
+                    {/* Grouping */}
                     <button
                       onClick={() => setGroupByDistanceReservados(!groupByDistanceReservados)}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${groupByDistanceReservados
@@ -3905,16 +3942,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </button>
                     {groupByDistanceReservados && (
                       <>
-                        <select
-                          value={distanciaGruposReservados}
-                          onChange={(e) => setDistanciaGruposReservados(parseInt(e.target.value))}
-                          className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
-                        >
-                          <option value={100}>100m</option>
-                          <option value={200}>200m</option>
-                          <option value={500}>500m</option>
-                          <option value={1000}>1km</option>
-                        </select>
+                        <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                          <button
+                            onClick={() => setGroupModeReservados('distancia')}
+                            className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupModeReservados === 'distancia' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                          >
+                            Distancia
+                          </button>
+                          <button
+                            onClick={() => setGroupModeReservados('listado')}
+                            className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupModeReservados === 'listado' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                          >
+                            Listado
+                          </button>
+                        </div>
+                        {groupModeReservados === 'distancia' && (
+                          <select
+                            value={distanciaGruposReservados}
+                            onChange={(e) => setDistanciaGruposReservados(parseInt(e.target.value))}
+                            className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                          >
+                            <option value={100}>100m</option>
+                            <option value={200}>200m</option>
+                            <option value={500}>500m</option>
+                            <option value={1000}>1km</option>
+                          </select>
+                        )}
                         <input
                           type="number"
                           value={tamanoGrupoReservados}
@@ -3922,6 +3975,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
                           min={2}
                           max={50}
+                          title="Tamaño de grupo"
                         />
                       </>
                     )}
