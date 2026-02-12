@@ -169,9 +169,14 @@ interface ViewSolicitudModalProps {
   isOpen: boolean;
   onClose: () => void;
   solicitudId: number | null;
+  onEdit?: () => void;
+  onAtender?: () => void;
+  onStatus?: () => void;
+  canEdit?: boolean;
+  canAtender?: boolean;
 }
 
-export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicitudModalProps) {
+export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAtender, onStatus, canEdit = true, canAtender = false }: ViewSolicitudModalProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // WebSocket para actualizaciones en tiempo real
@@ -590,6 +595,38 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {onEdit && (
+                <button
+                  onClick={() => { onClose(); onEdit(); }}
+                  disabled={!canEdit}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 text-zinc-300 text-xs font-medium hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-zinc-700"
+                  title={canEdit ? 'Editar solicitud' : 'No editable en este estatus'}
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                  Editar
+                </button>
+              )}
+              {onAtender && (
+                <button
+                  onClick={() => { onClose(); onAtender(); }}
+                  disabled={!canAtender}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-medium hover:bg-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-emerald-500/30"
+                  title={canAtender ? 'Atender solicitud' : 'Solo disponible para solicitudes aprobadas'}
+                >
+                  <PlayCircle className="h-3.5 w-3.5" />
+                  Atender
+                </button>
+              )}
+              {onStatus && (
+                <button
+                  onClick={() => { onClose(); onStatus(); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 text-xs font-medium hover:bg-amber-500/30 transition-all border border-amber-500/30"
+                  title="Ver estatus y comentarios"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Bitácora
+                </button>
+              )}
               <button
                 onClick={generatePDF}
                 disabled={isLoading || !data}

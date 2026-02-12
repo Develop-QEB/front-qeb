@@ -1438,6 +1438,27 @@ export function SolicitudesPage() {
         isOpen={!!viewSolicitudId}
         onClose={() => setViewSolicitudId(null)}
         solicitudId={viewSolicitudId}
+        onEdit={permissions.canEditSolicitudes ? () => {
+          const sol = data?.data?.find((s: Solicitud) => s.id === viewSolicitudId);
+          if (sol) { setViewSolicitudId(null); setEditSolicitud(sol); }
+        } : undefined}
+        onAtender={permissions.canAtenderSolicitudes ? () => {
+          const sol = data?.data?.find((s: Solicitud) => s.id === viewSolicitudId);
+          if (sol) { setViewSolicitudId(null); setAtenderSolicitud(sol); }
+        } : undefined}
+        onStatus={() => {
+          const sol = data?.data?.find((s: Solicitud) => s.id === viewSolicitudId);
+          if (sol) { setViewSolicitudId(null); setStatusSolicitud(sol); }
+        }}
+        canEdit={(() => {
+          const sol = data?.data?.find((s: Solicitud) => s.id === viewSolicitudId);
+          if (!sol) return false;
+          return sol.status !== 'Desactivada' && sol.status !== 'Aprobada' && sol.status !== 'Atendida';
+        })()}
+        canAtender={(() => {
+          const sol = data?.data?.find((s: Solicitud) => s.id === viewSolicitudId);
+          return sol?.status === 'Aprobada';
+        })()}
       />
 
       {/* Status Modal */}
