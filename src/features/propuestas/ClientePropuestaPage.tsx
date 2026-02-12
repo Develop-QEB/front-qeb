@@ -152,7 +152,7 @@ function applyFilters(data: InventarioReservado[], filters: FilterCondition[]): 
   if (filters.length === 0) return data;
   return data.filter(item => {
     return filters.every(filter => {
-      const fieldValue = (item as Record<string, unknown>)[filter.field];
+      const fieldValue = (item as unknown as Record<string, unknown>)[filter.field];
       const filterValue = filter.value;
       if (fieldValue === null || fieldValue === undefined) {
         return filter.operator === '!=' || filter.operator === 'not_contains';
