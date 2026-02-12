@@ -402,6 +402,7 @@ export interface Notificacion {
   estatus?: string;
   id_solicitud?: string;
   id_propuesta?: string;
+  campania_id?: number | null;
 }
 
 export interface NotificacionStats {

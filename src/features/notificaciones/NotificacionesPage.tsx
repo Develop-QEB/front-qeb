@@ -42,7 +42,7 @@ interface FilterCondition {
 interface FilterFieldConfig {
   field: keyof Notificacion;
   label: string;
-  type: 'string' | 'number';
+  type: 'string' | 'number' | 'date';
 }
 
 type QuickFilterKey =
@@ -66,12 +66,23 @@ const QUICK_FILTERS_TAREAS: { key: QuickFilter; label: string }[] = [
 
 // Campos disponibles para filtrar/ordenar
 const FILTER_FIELDS: FilterFieldConfig[] = [
-  { field: 'fecha_creacion', label: 'Fecha', type: 'string' },
+  { field: 'fecha_creacion', label: 'Fecha creación', type: 'date' },
+  { field: 'fecha_inicio', label: 'Fecha de inicio', type: 'date' },
+  { field: 'fecha_fin', label: 'Fecha de entrega', type: 'date' },
   { field: 'titulo', label: 'Título', type: 'string' },
   { field: 'tipo', label: 'Tipo', type: 'string' },
   { field: 'estatus', label: 'Estado', type: 'string' },
   { field: 'asignado', label: 'Asignado', type: 'string' },
   { field: 'responsable', label: 'Responsable', type: 'string' },
+];
+
+const DATE_PRESET_OPTIONS = [
+  { value: 'antes_de_hoy', label: 'Antes de hoy' },
+  { value: 'hoy', label: 'Hoy' },
+  { value: 'manana', label: 'Mañana' },
+  { value: 'esta_semana', label: 'Esta semana' },
+  { value: 'proxima_semana', label: 'Próxima semana' },
+  { value: 'proximos_14_dias', label: 'Los próximos 14 días' },
 ];
 
 // Campos disponibles para agrupar
@@ -97,6 +108,31 @@ const OPERATORS: { value: FilterOperator; label: string }[] = [
   { value: 'not_contains', label: 'No contiene' },
 ];
 
+// Resolver preset de fecha a un rango [inicio, fin)
+function resolveDatePreset(preset: string): [Date, Date] | null {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const dayOfWeek = today.getDay(); // 0=dom
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(today); monday.setDate(today.getDate() + mondayOffset);
+  const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7);
+  const nextNextMonday = new Date(monday); nextNextMonday.setDate(monday.getDate() + 14);
+  const in14Days = new Date(today); in14Days.setDate(today.getDate() + 14);
+
+  switch (preset) {
+    case 'antes_de_hoy': return [new Date(0), today];
+    case 'hoy': return [today, tomorrow];
+    case 'manana': { const d = new Date(tomorrow); d.setDate(d.getDate() + 1); return [tomorrow, d]; }
+    case 'esta_semana': return [monday, nextMonday];
+    case 'proxima_semana': return [nextMonday, nextNextMonday];
+    case 'proximos_14_dias': return [today, in14Days];
+    default: return null;
+  }
+}
+
+const DATE_FIELDS = ['fecha_creacion', 'fecha_inicio', 'fecha_fin'];
+
 // Función para aplicar filtros a los datos
 function applyFilters(data: Notificacion[], filters: FilterCondition[]): Notificacion[] {
   if (filters.length === 0) return data;
@@ -105,6 +141,17 @@ function applyFilters(data: Notificacion[], filters: FilterCondition[]): Notific
     return filters.every(filter => {
       const fieldValue = item[filter.field as keyof Notificacion];
       const filterValue = filter.value;
+
+      // Filtro de fecha con presets
+      if (DATE_FIELDS.includes(filter.field)) {
+        const range = resolveDatePreset(filterValue);
+        if (!range) return true;
+        if (fieldValue === null || fieldValue === undefined) return filter.operator === '!=';
+        const date = new Date(String(fieldValue));
+        if (isNaN(date.getTime())) return false;
+        const inRange = date >= range[0] && date < range[1];
+        return filter.operator === '=' ? inRange : !inRange;
+      }
 
       if (fieldValue === null || fieldValue === undefined) {
         return filter.operator === '!=' || filter.operator === 'not_contains';
@@ -1168,9 +1215,19 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
 }
 
 // Función para obtener la etiqueta del botón
-function getNavigationLabel(tipo: string, tipoTarea?: string): string {
+function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: number | null): string {
   if (tipo === 'campana' && tipoTarea === 'Correccion') {
     return 'Ver Tarea';
+  }
+  // Si tiene campania_id, ir a campaña
+  if (campaniaId) {
+    return 'Ver Campaña';
+  }
+  if (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto')) {
+    return 'Ver Propuesta';
+  }
+  if (tipoTarea?.toLowerCase().includes('campaña')) {
+    return 'Ver Campaña';
   }
   switch (tipo) {
     case 'propuesta':
@@ -1197,9 +1254,19 @@ function isRejectionTask(titulo: string): boolean {
 }
 
 // Función para obtener la ruta de navegación directa al detalle
-function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string): string {
+function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: number | null): string {
   const isComment = isCommentNotification(titulo);
   const isRejection = isRejectionTask(titulo);
+
+  // Si tiene campania_id, ir al detalle de campaña (excepto corrección)
+  if (campaniaId && tipoTarea !== 'Correccion') {
+    return `/campanas/detail/${campaniaId}`;
+  }
+
+  // Si es tarea de propuesta (ajuste cto, etc.) y tiene propuestaId, ir al detalle de propuesta
+  if ((tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto')) && propuestaId) {
+    return `/propuestas?viewId=${propuestaId}`;
+  }
 
   switch (tipo) {
     case 'propuesta':
@@ -1358,7 +1425,8 @@ function TaskDrawer({
     if (!onNavigate) return;
     // Si tiene referencia_tipo y referencia_id, usar esos
     if (tarea.referencia_tipo && tarea.referencia_id) {
-      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined);
+      const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
+      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId);
       onNavigate(path);
       return;
     }
@@ -1465,7 +1533,38 @@ function TaskDrawer({
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
             >
               <ExternalLink className="h-4 w-4" />
-              {getNavigationLabel(tarea.referencia_tipo || '', tarea.tipo || undefined)}
+              {getNavigationLabel(tarea.referencia_tipo || '', tarea.tipo || undefined, tarea.campania_id)}
+            </button>
+          )}
+
+          {/* Botón finalizar tarea */}
+          {contentType === 'tareas' && tarea.tipo?.toLowerCase().includes('seguimiento') && tarea.tipo?.toLowerCase().includes('campaña') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const nuevoEstatus = tarea.estatus === 'Atendido' ? 'Pendiente' : 'Atendido';
+                marcarLeidaMutation.mutate(nuevoEstatus);
+              }}
+              disabled={marcarLeidaMutation.isPending}
+              className={`mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                tarea.estatus === 'Atendido'
+                  ? 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-700'
+                  : 'bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/40'
+              } disabled:opacity-50`}
+            >
+              {marcarLeidaMutation.isPending ? (
+                'Actualizando...'
+              ) : tarea.estatus === 'Atendido' ? (
+                <>
+                  <Circle className="h-4 w-4" />
+                  Reabrir tarea
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4" />
+                  Finalizar tarea
+                </>
+              )}
             </button>
           )}
         </div>
@@ -1503,31 +1602,33 @@ function TaskDrawer({
                   );
                 }
                 
-                // línea de catorcena - formato: "Cat 5 - 2026: 3/3/2026 a 16/3/2026 (0 caras)"
-                if (lineaTrim.match(/^Cat\s+\d+\s+-\s+\d{4}:/)) {
+                // línea de catorcena - formatos: "Cat 5 - 2026: ..." o "Cat 1, 5/1/2026, ..."
+                if (lineaTrim.match(/^Cat\s+\d+/)) {
+                  // Intentar parsear "Cat N, fecha_inicio, fecha_fin"
+                  const catMatch = lineaTrim.match(/^Cat\s+(\d+)[,\s]+(\S+)[,\s]+(\S+)/);
+                  if (catMatch) {
+                    return (
+                      <div key={idx} className="flex items-center gap-3 py-2.5 px-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                        <Calendar className="h-3.5 w-3.5 text-cyan-400 flex-shrink-0" />
+                        <span className="text-xs font-medium text-white">Cat {catMatch[1]}</span>
+                        <span className="text-[10px] text-zinc-500">|</span>
+                        <span className="text-xs text-zinc-400">{catMatch[2]}</span>
+                        <span className="text-xs text-zinc-500">→</span>
+                        <span className="text-xs text-zinc-400">{catMatch[3]}</span>
+                      </div>
+                    );
+                  }
                   return (
-                    <div key={idx} className="flex items-center gap-2 py-2 px-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                    <div key={idx} className="flex items-center gap-2 py-2.5 px-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
                       <Calendar className="h-3.5 w-3.5 text-cyan-400 flex-shrink-0" />
                       <span className="text-xs text-zinc-300">{lineaTrim}</span>
                     </div>
                   );
                 }
                 
-                // Si es el link a la campaña
-                if (lineaTrim.includes('https://')) {
-                  const url = lineaTrim.replace('Ver campaña:', '').trim();
-                  return (
-                    <a 
-                      key={idx}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 mt-4 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      Ver Campaña
-                    </a>
-                  );
+                // Ocultar el link a la campaña del contenido (ya hay botón "Ver Campaña" arriba)
+                if (lineaTrim.includes('https://') || lineaTrim.includes('Ver campaña:')) {
+                  return null;
                 }
                 
                 // Líneas normales (Cliente, Campaña)
@@ -2159,7 +2260,7 @@ export function NotificacionesPage() {
   // Vista de tabs
   const viewTabs = [
     { key: 'lista', label: 'Lista', icon: List },
-    { key: 'tablero', label: 'Tablero', icon: LayoutGrid },
+    //{ key: 'tablero', label: 'Tablero', icon: LayoutGrid },
     { key: 'calendario', label: 'Calendario', icon: CalendarDays },
     { key: 'notas', label: 'Notas', icon: StickyNote },
   ] as const;
@@ -2344,9 +2445,16 @@ export function NotificacionesPage() {
                             onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
                             className="w-[110px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
                           >
-                            {OPERATORS.map((op) => (
-                              <option key={op.value} value={op.value}>{op.label}</option>
-                            ))}
+                            {DATE_FIELDS.includes(filter.field) ? (
+                              <>
+                                <option value="=">es</option>
+                                <option value="!=">no es</option>
+                              </>
+                            ) : (
+                              OPERATORS.map((op) => (
+                                <option key={op.value} value={op.value}>{op.label}</option>
+                              ))
+                            )}
                           </select>
                           {(filter.field === 'fecha_creacion' || filter.field === 'fecha_inicio' || filter.field === 'fecha_fin') ? (
                           <select
@@ -2354,24 +2462,10 @@ export function NotificacionesPage() {
                             onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
                             className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-purple-500"
                           >
-                            <option value="">Selecciona fecha...</option>
-                            {getUniqueValues[filter.field]?.map((val) => {
-                              const date = new Date(val);
-                              const formatted = !isNaN(date.getTime())
-                                ? date.toLocaleDateString('es-MX', {
-                                    year: 'numeric',
-                                    month: '2-digit',
-                                    day: '2-digit',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })
-                                : val;
-                              return (
-                                <option key={val} value={formatted}>
-                                  {formatted}
-                                </option>
-                              );
-                            })}
+                            <option value="">Selecciona...</option>
+                            {DATE_PRESET_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
                           </select>
                         ) : (
                           <>
@@ -2696,7 +2790,8 @@ export function NotificacionesPage() {
                                 e.stopPropagation();
                                 // Si tiene referencia_tipo y referencia_id, usar esos
                                 if (tarea.referencia_tipo && tarea.referencia_id) {
-                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined);
+                                  const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
+                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId);
                                   navigate(path);
                                   return;
                                 }
