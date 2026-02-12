@@ -3,9 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef } from 'react';
 import {
   Download, FileText, Map, Loader2, ChevronDown, ChevronRight,
-  Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink
+  Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink, X
 } from 'lucide-react';
-import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete } from '@react-google-maps/api';
+import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { formatCurrency, formatDate } from '../../lib/utils';
 
@@ -88,6 +88,61 @@ interface POIMarker {
   range: number;
 }
 
+// Advanced filter types
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
+
+interface FilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: string;
+  label: string;
+  type: 'string' | 'number';
+}
+
+const FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'codigo_unico', label: 'Codigo', type: 'string' },
+  { field: 'plaza', label: 'Plaza', type: 'string' },
+  { field: 'tipo_de_cara', label: 'Tipo', type: 'string' },
+  { field: 'tipo_de_mueble', label: 'Formato', type: 'string' },
+  { field: 'articulo', label: 'Articulo', type: 'string' },
+  { field: 'caras_totales', label: 'Caras', type: 'number' },
+  { field: 'tarifa_publica', label: 'Tarifa', type: 'number' },
+];
+
+const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
+  { value: '=', label: 'Igual a', forTypes: ['string', 'number'] },
+  { value: '!=', label: 'Diferente de', forTypes: ['string', 'number'] },
+  { value: 'contains', label: 'Contiene', forTypes: ['string'] },
+  { value: 'not_contains', label: 'No contiene', forTypes: ['string'] },
+  { value: '>', label: 'Mayor que', forTypes: ['number'] },
+  { value: '<', label: 'Menor que', forTypes: ['number'] },
+  { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
+  { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
+];
+
+// Resumen types
+interface ResumenArticuloGroup {
+  articulo: string;
+  items: InventarioReservado[];
+  totalCaras: number;
+  totalInversion: number;
+  formatos: string[];
+  tipos: string[];
+  plazas: string[];
+}
+
+interface ResumenCatorcenaGroup {
+  catorcena: string;
+  articulos: ResumenArticuloGroup[];
+  totalCaras: number;
+  totalInversion: number;
+}
+
 function formatInicioPeriodo(item: InventarioReservado): string {
   if (item.numero_catorcena && item.anio_catorcena) {
     return `Catorcena ${item.numero_catorcena}, ${item.anio_catorcena}`;
@@ -98,6 +153,32 @@ function formatInicioPeriodo(item: InventarioReservado): string {
 function getGroupValue(item: InventarioReservado, field: GroupByField): string {
   if (field === 'numero_catorcena') return formatInicioPeriodo(item);
   return String(item[field] || 'Sin asignar');
+}
+
+function applyFilters(data: InventarioReservado[], filters: FilterCondition[]): InventarioReservado[] {
+  if (filters.length === 0) return data;
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = (item as Record<string, unknown>)[filter.field];
+      const filterValue = filter.value;
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+      switch (filter.operator) {
+        case '=': return strValue === strFilterValue;
+        case '!=': return strValue !== strFilterValue;
+        case 'contains': return strValue.includes(strFilterValue);
+        case 'not_contains': return !strValue.includes(strFilterValue);
+        case '>': return Number(fieldValue) > Number(filterValue);
+        case '<': return Number(fieldValue) < Number(filterValue);
+        case '>=': return Number(fieldValue) >= Number(filterValue);
+        case '<=': return Number(fieldValue) <= Number(filterValue);
+        default: return true;
+      }
+    });
+  });
 }
 
 // Fetch from public endpoint
@@ -118,12 +199,18 @@ export function ClientePropuestaPage() {
   // States
   const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>(['numero_catorcena', 'articulo']);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [expandedResumen, setExpandedResumen] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState('');
   const [sortField, setSortField] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [poiMarkers, setPoiMarkers] = useState<POIMarker[]>([]);
   const [searchRange, setSearchRange] = useState(300);
   const [poiSearch, setPoiSearch] = useState('');
+  const [selectedMarker, setSelectedMarker] = useState<InventarioReservado | null>(null);
+
+  // Advanced filter states
+  const [filters, setFilters] = useState<FilterCondition[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -142,14 +229,47 @@ export function ClientePropuestaPage() {
   const kpis = useMemo(() => {
     if (!data) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
 
-    // Ensure numbers to prevent string concatenation
     const total = inventario.reduce((sum, i) => sum + Number(i.caras_totales || 0), 0);
     const inversion = inventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_totales || 1)), 0);
-
     const bonificadas = data.caras?.reduce((sum, c) => sum + Number(c.bonificacion || 0), 0) || 0;
 
     return { total: total + bonificadas, renta: total, bonificadas, inversion };
   }, [data, inventario]);
+
+  // Resumen de Caras (grouped by catorcena > articulo)
+  const resumenCaras = useMemo((): ResumenCatorcenaGroup[] => {
+    if (inventario.length === 0) return [];
+
+    const catorcenaMap = new Map<string, Map<string, InventarioReservado[]>>();
+
+    inventario.forEach(item => {
+      const catKey = formatInicioPeriodo(item);
+      const artKey = item.articulo || 'Sin articulo';
+      if (!catorcenaMap.has(catKey)) catorcenaMap.set(catKey, new Map());
+      const artMap = catorcenaMap.get(catKey)!;
+      if (!artMap.has(artKey)) artMap.set(artKey, []);
+      artMap.get(artKey)!.push(item);
+    });
+
+    return Array.from(catorcenaMap.entries()).map(([catorcena, artMap]) => {
+      const articulos: ResumenArticuloGroup[] = Array.from(artMap.entries()).map(([articulo, items]) => ({
+        articulo,
+        items,
+        totalCaras: items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0),
+        totalInversion: items.reduce((sum, i) => sum + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 1)), 0),
+        formatos: [...new Set(items.map(i => i.tipo_de_mueble || 'N/A'))],
+        tipos: [...new Set(items.map(i => i.tipo_de_cara || 'N/A'))],
+        plazas: [...new Set(items.map(i => i.plaza || 'N/A'))],
+      }));
+
+      return {
+        catorcena,
+        articulos,
+        totalCaras: articulos.reduce((sum, a) => sum + a.totalCaras, 0),
+        totalInversion: articulos.reduce((sum, a) => sum + a.totalInversion, 0),
+      };
+    });
+  }, [inventario]);
 
   const chartCiudades = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -180,12 +300,20 @@ export function ClientePropuestaPage() {
 
   const groupedData = useMemo(() => {
     let filtered = inventario;
+
+    // Apply advanced filters
+    if (filters.length > 0) {
+      filtered = applyFilters(filtered, filters);
+    }
+
     if (filterText) {
       const search = filterText.toLowerCase();
-      filtered = inventario.filter(i =>
+      filtered = filtered.filter(i =>
         i.codigo_unico?.toLowerCase().includes(search) ||
         i.plaza?.toLowerCase().includes(search) ||
-        i.ubicacion?.toLowerCase().includes(search)
+        i.ubicacion?.toLowerCase().includes(search) ||
+        i.tipo_de_mueble?.toLowerCase().includes(search) ||
+        i.articulo?.toLowerCase().includes(search)
       );
     }
     if (sortField) {
@@ -203,13 +331,44 @@ export function ClientePropuestaPage() {
       grouped[key].push(item);
     });
     return grouped;
-  }, [inventario, activeGroupings, filterText, sortField, sortOrder]);
+  }, [inventario, activeGroupings, filterText, sortField, sortOrder, filters]);
+
+  // Catorcena period display helpers
+  const periodoInicio = useMemo(() => {
+    if (data?.propuesta?.catorcena_inicio && data?.propuesta?.anio_inicio) {
+      return `Catorcena ${data.propuesta.catorcena_inicio}, ${data.propuesta.anio_inicio}`;
+    }
+    // Fallback: compute from inventario
+    const catorcenas = inventario
+      .filter(i => i.numero_catorcena && i.anio_catorcena)
+      .map(i => ({ num: i.numero_catorcena!, year: i.anio_catorcena! }));
+    if (catorcenas.length > 0) {
+      const sorted = catorcenas.sort((a, b) => a.year !== b.year ? a.year - b.year : a.num - b.num);
+      return `Catorcena ${sorted[0].num}, ${sorted[0].year}`;
+    }
+    return 'N/A';
+  }, [data, inventario]);
+
+  const periodoFin = useMemo(() => {
+    if (data?.propuesta?.catorcena_fin && data?.propuesta?.anio_fin) {
+      return `Catorcena ${data.propuesta.catorcena_fin}, ${data.propuesta.anio_fin}`;
+    }
+    const catorcenas = inventario
+      .filter(i => i.numero_catorcena && i.anio_catorcena)
+      .map(i => ({ num: i.numero_catorcena!, year: i.anio_catorcena! }));
+    if (catorcenas.length > 0) {
+      const sorted = catorcenas.sort((a, b) => a.year !== b.year ? a.year - b.year : a.num - b.num);
+      const last = sorted[sorted.length - 1];
+      return `Catorcena ${last.num}, ${last.year}`;
+    }
+    return 'N/A';
+  }, [data, inventario]);
 
   // Handlers
   const handleDownloadCSV = () => {
-    const headers = ['Código', 'Plaza', 'Ubicación', 'Tipo Cara', 'Formato', 'Caras', 'Tarifa', 'Periodo'];
+    const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Articulo', 'Caras', 'Tarifa', 'Periodo'];
     const rows = inventario.map(i => [
-      i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.tipo_de_mueble,
+      i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.tipo_de_mueble, i.articulo,
       i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i)
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
@@ -227,7 +386,15 @@ export function ClientePropuestaPage() {
       .map(i => `
         <Placemark>
           <name>${i.codigo_unico}</name>
-          <description>Plaza: ${i.plaza || 'N/A'}, Tipo: ${i.tipo_de_cara || 'N/A'}, Caras: ${i.caras_totales}</description>
+          <description>
+            <![CDATA[
+              Plaza: ${i.plaza || 'N/A'}<br/>
+              Tipo: ${i.tipo_de_cara || 'N/A'}<br/>
+              Formato: ${i.tipo_de_mueble || 'N/A'}<br/>
+              Caras: ${i.caras_totales}<br/>
+              Tarifa: ${formatCurrency(i.tarifa_publica || 0)}
+            ]]>
+          </description>
           <Point><coordinates>${i.longitud},${i.latitud},0</coordinates></Point>
         </Placemark>
       `).join('');
@@ -254,16 +421,13 @@ export function ClientePropuestaPage() {
     const pageHeight = doc.internal.pageSize.getHeight();
     let y = 15;
 
-    // IMU Brand Colors
-    const IMU_BLUE = [0, 84, 166]; // #0054A6
-    const IMU_GREEN = [122, 184, 0]; // #7AB800
+    const PDF_BLUE = [0, 84, 166] as const;
+    const PDF_GREEN = [122, 184, 0] as const;
 
-    // URL for client view
     const clientViewUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}`;
 
-    // Helper function for section titles
     const addSectionTitle = (title: string, yPos: number) => {
-      doc.setFillColor(IMU_BLUE[0], IMU_BLUE[1], IMU_BLUE[2]);
+      doc.setFillColor(PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]);
       doc.rect(marginX, yPos, pageWidth - marginX * 2, 7, 'F');
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
@@ -272,213 +436,185 @@ export function ClientePropuestaPage() {
       return yPos + 12;
     };
 
-    // Helper for compact field rows
     const createFieldRow = (fields: { label: string; value: string }[], yPos: number) => {
       const fieldWidth = (pageWidth - marginX * 2) / fields.length;
-
       fields.forEach((field, idx) => {
         const x = marginX + (fieldWidth * idx);
-
-        // Field background
         doc.setFillColor(252, 252, 252);
         doc.setDrawColor(220, 220, 220);
         doc.rect(x + 1, yPos, fieldWidth - 2, 14, 'FD');
-
-        // Label
         doc.setFontSize(7);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(IMU_BLUE[0], IMU_BLUE[1], IMU_BLUE[2]);
+        doc.setTextColor(PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]);
         doc.text(field.label, x + 3, yPos + 4);
-
-        // Value
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(field.value === 'N/A' ? 150 : 40, field.value === 'N/A' ? 150 : 40, field.value === 'N/A' ? 150 : 40);
         const valueText = doc.splitTextToSize(field.value, fieldWidth - 6);
         doc.text(valueText[0] || '', x + 3, yPos + 10);
       });
-
       return yPos + 18;
     };
 
-    // ========== HEADER ==========
-    doc.setFillColor(IMU_BLUE[0], IMU_BLUE[1], IMU_BLUE[2]);
+    // Header
+    doc.setFillColor(PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]);
     doc.rect(0, 0, pageWidth, 22, 'F');
-
-    // Green accent line
-    doc.setFillColor(IMU_GREEN[0], IMU_GREEN[1], IMU_GREEN[2]);
+    doc.setFillColor(PDF_GREEN[0], PDF_GREEN[1], PDF_GREEN[2]);
     doc.rect(0, 20, pageWidth, 2, 'F');
-
-    // Title
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 255, 255);
     doc.text('PROPUESTA DE CAMPAÑA PUBLICITARIA', pageWidth / 2, 13, { align: 'center' });
-
-    // Date
     const fechaActual = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.text(fechaActual, pageWidth - marginX, 8, { align: 'right' });
-
-    // Link to client view
     doc.setTextColor(200, 230, 255);
-    const linkText = 'Ver propuesta en línea';
+    const linkText = 'Ver propuesta en linea';
     const linkWidth = doc.getTextWidth(linkText);
     doc.textWithLink(linkText, pageWidth - marginX - linkWidth, 15, { url: clientViewUrl });
-
     y = 30;
 
-    // ========== INFORMACIÓN DEL CLIENTE ==========
-    y = addSectionTitle('INFORMACIÓN DEL CLIENTE', y);
-
-    // Row 1: Cliente, Razón Social, Marca
+    // Client Info
+    y = addSectionTitle('INFORMACION DEL CLIENTE', y);
     y = createFieldRow([
       { label: 'Cliente', value: data?.solicitud?.cliente || 'N/A' },
-      { label: 'Razón Social', value: data?.solicitud?.razon_social || 'N/A' },
+      { label: 'Razon Social', value: data?.solicitud?.razon_social || 'N/A' },
       { label: 'Marca', value: data?.solicitud?.marca_nombre || 'N/A' },
     ], y);
-
-    // Row 2: Asesor, Agencia, Producto, Categoría
     y = createFieldRow([
       { label: 'Asesor Comercial', value: data?.solicitud?.asesor || 'N/A' },
       { label: 'Agencia', value: data?.solicitud?.agencia || 'N/A' },
       { label: 'Producto', value: data?.solicitud?.producto_nombre || 'N/A' },
-      { label: 'Categoría', value: data?.solicitud?.categoria_nombre || 'N/A' },
+      { label: 'Categoria', value: data?.solicitud?.categoria_nombre || 'N/A' },
     ], y);
-
     y += 5;
 
-    // ========== DATOS DE LA CAMPAÑA ==========
+    // Campaign
     y = addSectionTitle('DATOS DE LA CAMPAÑA', y);
-
-    // Nombre de campaña
     y = createFieldRow([
       { label: 'Nombre de Campaña', value: data?.cotizacion?.nombre_campania || 'N/A' },
     ], y);
-
     y += 3;
 
-    // ========== PERIODO DE CAMPAÑA ==========
+    // Period
     y = addSectionTitle('PERIODO DE CAMPAÑA', y);
-
-    // Get catorcena info from propuesta
-    const catorcenaInicioStr = data?.propuesta?.catorcena_inicio && data?.propuesta?.anio_inicio
-      ? `Catorcena ${data.propuesta.catorcena_inicio} - ${data.propuesta.anio_inicio}`
-      : (data?.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : 'N/A');
-
-    const catorcenaFinStr = data?.propuesta?.catorcena_fin && data?.propuesta?.anio_fin
-      ? `Catorcena ${data.propuesta.catorcena_fin} - ${data.propuesta.anio_fin}`
-      : (data?.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : 'N/A');
-
     y = createFieldRow([
-      { label: 'Catorcena de Inicio', value: catorcenaInicioStr },
-      { label: 'Catorcena de Fin', value: catorcenaFinStr },
+      { label: 'Catorcena de Inicio', value: periodoInicio },
+      { label: 'Catorcena de Fin', value: periodoFin },
     ], y);
-
     y += 5;
 
-    // ========== RESUMEN DE INVERSIÓN ==========
-    y = addSectionTitle('RESUMEN DE INVERSIÓN', y);
-
-    // KPI boxes with colors
+    // KPIs
+    y = addSectionTitle('RESUMEN DE INVERSION', y);
     const kpiBoxWidth = (pageWidth - marginX * 2 - 15) / 4;
     const kpiItems = [
-      { label: 'Caras Facturadas', value: String(kpis.total), color: IMU_BLUE },
-      { label: 'Total de Caras', value: String(kpis.renta), color: [66, 133, 244] },
-      { label: 'Caras Bonificadas', value: String(kpis.bonificadas), color: IMU_GREEN },
-      { label: 'Inversión Total', value: formatCurrency(kpis.inversion), color: [0, 59, 113] },
+      { label: 'Caras Totales', value: String(kpis.total), color: PDF_BLUE },
+      { label: 'En Renta', value: String(kpis.renta), color: [66, 133, 244] as const },
+      { label: 'Bonificadas', value: String(kpis.bonificadas), color: PDF_GREEN },
+      { label: 'Inversion Total', value: formatCurrency(kpis.inversion), color: [0, 59, 113] as const },
     ];
-
     kpiItems.forEach((kpi, idx) => {
       const x = marginX + idx * (kpiBoxWidth + 5);
       doc.setFillColor(kpi.color[0], kpi.color[1], kpi.color[2]);
       doc.roundedRect(x, y, kpiBoxWidth, 20, 2, 2, 'F');
-
       doc.setFontSize(8);
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'normal');
       doc.text(kpi.label, x + kpiBoxWidth / 2, y + 6, { align: 'center' });
-
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
       doc.text(kpi.value, x + kpiBoxWidth / 2, y + 15, { align: 'center' });
     });
-
     y += 30;
 
-    // ========== TABLA DE INVENTARIO ==========
-    y = addSectionTitle('INVENTARIO RESERVADO', y);
-
+    // Grouped inventory table
     if (inventario.length > 0) {
-      // Only show: Plaza (Ciudad), Ubicación, Formato, Tipo de Cara (as Orientación), Caras, Periodo
-      autoTable(doc, {
-        head: [['Ciudad', 'Ubicación', 'Formato', 'Orientación', 'Caras', 'Periodo']],
-        body: inventario.map(i => [
-          i.plaza || '-',
-          i.ubicacion || '-',
-          i.tipo_de_mueble || '-',
-          i.tipo_de_cara || '-',
-          String(i.caras_totales || 0),
-          formatInicioPeriodo(i),
-        ]),
-        startY: y,
-        margin: { left: marginX, right: marginX },
-        styles: {
-          fontSize: 8,
-          cellPadding: 3,
-          textColor: [40, 40, 40],
-        },
-        headStyles: {
-          fillColor: [IMU_BLUE[0], IMU_BLUE[1], IMU_BLUE[2]],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          fontSize: 9,
-        },
-        alternateRowStyles: {
-          fillColor: [245, 250, 255],
-        },
-        columnStyles: {
-          0: { cellWidth: 35 },
-          1: { cellWidth: 80 },
-          4: { halign: 'center', cellWidth: 20 },
-          5: { cellWidth: 45 },
-        },
+      const grouped: Record<string, Record<string, typeof inventario>> = {};
+      inventario.forEach(item => {
+        const catKey = formatInicioPeriodo(item);
+        const artKey = item.articulo || 'Sin articulo';
+        if (!grouped[catKey]) grouped[catKey] = {};
+        if (!grouped[catKey][artKey]) grouped[catKey][artKey] = [];
+        grouped[catKey][artKey].push(item);
+      });
+
+      Object.entries(grouped).forEach(([catorcena, articulos]) => {
+        doc.setFillColor(PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]);
+        doc.roundedRect(marginX, y, pageWidth - marginX * 2, 8, 1, 1, 'F');
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(255, 255, 255);
+        doc.text(catorcena, marginX + 5, y + 5.5);
+        y += 10;
+
+        Object.entries(articulos).forEach(([articulo, items]) => {
+          const groupCaras = items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0);
+          const groupTarifa = items.reduce((sum, i) => sum + (Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 0), 0);
+
+          doc.setFillColor(PDF_GREEN[0], PDF_GREEN[1], PDF_GREEN[2]);
+          doc.roundedRect(marginX + 5, y, pageWidth - marginX * 2 - 10, 6, 1, 1, 'F');
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(255, 255, 255);
+          doc.text(`${articulo}`, marginX + 10, y + 4);
+          doc.setFont('helvetica', 'normal');
+          doc.text(`Caras: ${groupCaras}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
+          y += 8;
+
+          autoTable(doc, {
+            head: [['Ciudad', 'Ubicacion', 'Formato', 'Orientacion', 'Caras', 'Periodo']],
+            body: items.map(i => [
+              i.plaza || '-',
+              (i.ubicacion || '-').substring(0, 50),
+              i.tipo_de_mueble || '-',
+              i.tipo_de_cara || '-',
+              String(i.caras_totales || 0),
+              formatInicioPeriodo(i),
+            ]),
+            startY: y,
+            margin: { left: marginX + 5, right: marginX + 5 },
+            styles: { fontSize: 7, cellPadding: 2, textColor: [40, 40, 40] },
+            headStyles: { fillColor: [230, 240, 250], textColor: [PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]], fontStyle: 'bold', fontSize: 7 },
+            alternateRowStyles: { fillColor: [250, 252, 255] },
+            columnStyles: {
+              0: { cellWidth: 35 },
+              1: { cellWidth: 80 },
+              4: { halign: 'center', cellWidth: 20 },
+              5: { cellWidth: 45 },
+            },
+          });
+
+          y = (doc as any).lastAutoTable.finalY + 5;
+          if (y > pageHeight - 40) { doc.addPage(); y = 20; }
+        });
+        y += 5;
       });
     }
 
-    // ========== FOOTER ON ALL PAGES ==========
+    // Footer
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
-
-      // Footer bar
-      doc.setFillColor(IMU_BLUE[0], IMU_BLUE[1], IMU_BLUE[2]);
+      doc.setFillColor(PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]);
       doc.rect(0, pageHeight - 14, pageWidth, 14, 'F');
-
-      // Green accent
-      doc.setFillColor(IMU_GREEN[0], IMU_GREEN[1], IMU_GREEN[2]);
+      doc.setFillColor(PDF_GREEN[0], PDF_GREEN[1], PDF_GREEN[2]);
       doc.rect(0, pageHeight - 14, 4, 14, 'F');
-
-      // Footer text
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.text('IMU - Grupo IMU', marginX + 5, pageHeight - 6);
-
       doc.setFontSize(7);
       doc.setFont('helvetica', 'normal');
       doc.text('Desarrollado por QEB', marginX + 5, pageHeight - 2);
-
-      // Page number
       doc.setFontSize(8);
-      doc.text(`Página ${i} de ${totalPages}`, pageWidth - marginX, pageHeight - 5, { align: 'right' });
+      doc.text(`Pagina ${i} de ${totalPages}`, pageWidth - marginX, pageHeight - 5, { align: 'right' });
     }
 
     doc.save(`Propuesta_${data?.cotizacion?.nombre_campania || propuestaId}.pdf`);
     } catch (error) {
       console.error('Error generando PDF:', error);
-      alert('Error al generar el PDF. Revisa la consola para más detalles.');
+      alert('Error al generar el PDF. Revisa la consola para mas detalles.');
     }
   };
 
@@ -493,6 +629,7 @@ export function ClientePropuestaPage() {
       };
       setPoiMarkers(prev => [...prev, newMarker]);
       mapRef.current?.setCenter(newMarker.position);
+      mapRef.current?.setZoom(15);
       setPoiSearch('');
     }
   };
@@ -509,7 +646,14 @@ export function ClientePropuestaPage() {
     setExpandedGroups(next);
   };
 
-  const COLORS = ['#0054A6', '#7AB800', '#003B71', '#5FA800', '#0077E6', '#8BC34A']; // IMU Blue & Green palette
+  const toggleResumen = (key: string) => {
+    const next = new Set(expandedResumen);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setExpandedResumen(next);
+  };
+
+  const COLORS = ['#0054A6', '#7AB800', '#003B71', '#5FA800', '#0077E6', '#8BC34A'];
 
   if (isLoading) {
     return (
@@ -541,7 +685,6 @@ export function ClientePropuestaPage() {
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center justify-center">
-              {/* Large IMU Logo */}
               <img src="/logo-grupo-imu.png" alt="IMU" className="h-14 w-auto object-contain" />
             </div>
             <div className="border-l border-gray-300 pl-4">
@@ -576,10 +719,12 @@ export function ClientePropuestaPage() {
           </div>
           <div className="flex gap-6 mt-4 text-sm text-gray-500 border-t border-gray-100 pt-4">
             <span className="flex items-center gap-1">
-              <span className="font-medium text-gray-700">Inicio:</span> {data?.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : 'N/A'}
+              <span className="font-medium text-gray-700">Inicio:</span>
+              <span className="text-[#0054A6] font-medium">{periodoInicio}</span>
             </span>
             <span className="flex items-center gap-1">
-              <span className="font-medium text-gray-700">Fin:</span> {data?.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : 'N/A'}
+              <span className="font-medium text-gray-700">Fin:</span>
+              <span className="text-[#0054A6] font-medium">{periodoFin}</span>
             </span>
           </div>
         </div>
@@ -587,20 +732,170 @@ export function ClientePropuestaPage() {
         {/* Client Info */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Cliente', value: data?.solicitud?.cliente, icon: '👤' },
-            { label: 'Razón Social', value: data?.solicitud?.razon_social, icon: '🏢' },
-            { label: 'Marca', value: data?.solicitud?.marca_nombre, icon: '🏷️' },
-            { label: 'Asesor', value: data?.solicitud?.asesor, icon: '💼' },
-          ].map(({ label, value, icon }) => (
+            { label: 'Cliente', value: data?.solicitud?.cliente },
+            { label: 'Razon Social', value: data?.solicitud?.razon_social },
+            { label: 'Marca', value: data?.solicitud?.marca_nombre },
+            { label: 'Asesor', value: data?.solicitud?.asesor },
+          ].map(({ label, value }) => (
             <div key={label} className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm">{icon}</span>
-                <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
-              </div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</p>
               <p className="text-sm font-semibold truncate text-[#0054A6]">{value || 'N/A'}</p>
             </div>
           ))}
         </div>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'Total Caras', value: kpis.total, bg: 'bg-gradient-to-br from-[#0054A6] to-[#003B71]' },
+            { label: 'En Renta', value: kpis.renta, bg: 'bg-gradient-to-br from-blue-500 to-blue-600' },
+            { label: 'Bonificadas', value: kpis.bonificadas, bg: 'bg-gradient-to-br from-[#7AB800] to-[#5FA800]' },
+            { label: 'Inversion Total', value: formatCurrency(kpis.inversion), bg: 'bg-gradient-to-br from-amber-500 to-amber-600' },
+          ].map(({ label, value, bg }) => (
+            <div key={label} className={`${bg} rounded-xl p-5 text-center shadow-lg`}>
+              <p className="text-3xl font-bold text-white">{value}</p>
+              <p className="text-xs text-white/80 mt-1 uppercase tracking-wide">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Resumen de Caras - Like Solicitudes */}
+        {resumenCaras.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 bg-gradient-to-r from-[#0054A6]/5 to-[#7AB800]/5">
+              <h3 className="text-sm font-semibold text-[#0054A6] flex items-center gap-2">
+                <Layers className="h-4 w-4" />
+                Resumen de Caras
+              </h3>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {resumenCaras.map((catGroup) => (
+                <div key={catGroup.catorcena}>
+                  {/* Catorcena Header */}
+                  <button
+                    onClick={() => toggleResumen(catGroup.catorcena)}
+                    className="w-full px-5 py-3 flex items-center justify-between hover:bg-blue-50/50 transition-colors bg-[#0054A6]/5"
+                  >
+                    <div className="flex items-center gap-3">
+                      {expandedResumen.has(catGroup.catorcena) ? (
+                        <ChevronDown className="h-4 w-4 text-[#0054A6]" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-[#0054A6]/50" />
+                      )}
+                      <span className="px-3 py-1 rounded-lg bg-[#0054A6]/10 text-[#0054A6] text-xs font-medium border border-[#0054A6]/20">
+                        {catGroup.catorcena}
+                      </span>
+                      <span className="text-gray-400 text-xs">
+                        ({catGroup.articulos.length} articulo{catGroup.articulos.length > 1 ? 's' : ''})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-gray-400 text-xs">Caras:</span>
+                        <span className="text-gray-800 text-sm font-semibold">{catGroup.totalCaras}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 pl-2 border-l border-gray-200">
+                        <span className="text-[#7AB800] text-xs">Inversion:</span>
+                        <span className="text-[#7AB800] text-sm font-semibold">{formatCurrency(catGroup.totalInversion)}</span>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Articulo Groups */}
+                  {expandedResumen.has(catGroup.catorcena) && (
+                    <div className="pl-6 border-l-2 border-[#0054A6]/20 ml-5">
+                      {catGroup.articulos.map((artGroup) => {
+                        const artKey = `${catGroup.catorcena}|${artGroup.articulo}`;
+                        return (
+                          <div key={artKey} className="border-b border-gray-100 last:border-b-0">
+                            <button
+                              onClick={() => toggleResumen(artKey)}
+                              className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-green-50/50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                {expandedResumen.has(artKey) ? (
+                                  <ChevronDown className="h-3.5 w-3.5 text-[#7AB800]" />
+                                ) : (
+                                  <ChevronRight className="h-3.5 w-3.5 text-[#7AB800]/50" />
+                                )}
+                                <span className="px-2.5 py-0.5 rounded-md bg-[#7AB800]/10 text-[#7AB800] text-xs font-medium border border-[#7AB800]/20">
+                                  {artGroup.articulo}
+                                </span>
+                                <span className="text-gray-400 text-xs">
+                                  ({artGroup.items.length} inventario{artGroup.items.length > 1 ? 's' : ''})
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs">
+                                <span className="text-gray-400">Caras: <span className="text-gray-700 font-medium">{artGroup.totalCaras}</span></span>
+                                <span className="text-[#7AB800]">{formatCurrency(artGroup.totalInversion)}</span>
+                              </div>
+                            </button>
+
+                            {expandedResumen.has(artKey) && (
+                              <div className="px-4 pb-3">
+                                {/* Summary badges */}
+                                <div className="flex flex-wrap gap-2 mb-3 px-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs text-gray-400">Formatos:</span>
+                                    {artGroup.formatos.map(f => (
+                                      <span key={f} className="px-2 py-0.5 bg-blue-50 text-[#0054A6] rounded text-[10px] font-medium border border-blue-100">{f}</span>
+                                    ))}
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs text-gray-400">Tipos:</span>
+                                    {artGroup.tipos.map(t => (
+                                      <span key={t} className="px-2 py-0.5 bg-green-50 text-[#7AB800] rounded text-[10px] font-medium border border-green-100">{t}</span>
+                                    ))}
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs text-gray-400">Plazas:</span>
+                                    {artGroup.plazas.map(p => (
+                                      <span key={p} className="px-2 py-0.5 bg-gray-50 text-gray-600 rounded text-[10px] font-medium border border-gray-200">{p}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                                {/* Detail table */}
+                                <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="bg-[#0054A6]/5">
+                                        <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Plaza</th>
+                                        <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Formato</th>
+                                        <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Tipo</th>
+                                        <th className="px-3 py-2 text-center text-xs font-semibold text-[#0054A6]">Caras</th>
+                                        <th className="px-3 py-2 text-right text-xs font-semibold text-amber-600">Tarifa</th>
+                                        <th className="px-3 py-2 text-right text-xs font-semibold text-[#7AB800]">Inversion</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                      {artGroup.items.map((item, idx) => {
+                                        const inv = (Number(item.tarifa_publica) || 0) * (Number(item.caras_totales) || 0);
+                                        return (
+                                          <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
+                                            <td className="px-3 py-2 text-gray-700 text-xs">{item.plaza || '-'}</td>
+                                            <td className="px-3 py-2 text-gray-600 text-xs">{item.tipo_de_mueble || '-'}</td>
+                                            <td className="px-3 py-2 text-gray-600 text-xs">{item.tipo_de_cara || '-'}</td>
+                                            <td className="px-3 py-2 text-center font-semibold text-gray-800 text-xs">{item.caras_totales}</td>
+                                            <td className="px-3 py-2 text-right text-amber-600 text-xs">{formatCurrency(item.tarifa_publica || 0)}</td>
+                                            <td className="px-3 py-2 text-right text-[#7AB800] font-medium text-xs">{formatCurrency(inv)}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -649,21 +944,6 @@ export function ClientePropuestaPage() {
           </div>
         </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: 'Total Caras', value: kpis.total, bg: 'bg-gradient-to-br from-[#0054A6] to-[#003B71]', textColor: 'text-white' },
-            { label: 'En Renta', value: kpis.renta, bg: 'bg-gradient-to-br from-blue-500 to-blue-600', textColor: 'text-white' },
-            { label: 'Bonificadas', value: kpis.bonificadas, bg: 'bg-gradient-to-br from-[#7AB800] to-[#5FA800]', textColor: 'text-white' },
-            { label: 'Inversión Total', value: formatCurrency(kpis.inversion), bg: 'bg-gradient-to-br from-amber-500 to-amber-600', textColor: 'text-white' },
-          ].map(({ label, value, bg, textColor }) => (
-            <div key={label} className={`${bg} rounded-xl p-5 text-center shadow-lg`}>
-              <p className={`text-3xl font-bold ${textColor}`}>{value}</p>
-              <p className="text-xs text-white/80 mt-1 uppercase tracking-wide">{label}</p>
-            </div>
-          ))}
-        </div>
-
         {/* Table */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="p-4 border-b border-gray-200 flex flex-wrap items-center gap-4 bg-gray-50">
@@ -676,16 +956,27 @@ export function ClientePropuestaPage() {
                 onChange={(e) => setFilterText(e.target.value)}
                 className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#0054A6] focus:border-transparent"
               />
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1 ${showFilters || filters.length > 0
+                  ? 'bg-[#0054A6] text-white'
+                  : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                }`}
+              >
+                <Filter className="h-3 w-3" />
+                Filtros {filters.length > 0 && `(${filters.length})`}
+              </button>
             </div>
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-gray-500" />
-              {(['numero_catorcena', 'articulo', 'plaza'] as GroupByField[]).map(field => (
+              <span className="text-xs text-gray-500">Agrupar:</span>
+              {(['numero_catorcena', 'articulo', 'plaza', 'tipo_de_cara'] as GroupByField[]).map(field => (
                 <button
                   key={field}
                   onClick={() => toggleGrouping(field)}
                   className={`px-2 py-1 rounded text-xs font-medium transition-colors ${activeGroupings.includes(field) ? 'bg-[#0054A6] text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
                 >
-                  {field === 'numero_catorcena' ? 'Catorcena' : field}
+                  {field === 'numero_catorcena' ? 'Catorcena' : field === 'tipo_de_cara' ? 'tipo cara' : field}
                 </button>
               ))}
             </div>
@@ -693,50 +984,150 @@ export function ClientePropuestaPage() {
               <ArrowUpDown className="h-4 w-4 text-gray-500" />
               <select value={sortField} onChange={(e) => setSortField(e.target.value)} className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700">
                 <option value="">Sin ordenar</option>
+                <option value="codigo_unico">Codigo</option>
                 <option value="plaza">Plaza</option>
                 <option value="tipo_de_cara">Tipo</option>
+                <option value="tarifa_publica">Tarifa</option>
               </select>
+              <button
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-xs text-gray-600"
+              >
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </button>
             </div>
             <button onClick={handleDownloadCSV} className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-[#7AB800] hover:bg-[#5FA800] text-white rounded-lg text-sm font-medium shadow-sm transition-colors">
               <FileSpreadsheet className="h-4 w-4" /> CSV
             </button>
           </div>
 
-          <div className="max-h-[500px] overflow-auto">
-            {Object.entries(groupedData).map(([groupKey, items]) => (
-              <div key={groupKey} className="border-b border-gray-200">
-                <button onClick={() => toggleGroup(groupKey)} className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left transition-colors">
-                  {expandedGroups.has(groupKey) ? <ChevronDown className="h-4 w-4 text-[#0054A6]" /> : <ChevronRight className="h-4 w-4 text-[#0054A6]" />}
-                  <span className="text-sm font-medium text-gray-800">{groupKey}</span>
-                  <span className="text-xs text-gray-500">({items.length})</span>
-                  <span className="ml-auto text-xs font-semibold text-[#0054A6]">{items.reduce((s, i) => s + (Number(i.caras_totales) || 0), 0)} caras</span>
+          {/* Advanced Filters Panel */}
+          {showFilters && (
+            <div className="p-4 border-b border-gray-200 bg-blue-50/30">
+              <div className="flex flex-wrap gap-2 mb-3">
+                {filters.map(filter => {
+                  const fieldConfig = FILTER_FIELDS.find(f => f.field === filter.field);
+                  const operatorConfig = FILTER_OPERATORS.find(o => o.value === filter.operator);
+                  return (
+                    <div key={filter.id} className="flex items-center gap-1 px-2 py-1 bg-[#0054A6]/10 rounded-lg text-xs">
+                      <span className="text-[#0054A6]">{fieldConfig?.label || filter.field}</span>
+                      <span className="text-gray-400">{operatorConfig?.label || filter.operator}</span>
+                      <span className="text-gray-800 font-medium">{filter.value}</span>
+                      <button
+                        onClick={() => setFilters(filters.filter(f => f.id !== filter.id))}
+                        className="ml-1 text-gray-400 hover:text-red-500"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  id="filter-field-client"
+                  className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700"
+                  defaultValue=""
+                >
+                  <option value="" disabled>Campo</option>
+                  {FILTER_FIELDS.map(f => (
+                    <option key={f.field} value={f.field}>{f.label}</option>
+                  ))}
+                </select>
+                <select
+                  id="filter-operator-client"
+                  className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700"
+                  defaultValue="="
+                >
+                  {FILTER_OPERATORS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <input
+                  id="filter-value-client"
+                  type="text"
+                  placeholder="Valor"
+                  className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700 w-32"
+                />
+                <button
+                  onClick={() => {
+                    const field = (document.getElementById('filter-field-client') as HTMLSelectElement).value;
+                    const operator = (document.getElementById('filter-operator-client') as HTMLSelectElement).value as FilterOperator;
+                    const value = (document.getElementById('filter-value-client') as HTMLInputElement).value;
+                    if (field && value) {
+                      setFilters([...filters, { id: `filter-${Date.now()}`, field, operator, value }]);
+                      (document.getElementById('filter-value-client') as HTMLInputElement).value = '';
+                    }
+                  }}
+                  className="px-3 py-1 bg-[#0054A6] hover:bg-[#003B71] text-white rounded text-xs"
+                >
+                  Agregar
                 </button>
-                {expandedGroups.has(groupKey) && (
-                  <table className="w-full text-sm">
-                    <thead><tr className="bg-[#0054A6]/5 text-xs text-gray-600">
-                      <th className="px-4 py-2 text-left font-semibold">Código</th>
-                      <th className="px-4 py-2 text-left font-semibold">Plaza</th>
-                      <th className="px-4 py-2 text-left font-semibold">Ubicación</th>
-                      <th className="px-4 py-2 text-left font-semibold">Tipo</th>
-                      <th className="px-4 py-2 text-center font-semibold">Caras</th>
-                      <th className="px-4 py-2 text-right font-semibold">Tarifa</th>
-                    </tr></thead>
-                    <tbody>
-                      {items.map((item, idx) => (
-                        <tr key={idx} className="border-t border-gray-100 hover:bg-blue-50/50 transition-colors">
-                          <td className="px-4 py-2 font-mono text-xs text-[#0054A6] font-medium">{item.codigo_unico}</td>
-                          <td className="px-4 py-2 text-gray-700">{item.plaza}</td>
-                          <td className="px-4 py-2 text-gray-500 text-xs truncate max-w-[200px]">{item.ubicacion}</td>
-                          <td className="px-4 py-2 text-gray-600">{item.tipo_de_cara}</td>
-                          <td className="px-4 py-2 text-center font-semibold text-gray-800">{item.caras_totales}</td>
-                          <td className="px-4 py-2 text-right font-medium text-[#7AB800]">{formatCurrency(item.tarifa_publica || 0)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                {filters.length > 0 && (
+                  <button
+                    onClick={() => setFilters([])}
+                    className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded text-xs"
+                  >
+                    Limpiar
+                  </button>
                 )}
               </div>
-            ))}
+            </div>
+          )}
+
+          <div className="max-h-[500px] overflow-auto">
+            {Object.entries(groupedData).map(([groupKey, items]) => {
+              const groupCaras = items.reduce((s, i) => s + (Number(i.caras_totales) || 0), 0);
+              const groupInversion = items.reduce((s, i) => s + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 1)), 0);
+              const groupFormatos = [...new Set(items.map(i => i.tipo_de_mueble || 'N/A'))];
+              const groupPlazas = [...new Set(items.map(i => i.plaza || 'N/A'))];
+
+              return (
+                <div key={groupKey} className="border-b border-gray-200">
+                  <button onClick={() => toggleGroup(groupKey)} className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left transition-colors">
+                    {expandedGroups.has(groupKey) ? <ChevronDown className="h-4 w-4 text-[#0054A6]" /> : <ChevronRight className="h-4 w-4 text-[#0054A6]" />}
+                    <span className="text-sm font-medium text-gray-800">{groupKey}</span>
+                    <span className="text-xs text-gray-500">({items.length})</span>
+                    <div className="ml-auto flex items-center gap-3">
+                      <span className="text-xs text-gray-400">
+                        {groupFormatos.length > 1 ? `${groupFormatos.length} formatos` : groupFormatos[0]}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {groupPlazas.length > 1 ? `${groupPlazas.length} plazas` : groupPlazas[0]}
+                      </span>
+                      <span className="text-xs font-semibold text-[#0054A6]">{groupCaras} caras</span>
+                      <span className="text-xs font-semibold text-[#7AB800]">{formatCurrency(groupInversion)}</span>
+                    </div>
+                  </button>
+                  {expandedGroups.has(groupKey) && (
+                    <table className="w-full text-sm">
+                      <thead><tr className="bg-[#0054A6]/5 text-xs text-gray-600">
+                        <th className="px-4 py-2 text-left font-semibold">Codigo</th>
+                        <th className="px-4 py-2 text-left font-semibold">Plaza</th>
+                        <th className="px-4 py-2 text-left font-semibold">Ubicacion</th>
+                        <th className="px-4 py-2 text-left font-semibold">Formato</th>
+                        <th className="px-4 py-2 text-left font-semibold">Tipo</th>
+                        <th className="px-4 py-2 text-center font-semibold">Caras</th>
+                        <th className="px-4 py-2 text-right font-semibold">Tarifa</th>
+                      </tr></thead>
+                      <tbody>
+                        {items.map((item, idx) => (
+                          <tr key={idx} className="border-t border-gray-100 hover:bg-blue-50/50 transition-colors">
+                            <td className="px-4 py-2 font-mono text-xs text-[#0054A6] font-medium">{item.codigo_unico}</td>
+                            <td className="px-4 py-2 text-gray-700">{item.plaza}</td>
+                            <td className="px-4 py-2 text-gray-500 text-xs truncate max-w-[200px]">{item.ubicacion}</td>
+                            <td className="px-4 py-2 text-gray-600">{item.tipo_de_mueble}</td>
+                            <td className="px-4 py-2 text-gray-600">{item.tipo_de_cara}</td>
+                            <td className="px-4 py-2 text-center font-semibold text-gray-800">{item.caras_totales}</td>
+                            <td className="px-4 py-2 text-right font-medium text-[#7AB800]">{formatCurrency(item.tarifa_publica || 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -748,6 +1139,7 @@ export function ClientePropuestaPage() {
             <div className="flex items-center gap-2 ml-auto">
               <select value={searchRange} onChange={(e) => setSearchRange(parseInt(e.target.value))} className="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-700">
                 <option value={100}>100m</option>
+                <option value={200}>200m</option>
                 <option value={300}>300m</option>
                 <option value={500}>500m</option>
                 <option value={1000}>1km</option>
@@ -769,24 +1161,59 @@ export function ClientePropuestaPage() {
                 center={mapCenter}
                 zoom={12}
                 options={{ styles: IMU_MAP_STYLES, disableDefaultUI: true, zoomControl: true }}
-                onLoad={(map) => { mapRef.current = map; }}
+                onLoad={(map) => {
+                  mapRef.current = map;
+                  if (inventario.length > 0) {
+                    const bounds = new google.maps.LatLngBounds();
+                    inventario.forEach(item => {
+                      if (item.latitud && item.longitud) {
+                        bounds.extend({ lat: item.latitud, lng: item.longitud });
+                      }
+                    });
+                    if (!bounds.isEmpty()) {
+                      map.fitBounds(bounds, 50);
+                    }
+                  }
+                }}
               >
                 {inventario.map((item) => (
                   item.latitud && item.longitud && (
                     <Marker
                       key={item.id}
                       position={{ lat: item.latitud, lng: item.longitud }}
+                      onClick={() => setSelectedMarker(item)}
                       icon={{
                         path: google.maps.SymbolPath.CIRCLE,
                         scale: 8,
-                        fillColor: IMU_BLUE,
-                        fillOpacity: 1,
+                        fillColor: item.tipo_de_cara === 'Flujo' ? '#ef4444' : item.tipo_de_cara === 'Contraflujo' ? '#3b82f6' : IMU_BLUE,
+                        fillOpacity: 0.9,
                         strokeColor: '#ffffff',
                         strokeWeight: 2,
                       }}
                     />
                   )
                 ))}
+                {selectedMarker && (
+                  <InfoWindow
+                    position={{ lat: selectedMarker.latitud, lng: selectedMarker.longitud }}
+                    onCloseClick={() => setSelectedMarker(null)}
+                  >
+                    <div className="p-2 min-w-[200px]" style={{ color: '#000' }}>
+                      <h4 className="font-bold text-sm mb-2" style={{ color: IMU_DARK }}>{selectedMarker.codigo_unico}</h4>
+                      <div className="text-xs space-y-1">
+                        <p><strong>Plaza:</strong> {selectedMarker.plaza || 'N/A'}</p>
+                        <p><strong>Tipo:</strong> {selectedMarker.tipo_de_cara || 'N/A'}</p>
+                        <p><strong>Formato:</strong> {selectedMarker.tipo_de_mueble || 'N/A'}</p>
+                        <p><strong>Ubicacion:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
+                        <p><strong>Caras:</strong> {selectedMarker.caras_totales}</p>
+                        <p><strong>Tarifa:</strong> {formatCurrency(selectedMarker.tarifa_publica || 0)}</p>
+                        {selectedMarker.numero_catorcena && (
+                          <p><strong>Periodo:</strong> Catorcena {selectedMarker.numero_catorcena}, {selectedMarker.anio_catorcena}</p>
+                        )}
+                      </div>
+                    </div>
+                  </InfoWindow>
+                )}
                 {poiMarkers.map(marker => (
                   <Circle key={marker.id} center={marker.position} radius={marker.range} options={{ strokeColor: IMU_GREEN, strokeOpacity: 0.8, strokeWeight: 2, fillColor: IMU_GREEN, fillOpacity: 0.15 }} />
                 ))}
