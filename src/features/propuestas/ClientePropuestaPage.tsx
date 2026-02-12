@@ -2,8 +2,8 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef } from 'react';
 import {
-  Download, FileText, Map, Loader2, ChevronDown, ChevronRight,
-  Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink, X
+  FileText, Map as MapIcon, Loader2, ChevronDown, ChevronRight,
+  Filter, ArrowUpDown, Layers, FileSpreadsheet, X
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -79,8 +79,6 @@ interface PublicPropuestaData {
   inventario: InventarioReservado[];
 }
 
-type GroupByField = 'numero_catorcena' | 'articulo' | 'plaza' | 'tipo_de_cara';
-
 interface POIMarker {
   id: string;
   position: { lat: number; lng: number };
@@ -150,11 +148,6 @@ function formatInicioPeriodo(item: InventarioReservado): string {
   return 'Sin asignar';
 }
 
-function getGroupValue(item: InventarioReservado, field: GroupByField): string {
-  if (field === 'numero_catorcena') return formatInicioPeriodo(item);
-  return String(item[field] || 'Sin asignar');
-}
-
 function applyFilters(data: InventarioReservado[], filters: FilterCondition[]): InventarioReservado[] {
   if (filters.length === 0) return data;
   return data.filter(item => {
@@ -197,8 +190,6 @@ export function ClientePropuestaPage() {
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   // States
-  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>(['numero_catorcena', 'articulo']);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [expandedResumen, setExpandedResumen] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState('');
   const [sortField, setSortField] = useState<string>('');
@@ -236,13 +227,39 @@ export function ClientePropuestaPage() {
     return { total: total + bonificadas, renta: total, bonificadas, inversion };
   }, [data, inventario]);
 
-  // Resumen de Caras (grouped by catorcena > articulo)
+  // Filtered inventario (used by resumen)
+  const filteredInventario = useMemo(() => {
+    let filtered = inventario;
+    if (filters.length > 0) {
+      filtered = applyFilters(filtered, filters);
+    }
+    if (filterText) {
+      const search = filterText.toLowerCase();
+      filtered = filtered.filter(i =>
+        i.codigo_unico?.toLowerCase().includes(search) ||
+        i.plaza?.toLowerCase().includes(search) ||
+        i.ubicacion?.toLowerCase().includes(search) ||
+        i.tipo_de_mueble?.toLowerCase().includes(search) ||
+        i.articulo?.toLowerCase().includes(search)
+      );
+    }
+    if (sortField) {
+      filtered = [...filtered].sort((a, b) => {
+        const aVal = String(a[sortField as keyof InventarioReservado] || '');
+        const bVal = String(b[sortField as keyof InventarioReservado] || '');
+        return sortOrder === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      });
+    }
+    return filtered;
+  }, [inventario, filters, filterText, sortField, sortOrder]);
+
+  // Resumen de Caras (grouped by catorcena > articulo from filtered data)
   const resumenCaras = useMemo((): ResumenCatorcenaGroup[] => {
-    if (inventario.length === 0) return [];
+    if (filteredInventario.length === 0) return [];
 
     const catorcenaMap = new Map<string, Map<string, InventarioReservado[]>>();
 
-    inventario.forEach(item => {
+    filteredInventario.forEach(item => {
       const catKey = formatInicioPeriodo(item);
       const artKey = item.articulo || 'Sin articulo';
       if (!catorcenaMap.has(catKey)) catorcenaMap.set(catKey, new Map());
@@ -269,7 +286,7 @@ export function ClientePropuestaPage() {
         totalInversion: articulos.reduce((sum, a) => sum + a.totalInversion, 0),
       };
     });
-  }, [inventario]);
+  }, [filteredInventario]);
 
   const chartCiudades = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -297,41 +314,6 @@ export function ClientePropuestaPage() {
     const avgLng = validItems.reduce((sum, i) => sum + i.longitud, 0) / validItems.length;
     return { lat: avgLat, lng: avgLng };
   }, [inventario]);
-
-  const groupedData = useMemo(() => {
-    let filtered = inventario;
-
-    // Apply advanced filters
-    if (filters.length > 0) {
-      filtered = applyFilters(filtered, filters);
-    }
-
-    if (filterText) {
-      const search = filterText.toLowerCase();
-      filtered = filtered.filter(i =>
-        i.codigo_unico?.toLowerCase().includes(search) ||
-        i.plaza?.toLowerCase().includes(search) ||
-        i.ubicacion?.toLowerCase().includes(search) ||
-        i.tipo_de_mueble?.toLowerCase().includes(search) ||
-        i.articulo?.toLowerCase().includes(search)
-      );
-    }
-    if (sortField) {
-      filtered = [...filtered].sort((a, b) => {
-        const aVal = String(a[sortField as keyof InventarioReservado] || '');
-        const bVal = String(b[sortField as keyof InventarioReservado] || '');
-        return sortOrder === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      });
-    }
-    const grouped: Record<string, InventarioReservado[]> = {};
-    filtered.forEach(item => {
-      const keys = activeGroupings.map(g => getGroupValue(item, g));
-      const key = keys.join(' | ');
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(item);
-    });
-    return grouped;
-  }, [inventario, activeGroupings, filterText, sortField, sortOrder, filters]);
 
   // Catorcena period display helpers
   const periodoInicio = useMemo(() => {
@@ -634,18 +616,6 @@ export function ClientePropuestaPage() {
     }
   };
 
-  const toggleGrouping = (field: GroupByField) => {
-    if (activeGroupings.includes(field)) setActiveGroupings(activeGroupings.filter(g => g !== field));
-    else setActiveGroupings([...activeGroupings, field]);
-  };
-
-  const toggleGroup = (key: string) => {
-    const next = new Set(expandedGroups);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    setExpandedGroups(next);
-  };
-
   const toggleResumen = (key: string) => {
     const next = new Set(expandedResumen);
     if (next.has(key)) next.delete(key);
@@ -694,7 +664,7 @@ export function ClientePropuestaPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={handleDownloadKML} className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-sm font-medium shadow-sm transition-colors">
-              <Map className="h-4 w-4" /> KML
+              <MapIcon className="h-4 w-4" /> KML
             </button>
             <button onClick={handleGeneratePDF} className="flex items-center gap-2 px-4 py-2 bg-[#0054A6] hover:bg-[#003B71] text-white rounded-lg text-sm font-medium shadow-sm transition-colors">
               <FileText className="h-4 w-4" /> PDF
@@ -759,15 +729,116 @@ export function ClientePropuestaPage() {
           ))}
         </div>
 
-        {/* Resumen de Caras - Like Solicitudes */}
-        {resumenCaras.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 bg-gradient-to-r from-[#0054A6]/5 to-[#7AB800]/5">
+        {/* Resumen de Caras - Tabla principal */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          {/* Toolbar */}
+          <div className="px-5 py-4 border-b border-gray-200 bg-gradient-to-r from-[#0054A6]/5 to-[#7AB800]/5">
+            <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-[#0054A6] flex items-center gap-2">
                 <Layers className="h-4 w-4" />
                 Resumen de Caras
+                <span className="text-xs text-gray-400 font-normal">({filteredInventario.length} inventarios)</span>
               </h3>
+              <div className="flex items-center gap-2">
+                <button onClick={handleDownloadCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7AB800] hover:bg-[#5FA800] text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> CSV
+                </button>
+              </div>
             </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Filter className="h-3.5 w-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={filterText}
+                  onChange={(e) => setFilterText(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#0054A6] focus:border-transparent w-44"
+                />
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1 ${showFilters || filters.length > 0
+                    ? 'bg-[#0054A6] text-white'
+                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                  }`}
+                >
+                  <Filter className="h-3 w-3" />
+                  Filtros {filters.length > 0 && `(${filters.length})`}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="h-3.5 w-3.5 text-gray-400" />
+                <select value={sortField} onChange={(e) => setSortField(e.target.value)} className="px-2 py-1.5 bg-white border border-gray-300 rounded text-xs text-gray-700">
+                  <option value="">Sin ordenar</option>
+                  <option value="codigo_unico">Codigo</option>
+                  <option value="plaza">Plaza</option>
+                  <option value="tipo_de_cara">Tipo</option>
+                  <option value="tarifa_publica">Tarifa</option>
+                </select>
+                <button
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="px-2 py-1.5 bg-gray-200 hover:bg-gray-300 rounded text-xs text-gray-600"
+                >
+                  {sortOrder === 'asc' ? '↑' : '↓'}
+                </button>
+              </div>
+              {(filterText || filters.length > 0) && (
+                <button
+                  onClick={() => { setFilterText(''); setFilters([]); }}
+                  className="px-2.5 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs hover:bg-red-100"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Advanced Filters Panel */}
+          {showFilters && (
+            <div className="p-4 border-b border-gray-200 bg-blue-50/30">
+              <div className="flex flex-wrap gap-2 mb-3">
+                {filters.map(filter => {
+                  const fieldConfig = FILTER_FIELDS.find(f => f.field === filter.field);
+                  const operatorConfig = FILTER_OPERATORS.find(o => o.value === filter.operator);
+                  return (
+                    <div key={filter.id} className="flex items-center gap-1 px-2 py-1 bg-[#0054A6]/10 rounded-lg text-xs">
+                      <span className="text-[#0054A6]">{fieldConfig?.label || filter.field}</span>
+                      <span className="text-gray-400">{operatorConfig?.label || filter.operator}</span>
+                      <span className="text-gray-800 font-medium">{filter.value}</span>
+                      <button onClick={() => setFilters(filters.filter(f => f.id !== filter.id))} className="ml-1 text-gray-400 hover:text-red-500">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2">
+                <select id="filter-field-client" className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700" defaultValue="">
+                  <option value="" disabled>Campo</option>
+                  {FILTER_FIELDS.map(f => (<option key={f.field} value={f.field}>{f.label}</option>))}
+                </select>
+                <select id="filter-operator-client" className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700" defaultValue="=">
+                  {FILTER_OPERATORS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                </select>
+                <input id="filter-value-client" type="text" placeholder="Valor" className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700 w-32" />
+                <button
+                  onClick={() => {
+                    const field = (document.getElementById('filter-field-client') as HTMLSelectElement).value;
+                    const operator = (document.getElementById('filter-operator-client') as HTMLSelectElement).value as FilterOperator;
+                    const value = (document.getElementById('filter-value-client') as HTMLInputElement).value;
+                    if (field && value) {
+                      setFilters([...filters, { id: `filter-${Date.now()}`, field, operator, value }]);
+                      (document.getElementById('filter-value-client') as HTMLInputElement).value = '';
+                    }
+                  }}
+                  className="px-3 py-1 bg-[#0054A6] hover:bg-[#003B71] text-white rounded text-xs"
+                >Agregar</button>
+                {filters.length > 0 && (
+                  <button onClick={() => setFilters([])} className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded text-xs">Limpiar</button>
+                )}
+              </div>
+            </div>
+          )}
             <div className="divide-y divide-gray-100">
               {resumenCaras.map((catGroup) => (
                 <div key={catGroup.catorcena}>
@@ -895,7 +966,6 @@ export function ClientePropuestaPage() {
               ))}
             </div>
           </div>
-        )}
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -944,197 +1014,10 @@ export function ClientePropuestaPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 flex flex-wrap items-center gap-4 bg-gray-50">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-gray-500" />
-              <input
-                type="text"
-                placeholder="Buscar..."
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#0054A6] focus:border-transparent"
-              />
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1 ${showFilters || filters.length > 0
-                  ? 'bg-[#0054A6] text-white'
-                  : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                }`}
-              >
-                <Filter className="h-3 w-3" />
-                Filtros {filters.length > 0 && `(${filters.length})`}
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-gray-500" />
-              <span className="text-xs text-gray-500">Agrupar:</span>
-              {(['numero_catorcena', 'articulo', 'plaza', 'tipo_de_cara'] as GroupByField[]).map(field => (
-                <button
-                  key={field}
-                  onClick={() => toggleGrouping(field)}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${activeGroupings.includes(field) ? 'bg-[#0054A6] text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
-                >
-                  {field === 'numero_catorcena' ? 'Catorcena' : field === 'tipo_de_cara' ? 'tipo cara' : field}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <ArrowUpDown className="h-4 w-4 text-gray-500" />
-              <select value={sortField} onChange={(e) => setSortField(e.target.value)} className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700">
-                <option value="">Sin ordenar</option>
-                <option value="codigo_unico">Codigo</option>
-                <option value="plaza">Plaza</option>
-                <option value="tipo_de_cara">Tipo</option>
-                <option value="tarifa_publica">Tarifa</option>
-              </select>
-              <button
-                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-xs text-gray-600"
-              >
-                {sortOrder === 'asc' ? '↑' : '↓'}
-              </button>
-            </div>
-            <button onClick={handleDownloadCSV} className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-[#7AB800] hover:bg-[#5FA800] text-white rounded-lg text-sm font-medium shadow-sm transition-colors">
-              <FileSpreadsheet className="h-4 w-4" /> CSV
-            </button>
-          </div>
-
-          {/* Advanced Filters Panel */}
-          {showFilters && (
-            <div className="p-4 border-b border-gray-200 bg-blue-50/30">
-              <div className="flex flex-wrap gap-2 mb-3">
-                {filters.map(filter => {
-                  const fieldConfig = FILTER_FIELDS.find(f => f.field === filter.field);
-                  const operatorConfig = FILTER_OPERATORS.find(o => o.value === filter.operator);
-                  return (
-                    <div key={filter.id} className="flex items-center gap-1 px-2 py-1 bg-[#0054A6]/10 rounded-lg text-xs">
-                      <span className="text-[#0054A6]">{fieldConfig?.label || filter.field}</span>
-                      <span className="text-gray-400">{operatorConfig?.label || filter.operator}</span>
-                      <span className="text-gray-800 font-medium">{filter.value}</span>
-                      <button
-                        onClick={() => setFilters(filters.filter(f => f.id !== filter.id))}
-                        className="ml-1 text-gray-400 hover:text-red-500"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  id="filter-field-client"
-                  className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700"
-                  defaultValue=""
-                >
-                  <option value="" disabled>Campo</option>
-                  {FILTER_FIELDS.map(f => (
-                    <option key={f.field} value={f.field}>{f.label}</option>
-                  ))}
-                </select>
-                <select
-                  id="filter-operator-client"
-                  className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700"
-                  defaultValue="="
-                >
-                  {FILTER_OPERATORS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-                <input
-                  id="filter-value-client"
-                  type="text"
-                  placeholder="Valor"
-                  className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700 w-32"
-                />
-                <button
-                  onClick={() => {
-                    const field = (document.getElementById('filter-field-client') as HTMLSelectElement).value;
-                    const operator = (document.getElementById('filter-operator-client') as HTMLSelectElement).value as FilterOperator;
-                    const value = (document.getElementById('filter-value-client') as HTMLInputElement).value;
-                    if (field && value) {
-                      setFilters([...filters, { id: `filter-${Date.now()}`, field, operator, value }]);
-                      (document.getElementById('filter-value-client') as HTMLInputElement).value = '';
-                    }
-                  }}
-                  className="px-3 py-1 bg-[#0054A6] hover:bg-[#003B71] text-white rounded text-xs"
-                >
-                  Agregar
-                </button>
-                {filters.length > 0 && (
-                  <button
-                    onClick={() => setFilters([])}
-                    className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded text-xs"
-                  >
-                    Limpiar
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="max-h-[500px] overflow-auto">
-            {Object.entries(groupedData).map(([groupKey, items]) => {
-              const groupCaras = items.reduce((s, i) => s + (Number(i.caras_totales) || 0), 0);
-              const groupInversion = items.reduce((s, i) => s + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 1)), 0);
-              const groupFormatos = [...new Set(items.map(i => i.tipo_de_mueble || 'N/A'))];
-              const groupPlazas = [...new Set(items.map(i => i.plaza || 'N/A'))];
-
-              return (
-                <div key={groupKey} className="border-b border-gray-200">
-                  <button onClick={() => toggleGroup(groupKey)} className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left transition-colors">
-                    {expandedGroups.has(groupKey) ? <ChevronDown className="h-4 w-4 text-[#0054A6]" /> : <ChevronRight className="h-4 w-4 text-[#0054A6]" />}
-                    <span className="text-sm font-medium text-gray-800">{groupKey}</span>
-                    <span className="text-xs text-gray-500">({items.length})</span>
-                    <div className="ml-auto flex items-center gap-3">
-                      <span className="text-xs text-gray-400">
-                        {groupFormatos.length > 1 ? `${groupFormatos.length} formatos` : groupFormatos[0]}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        {groupPlazas.length > 1 ? `${groupPlazas.length} plazas` : groupPlazas[0]}
-                      </span>
-                      <span className="text-xs font-semibold text-[#0054A6]">{groupCaras} caras</span>
-                      <span className="text-xs font-semibold text-[#7AB800]">{formatCurrency(groupInversion)}</span>
-                    </div>
-                  </button>
-                  {expandedGroups.has(groupKey) && (
-                    <table className="w-full text-sm">
-                      <thead><tr className="bg-[#0054A6]/5 text-xs text-gray-600">
-                        <th className="px-4 py-2 text-left font-semibold">Codigo</th>
-                        <th className="px-4 py-2 text-left font-semibold">Plaza</th>
-                        <th className="px-4 py-2 text-left font-semibold">Ubicacion</th>
-                        <th className="px-4 py-2 text-left font-semibold">Formato</th>
-                        <th className="px-4 py-2 text-left font-semibold">Tipo</th>
-                        <th className="px-4 py-2 text-center font-semibold">Caras</th>
-                        <th className="px-4 py-2 text-right font-semibold">Tarifa</th>
-                      </tr></thead>
-                      <tbody>
-                        {items.map((item, idx) => (
-                          <tr key={idx} className="border-t border-gray-100 hover:bg-blue-50/50 transition-colors">
-                            <td className="px-4 py-2 font-mono text-xs text-[#0054A6] font-medium">{item.codigo_unico}</td>
-                            <td className="px-4 py-2 text-gray-700">{item.plaza}</td>
-                            <td className="px-4 py-2 text-gray-500 text-xs truncate max-w-[200px]">{item.ubicacion}</td>
-                            <td className="px-4 py-2 text-gray-600">{item.tipo_de_mueble}</td>
-                            <td className="px-4 py-2 text-gray-600">{item.tipo_de_cara}</td>
-                            <td className="px-4 py-2 text-center font-semibold text-gray-800">{item.caras_totales}</td>
-                            <td className="px-4 py-2 text-right font-medium text-[#7AB800]">{formatCurrency(item.tarifa_publica || 0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Map */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="p-4 border-b border-gray-200 flex items-center gap-4 bg-gray-50">
-            <Map className="h-5 w-5 text-[#0054A6]" />
+            <MapIcon className="h-5 w-5 text-[#0054A6]" />
             <h3 className="text-lg font-semibold text-[#0054A6]">Mapa de Ubicaciones</h3>
             <div className="flex items-center gap-2 ml-auto">
               <select value={searchRange} onChange={(e) => setSearchRange(parseInt(e.target.value))} className="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-700">
