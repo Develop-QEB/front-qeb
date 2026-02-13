@@ -74,6 +74,9 @@ export const SOCKET_EVENTS = {
 
 let socketInstance: Socket | null = null;
 
+// Track active rooms for automatic re-join on reconnection
+const activeRooms = new Set<string>();
+
 function getSocket(): Socket {
   if (!socketInstance) {
     socketInstance = io(SOCKET_URL, {
@@ -86,6 +89,13 @@ function getSocket(): Socket {
 
     socketInstance.on('connect', () => {
       console.log('[Socket] Conectado al servidor:', socketInstance?.id);
+      // Re-join all active rooms on reconnection
+      if (activeRooms.size > 0) {
+        console.log('[Socket] Re-joining rooms:', Array.from(activeRooms));
+        for (const room of activeRooms) {
+          socketInstance?.emit(room);
+        }
+      }
     });
 
     socketInstance.on('disconnect', (reason) => {
@@ -97,6 +107,22 @@ function getSocket(): Socket {
     });
   }
   return socketInstance;
+}
+
+/**
+ * Join a socket room and track it for automatic re-joining on reconnection
+ */
+function joinRoom(socket: Socket, roomEvent: string) {
+  activeRooms.add(roomEvent);
+  socket.emit(roomEvent);
+}
+
+/**
+ * Leave a socket room and stop tracking it
+ */
+function leaveRoom(socket: Socket, roomEvent: string) {
+  activeRooms.delete(roomEvent);
+  socket.emit(roomEvent.replace('join-', 'leave-'));
 }
 
 /**
@@ -513,9 +539,9 @@ export function useSocketSolicitudes() {
     const socket = getSocket();
     socketRef.current = socket;
 
-    // Unirse al room de solicitudes
+    // Unirse al room de solicitudes (con tracking para reconexión)
     if (!joinedRef.current) {
-      socket.emit('join-solicitudes');
+      joinRoom(socket, 'join-solicitudes');
       joinedRef.current = true;
       console.log('[Socket] Unido a solicitudes');
     }
@@ -581,7 +607,7 @@ export function useSocketPropuestas() {
     socketRef.current = socket;
 
     if (!joinedRef.current) {
-      socket.emit('join-propuestas');
+      joinRoom(socket, 'join-propuestas');
       joinedRef.current = true;
       console.log('[Socket] Unido a propuestas');
     }
@@ -650,7 +676,7 @@ export function useSocketCampanas() {
     socketRef.current = socket;
 
     if (!joinedRef.current) {
-      socket.emit('join-campanas');
+      joinRoom(socket, 'join-campanas');
       joinedRef.current = true;
       console.log('[Socket] Unido a campanas');
     }
@@ -703,7 +729,7 @@ export function useSocketClientes() {
     socketRef.current = socket;
 
     if (!joinedRef.current) {
-      socket.emit('join-clientes');
+      joinRoom(socket, 'join-clientes');
       joinedRef.current = true;
       console.log('[Socket] Unido a clientes');
     }
@@ -756,7 +782,7 @@ export function useSocketProveedores() {
     socketRef.current = socket;
 
     if (!joinedRef.current) {
-      socket.emit('join-proveedores');
+      joinRoom(socket, 'join-proveedores');
       joinedRef.current = true;
       console.log('[Socket] Unido a proveedores');
     }
@@ -807,7 +833,7 @@ export function useSocketDashboard() {
     socketRef.current = socket;
 
     if (!joinedRef.current) {
-      socket.emit('join-dashboard');
+      joinRoom(socket, 'join-dashboard');
       joinedRef.current = true;
       console.log('[Socket] Unido a dashboard');
     }
