@@ -9,9 +9,11 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Spinner } from '../../components/ui/spinner';
 
-// Areas disponibles
+// Areas disponibles (sincronizado con UsuariosAdminPage)
 const AREAS = [
+  'Dirección',
   'Comercial',
+  'Aeropuerto',
   'Tráfico',
   'Mercadotecnia',
   'Compras',
@@ -19,11 +21,24 @@ const AREAS = [
   'Facturación',
 ] as const;
 
-// Mapeo de puestos por área (igual que en UsuariosAdminPage)
+// Mapeo de puestos por área (sincronizado con UsuariosAdminPage)
 const PUESTOS_POR_AREA: Record<string, string[]> = {
+  'Dirección': [
+    'Director General',
+    'Director Comercial',
+  ],
   'Comercial': [
     'Asesor Comercial',
     'Analista de Servicio al Cliente',
+    'Jefe Digital Comercial',
+    'Especialista de BI',
+    'Director de Desarrollo Digital',
+  ],
+  'Aeropuerto': [
+    'Director Comercial Aeropuerto',
+    'Gerente Comercial Aeropuerto',
+    'Asesor Comercial Aeropuerto',
+    'Analista de Aeropuerto',
   ],
   'Tráfico': [
     'Gerente de Tráfico',
@@ -40,6 +55,9 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   ],
   'Operaciones': [
     'Director de Operaciones',
+    'Call Center CON',
+    'Gerente de Operaciones CON',
+    'Jefe de Operaciones Digital',
     'Gerente Digital (Operaciones)',
     'Gerentes de Operaciones Plazas (GDL y MTY)',
     'Jefes de Operaciones Plazas',
