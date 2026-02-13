@@ -2620,7 +2620,7 @@ function TaskDetailModal({
   onUpdateArteDigital: (reservaIds: number[], files: { file: File; spot: number }[], deleteArchivos?: string[]) => Promise<void>;
   onTaskComplete: (taskId: string, observaciones?: string) => Promise<void>;
   onSendToReview: (reservaIds: number[], responsableOriginal: string) => Promise<void>;
-  onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string) => Promise<void>;
+  onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string, asignadoId?: string) => Promise<void>;
   onCreateRecepcionFaltante: (faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[], observaciones: string) => Promise<void>;
   onUpdateTask: (taskId: string, data: { evidencia?: string; estatus?: string }) => Promise<void>;
   isUpdating: boolean;
@@ -2815,6 +2815,7 @@ function TaskDetailModal({
   // Estado para crear tarea de recepción (Impresión)
   const [isCreatingRecepcion, setIsCreatingRecepcion] = useState(false);
   const [recepcionAsignadoNombre, setRecepcionAsignadoNombre] = useState('');
+  const [recepcionAsignadoId, setRecepcionAsignadoId] = useState('');
   const [recepcionAsignadoSearch, setRecepcionAsignadoSearch] = useState('');
   const [showRecepcionAsignadoDropdown, setShowRecepcionAsignadoDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
@@ -4129,8 +4130,9 @@ function TaskDetailModal({
 
     setIsCreatingRecepcion(true);
     try {
-      await onCreateRecepcion(task.id, recepcionAsignadoNombre || undefined);
+      await onCreateRecepcion(task.id, recepcionAsignadoNombre || undefined, recepcionAsignadoId || undefined);
       setRecepcionAsignadoNombre('');
+      setRecepcionAsignadoId('');
       setRecepcionAsignadoSearch('');
       onClose();
     } catch (error) {
@@ -4545,6 +4547,7 @@ function TaskDetailModal({
                         setShowRecepcionAsignadoDropdown(true);
                         if (!e.target.value) {
                           setRecepcionAsignadoNombre('');
+                          setRecepcionAsignadoId('');
                         }
                       }}
                       onFocus={() => {
@@ -4577,6 +4580,7 @@ function TaskDetailModal({
                             type="button"
                             onClick={() => {
                               setRecepcionAsignadoNombre(u.nombre);
+                              setRecepcionAsignadoId(String(u.id));
                               setRecepcionAsignadoSearch(`${u.id}, ${u.nombre}`);
                               setShowRecepcionAsignadoDropdown(false);
                             }}
@@ -14753,7 +14757,7 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
             ids_reservas: reservaIds.join(','),
           });
         }}
-        onCreateRecepcion={async (tareaImpresionId, asignadoNombre) => {
+        onCreateRecepcion={async (tareaImpresionId, asignadoNombre, asignadoId) => {
           if (!selectedTask) return;
 
           // 1. Marcar la tarea de Impresión como "Atendido"
@@ -14788,6 +14792,7 @@ Total de impresiones solicitadas: ${numImpresiones}
 Por favor registra la cantidad de impresiones recibidas.`,
             tipo: 'Recepción',
             asignado: asignadoFinal,
+            id_asignado: asignadoId || '',
             ids_reservas: selectedTask.inventario_ids?.join(',') || '',
             num_impresiones: numImpresiones,
             evidencia: evidenciaRecepcion,
@@ -14835,6 +14840,7 @@ ${observaciones ? `Observaciones de recepción anterior:\n${observaciones}` : ''
 Por favor registra la cantidad de impresiones recibidas.`,
             tipo: 'Recepción',
             asignado: selectedTask.asignado || selectedTask.creador || '',
+            id_asignado: (selectedTask as any).id_asignado || '',
             ids_reservas: selectedTask.inventario_ids?.join(',') || '',
             evidencia: evidenciaFaltantes,
             num_impresiones: totalFaltantes,
