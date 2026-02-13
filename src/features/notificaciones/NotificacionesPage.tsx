@@ -1208,6 +1208,10 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
   if (tarea.referencia_tipo && tarea.referencia_id && tarea.referencia_tipo !== 'sistema') {
     return true;
   }
+  // Tareas de Revisión de artes / Corrección con campania_id → Gestión de Artes
+  if ((tarea.tipo === 'Revisión de artes' || tarea.tipo === 'Correccion') && tarea.campania_id) {
+    return true;
+  }
   // Si es tarea de autorización o rechazo con id_solicitud, también puede navegar
   if (tarea.id_solicitud && (tarea.tipo?.includes('Autorización') || tarea.tipo?.includes('Rechazo'))) {
     return true;
@@ -1219,6 +1223,10 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
 function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: string | null): string {
   if (tipo === 'campana' && tipoTarea === 'Correccion') {
     return 'Ver Tarea';
+  }
+  // Tareas de Revisión de artes → Gestión de Artes
+  if (tipoTarea === 'Revisión de artes' || tipoTarea === 'Correccion') {
+    return 'Ver Gestión de Artes';
   }
   if (tipoTarea?.toLowerCase().includes('solicitud')) {
     return 'Ver Solicitud';
@@ -1258,13 +1266,18 @@ function isRejectionTask(titulo: string): boolean {
 }
 
 // Función para obtener la ruta de navegación directa al detalle
-function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: number | null): string {
+function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: number | null, tareaId?: number): string {
   const isComment = isCommentNotification(titulo);
   const isRejection = isRejectionTask(titulo);
 
   // Si es tarea de propuesta (ajuste cto, etc.) o tiene id_propuesta, ir al detalle de propuesta
   if (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId) {
     return `/propuestas?viewId=${propuestaId || id}`;
+  }
+
+  // Tareas de Revisión de artes / Corrección → Gestión de Artes con auto-open del modal
+  if ((tipoTarea === 'Revisión de artes' || tipoTarea === 'Correccion') && campaniaId) {
+    return `/campanas/${campaniaId}/tareas?taskId=${tareaId || id}`;
   }
 
   // Si tiene campania_id, ir al detalle de campaña (excepto corrección, solicitud y propuesta)
@@ -1430,8 +1443,13 @@ function TaskDrawer({
     // Si tiene referencia_tipo y referencia_id, usar esos
     if (tarea.referencia_tipo && tarea.referencia_id) {
       const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
-      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId);
+      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id);
       onNavigate(path);
+      return;
+    }
+    // Tareas de Revisión de artes / Corrección con campania_id → Gestión de Artes
+    if ((tarea.tipo === 'Revisión de artes' || tarea.tipo === 'Correccion') && tarea.campania_id) {
+      onNavigate(`/campanas/${tarea.campania_id}/tareas?taskId=${tarea.id}`);
       return;
     }
     // Si es tarea de autorización/rechazo con id_solicitud, navegar a solicitud
@@ -2801,8 +2819,13 @@ export function NotificacionesPage() {
                                 // Si tiene referencia_tipo y referencia_id, usar esos
                                 if (tarea.referencia_tipo && tarea.referencia_id) {
                                   const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
-                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId);
+                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id);
                                   navigate(path);
+                                  return;
+                                }
+                                // Tareas de Revisión de artes / Corrección con campania_id → Gestión de Artes
+                                if ((tarea.tipo === 'Revisión de artes' || tarea.tipo === 'Correccion') && tarea.campania_id) {
+                                  navigate(`/campanas/${tarea.campania_id}/tareas?taskId=${tarea.id}`);
                                   return;
                                 }
                                 // Si es tarea de autorización/rechazo con id_solicitud, navegar a solicitud

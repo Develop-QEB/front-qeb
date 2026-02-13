@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
@@ -9495,6 +9495,10 @@ export function TareaSeguimientoPage() {
   const [initialTaskTipo, setInitialTaskTipo] = useState<string>('');
   const [availableTaskTipos, setAvailableTaskTipos] = useState<string[]>([]);
 
+  // URL search params (para auto-abrir modal de tarea desde "Mis Tareas")
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTaskId = searchParams.get('taskId');
+
   // ---- Query Client for mutations ----
   const queryClient = useQueryClient();
 
@@ -10762,6 +10766,20 @@ export function TareaSeguimientoPage() {
         archivo_testigo: t.archivo_testigo || undefined,
       }));
   }, [tareasAPI, campanaId]);
+
+  // Auto-abrir modal de tarea si viene taskId en URL (desde "Mis Tareas")
+  useEffect(() => {
+    if (!urlTaskId || isLoadingTareas) return;
+    const allTasks = [...tasks, ...completedTasks];
+    const targetTask = allTasks.find(t => t.id === urlTaskId);
+    if (targetTask && !isTaskDetailModalOpen) {
+      setSelectedTask(targetTask);
+      setIsTaskDetailModalOpen(true);
+      // Limpiar el param de la URL para que no se re-abra al navegar
+      searchParams.delete('taskId');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [urlTaskId, tasks, completedTasks, isLoadingTareas]);
 
   // Obtener valores únicos para filtros de tareas
   const getUniqueValuesTareas = useMemo(() => {
