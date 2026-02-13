@@ -548,30 +548,30 @@ export function useSocketSolicitudes() {
 
     const handleSolicitudCreada = () => {
       console.log('[Socket] Solicitud creada');
-      queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
-      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'active' });
     };
 
     const handleSolicitudActualizada = () => {
       console.log('[Socket] Solicitud actualizada');
-      queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
-      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'], refetchType: 'active' });
     };
 
     const handleSolicitudEliminada = () => {
       console.log('[Socket] Solicitud eliminada');
-      queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
-      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'active' });
     };
 
     const handleSolicitudStatusChanged = () => {
       console.log('[Socket] Status de solicitud cambiado');
-      queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
-      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'active' });
     };
 
     socket.on(SOCKET_EVENTS.SOLICITUD_CREADA, handleSolicitudCreada);
