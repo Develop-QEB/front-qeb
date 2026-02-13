@@ -24,7 +24,7 @@ import { useSocketNotificaciones } from '../../hooks/useSocket';
 type ContentType = 'notificaciones' | 'tareas';
 type ViewType = 'tablero' | 'lista' | 'calendario' | 'notas';
 type GroupByType = 'estatus' | 'tipo' | 'fecha' | 'responsable' | 'asignado';
-type OrderByType = 'fecha_fin' | 'fecha_inicio' | 'titulo' | 'estatus';
+type OrderByType = 'fecha_fin' | 'fecha_inicio' | 'created_at' | 'titulo' | 'estatus';
 type DateFilterType = 'all' | 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month';
 type QuickFilter = 'all' | 'pendientes' | 'finalizadas' | 'leidas' | 'no_leidas' | null;
 
@@ -1996,7 +1996,7 @@ export function NotificacionesPage() {
   const [view, setView] = useState<ViewType>('lista');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [orderBy, setOrderBy] = useState<OrderByType>('fecha_inicio');
+  const [orderBy, setOrderBy] = useState<OrderByType>('created_at');
   const [orderDir, setOrderDir] = useState<'asc' | 'desc'>('desc');
   const [filterEstatus, setFilterEstatus] = useState<string>('');
   const [filterFecha, setFilterFecha] = useState<DateFilterType>('all');
@@ -2009,7 +2009,7 @@ export function NotificacionesPage() {
   const [showFilterPopup, setShowFilterPopup] = useState(false);
   const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
   const [showGroupPopup, setShowGroupPopup] = useState(false);
-  const [sortField, setSortField] = useState<string | null>('fecha_creacion');
+  const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [showSortPopup, setShowSortPopup] = useState(false);
 
@@ -2142,6 +2142,12 @@ export function NotificacionesPage() {
         if (aVal === null || aVal === undefined) return sortDirection === 'asc' ? 1 : -1;
         if (bVal === null || bVal === undefined) return sortDirection === 'asc' ? -1 : 1;
 
+        // Comparar fechas cronológicamente
+        if (DATE_FIELDS.includes(sortField)) {
+          const comparison = new Date(String(aVal)).getTime() - new Date(String(bVal)).getTime();
+          return sortDirection === 'asc' ? comparison : -comparison;
+        }
+
         const comparison = String(aVal).localeCompare(String(bVal));
         return sortDirection === 'asc' ? comparison : -comparison;
       });
@@ -2240,14 +2246,14 @@ export function NotificacionesPage() {
   }, []);
 
   // Verificar si hay filtros activos
-  const hasActiveFilters = filters.length > 0 || activeGroupings.length > 0 || sortField !== null || filterFecha !== 'all' || search || quickFilter !== null;
+  const hasActiveFilters = filters.length > 0 || activeGroupings.length > 0 || sortField !== null || filterFecha !== 'all' || search || (quickFilter !== null && quickFilter !== 'all');
 
   // Limpiar todos los filtros
   const clearAllFilters = useCallback(() => {
     setQuickFilter(null);
     setFilters([]);
     setActiveGroupings([]);
-    setSortField('fecha_creacion');
+    setSortField(null);
     setSortDirection('desc');
     setFilterFecha('all');
     setSearch('');
