@@ -1561,7 +1561,7 @@ function TaskDrawer({
           )}
 
           {/* Botón finalizar tarea */}
-          {contentType === 'tareas' && tarea.tipo?.toLowerCase().includes('seguimiento') && tarea.tipo?.toLowerCase().includes('campaña') && (
+          {contentType === 'tareas' && (tarea.tipo?.toLowerCase().includes('ajuste') || (tarea.tipo?.toLowerCase().includes('seguimiento') && tarea.tipo?.toLowerCase().includes('campaña'))) && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
