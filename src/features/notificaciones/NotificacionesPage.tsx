@@ -1219,6 +1219,9 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   if (tipo === 'campana' && tipoTarea === 'Correccion') {
     return 'Ver Tarea';
   }
+  if (tipoTarea?.toLowerCase().includes('solicitud')) {
+    return 'Ver Solicitud';
+  }
   // Si tiene campania_id, ir a campaña
   if (campaniaId) {
     return 'Ver Campaña';
@@ -1258,8 +1261,8 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   const isComment = isCommentNotification(titulo);
   const isRejection = isRejectionTask(titulo);
 
-  // Si tiene campania_id, ir al detalle de campaña (excepto corrección)
-  if (campaniaId && tipoTarea !== 'Correccion') {
+  // Si tiene campania_id, ir al detalle de campaña (excepto corrección y solicitud)
+  if (campaniaId && tipoTarea !== 'Correccion' && !tipoTarea?.toLowerCase().includes('solicitud')) {
     return `/campanas/detail/${campaniaId}`;
   }
 
