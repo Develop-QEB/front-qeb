@@ -1274,14 +1274,14 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   const isComment = isCommentNotification(titulo);
   const isRejection = isRejectionTask(titulo);
 
+  // Tareas de Gestión de Artes → Gestión de Artes con auto-open del modal (prioridad sobre propuesta)
+  if (isGestionArtesTarea(tipoTarea) && campaniaId) {
+    return `/campanas/${campaniaId}/tareas?taskId=${tareaId || id}`;
+  }
+
   // Si es tarea de propuesta (ajuste cto, etc.) o tiene id_propuesta, ir al detalle de propuesta
   if (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId) {
     return `/propuestas?viewId=${propuestaId || id}`;
-  }
-
-  // Tareas de Gestión de Artes → Gestión de Artes con auto-open del modal
-  if (isGestionArtesTarea(tipoTarea) && campaniaId) {
-    return `/campanas/${campaniaId}/tareas?taskId=${tareaId || id}`;
   }
 
   // Si tiene campania_id, ir al detalle de campaña (excepto solicitud y propuesta)
