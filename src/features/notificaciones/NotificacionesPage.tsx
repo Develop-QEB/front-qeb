@@ -147,8 +147,9 @@ function applyFilters(data: Notificacion[], filters: FilterCondition[]): Notific
         const range = resolveDatePreset(filterValue);
         if (!range) return true;
         if (fieldValue === null || fieldValue === undefined) return filter.operator === '!=';
-        const date = new Date(String(fieldValue));
-        if (isNaN(date.getTime())) return false;
+        const raw = new Date(String(fieldValue));
+        if (isNaN(raw.getTime())) return false;
+        const date = new Date(raw.getFullYear(), raw.getMonth(), raw.getDate());
         const inRange = date >= range[0] && date < range[1];
         return filter.operator === '=' ? inRange : !inRange;
       }
