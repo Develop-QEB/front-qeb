@@ -10262,11 +10262,22 @@ export function TareaSeguimientoPage() {
         }
       }
 
+      // Si hay tarea de recepción pendiente, mostrar su estatus en vez del de impresión
+      let estatusMostrado = tarea.estatus || 'Pendiente';
+      let tituloMostrado = tarea.titulo || `Impresión #${tarea.id}`;
+      if (estadoImpresion === 'pendiente_recepcion' && tareaRecepcionId) {
+        const tareaRecepcion = tareasRecepcionRelacionadas.find(r => r.id === tareaRecepcionId);
+        if (tareaRecepcion) {
+          estatusMostrado = tareaRecepcion.estatus || 'Pendiente';
+          tituloMostrado = tareaRecepcion.titulo || `Recepción #${tareaRecepcionId}`;
+        }
+      }
+
       ids.forEach(id => {
         reservaToTareaMap.set(id, {
-          tarea_id: tarea.id,
-          tarea_estatus: tarea.estatus || 'Pendiente',
-          tarea_titulo: tarea.titulo || `Impresión #${tarea.id}`,
+          tarea_id: estadoImpresion === 'pendiente_recepcion' && tareaRecepcionId ? tareaRecepcionId : tarea.id,
+          tarea_estatus: estatusMostrado,
+          tarea_titulo: tituloMostrado,
           proveedor: tarea.nombre_proveedores || '-',
           estado_impresion: estadoImpresion,
           tarea_recepcion_id: tareaRecepcionId,
