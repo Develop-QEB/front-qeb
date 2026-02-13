@@ -1222,14 +1222,14 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   if (tipoTarea?.toLowerCase().includes('solicitud')) {
     return 'Ver Solicitud';
   }
-  // Si tiene campania_id, ir a campaña
-  if (campaniaId) {
-    return 'Ver Campaña';
-  }
   if (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto')) {
     return 'Ver Propuesta';
   }
   if (tipoTarea?.toLowerCase().includes('campaña')) {
+    return 'Ver Campaña';
+  }
+  // Si tiene campania_id, ir a campaña
+  if (campaniaId) {
     return 'Ver Campaña';
   }
   switch (tipo) {
@@ -1261,14 +1261,14 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   const isComment = isCommentNotification(titulo);
   const isRejection = isRejectionTask(titulo);
 
-  // Si tiene campania_id, ir al detalle de campaña (excepto corrección y solicitud)
-  if (campaniaId && tipoTarea !== 'Correccion' && !tipoTarea?.toLowerCase().includes('solicitud')) {
-    return `/campanas/detail/${campaniaId}`;
+  // Si es tarea de propuesta (ajuste cto, etc.), ir al detalle de propuesta
+  if (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto')) {
+    return `/propuestas?viewId=${propuestaId || id}`;
   }
 
-  // Si es tarea de propuesta (ajuste cto, etc.) y tiene propuestaId, ir al detalle de propuesta
-  if ((tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto')) && propuestaId) {
-    return `/propuestas?viewId=${propuestaId}`;
+  // Si tiene campania_id, ir al detalle de campaña (excepto corrección, solicitud y propuesta)
+  if (campaniaId && tipoTarea !== 'Correccion' && !tipoTarea?.toLowerCase().includes('solicitud') && !tipoTarea?.toLowerCase().includes('propuesta')) {
+    return `/campanas/detail/${campaniaId}`;
   }
 
   switch (tipo) {
