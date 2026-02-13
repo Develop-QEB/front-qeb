@@ -16,7 +16,7 @@ const labelClasses = 'block text-sm font-medium text-purple-300 mb-2';
 
 const AREAS_DISPONIBLES = [
   'Dirección General',
-  'Dirección Comercial',
+  'Comercial',
   'Dirección Comercial Aeropuerto',
   'Departamento de Tráfico',
   'Dirección de Mercadotecnia',
@@ -30,7 +30,7 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   'Dirección General': [
     'Director General',
   ],
-  'Dirección Comercial': [
+  'Comercial': [
     'Director Comercial',
     'Asesor Comercial',
     'Analista de Servicio al Cliente',
