@@ -1219,12 +1219,13 @@ export function PropuestasPage() {
 
   const renderPropuestaRow = (item: Propuesta & any, index: number) => {
     const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
-    // Bloquear todas las acciones cuando el status es "Activa" (para todos los usuarios)
+    // Bloquear todas las acciones cuando el status es "Activa" o "Atendido" (para todos los usuarios)
     const isActiva = item.status === 'Activa';
+    const isAtendido = item.status === 'Atendido';
     // Roles comerciales: bloquear acciones cuando el status es "Abierto"
     const rolesLockedByAbierto = ['Asesor Comercial', 'Director Comercial Aeropuerto', 'Asesor Comercial Aeropuerto'];
     const isLockedByAbierto = rolesLockedByAbierto.includes(user?.rol || '') && item.status === 'Abierto';
-    const isLocked = isActiva || isLockedByAbierto;
+    const isLocked = isActiva || isLockedByAbierto || isAtendido;
 
     return (
       <tr key={`prop-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
