@@ -193,6 +193,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
     canEditGestionArtes: false,
+    canOpenTasks: false, // No puede abrir tareas en Gestión de Artes
 
     canCreateInventarios: false,
     canEditInventarios: false,
