@@ -14359,8 +14359,8 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300 max-w-[150px] truncate">{task.descripcion}</td>
                             <td className="p-2 text-zinc-300">{task.titulo}</td>
                             <td className="p-2">
-                              {/* Solo mostrar botón Abrir si: canOpenTasks=true Y (no tiene restricción O es tarea del tipo permitido) */}
-                              {permissions.canOpenTasks && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks && !permissions.canOnlyOpenCorreccionTasks) ||
+                              {/* Solo mostrar botón Abrir si: canOpenTasks=true Y (no tiene restricción O es tarea del tipo permitido) Y no está bloqueado por cannotOpenCorreccionTasks */}
+                              {permissions.canOpenTasks && !(permissions.cannotOpenCorreccionTasks && task.tipo === 'Correccion') && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks && !permissions.canOnlyOpenCorreccionTasks) ||
                                 (permissions.canOnlyOpenImpresionTasks && task.tipo === 'Impresión') ||
                                 (permissions.canOnlyOpenRecepcionTasks && (task.tipo === 'Recepción' || task.tipo === 'Instalación' || task.tipo === 'Testigo' || task.tipo === 'Programación')) ||
                                 (permissions.canOnlyOpenCorreccionTasks && task.tipo === 'Correccion')) ? (
