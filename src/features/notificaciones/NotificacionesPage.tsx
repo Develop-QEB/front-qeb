@@ -1998,7 +1998,7 @@ export function NotificacionesPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [orderBy, setOrderBy] = useState<OrderByType>('created_at');
-  const [orderDir, setOrderDir] = useState<'asc' | 'desc'>('asc');
+  const [orderDir, setOrderDir] = useState<'asc' | 'desc'>('desc');
   const [filterEstatus, setFilterEstatus] = useState<string>('');
   const [filterFecha, setFilterFecha] = useState<DateFilterType>('all');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
