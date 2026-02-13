@@ -853,9 +853,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Gestión de Artes - solo tab Programación, puede usarla y resolver tareas
     canEditGestionArtes: true,
-    canResolveProduccionTasks: false,
+    canResolveProduccionTasks: true,
     canSeeTabProgramacion: true,
-    canSeeTabImpresiones: false,
+    canSeeTabImpresiones: true,
     canSeeTabSubirArtes: false,
     canSeeTabRevisarAprobar: false,
     canSeeTabTestigos: false,
