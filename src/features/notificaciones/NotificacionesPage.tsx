@@ -2246,7 +2246,7 @@ export function NotificacionesPage() {
   }, []);
 
   // Verificar si hay filtros activos
-  const hasActiveFilters = filters.length > 0 || activeGroupings.length > 0 || sortField !== null || filterFecha !== 'all' || search || quickFilter !== null;
+  const hasActiveFilters = filters.length > 0 || activeGroupings.length > 0 || sortField !== null || filterFecha !== 'all' || search || (quickFilter !== null && quickFilter !== 'all');
 
   // Limpiar todos los filtros
   const clearAllFilters = useCallback(() => {
