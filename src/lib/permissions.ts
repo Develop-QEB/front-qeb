@@ -93,6 +93,7 @@ export interface RolePermissions {
   canOnlyOpenImpresionTasks: boolean; // Solo puede abrir tareas de tipo Impresión (oculta botón Abrir para otros tipos)
   canOnlyOpenRecepcionTasks: boolean; // Solo puede abrir tareas de tipo Recepción, Instalación, Testigo y Programación (para Operaciones)
   canOnlyOpenCorreccionTasks: boolean; // Solo puede abrir tareas de tipo Corrección
+  cannotOpenCorreccionTasks: boolean; // No puede abrir tareas de tipo Corrección (para Diseñadores)
   canOpenTasks: boolean; // Puede abrir/ver detalle de tareas (false = solo visualización de la lista)
   canCreateInstalacionFromRecibido: boolean; // Crear tareas de Instalación desde tab Impresiones con estado recibido (Operaciones)
 
@@ -160,6 +161,7 @@ const defaultPermissions: RolePermissions = {
   canOnlyOpenImpresionTasks: false,
   canOnlyOpenRecepcionTasks: false,
   canOnlyOpenCorreccionTasks: false,
+  cannotOpenCorreccionTasks: false,
   canOpenTasks: true,
   canCreateInstalacionFromRecibido: false, // Default false - solo Operaciones
 
@@ -1306,6 +1308,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabValidacionInstalacion: false,
     canCreateTareasGestionArtes: false, // No pueden crear tareas
     canResolveRevisionArtesTasks: true, // Sí pueden resolver tareas de revisión de artes
+    cannotOpenCorreccionTasks: true, // NO pueden abrir tareas de corrección
 
     // Inventarios - oculto
     canCreateInventarios: false,
