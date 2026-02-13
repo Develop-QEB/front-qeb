@@ -39,8 +39,9 @@ export function LoginPage() {
 
     try {
       const response = await authService.login(data.email, data.password);
-      // Limpiar caché de React Query para evitar datos del usuario anterior
+      // Limpiar caché de React Query (memoria + localStorage) para evitar datos del usuario anterior
       queryClient.clear();
+      localStorage.removeItem('qeb-query-cache');
       setAuth(response.user, response.accessToken, response.refreshToken);
       navigate('/');
     } catch (err: any) {

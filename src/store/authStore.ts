@@ -33,6 +33,7 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        localStorage.removeItem('qeb-query-cache');
         set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
       },
       setHasHydrated: (state) => {
