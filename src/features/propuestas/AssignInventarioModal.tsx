@@ -2098,7 +2098,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Check if there are digital items in inventory
   const hasDigitalInventory = useMemo(() => {
     return inventarioDisponible.some(inv =>
-      inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0)
+      inv.tradicional_digital === 'Digital'
     );
   }, [inventarioDisponible]);
 
@@ -5572,6 +5572,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     else next.add(id);
                     return next;
                   });
+                  // Pan map to the selected reserva's location
+                  const reserva = filteredReservas.find(r => r.id === id);
+                  if (reserva?.latitud && reserva?.longitud && resumenReservasMapRef.current) {
+                    resumenReservasMapRef.current.panTo({ lat: reserva.latitud, lng: reserva.longitud });
+                    resumenReservasMapRef.current.setZoom(15);
+                  }
                 };
                 const toggleReservasGroup = (groupKey: string) => {
                   setExpandedReservasGroups(prev => {
@@ -6040,7 +6046,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           <>
                             <GoogleMap
                               mapContainerStyle={{ width: '100%', height: '100%' }}
-                              center={{ lat: 20.6597, lng: -103.3496 }}
+                              center={filteredReservas.find(r => r.latitud && r.longitud) ? { lat: filteredReservas.find(r => r.latitud && r.longitud)!.latitud, lng: filteredReservas.find(r => r.latitud && r.longitud)!.longitud } : { lat: 20.6597, lng: -103.3496 }}
                               zoom={11}
                               options={{
                                 styles: DARK_MAP_STYLES,
