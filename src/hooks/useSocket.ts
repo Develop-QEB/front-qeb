@@ -689,19 +689,26 @@ export function useSocketCampanas() {
 
     const handleCampanaCreada = () => {
       console.log('[Socket] Campaña creada');
-      queryClient.invalidateQueries({ queryKey: ['campanas'] });
-      queryClient.invalidateQueries({ queryKey: ['campanas-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['campanas'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['campanas-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'active' });
     };
 
     const handleCampanaActualizada = () => {
       console.log('[Socket] Campaña actualizada');
-      queryClient.invalidateQueries({ queryKey: ['campanas'] });
+      queryClient.invalidateQueries({ queryKey: ['campanas'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['campanas-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['campana-full'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['campana'], refetchType: 'active' });
     };
 
     const handleCampanaStatusChanged = () => {
       console.log('[Socket] Status de campaña cambiado');
-      queryClient.invalidateQueries({ queryKey: ['campanas'] });
-      queryClient.invalidateQueries({ queryKey: ['campanas-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['campanas'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['campanas-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['campana-full'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['campana'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'active' });
     };
 
     socket.on(SOCKET_EVENTS.CAMPANA_CREADA, handleCampanaCreada);

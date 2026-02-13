@@ -1276,11 +1276,11 @@ export function CampanasPage() {
         <td className="px-4 py-3">
           <span className="font-medium text-white text-sm">{item.nombre}</span>
         </td>
-        {/* Cliente - Simple text */}
+        {/* Cliente/Marca */}
         <td className="px-4 py-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-zinc-300 text-sm max-w-[180px] truncate" title={item.cliente_nombre || item.cliente_razon_social || '-'}>
-              {item.cliente_nombre || item.cliente_razon_social || '-'}
+            <span className="text-zinc-300 text-sm max-w-[180px] truncate" title={item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}>
+              {item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}
             </span>
             {item.sap_database && (
               <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
@@ -1829,7 +1829,7 @@ export function CampanasPage() {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Periodo</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Creador</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Actividad</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Inicio</th>
