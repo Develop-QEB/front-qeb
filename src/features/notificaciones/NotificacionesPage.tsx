@@ -86,6 +86,7 @@ const DATE_PRESET_OPTIONS = [
 ];
 
 // Campos disponibles para agrupar
+// test
 type GroupByField = 'estatus' | 'tipo' | 'asignado' | 'responsable' | 'fecha';
 
 interface GroupConfig {
