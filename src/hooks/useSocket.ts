@@ -614,31 +614,37 @@ export function useSocketPropuestas() {
 
     const handlePropuestaCreada = () => {
       console.log('[Socket] Propuesta creada');
-      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['propuestas-stats'], refetchType: 'active' });
     };
 
     const handlePropuestaActualizada = () => {
       console.log('[Socket] Propuesta actualizada');
-      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['propuestas-stats'], refetchType: 'active' });
     };
 
     const handlePropuestaStatusChanged = () => {
       console.log('[Socket] Status de propuesta cambiado');
-      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['propuestas-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'active' });
     };
 
     const handleAutorizacionAprobada = (data: { propuestaId: number; idquote: string }) => {
       console.log('[Socket] Autorización aprobada (global):', data);
-      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
-      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', data.propuestaId] });
-      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['propuestas-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', data.propuestaId], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'], refetchType: 'active' });
     };
 
     const handleAutorizacionRechazada = (data: { propuestaId: number; idquote: string }) => {
       console.log('[Socket] Autorización rechazada (global):', data);
-      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
-      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', data.propuestaId] });
-      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['propuestas-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', data.propuestaId], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'], refetchType: 'active' });
     };
 
     socket.on(SOCKET_EVENTS.PROPUESTA_CREADA, handlePropuestaCreada);
