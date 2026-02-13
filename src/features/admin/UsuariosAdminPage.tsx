@@ -15,11 +15,11 @@ const inputClasses =
 const labelClasses = 'block text-sm font-medium text-purple-300 mb-2';
 
 const AREAS_DISPONIBLES = [
-  'Dirección',
-  'Comercial',
-  'Aeropuerto',
-  'Tráfico',
-  'Mercadotecnia',
+  'Dirección General',
+  'Dirección Comercial',
+  'Dirección Comercial Aeropuerto',
+  'Departamento de Tráfico',
+  'Dirección de Mercadotecnia',
   'Compras',
   'Operaciones',
   'Facturación',
@@ -27,30 +27,29 @@ const AREAS_DISPONIBLES = [
 
 // Mapeo de puestos por área
 const PUESTOS_POR_AREA: Record<string, string[]> = {
-  'Dirección': [
+  'Dirección General': [
     'Director General',
-    'Director Comercial',
   ],
-  'Comercial': [
+  'Dirección Comercial': [
+    'Director Comercial',
     'Asesor Comercial',
     'Analista de Servicio al Cliente',
     'Jefe Digital Comercial',
     'Especialista de BI',
-    'Director de Desarrollo Digital',
   ],
-  'Aeropuerto': [
+  'Dirección Comercial Aeropuerto': [
     'Director Comercial Aeropuerto',
     'Gerente Comercial Aeropuerto',
-    'Asesor Comercial Aeropuerto',
+    'Asesor Comercial (Aeropuerto)',
     'Analista de Aeropuerto',
   ],
-  'Tráfico': [
+  'Departamento de Tráfico': [
     'Gerente de Tráfico',
     'Coordinador de tráfico',
     'Especialista de tráfico',
     'Auxiliar de tráfico',
   ],
-  'Mercadotecnia': [
+  'Dirección de Mercadotecnia': [
     'Coordinador de Diseño',
     'Diseñadores',
   ],
@@ -58,14 +57,13 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
     'Compradores',
   ],
   'Operaciones': [
+    'Call Center (CON)',
     'Director de Operaciones',
-    'Call Center CON',
     'Gerente de Operaciones CON',
-    'Jefe de Operaciones Digital',
-    'Gerente Digital (Operaciones)',
     'Gerentes de Operaciones Plazas (GDL y MTY)',
     'Jefes de Operaciones Plazas',
-    'Supervisores de Operaciones',
+    'Gerente Digital (Operaciones)',
+    'Jefe de Operaciones Digital',
   ],
   'Facturación': [
     'Coordinador de Facturación y Cobranza',
