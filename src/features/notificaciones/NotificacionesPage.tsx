@@ -2009,7 +2009,7 @@ export function NotificacionesPage() {
   const [showFilterPopup, setShowFilterPopup] = useState(false);
   const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
   const [showGroupPopup, setShowGroupPopup] = useState(false);
-  const [sortField, setSortField] = useState<string | null>('fecha_creacion');
+  const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [showSortPopup, setShowSortPopup] = useState(false);
 
@@ -2253,7 +2253,7 @@ export function NotificacionesPage() {
     setQuickFilter(null);
     setFilters([]);
     setActiveGroupings([]);
-    setSortField('fecha_creacion');
+    setSortField(null);
     setSortDirection('desc');
     setFilterFecha('all');
     setSearch('');
