@@ -10733,7 +10733,12 @@ export function TareaSeguimientoPage() {
   // Transform tareas from API to TaskRow format (excluye "Seguimiento Campaña" que pertenece a otra pantalla)
   const tasks = useMemo((): TaskRow[] => {
     return tareasAPI
-      .filter((t) => t.estatus !== 'Atendido' && t.estatus !== 'Completado' && t.tipo !== 'Seguimiento Campaña')
+      .filter((t) => {
+        if (t.estatus === 'Atendido' || t.estatus === 'Completado') return false;
+        // Solo mostrar tipos que pertenecen al flujo de gestión de artes
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación'];
+        return TIPOS_GESTION_ARTES.includes(t.tipo || '');
+      })
       .sort((a, b) => b.id - a.id) // Más recientes primero
       .map((t) => ({
         id: t.id.toString(),
@@ -10758,7 +10763,12 @@ export function TareaSeguimientoPage() {
 
   const completedTasks = useMemo((): TaskRow[] => {
     return tareasAPI
-      .filter((t) => (t.estatus === 'Atendido' || t.estatus === 'Completado') && t.tipo !== 'Seguimiento Campaña')
+      .filter((t) => {
+        if (t.estatus !== 'Atendido' && t.estatus !== 'Completado') return false;
+        // Solo mostrar tipos que pertenecen al flujo de gestión de artes
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación'];
+        return TIPOS_GESTION_ARTES.includes(t.tipo || '');
+      })
       .sort((a, b) => b.id - a.id) // Más recientes primero
       .map((t) => ({
         id: t.id.toString(),

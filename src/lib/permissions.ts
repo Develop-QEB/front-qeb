@@ -240,6 +240,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Gestión de Artes: Puede hacer todo EXCEPTO resolver tareas de producción
     // canEditGestionArtes: true (por defecto)
     canResolveProduccionTasks: false,
+    canResolveCorreccionTasks: true, // SÍ puede resolver tareas de corrección de artes
+    canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de tipo Corrección
 
     // Inventarios: Oculto (ya se oculta con canSeeInventarios: false)
     canCreateInventarios: false,
