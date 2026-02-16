@@ -291,7 +291,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     // Get catorcenas from CAT data
     if (catData) {
       catData.forEach(item => {
-        if (item.catorcena_numero && item.catorcena_year && item.aps_especifico && item.aps_especifico > 0) {
+        if (item.catorcena_numero && item.catorcena_year) {
           const id = `${item.catorcena_numero}-${item.catorcena_year}`;
           if (!catorcenasSet.has(id)) {
             catorcenasSet.set(id, { numero: item.catorcena_numero, year: item.catorcena_year });
@@ -327,9 +327,6 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const filteredCATData = useMemo(() => {
     if (!catData) return [];
     let items = [...catData];
-
-    // Filter only items with APS > 0
-    items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== undefined && item.aps_especifico > 0);
 
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
@@ -380,9 +377,6 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const filteredDigitalData = useMemo(() => {
     if (!catData) return [];
     let items = [...catData];
-
-    // Filter by APS > 0
-    items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== undefined && item.aps_especifico > 0);
 
     // Exclude VIA PUBLICA
     items = items.filter(item => {
