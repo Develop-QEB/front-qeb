@@ -1548,7 +1548,7 @@ export function CampanaDetailPage() {
         <div className="bg-card rounded-xl border border-border">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 md:p-4 border-b border-border">
             <h3 className="text-xs md:text-sm font-semibold text-purple-300 uppercase tracking-wide">
-              Lista de inventario reservado
+              Lista Inventarios Sin APS
             </h3>
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               {permissions.canEditDetalleCampana && (
@@ -1916,8 +1916,8 @@ export function CampanaDetailPage() {
                 ) : inventarioReservado.length === 0 ? (
                   <EmptyState
                     icon={<Package className="h-6 w-6 text-purple-400" />}
-                    title="Sin inventario reservado"
-                    description="Esta campaña aún no tiene espacios reservados"
+                    title="Todos los Inventarios tienen APS "
+                    description="Esta campaña no tiene inventarios sin APS"
                   />
                 ) : activeGroupings.length === 0 ? (
                   // Sin agrupación
