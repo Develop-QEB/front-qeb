@@ -2776,21 +2776,21 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-zinc-400 flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-amber-500" />
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
                     Contraflujo
                   </span>
-                  <span className="text-sm font-bold text-amber-400">
+                  <span className="text-sm font-bold text-blue-400">
                     {(selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo} / {selectedCaraForSearch?.caras_contraflujo || 0}
                   </span>
                 </div>
                 <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all"
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
                     style={{ width: `${Math.min(100, ((selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo) / (selectedCaraForSearch?.caras_contraflujo || 1) * 100)}%` }}
                   />
                 </div>
                 <div className="mt-1 text-xs text-zinc-500">
-                  <span className="text-amber-400 font-medium">{remainingToAssign.contraflujo}</span> restantes
+                  <span className="text-blue-400 font-medium">{remainingToAssign.contraflujo}</span> restantes
                 </div>
               </div>
 
@@ -2871,8 +2871,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         key={opt}
                         onClick={() => setFlujoFilter(opt)}
                         className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${flujoFilter === opt
-                          ? opt === 'Todos' ? 'bg-purple-500 text-white shadow' :
-                            opt === 'Flujo' ? 'bg-blue-500 text-white shadow' : 'bg-amber-500 text-white shadow'
+                          ? 'bg-blue-500 text-white shadow'
                           : 'text-zinc-400 hover:text-white'
                           }`}
                       >
@@ -3248,11 +3247,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     </td>
                                     <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
                                     <td className="px-3 py-2">
-                                      <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Flujo'
-                                        ? 'bg-blue-500/20 text-blue-300'
-                                        : inv.tipo_de_cara === 'Completo'
-                                          ? 'bg-purple-500/20 text-purple-300'
-                                          : 'bg-amber-500/20 text-amber-300'
+                                      <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Completo'
+                                        ? 'bg-purple-500/20 text-purple-300'
+                                        : 'bg-blue-500/20 text-blue-300'
                                         }`}>
                                         {inv.tipo_de_cara || '-'}
                                       </span>
@@ -3290,11 +3287,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 </td>
                                 <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
                                 <td className="px-3 py-2">
-                                  <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Flujo'
-                                    ? 'bg-blue-500/20 text-blue-300'
-                                    : inv.tipo_de_cara === 'Completo'
-                                      ? 'bg-purple-500/20 text-purple-300'
-                                      : 'bg-amber-500/20 text-amber-300'
+                                  <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Completo'
+                                    ? 'bg-purple-500/20 text-purple-300'
+                                    : 'bg-blue-500/20 text-blue-300'
                                     }`}>
                                     {inv.tipo_de_cara || '-'}
                                   </span>
@@ -3557,11 +3552,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                   </div>
                                 </td>
                                 <td className="px-4 py-3">
-                                  <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
-                                    ? 'bg-blue-500/20 text-blue-300'
-                                    : reserva.tipo === 'Bonificacion'
-                                      ? 'bg-emerald-500/20 text-emerald-300'
-                                      : 'bg-amber-500/20 text-amber-300'
+                                  <span className={`px-2 py-1 rounded-full text-xs ${
+                                    reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
                                     }`}>
                                     {reserva.tipo}
                                   </span>
@@ -3626,11 +3618,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </div>
                       <div>
                         <label className="block text-xs text-zinc-500 mb-1">Tipo</label>
-                        <span className={`px-2 py-1 rounded-full text-xs ${editingReserva.tipo === 'Flujo'
-                          ? 'bg-blue-500/20 text-blue-300'
-                          : editingReserva.tipo === 'Bonificacion'
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : 'bg-amber-500/20 text-amber-300'
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          editingReserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
                           }`}>
                           {editingReserva.tipo}
                         </span>
@@ -3690,7 +3679,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           <span className="text-blue-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Flujo').length}</span> Flujo
                         </span>
                         <span className="text-zinc-500">
-                          <span className="text-amber-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Contraflujo').length}</span> Contraflujo
+                          <span className="text-blue-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Contraflujo').length}</span> Contraflujo
                         </span>
                         <span className="text-zinc-500">
                           <span className="text-emerald-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Bonificacion').length}</span> Bonificación
@@ -3765,15 +3754,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
                           <div>
-                            <span className="text-zinc-300">Flujo</span>
-                            <span className="text-zinc-500 text-[10px] ml-1">(a favor)</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-amber-500 ring-1 ring-amber-400/30" />
-                          <div>
-                            <span className="text-zinc-300">Contraflujo</span>
-                            <span className="text-zinc-500 text-[10px] ml-1">(en contra)</span>
+                            <span className="text-zinc-300">Flujo / Contraflujo</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -4951,8 +4932,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           <span className="text-zinc-500 text-[11px] truncate max-w-[80px]">{reserva.plaza}</span>
                                           <span className="text-zinc-500 text-[11px]">{reserva.formato}</span>
                                           <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
-                                            reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
-                                            reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+                                            reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
                                           }`}>{reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
                                         </label>
                                       ))
@@ -5000,8 +4980,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                       <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
                                                       <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
                                                       <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
-                                                        reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
-                                                        reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+                                                        reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
                                                       }`}>{reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
                                                     </label>
                                                   ))
@@ -5059,7 +5038,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             </div>
                             <div>
                               <p className="text-zinc-500">Contra</p>
-                              <p className="text-amber-400 font-bold">{reservasKPIs.contraflujo}</p>
+                              <p className="text-blue-400 font-bold">{reservasKPIs.contraflujo}</p>
                             </div>
                             {reservasKPIs.completos > 0 && (
                               <div>

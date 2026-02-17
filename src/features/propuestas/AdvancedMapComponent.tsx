@@ -344,16 +344,16 @@ export function AdvancedMapComponent({
   // Color constants for consistency
   const COLORS = {
     // Traffic direction
-    flujo: '#3b82f6',        // Blue - Flujo (a favor)
-    contraflujo: '#f59e0b',  // Amber - Contraflujo (en contra)
-    ambos: '#a855f7',        // Purple - Ambos (F+C juntos)
+    flujo: '#3b82f6',        // Blue - Flujo/Contraflujo (same color)
+    contraflujo: '#3b82f6',  // Blue - same as flujo (no differentiation)
+    ambos: '#a855f7',        // Purple - Completos (F+C juntos)
     // Status
     seleccionado: '#facc15', // Yellow - Seleccionado
     yaReservado: '#22c55e',  // Green - Ya reservado para otra cara
     fueraRango: '#6b7280',   // Gray - Fuera de rango de POI
   };
 
-  // Get inventory marker color based on Flujo/Contraflujo
+  // Get inventory marker color
   const getInventoryColor = (inv: InventarioDisponible) => {
     // Priority 1: Selection status
     if (selectedInventory.has(inv.id)) return COLORS.seleccionado;
@@ -369,18 +369,8 @@ export function AdvancedMapComponent({
       return COLORS.ambos;  // Purple for complete pairs
     }
 
-    // Priority 4: Traffic direction - check if both Flujo and Contraflujo exist at same location
-    if (inv.latitud && inv.longitud) {
-      const key = `${inv.latitud.toFixed(5)},${inv.longitud.toFixed(5)}`;
-      const locationInfo = locationFlowMap.get(key);
-
-      if (locationInfo?.hasFlujo && locationInfo?.hasContraflujo) {
-        return COLORS.ambos;
-      }
-    }
-
-    // Single type at location
-    return inv.tipo_de_cara === 'Flujo' ? COLORS.flujo : COLORS.contraflujo;
+    // Default: same color for Flujo and Contraflujo
+    return COLORS.flujo;
   };
 
   // Center map on inventory bounds
@@ -707,22 +697,14 @@ export function AdvancedMapComponent({
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
                 <div>
-                  <span className="text-zinc-300">Flujo</span>
-                  <span className="text-zinc-500 text-[10px] ml-1">(a favor)</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-amber-500 ring-1 ring-amber-400/30" />
-                <div>
-                  <span className="text-zinc-300">Contraflujo</span>
-                  <span className="text-zinc-500 text-[10px] ml-1">(en contra)</span>
+                  <span className="text-zinc-300">Flujo / Contraflujo</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
                 <div>
-                  <span className="text-zinc-300">Ambos</span>
-                  <span className="text-zinc-500 text-[10px] ml-1">(F+C juntos)</span>
+                  <span className="text-zinc-300">Completo</span>
+                  <span className="text-zinc-500 text-[10px] ml-1">(F+C)</span>
                 </div>
               </div>
             </div>
