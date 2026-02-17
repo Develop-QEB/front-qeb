@@ -1371,7 +1371,7 @@ export function DashboardPage() {
   const [filters, setFilters] = useState<DashboardFilters>({});
   const [activeEstatus, setActiveEstatus] = useState<EstatusType>('total');
   const [showFilters, setShowFilters] = useState(false);
-  const [showPins, setShowPins] = useState(true);
+  const [showPins, setShowPins] = useState(false);
   const [selectedPlaza, setSelectedPlaza] = useState<string | null>(null);
   const [inventoryPage, setInventoryPage] = useState(1);
   const [selectedInventoryIds, setSelectedInventoryIds] = useState<Set<number>>(new Set());
@@ -1404,12 +1404,13 @@ export function DashboardPage() {
   });
 
   const { data: inventoryData, isLoading: loadingInventory } = useQuery({
-    queryKey: ['dashboard', 'inventory-detail', filters, activeEstatus, inventoryPage],
+    queryKey: ['dashboard', 'inventory-detail', filters, activeEstatus, inventoryPage, showPins],
     queryFn: () => dashboardService.getInventoryDetail({
       ...filters,
       estatus: activeEstatus !== 'total' ? activeEstatus : undefined,
       page: inventoryPage,
       limit: 50,
+      includeCoords: showPins,
     }),
   });
 
