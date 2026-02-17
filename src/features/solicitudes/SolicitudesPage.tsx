@@ -806,8 +806,8 @@ export function SolicitudesPage() {
     const canEdit = !isDesactivada && !isAprobada && !isAtendida;
     // Atender: solo activo si está Aprobada
     const canAtender = isAprobada;
-    // Estatus: siempre activo
-    const canChangeStatus = true;
+    // Estatus: bloqueado si está Atendida
+    const canChangeStatus = !isAtendida;
     // Eliminar: solo si no está Desactivada, Aprobada o Atendida
     const canDelete = !isDesactivada && !isAprobada && !isAtendida;
 
@@ -850,8 +850,9 @@ export function SolicitudesPage() {
         </td>
         <td className="px-4 py-3">
           <button
-            onClick={(e) => { e.stopPropagation(); setStatusSolicitud(item); }}
-            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+            onClick={(e) => { e.stopPropagation(); if (canChangeStatus) setStatusSolicitud(item); }}
+            disabled={!canChangeStatus}
+            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} ${canChangeStatus ? 'hover:opacity-80 cursor-pointer' : 'opacity-60 cursor-not-allowed'} transition-opacity`}
           >
             {item.status}
           </button>
@@ -899,9 +900,13 @@ export function SolicitudesPage() {
 
             {/* Estatus/Comentarios */}
             <button
-              onClick={(e) => { e.stopPropagation(); setStatusSolicitud(item); }}
-              className="p-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/20 hover:border-amber-500/40 transition-all"
-              title={permissions.canChangeEstadoSolicitud ? 'Ver/Cambiar estatus' : 'Ver estatus y comentarios'}
+              onClick={(e) => { e.stopPropagation(); if (canChangeStatus) setStatusSolicitud(item); }}
+              disabled={!canChangeStatus}
+              className={`p-2 rounded-lg transition-all border ${canChangeStatus
+                ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border-amber-500/20 hover:border-amber-500/40'
+                : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                }`}
+              title={!canChangeStatus ? 'No disponible' : permissions.canChangeEstadoSolicitud ? 'Ver/Cambiar estatus' : 'Ver estatus y comentarios'}
             >
               <MessageSquare className="h-3.5 w-3.5" />
             </button>
