@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -12,6 +12,7 @@ import {
 import { Header } from '../../components/layout/Header';
 import { notificacionesService, CaraAutorizacion, ResumenAutorizacion } from '../../services/notificaciones.service';
 import { notasService, NotaPersonal } from '../../services/notas.service';
+import { usuariosService } from '../../services/usuarios.service';
 import { Notificacion, ComentarioTarea } from '../../types';
 import { formatDate } from '../../lib/utils';
 import { STATUS_CONFIG, getTipoConfig, getStatusConfig } from '../../lib/taskConfig';
@@ -1336,8 +1337,46 @@ function TaskDrawer({
   );
   const user = useAuthStore((state) => state.user);
   const canNavigate = hasNavigationRoute(tarea);
+  const isAdmin = user?.rol === 'Administrador';
 
   const queryClient = useQueryClient();
+
+  const { data: usuarios } = useQuery({
+    queryKey: ['usuarios'],
+    queryFn: () => usuariosService.getAll(),
+    enabled: isAdmin && contentType === 'tareas',
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const updateAsignadoMutation = useMutation({
+    mutationFn: ({ asignado, id_asignado }: { asignado: string; id_asignado: string }) =>
+      notificacionesService.update(tarea.id, { asignado, id_asignado }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+    },
+  });
+
+  const [asignadoOpen, setAsignadoOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>(
+    tarea.id_asignado != null ? String(tarea.id_asignado).split(',').map(s => s.trim()).filter(Boolean) : []
+  );
+  const asignadoRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!asignadoOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (asignadoRef.current && !asignadoRef.current.contains(e.target as Node)) setAsignadoOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [asignadoOpen]);
+
+  const toggleAsignado = (uid: string) => {
+    const newIds = selectedIds.includes(uid) ? selectedIds.filter(id => id !== uid) : [...selectedIds, uid];
+    setSelectedIds(newIds);
+    const newNames = newIds.map(id => usuarios?.find(u => String(u.id) === id)?.nombre ?? '').filter(Boolean);
+    updateAsignadoMutation.mutate({ asignado: newNames.join(', '), id_asignado: newIds.join(',') });
+  };
+
   const marcarLeidaMutation = useMutation({
     mutationFn: (estatus: string) => notificacionesService.update(tarea.id, { estatus }),
     onSuccess: async () => {
@@ -1699,10 +1738,41 @@ function TaskDrawer({
               <User className="h-4 w-4" />
               <span className="text-xs">Asignado a</span>
             </div>
-            <div className="flex items-center gap-2">
-              <UserAvatar nombre={tarea.asignado} size="md" />
-              <span className="text-sm text-white font-medium">{tarea.asignado || 'Sin asignar'}</span>
-            </div>
+            {isAdmin && contentType === 'tareas' && usuarios ? (
+              <div className="relative" ref={asignadoRef}>
+                <button
+                  onClick={() => setAsignadoOpen(v => !v)}
+                  className="flex items-center gap-1.5 text-sm bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white max-w-[200px]"
+                >
+                  <span className="truncate">
+                    {selectedIds.length === 0
+                      ? 'Sin asignar'
+                      : selectedIds.map(id => usuarios.find(u => String(u.id) === id)?.nombre).filter(Boolean).join(', ')}
+                  </span>
+                  <ChevronDown className="h-3 w-3 flex-shrink-0 text-zinc-400" />
+                </button>
+                {asignadoOpen && (
+                  <div className="absolute right-0 top-full mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-1.5 min-w-[180px] max-h-[220px] overflow-y-auto">
+                    {usuarios.map(u => (
+                      <label key={u.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 rounded cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(String(u.id))}
+                          onChange={() => toggleAsignado(String(u.id))}
+                          className="accent-purple-500"
+                        />
+                        <span className="text-xs text-zinc-300">{u.nombre}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <UserAvatar nombre={tarea.asignado} size="md" />
+                <span className="text-sm text-white font-medium">{tarea.asignado || 'Sin asignar'}</span>
+              </div>
+            )}
           </div>
 
           {/* Responsable/Creador */}
@@ -2034,6 +2104,19 @@ export function NotificacionesPage() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [showSortPopup, setShowSortPopup] = useState(false);
 
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+        setShowFilterPopup(false);
+        setShowGroupPopup(false);
+        setShowSortPopup(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   // Obtener usuario actual
   const user = useAuthStore((state) => state.user);
 
@@ -2202,6 +2285,9 @@ export function NotificacionesPage() {
 
   const filteredTareas = tareasConQuickFilter;
 
+  const countActivas = useMemo(() => baseTareas.filter(t => t.estatus !== 'Atendido').length, [baseTareas]);
+  const countAtendidas = useMemo(() => baseTareas.filter(t => t.estatus === 'Atendido').length, [baseTareas]);
+
   // Agrupar tareas (soporta múltiples agrupaciones anidadas)
   const nestedGroups = useMemo<NestedGroup[]>(() => {
     if (!filteredTareas.length) return [];
@@ -2313,11 +2399,11 @@ export function NotificacionesPage() {
           >
             <Bell className="h-4 w-4" />
             Notificaciones
-            {stats?.total && contentType !== 'notificaciones' && (
+            {/* {!!stats?.por_tipo?.['Notificación'] && contentType !== 'notificaciones' && (
               <span className="ml-1 px-1.5 py-0.5 rounded-full bg-purple-500/30 text-[10px]">
-                {stats.total}
+                {stats.por_tipo['Notificación']}
               </span>
-            )}
+            )} */}
           </button>
           <button
             onClick={() => setContentType('tareas')}
@@ -2401,11 +2487,11 @@ export function NotificacionesPage() {
             </div>
 
             {/* Filter/Group/Sort Buttons - Estilo Proveedores */}
-            <div className="flex items-center gap-2">
+            <div ref={toolbarRef} className="flex items-center gap-2">
               {/* Botón de Filtros */}
               <div className="relative">
                 <button
-                  onClick={() => setShowFilterPopup(!showFilterPopup)}
+                  onClick={() => { setShowFilterPopup(v => !v); setShowGroupPopup(false); setShowSortPopup(false); }}
                   className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
                     filters.length > 0
                       ? 'bg-purple-600 text-white'
@@ -2544,7 +2630,7 @@ export function NotificacionesPage() {
               {view === 'lista' && (
                 <div className="relative">
                   <button
-                    onClick={() => setShowGroupPopup(!showGroupPopup)}
+                    onClick={() => { setShowGroupPopup(v => !v); setShowFilterPopup(false); setShowSortPopup(false); }}
                     className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
                       activeGroupings.length > 0
                         ? 'bg-purple-600 text-white'
@@ -2593,7 +2679,7 @@ export function NotificacionesPage() {
               {/* Botón de Ordenar */}
               <div className="relative">
                 <button
-                  onClick={() => setShowSortPopup(!showSortPopup)}
+                  onClick={() => { setShowSortPopup(v => !v); setShowFilterPopup(false); setShowGroupPopup(false); }}
                   className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
                     sortField
                       ? 'bg-purple-600 text-white'
@@ -2679,11 +2765,11 @@ export function NotificacionesPage() {
             <div className="flex items-center gap-3 ml-auto">
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/30">
                 <Clock className="h-3 w-3 text-amber-400" />
-                <span className="text-xs text-amber-300">{stats?.por_estatus?.['Activo'] || 0} activas</span>
+                <span className="text-xs text-amber-300">{countActivas} activas</span>
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30">
                 <CheckCircle className="h-3 w-3 text-emerald-400" />
-                <span className="text-xs text-emerald-300">{stats?.por_estatus?.['Atendido'] || 0} atendidas</span>
+                <span className="text-xs text-emerald-300">{countAtendidas} atendidas</span>
               </div>
             </div>
           </div>
