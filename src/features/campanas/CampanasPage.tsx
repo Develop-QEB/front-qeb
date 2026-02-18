@@ -5,7 +5,7 @@ import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, Layers,
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
-  ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera
+  ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -1359,6 +1359,15 @@ export function CampanasPage() {
             >
               <Eye className="h-3.5 w-3.5" />
             </button>
+            {item.propuesta_id && (
+              <button
+                onClick={() => navigate(`/propuestas/compartir/${item.propuesta_id}`)}
+                className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border border-cyan-500/20 hover:border-cyan-500/40 transition-all"
+                title="Compartir campaña"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+              </button>
+            )}
             {permissions.canEditCampanas && (
               <button
                 onClick={() => handleEditCampana(item)}
@@ -2054,6 +2063,15 @@ export function CampanasPage() {
                             >
                               <Eye className="h-3 w-3" />
                             </button>
+                            {campana.propuesta_id && (
+                              <button
+                                onClick={() => navigate(`/propuestas/compartir/${campana.propuesta_id}`)}
+                                className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/20 transition-all"
+                                title="Compartir campaña"
+                              >
+                                <Share2 className="h-3 w-3" />
+                              </button>
+                            )}
                             {permissions.canEditCampanas && (
                               <button
                                 onClick={() => handleEditCampana(campana)}

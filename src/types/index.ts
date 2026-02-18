@@ -308,6 +308,7 @@ export interface Campana {
   catorcena_fin_num: number | null;
   catorcena_fin_anio: number | null;
   has_aps: boolean | number | null;
+  propuesta_id: number | null;
   // SAP integration fields
   card_code?: string | null;
   salesperson_code?: number | null;

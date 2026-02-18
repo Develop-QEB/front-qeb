@@ -226,13 +226,47 @@ const COSTO_MAP: Record<string, number> = {
 const getFormatoFromArticulo = (itemName: string): string => {
   if (!itemName) return '';
   const name = itemName.toUpperCase();
-  if (name.includes('PARABUS')) return 'PARABUS';
+
+  // Bajo Puente - detectar ubicación específica del nombre del artículo SAP
+  if (name.includes('BAJO PUENTE')) {
+    if (name.includes('GRAN TERRAZA')) return 'Bajo Puente Gran Terraza';
+    if (name.includes('GEOGRAFOS')) return 'Bajo Puente Circuito Geografos';
+    if (name.includes('DEL PARQUE')) return 'Bajo Puente Circuito del Parque';
+    if (name.includes('FUENTES')) return 'Bajo Puente Fuentes';
+    if (name.includes('COLORINES 1') || name.includes('COLORINES1')) return 'Bajo Puente Colorines Bloque 1';
+    if (name.includes('COLORINES 2') || name.includes('COLORINES2')) return 'Bajo Puente Colorines Bloque 2';
+    if (name.includes('COLORINES 3') || name.includes('COLORINES3')) return 'Bajo Puente Colorines Bloque 3';
+    if (name.includes('COLORINES')) return 'Bajo Puente Colorines Bloque 4';
+    return 'Bajo Puente';
+  }
+
+  // MI MACRO - detectar sub-tipo (antes de PARABUS/MUPI para evitar falsos positivos)
+  if (name.includes('MI MACRO')) {
+    if (name.includes('VIDRIO INTERIOR')) return 'MI MACRO Vidrio Int';
+    if (name.includes('VIDRIO EXTERIOR')) return 'MI MACRO Vidrio Ext';
+    if (name.includes('MUPI')) return 'MI MACRO MUPI Int';
+    if (name.includes('PARABUS')) return 'MI MACRO Parabus';
+    if (name.includes('MODULO')) return 'MI MACRO Modulos';
+    return 'MI MACRO';
+  }
+
+  // Puente Peatonal (antes de checks genéricos)
+  if (name.includes('PUENTE PEATONAL')) return 'Puente Peatonal';
+
+  // Totem
+  if (name.includes('TOTEM')) return 'TOTEM';
+
+  // Kiosco
+  if (name.includes('KIOSCO')) return 'Kiosco';
+
+  // Formatos estándar
   if (name.includes('CASETA DE TAXIS')) return 'CASETA DE TAXIS';
   if (name.includes('METROPOLITANO PARALELO')) return 'METROPOLITANO PARALELO';
   if (name.includes('METROPOLITANO PERPENDICULAR')) return 'METROPOLITANO PERPENDICULAR';
   if (name.includes('COLUMNA RECARGA')) return 'COLUMNA RECARGA';
   if (name.includes('MUPI DE PIEDRA')) return 'MUPI DE PIEDRA';
   if (name.includes('MUPI')) return 'MUPI';
+  if (name.includes('PARABUS')) return 'PARABUS';
   if (name.includes('COLUMNA')) return 'COLUMNA';
   if (name.includes('BOLERO')) return 'BOLERO';
   return '';

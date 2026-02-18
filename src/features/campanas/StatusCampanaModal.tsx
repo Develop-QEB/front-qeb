@@ -17,9 +17,10 @@ interface StatusCampanaModalProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: 'Ajustar', label: 'Ajustar', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
-  { value: 'Compartir', label: 'Compartir', color: 'bg-blue-500/20 text-blue-300 border-blue-500/30' },
-  { value: 'Aprobar', label: 'Aprobar', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+  { value: 'Ajuste CTO Cliente', label: 'Ajuste CTO Cliente', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+  { value: 'Atendido', label: 'Atendido', color: 'bg-blue-500/20 text-blue-300 border-blue-500/30' },
+  { value: 'Ajuste Comercial', label: 'Ajuste Comercial', color: 'bg-orange-500/20 text-orange-300 border-orange-500/30' },
+  { value: 'Aprobada', label: 'Aprobada', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
 ];
 
 export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = false }: StatusCampanaModalProps) {
