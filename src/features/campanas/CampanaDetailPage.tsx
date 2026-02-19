@@ -2240,12 +2240,12 @@ export function CampanaDetailPage() {
               )}
               {permissions.canEditDetalleCampana && inventarioConAPS.length > 0 && (
                 <button
-                  disabled
-                  className="flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border bg-cyan-900/30 border-cyan-500/20 opacity-50 cursor-not-allowed transition-colors"
-                  title="Proximamente"
+                  onClick={() => setShowPostSAPModal(true)}
+                  className="flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border bg-cyan-900/30 border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40 transition-colors"
+                  title="Enviar a SAP"
                 >
-                  <Upload className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-cyan-400/50 mr-1" />
-                  <span className="text-[10px] sm:text-xs font-medium text-cyan-300/50">POST</span>
+                  <Upload className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-cyan-400 mr-1" />
+                  <span className="text-[10px] sm:text-xs font-medium text-cyan-300">POST</span>
                 </button>
               )}
             </div>
