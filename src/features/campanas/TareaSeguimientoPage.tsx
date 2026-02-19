@@ -11007,7 +11007,7 @@ export function TareaSeguimientoPage() {
     XLSX.utils.book_append_sheet(wb, wsCompletadas, 'Completadas');
 
     // Descargar
-    const filename = `tareas_produccion_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const filename = `tareas_gestion_artes_${new Date().toISOString().split('T')[0]}.xlsx`;
     XLSX.writeFile(wb, filename);
   }, [filteredTasks, filteredCompletedTasks]);
 
@@ -14220,8 +14220,8 @@ export function TareaSeguimientoPage() {
                 <ClipboardList className="h-4 w-4 text-blue-400" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">Tareas de Produccion</h3>
-                <p className="text-xs text-zinc-400">Gestiona las tareas de instalacion y produccion de esta campaña</p>
+                <h3 className="text-sm font-semibold text-white">Tareas de Gestión de Artes</h3>
+                <p className="text-xs text-zinc-400">Tareas del flujo de gestión de artes: revisión, impresión, instalación y programación</p>
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
