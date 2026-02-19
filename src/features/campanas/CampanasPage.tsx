@@ -2249,7 +2249,7 @@ export function CampanasPage() {
                                                         <div key={inv.id} className="flex items-center gap-2 text-[10px] text-zinc-500 py-0.5 flex-wrap">
                                                           <MapPin className="h-2.5 w-2.5 text-zinc-600" />
                                                           <span className="text-zinc-400 font-mono">{inv.codigo_unico}</span>
-                                                          <Image className={`h-2.5 w-2.5 ${hasArte ? 'text-green-400' : 'text-zinc-600'}`} title={hasArte ? 'Arte subido' : 'Sin arte'} />
+                                                          <span title={hasArte ? 'Arte subido' : 'Sin arte'}><Image className={`h-2.5 w-2.5 ${hasArte ? 'text-green-400' : 'text-zinc-600'}`} /></span>
                                                           {(inv as any).estatus_arte && (
                                                             <span className={`px-1.5 py-0.5 rounded text-[9px] ${estatusArteColor.bg} ${estatusArteColor.text} border ${estatusArteColor.border}`}>
                                                               {(inv as any).estatus_arte}

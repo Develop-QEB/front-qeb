@@ -113,6 +113,7 @@ export interface InventarioConAPS extends InventarioReservado {
   bonificacion_sc?: number | null;
   renta?: number | null;
   indicaciones_programacion?: string | null;
+  archivo?: string | null;
 }
 
 export interface InventarioConArte {
