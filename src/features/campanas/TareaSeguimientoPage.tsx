@@ -10258,18 +10258,35 @@ export function TareaSeguimientoPage() {
         } else {
           // Hay recepciones pero ninguna completada normal
           estadoImpresion = 'pendiente_recepcion';
-          tareaRecepcionId = tareasRecepcionRelacionadas[0]?.id;
+          // Priorizar la tarea de recepción normal (no faltantes) para mostrar su estatus
+          const recepcionNormal = tareasRecepcionRelacionadas.find(recepcion => {
+            let esFaltantes = false;
+            if (recepcion.evidencia) {
+              try {
+                const evidenciaObj = JSON.parse(recepcion.evidencia);
+                esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
+              } catch (e) {}
+            }
+            return !esFaltantes;
+          });
+          tareaRecepcionId = recepcionNormal?.id || tareasRecepcionRelacionadas[0]?.id;
         }
       }
 
       // Si hay tarea de recepción pendiente, mostrar su estatus en vez del de impresión
       let estatusMostrado = tarea.estatus || 'Pendiente';
       let tituloMostrado = tarea.titulo || `Impresión #${tarea.id}`;
-      if (estadoImpresion === 'pendiente_recepcion' && tareaRecepcionId) {
-        const tareaRecepcion = tareasRecepcionRelacionadas.find(r => r.id === tareaRecepcionId);
-        if (tareaRecepcion) {
-          estatusMostrado = tareaRecepcion.estatus || 'Pendiente';
-          tituloMostrado = tareaRecepcion.titulo || `Recepción #${tareaRecepcionId}`;
+      if (estadoImpresion === 'pendiente_recepcion') {
+        if (tareaRecepcionId) {
+          const tareaRecepcion = tareasRecepcionRelacionadas.find(r => r.id === tareaRecepcionId);
+          if (tareaRecepcion) {
+            estatusMostrado = tareaRecepcion.estatus || 'Pendiente';
+            tituloMostrado = tareaRecepcion.titulo || `Recepción #${tareaRecepcionId}`;
+          } else {
+            estatusMostrado = 'Pendiente';
+          }
+        } else {
+          estatusMostrado = 'Pendiente';
         }
       }
 
