@@ -807,6 +807,20 @@ export const campanasService = {
     return response.data.data;
   },
 
+  async enviarOrdenProgramacion(campanaId: number, tareaId: number): Promise<{
+    orden: { id: number; estatus: string };
+    programacion: { id: number; estatus: string };
+  }> {
+    const response = await api.post<ApiResponse<{
+      orden: { id: number; estatus: string };
+      programacion: { id: number; estatus: string };
+    }>>(`/campanas/${campanaId}/tareas/${tareaId}/enviar-orden-programacion`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al enviar orden de programación');
+    }
+    return response.data.data;
+  },
+
   async deleteTarea(id: number, tareaId: number): Promise<void> {
     const response = await api.delete<ApiResponse<void>>(`/campanas/${id}/tareas/${tareaId}`);
     if (!response.data.success) {

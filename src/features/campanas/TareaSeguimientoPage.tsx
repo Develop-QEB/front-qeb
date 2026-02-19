@@ -573,6 +573,8 @@ const statusColors: Record<string, string> = {
   'Completado': 'bg-green-500/20 text-green-400',
   'Cancelado': 'bg-red-500/20 text-red-400',
   'Notificación': 'bg-purple-500/20 text-purple-400',
+  'Enviada': 'bg-blue-500/20 text-blue-400',
+  'Finalizada': 'bg-green-500/20 text-green-400',
   validado: 'bg-green-500/20 text-green-400',
 };
 
@@ -1729,6 +1731,7 @@ const TIPOS_TAREA = [
   { value: 'Impresión', label: 'Impresión', description: 'Impresión de materiales publicitarios' },
   { value: 'Testigo', label: 'Testigo', description: 'Validación de instalación con evidencia fotográfica' },
   { value: 'Programación', label: 'Programación', description: 'Programación de artes digitales con indicaciones' },
+  { value: 'Orden de Programación', label: 'Orden de Programación', description: 'Orden de programación para tráfico' },
 ];
 
 // ============================================================================
@@ -2828,6 +2831,16 @@ function TaskDetailModal({
   // Estado para archivos digitales cargados desde API (fallback si evidencia no tiene archivos)
   const [loadedArchivosDigitales, setLoadedArchivosDigitales] = useState<{ archivo: string; archivoData?: string; spot: number; tipo: string }[]>([]);
   const [isLoadingArchivosDigitales, setIsLoadingArchivosDigitales] = useState(false);
+  // Estado para envío de Orden de Programación
+  const [isSendingOrden, setIsSendingOrden] = useState(false);
+  // Estado para indicaciones editables en Orden de Programación (Pendiente)
+  const [ordenIndicaciones, setOrdenIndicaciones] = useState<Record<string, string>>({});
+
+  // Reset orden indicaciones when task changes
+  useEffect(() => {
+    setOrdenIndicaciones({});
+    setIsSendingOrden(false);
+  }, [task?.id]);
 
   // Estado para nodos expandidos en las tablas de Impresión y Recepción
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
@@ -2925,7 +2938,7 @@ function TaskDetailModal({
   // Efecto para cargar nombres de archivos digitales cuando se abre el tab "Ver tabla" en Programación
   useEffect(() => {
     const loadDigitalFileNames = async () => {
-      if (task?.tipo !== 'Programación' || programacionTab !== 'tabla' || taskInventory.length === 0) return;
+      if ((task?.tipo !== 'Programación' && task?.tipo !== 'Orden de Programación') || programacionTab !== 'tabla' || taskInventory.length === 0) return;
 
       // Recopilar todas las reservas únicas
       const allReservaIds = new Set<number>();
@@ -2974,7 +2987,7 @@ function TaskDetailModal({
   // Efecto para cargar archivos digitales para el tab "Resumen" en Programación si no están en evidencia
   useEffect(() => {
     const loadArchivosForResumen = async () => {
-      if (!isOpen || task?.tipo !== 'Programación') {
+      if (!isOpen || (task?.tipo !== 'Programación' && task?.tipo !== 'Orden de Programación')) {
         setLoadedArchivosDigitales([]);
         return;
       }
@@ -4300,7 +4313,7 @@ function TaskDetailModal({
           </div>
 
           {/* Tabs - Solo mostrar si NO es tarea de Impresión, Recepción, Instalación ni Testigo */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && (
+          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Orden de Programación' && (
             <div className="flex flex-wrap gap-2 mt-4">
               {tabs
                 .filter(tab => canResolveCurrentTask || tab.key === 'resumen')
@@ -5595,6 +5608,407 @@ function TaskDetailModal({
             </div>
           )}
 
+          {/* === VISTA ESPECIAL PARA ORDEN DE PROGRAMACIÓN === */}
+          {task.tipo === 'Orden de Programación' && (
+            <div className="space-y-6">
+              {/* Tabs */}
+              <div className="flex gap-2 border-b border-border pb-2">
+                <button
+                  onClick={() => setProgramacionTab('resumen')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'resumen'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Resumen
+                </button>
+                <button
+                  onClick={() => setProgramacionTab('tabla')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'tabla'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Ver tabla ({taskInventory.length})
+                </button>
+              </div>
+
+              {/* Tab Resumen */}
+              {programacionTab === 'resumen' && (
+                <>
+                  {/* Info de la Tarea */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Orden</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <p className="text-white font-medium">{task.titulo || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Estatus:</span>
+                        <p className={`font-medium ${
+                          task.estatus === 'Finalizada' ? 'text-green-400' :
+                          task.estatus === 'Enviada' ? 'text-blue-400' :
+                          'text-yellow-400'
+                        }`}>
+                          {task.estatus}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Asignado:</span>
+                        <p className="text-white font-medium">{task.asignado || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Catorcena:</span>
+                        <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Creador:</span>
+                        <p className="text-white">{task.creador || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <p className="text-white">{task.fecha_inicio || '-'}</p>
+                      </div>
+                      {task.descripcion && (
+                        <div className="col-span-2">
+                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <p className="text-white">{task.descripcion}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Badge de estado */}
+                  {task.estatus === 'Enviada' && (
+                    <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-blue-400" />
+                      <span className="text-sm text-blue-300 font-medium">Enviada - Esperando programación por Operaciones</span>
+                    </div>
+                  )}
+                  {task.estatus === 'Finalizada' && (
+                    <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-400" />
+                      <span className="text-sm text-green-300 font-medium">Finalizada - Programación completada por Operaciones</span>
+                    </div>
+                  )}
+
+                  {/* Indicaciones por Arte */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Programación por Arte</h4>
+                    {(() => {
+                      let indicaciones: Record<string, string> = {};
+                      let archivosFromEvidencia: { archivo: string; archivoData?: string; spot: number; tipo: string }[] = [];
+                      try {
+                        if (task.evidencia) {
+                          const parsed = JSON.parse(task.evidencia);
+                          indicaciones = parsed.indicaciones || {};
+                          archivosFromEvidencia = parsed.archivos || [];
+                        }
+                      } catch (e) {
+                        console.error('Error parsing orden programacion evidencia:', e);
+                      }
+
+                      const evidenciaHasArchivoData = archivosFromEvidencia.length > 0 &&
+                        archivosFromEvidencia.every(a => a.archivoData && a.archivoData.trim() !== '');
+                      const archivos = evidenciaHasArchivoData ? archivosFromEvidencia : loadedArchivosDigitales;
+
+                      // Initialize ordenIndicaciones from evidencia on first render
+                      const currentIndicaciones = Object.keys(ordenIndicaciones).length > 0 ? ordenIndicaciones : indicaciones;
+
+                      if (isLoadingArchivosDigitales) {
+                        return (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-purple-400 mr-2" />
+                            <span className="text-zinc-400 text-sm">Cargando archivos digitales...</span>
+                          </div>
+                        );
+                      }
+
+                      if (archivos.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-zinc-500 text-sm">
+                            <Image className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                            No hay archivos digitales asociados a esta orden
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-4">
+                          {archivos.map((archivo, index) => {
+                            const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
+                            const isVideo = archivo.tipo === 'video';
+                            const indicacion = currentIndicaciones[archivo.archivo] || '';
+                            const fileUrl = getImageUrl(archivo.archivoData || archivo.archivo);
+
+                            return (
+                              <div key={index} className="flex gap-4 p-3 border rounded-lg bg-purple-900/10 border-purple-500/20">
+                                {/* Thumbnail */}
+                                <div className="flex-shrink-0 w-24 h-16 bg-zinc-800 rounded overflow-hidden">
+                                  {isVideo ? (
+                                    <div className="w-full h-full flex items-center justify-center bg-zinc-800">
+                                      <Play className="h-6 w-6 text-purple-400" />
+                                    </div>
+                                  ) : fileUrl ? (
+                                    <>
+                                      <img
+                                        src={fileUrl}
+                                        alt={fileName}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = 'none';
+                                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                        }}
+                                      />
+                                      <div className="w-full h-full flex items-center justify-center hidden">
+                                        <Image className="h-6 w-6 text-zinc-600" />
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-6 w-6 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Info y indicaciones */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2 mb-2">
+                                    <div className="flex items-center gap-2">
+                                      {isVideo ? (
+                                        <Video className="h-4 w-4 text-blue-400" />
+                                      ) : (
+                                        <Image className="h-4 w-4 text-green-400" />
+                                      )}
+                                      <span className="text-sm text-white font-medium truncate" title={fileName}>
+                                        {fileName}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-400 bg-zinc-700 px-1.5 py-0.5 rounded">
+                                        Spot {archivo.spot}
+                                      </span>
+                                    </div>
+                                    {/* Download */}
+                                    <a
+                                      href={fileUrl || '#'}
+                                      download={fileName}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-1 px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs hover:bg-blue-600/30 transition-colors"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                      Descargar
+                                    </a>
+                                  </div>
+                                  {/* Indicaciones: editable when Pendiente, read-only otherwise */}
+                                  {task.estatus === 'Pendiente' ? (
+                                    <textarea
+                                      value={indicacion}
+                                      onChange={(e) => {
+                                        const newIndicaciones = { ...currentIndicaciones, [archivo.archivo]: e.target.value };
+                                        setOrdenIndicaciones(newIndicaciones);
+                                      }}
+                                      placeholder="Escribir indicaciones para este arte..."
+                                      className="w-full bg-zinc-800/60 rounded p-2 text-xs text-white placeholder:text-zinc-500 border border-zinc-700 focus:border-purple-500 focus:outline-none resize-none"
+                                      rows={2}
+                                    />
+                                  ) : (
+                                    <div className="bg-zinc-800/60 rounded p-2">
+                                      <p className="text-xs text-white whitespace-pre-wrap">
+                                        {indicacion || <span className="text-zinc-500 italic">Sin indicaciones especificadas</span>}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Botón Enviar a Operaciones (solo cuando estatus=Pendiente) */}
+                  {task.estatus === 'Pendiente' && (
+                    <div className="mt-4 flex justify-end gap-3">
+                      {/* Save indicaciones button */}
+                      {Object.keys(ordenIndicaciones).length > 0 && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              let evidenciaObj: any = {};
+                              try {
+                                if (task.evidencia) evidenciaObj = JSON.parse(task.evidencia);
+                              } catch (e) { /* ignore */ }
+                              const newEvidencia = JSON.stringify({
+                                ...evidenciaObj,
+                                indicaciones: ordenIndicaciones,
+                              });
+                              await onUpdateTask(task.id, { evidencia: newEvidencia });
+                              setOrdenIndicaciones({});
+                            } catch (e) {
+                              console.error('Error saving indicaciones:', e);
+                            }
+                          }}
+                          disabled={isUpdating}
+                          className="flex items-center gap-2 px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors disabled:opacity-50"
+                        >
+                          <Check className="h-4 w-4" />
+                          Guardar indicaciones
+                        </button>
+                      )}
+                      <button
+                        onClick={async () => {
+                          setIsSendingOrden(true);
+                          try {
+                            // Save indicaciones first if modified
+                            if (Object.keys(ordenIndicaciones).length > 0) {
+                              let evidenciaObj: any = {};
+                              try {
+                                if (task.evidencia) evidenciaObj = JSON.parse(task.evidencia);
+                              } catch (e) { /* ignore */ }
+                              const newEvidencia = JSON.stringify({
+                                ...evidenciaObj,
+                                indicaciones: ordenIndicaciones,
+                              });
+                              await onUpdateTask(task.id, { evidencia: newEvidencia });
+                            }
+                            await campanasService.enviarOrdenProgramacion(campanaId, parseInt(task.id));
+                            setOrdenIndicaciones({});
+                            onClose();
+                          } catch (e) {
+                            console.error('Error enviando orden:', e);
+                            alert(e instanceof Error ? e.message : 'Error al enviar orden de programación');
+                          } finally {
+                            setIsSendingOrden(false);
+                          }
+                        }}
+                        disabled={isSendingOrden || isUpdating}
+                        className="flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isSendingOrden ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Enviando...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4" />
+                            Enviar a Operaciones
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Tab Ver Tabla - Reuse same table as Programación */}
+              {programacionTab === 'tabla' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-zinc-400">{filteredProgramacionModalData.length} de {taskInventory.length} items</span>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                        <input
+                          type="text"
+                          placeholder="Buscar por ID, código, nombre archivo..."
+                          value={programacionModalSearch}
+                          onChange={(e) => setProgramacionModalSearch(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                        />
+                        {programacionModalSearch && (
+                          <button
+                            onClick={() => setProgramacionModalSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Catorcena', 'Estado Arte'];
+                          const rows = filteredProgramacionModalData.map(item => [
+                            item.id,
+                            item.codigo_unico,
+                            item.tradicional_digital,
+                            item.ubicacion,
+                            item.plaza,
+                            item.mueble,
+                            item.ciudad,
+                            item.nse,
+                            item.catorcena,
+                            item.estado_arte,
+                          ]);
+                          const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${(c || '').toString().replace(/"/g, '""')}"`).join(','))].join('\n');
+                          const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `orden_programacion_${task.id}_inventario.csv`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-600/30 transition-colors"
+                        title="Descargar tabla como CSV"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        CSV
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-zinc-900 z-10">
+                        <tr className="border-b border-border">
+                          <th className="text-left p-2 text-zinc-400 font-medium">ID</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Código</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Tipo</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Ubicación</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Plaza</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Mueble</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Ciudad</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">NSE</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Catorcena</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Estado Arte</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredProgramacionModalData.map(item => (
+                          <tr key={item.id} className="border-b border-border/50 hover:bg-zinc-800/30">
+                            <td className="p-2 text-zinc-300">{item.id}</td>
+                            <td className="p-2 text-zinc-300">{item.codigo_unico}</td>
+                            <td className="p-2 text-zinc-300">{item.tradicional_digital}</td>
+                            <td className="p-2 text-zinc-300 max-w-[200px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
+                            <td className="p-2 text-zinc-300">{item.plaza}</td>
+                            <td className="p-2 text-zinc-300">{item.mueble}</td>
+                            <td className="p-2 text-zinc-300">{item.ciudad}</td>
+                            <td className="p-2 text-zinc-300">{item.nse}</td>
+                            <td className="p-2 text-zinc-300">{item.catorcena}</td>
+                            <td className="p-2">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                item.estado_arte === 'aprobado' ? 'bg-green-900/30 text-green-400' :
+                                item.estado_arte === 'rechazado' ? 'bg-red-900/30 text-red-400' :
+                                'bg-zinc-700/50 text-zinc-400'
+                              }`}>
+                                {item.estado_arte || 'sin_revisar'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* === VISTA ESPECIAL PARA TAREAS DE PROGRAMACIÓN === */}
           {task.tipo === 'Programación' && (
             <div className="space-y-6">
@@ -6210,8 +6624,8 @@ function TaskDetailModal({
             />
           )}
 
-          {/* Tab Resumen - Solo para tareas que NO son Impresión, Recepción, Instalación, Testigo ni Programación */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && activeTab === 'resumen' && (
+          {/* Tab Resumen - Solo para tareas que NO son Impresión, Recepción, Instalación, Testigo, Programación ni Orden de Programación */}
+          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Orden de Programación' && activeTab === 'resumen' && (
             <div className="space-y-4">
               {/* Info de la tarea - Compacta */}
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
@@ -7767,7 +8181,7 @@ function CreateTaskModal({
 
   // Cargar archivos digitales cuando se selecciona tipo Programación
   useEffect(() => {
-    if (isOpen && selectedInventory.length > 0 && tipo === 'Programación') {
+    if (isOpen && selectedInventory.length > 0 && (tipo === 'Programación' || tipo === 'Orden de Programación')) {
       const loadDigitalFiles = async () => {
         setIsLoadingArchivosDigitales(true);
         try {
@@ -7987,6 +8401,24 @@ function CreateTaskModal({
         // Guardar IDs separados por coma
         (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(', ');
         // Guardar nombres separados por coma
+        payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
+      }
+    } else if (tipo === 'Orden de Programación') {
+      // Campos adicionales para Orden de Programación (misma estructura que Programación)
+      (payload as any).fecha_fin = fechaEntrega;
+      (payload as any).fecha_creacion = new Date().toISOString();
+      (payload as any).listado_inventario = selectedIds.join(',');
+      (payload as any).evidencia = JSON.stringify({
+        indicaciones: programacionIndicaciones,
+        archivos: archivosDigitalesProgramacion.map(a => ({
+          archivo: a.archivo,
+          spot: a.spot,
+          tipo: a.tipo,
+        })),
+      });
+      // Asignados múltiples para Orden de Programación (área Operaciones)
+      if (selectedAsignadosProgramacion.length > 0) {
+        (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(', ');
         payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
       }
     } else if (proveedorId && selectedProveedor) {
@@ -8412,8 +8844,8 @@ function CreateTaskModal({
               </>
             )}
 
-            {/* === FORMULARIO PROGRAMACIÓN === */}
-            {tipo === 'Programación' && (
+            {/* === FORMULARIO PROGRAMACIÓN / ORDEN DE PROGRAMACIÓN === */}
+            {(tipo === 'Programación' || tipo === 'Orden de Programación') && (
               <>
                 {/* Título */}
                 <div>
@@ -9036,11 +9468,11 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !fechaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : !titulo.trim()) || isSubmitting}
+            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !fechaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : tipo === 'Orden de Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0) : !titulo.trim()) || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {(isSubmitting || (tipo === 'Programación' && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isSubmitting ? 'Generando...' : tipo === 'Programación' && isLoadingArchivosDigitales ? 'Cargando archivos...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : tipo === 'Testigo' ? 'Crear Testigo' : 'Crear tarea'}
+            {(isSubmitting || ((tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Generando...' : (tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales ? 'Cargando archivos...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : tipo === 'Testigo' ? 'Crear Testigo' : tipo === 'Orden de Programación' ? 'Crear Orden de Programación' : 'Crear tarea'}
           </button>
         </div>
       </div>
@@ -10024,8 +10456,8 @@ export function TareaSeguimientoPage() {
     estado_programacion?: EstadoProgramacion;
     indicaciones?: string;
   })[] => {
-    // Filtrar tareas de tipo Programación
-    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación');
+    // Filtrar tareas de tipo Programación y Orden de Programación
+    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación' || t.tipo === 'Orden de Programación');
 
     if (tareasProgramacion.length === 0) return [];
 
@@ -10435,7 +10867,7 @@ export function TareaSeguimientoPage() {
   // Mapa de rsv_id -> estado de programación (para FlowStepIcons)
   const programacionStatusMap = useMemo(() => {
     const map = new Map<string, { estado: 'en_programacion' | 'programado' }>();
-    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación');
+    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación' || t.tipo === 'Orden de Programación');
     tareasProgramacion.forEach(tarea => {
       const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
       const estado: 'en_programacion' | 'programado' = tarea.estatus === 'Completado' ? 'programado' : 'en_programacion';
@@ -10751,9 +11183,9 @@ export function TareaSeguimientoPage() {
   const tasks = useMemo((): TaskRow[] => {
     return tareasAPI
       .filter((t) => {
-        if (t.estatus === 'Atendido' || t.estatus === 'Completado') return false;
+        if (t.estatus === 'Atendido' || t.estatus === 'Completado' || t.estatus === 'Finalizada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación'];
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
@@ -10781,9 +11213,9 @@ export function TareaSeguimientoPage() {
   const completedTasks = useMemo((): TaskRow[] => {
     return tareasAPI
       .filter((t) => {
-        if (t.estatus !== 'Atendido' && t.estatus !== 'Completado') return false;
+        if (t.estatus !== 'Atendido' && t.estatus !== 'Completado' && t.estatus !== 'Finalizada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación'];
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
@@ -11337,9 +11769,14 @@ export function TareaSeguimientoPage() {
 
     if (allAprobado) {
       if (allDigital) {
-        // Para digitales aprobados: solo mostrar Programación
-        availableTipos = ['Programación'];
-        initialTipo = 'Programación';
+        // Para digitales aprobados: Tráfico crea Orden de Programación, Operaciones crea Programación
+        if (permissions.canCreateOrdenProgramacion) {
+          availableTipos = ['Orden de Programación'];
+          initialTipo = 'Orden de Programación';
+        } else {
+          availableTipos = ['Programación'];
+          initialTipo = 'Programación';
+        }
       } else if (hasIMU && !hasRecibido) {
         // Tradicionales con IMU: mostrar Impresión e Instalación
         availableTipos = ['Impresión', 'Instalación'];
@@ -11356,8 +11793,13 @@ export function TareaSeguimientoPage() {
     } else {
       // Mezcla: mostrar tipos según IMU y tipo de inventario (pero excluir Impresión si ya fue recibido)
       if (allDigital) {
-        availableTipos = ['Programación', 'Revisión de artes'];
-        initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Programación' : 'Revisión de artes';
+        if (permissions.canCreateOrdenProgramacion) {
+          availableTipos = ['Orden de Programación', 'Revisión de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Orden de Programación' : 'Revisión de artes';
+        } else {
+          availableTipos = ['Programación', 'Revisión de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Programación' : 'Revisión de artes';
+        }
       } else if (hasIMU && !hasRecibido) {
         availableTipos = ['Instalación', 'Revisión de artes', 'Impresión'];
         initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Impresión' : 'Revisión de artes';
@@ -11368,7 +11810,7 @@ export function TareaSeguimientoPage() {
     }
 
     return { initialTipo, availableTipos };
-  }, [selectedInventoryItems, activeMainTab, activeEstadoProgramacionTab]);
+  }, [selectedInventoryItems, activeMainTab, activeEstadoProgramacionTab, permissions.canCreateOrdenProgramacion]);
 
   // Verificar si alguno de los items seleccionados tiene relación con instalación
   const hasSelectedItemsWithInstalacion = useMemo(() => {
@@ -12404,7 +12846,7 @@ export function TareaSeguimientoPage() {
                       </>
                     )}
                   </button>
-                  {permissions.canCreateTareasGestionArtes && (
+                  {(permissions.canCreateTareasGestionArtes || permissions.canCreateOrdenProgramacion) && (
                     <button
                       onClick={handleCreateTaskClick}
                       disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
@@ -14387,10 +14829,11 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300">{task.titulo}</td>
                             <td className="p-2">
                               {/* Solo mostrar botón Abrir si: canOpenTasks=true Y (no tiene restricción O es tarea del tipo permitido) Y no está bloqueado por cannotOpenCorreccionTasks */}
-                              {permissions.canOpenTasks && !(permissions.cannotOpenCorreccionTasks && task.tipo === 'Correccion') && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks && !permissions.canOnlyOpenCorreccionTasks) ||
+                              {permissions.canOpenTasks && !(permissions.cannotOpenCorreccionTasks && task.tipo === 'Correccion') && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks && !permissions.canOnlyOpenCorreccionTasks && !permissions.canOnlyOpenOrdenProgramacionTasks) ||
                                 (permissions.canOnlyOpenImpresionTasks && task.tipo === 'Impresión') ||
                                 (permissions.canOnlyOpenRecepcionTasks && (task.tipo === 'Recepción' || task.tipo === 'Instalación' || task.tipo === 'Testigo' || task.tipo === 'Programación')) ||
-                                (permissions.canOnlyOpenCorreccionTasks && task.tipo === 'Correccion')) ? (
+                                (permissions.canOnlyOpenCorreccionTasks && task.tipo === 'Correccion') ||
+                                (permissions.canOnlyOpenOrdenProgramacionTasks && task.tipo === 'Orden de Programación')) ? (
                                 <button
                                   onClick={() => {
                                     setSelectedTask(task);
