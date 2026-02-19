@@ -1256,7 +1256,7 @@ export function PropuestasPage() {
           </div>
         </td>
         <td className="px-4 py-3">
-          <span className="text-white text-sm truncate max-w-[250px] block" title={item.nombre_campania || item.descripcion || '-'}>{item.nombre_campania || item.descripcion || '-'}</span>
+          <span className="text-white text-sm truncate max-w-[250px] block" title={item.campana_nombre || item.nombre_campania || '-'}>{item.campana_nombre || item.nombre_campania || '-'}</span>
         </td>
         <td className="px-4 py-3">
           <span className="text-zinc-300 text-xs">{item.asignado || 'Sin asignar'}</span>
