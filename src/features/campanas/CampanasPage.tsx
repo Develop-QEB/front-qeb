@@ -983,16 +983,32 @@ export function CampanasPage() {
       subgroups?: { name: string; campanas: Campana[] }[];
     }> = {};
 
+    const CATORCENAS_POR_ANIO = 26;
+
     filteredData.forEach(item => {
       if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
-        const key = `${item.catorcena_inicio_anio}-${String(item.catorcena_inicio_num).padStart(2, '0')}`;
-        if (!groups[key]) {
-          groups[key] = {
-            catorcena: { num: item.catorcena_inicio_num, anio: item.catorcena_inicio_anio },
-            campanas: []
-          };
+        const finNum = item.catorcena_fin_num ?? item.catorcena_inicio_num;
+        const finAnio = item.catorcena_fin_anio ?? item.catorcena_inicio_anio;
+
+        let num = item.catorcena_inicio_num;
+        let anio = item.catorcena_inicio_anio;
+
+        while (anio < finAnio || (anio === finAnio && num <= finNum)) {
+          const key = `${anio}-${String(num).padStart(2, '0')}`;
+          if (!groups[key]) {
+            groups[key] = {
+              catorcena: { num, anio },
+              campanas: []
+            };
+          }
+          groups[key].campanas.push(item);
+
+          num++;
+          if (num > CATORCENAS_POR_ANIO) {
+            num = 1;
+            anio++;
+          }
         }
-        groups[key].campanas.push(item);
       }
     });
 

@@ -30,6 +30,7 @@ export interface UsuarioAdmin {
 
 export interface UpdateUsuarioInput {
   nombre?: string;
+  correo_electronico?: string;
   area?: string;
   puesto?: string;
   rol?: string;
