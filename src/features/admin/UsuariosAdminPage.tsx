@@ -291,6 +291,7 @@ function EditModal({
 }) {
   const [form, setForm] = useState<UpdateUsuarioInput>({
     nombre: usuario.nombre,
+    correo_electronico: usuario.email,
     area: usuario.area || '',
     puesto: usuario.puesto || '',
     rol: usuario.rol,
@@ -308,6 +309,7 @@ function EditModal({
   useEffect(() => {
     setForm({
       nombre: usuario.nombre,
+      correo_electronico: usuario.email,
       area: usuario.area || '',
       puesto: usuario.puesto || '',
       rol: usuario.rol,
@@ -346,6 +348,21 @@ function EditModal({
               className={inputClasses}
               required
             />
+          </div>
+
+          <div>
+            <label className={labelClasses}>Correo electrónico</label>
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400/50" />
+              <input
+                type="email"
+                value={form.correo_electronico}
+                onChange={(e) => setForm({ ...form, correo_electronico: e.target.value })}
+                className={`${inputClasses} pl-11`}
+                placeholder="correo@ejemplo.com"
+                required
+              />
+            </div>
           </div>
 
           <div>

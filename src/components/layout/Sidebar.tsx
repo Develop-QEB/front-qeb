@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -9,12 +10,14 @@ import {
   MapPin,
   LogOut,
   ChevronLeft,
+  HelpCircle,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import { usePrefetch } from '../../hooks/usePrefetch';
 import { getPermissions } from '../../lib/permissions';
+import { AyudaModal } from './AyudaModal';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -41,6 +44,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
   const prefetch = usePrefetch();
+  const [ayudaOpen, setAyudaOpen] = useState(false);
+  const [ayudaTutorial, setAyudaTutorial] = useState('asesores-solicitudes');
 
   const handleLogout = () => {
     queryClient.clear();
@@ -67,6 +72,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   });
 
   return (
+    <>
     <aside
       className={cn(
         'fixed left-0 top-0 z-40 h-screen bg-[#1a1025] text-white transition-all duration-300 border-r border-purple-900/30',
@@ -150,6 +156,17 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             </div>
           )}
           <button
+            onClick={() => setAyudaOpen(true)}
+            className={cn(
+              'flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-light text-purple-300/70 hover:bg-purple-900/30 hover:text-white transition-all duration-200',
+              collapsed && 'justify-center px-2'
+            )}
+            title={collapsed ? 'Ayuda' : undefined}
+          >
+            <HelpCircle className="h-5 w-5 flex-shrink-0" />
+            {!collapsed && <span>Ayuda</span>}
+          </button>
+          <button
             onClick={handleLogout}
             className={cn(
               'flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-light text-purple-300/70 hover:bg-purple-900/30 hover:text-white transition-all duration-200',
@@ -163,5 +180,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       </div>
     </aside>
+
+    <AyudaModal
+      isOpen={ayudaOpen}
+      onClose={() => setAyudaOpen(false)}
+      tutorialId={ayudaTutorial}
+      onSelect={setAyudaTutorial}
+    />
+    </>
   );
 }
