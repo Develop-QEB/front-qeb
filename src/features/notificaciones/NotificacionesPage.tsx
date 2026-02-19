@@ -1882,7 +1882,7 @@ function TaskDrawer({
               <div className="mb-3 p-3 rounded-lg bg-zinc-800/30 border border-zinc-700/50">
                 <div className="flex items-center gap-2 text-xs">
                   <Calendar className="h-3.5 w-3.5 text-cyan-400" />
-                  <span className="text-zinc-500">Catorcena:</span>
+                  <span className="text-zinc-500">Periodo:</span>
                   <span className="text-cyan-300 font-medium">{carasPendientes[0].catorcena}</span>
                 </div>
               </div>

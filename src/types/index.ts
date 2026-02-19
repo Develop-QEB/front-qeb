@@ -230,6 +230,9 @@ export interface Propuesta {
   anio_inicio?: number | null;
   catorcena_fin?: number | null;
   anio_fin?: number | null;
+  tipo_periodo?: string | null;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
 }
 
 export interface PropuestaStats {
@@ -307,6 +310,7 @@ export interface Campana {
   catorcena_inicio_anio: number | null;
   catorcena_fin_num: number | null;
   catorcena_fin_anio: number | null;
+  tipo_periodo: string | null;
   has_aps: boolean | number | null;
   propuesta_id: number | null;
   // SAP integration fields

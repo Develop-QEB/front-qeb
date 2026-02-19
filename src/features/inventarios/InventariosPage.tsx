@@ -385,7 +385,11 @@ export function InventariosPage() {
                                       </>
                                     );
                                   })()}
-                                  <span>Catorcena: {item.numero_catorcena}/{item.anio_catorcena}</span>
+                                  <span>{item.numero_catorcena && item.anio_catorcena
+                                    ? `Catorcena: ${item.numero_catorcena}/${item.anio_catorcena}`
+                                    : item.inicio_periodo
+                                      ? `Periodo: ${(() => { const d = new Date(item.inicio_periodo); const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']; return !isNaN(d.getTime()) ? `${meses[d.getMonth()]} ${d.getFullYear()}` : '-'; })()}`
+                                      : 'Catorcena: -'}</span>
                                   {item.APS && <span>APS: {item.APS}</span>}
                                 </div>
                               </div>

@@ -19,6 +19,12 @@ import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 
+const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+function getMonthShort(dateStr: string): string {
+  const d = new Date(dateStr);
+  return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : '-';
+}
+
 // Status badge colors
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   'Abierto': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
@@ -1265,7 +1271,12 @@ export function PropuestasPage() {
           <span className="font-medium text-amber-400">{formatCurrency(item.inversion)}</span>
         </td>
         <td className="px-4 py-3">
-          {item.catorcena_inicio ? (
+          {item.tipo_periodo === 'mensual' && item.fecha_inicio ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
+              <Calendar className="h-3 w-3" />
+              {getMonthShort(item.fecha_inicio)}
+            </span>
+          ) : item.catorcena_inicio ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
               <Calendar className="h-3 w-3" />
               {item.catorcena_inicio}/{item.anio_inicio}
@@ -1275,7 +1286,12 @@ export function PropuestasPage() {
           )}
         </td>
         <td className="px-4 py-3">
-          {item.catorcena_fin ? (
+          {item.tipo_periodo === 'mensual' && item.fecha_fin ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
+              <Calendar className="h-3 w-3" />
+              {getMonthShort(item.fecha_fin)}
+            </span>
+          ) : item.catorcena_fin ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
               <Calendar className="h-3 w-3" />
               {item.catorcena_fin}/{item.anio_fin}

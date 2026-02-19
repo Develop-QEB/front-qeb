@@ -141,7 +141,13 @@ interface ResumenCatorcenaGroup {
   totalInversion: number;
 }
 
-function formatInicioPeriodo(item: InventarioReservado): string {
+const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+    const d = new Date(item.inicio_periodo);
+    if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+  }
   if (item.numero_catorcena && item.anio_catorcena) {
     return `Catorcena ${item.numero_catorcena}, ${item.anio_catorcena}`;
   }
@@ -215,6 +221,7 @@ export function ClientePropuestaPage() {
   });
 
   const inventario = data?.inventario || [];
+  const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
   // Computed data
   const kpis = useMemo(() => {
@@ -260,7 +267,7 @@ export function ClientePropuestaPage() {
     const catorcenaMap = new Map<string, Map<string, InventarioReservado[]>>();
 
     filteredInventario.forEach(item => {
-      const catKey = formatInicioPeriodo(item);
+      const catKey = formatInicioPeriodo(item, tipoPeriodo);
       const artKey = item.articulo || 'Sin articulo';
       if (!catorcenaMap.has(catKey)) catorcenaMap.set(catKey, new Map());
       const artMap = catorcenaMap.get(catKey)!;
@@ -315,12 +322,15 @@ export function ClientePropuestaPage() {
     return { lat: avgLat, lng: avgLng };
   }, [inventario]);
 
-  // Catorcena period display helpers
+  // Period display helpers
   const periodoInicio = useMemo(() => {
+    if (tipoPeriodo === 'mensual' && data?.cotizacion?.fecha_inicio) {
+      const d = new Date(data.cotizacion.fecha_inicio);
+      if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+    }
     if (data?.propuesta?.catorcena_inicio && data?.propuesta?.anio_inicio) {
       return `Catorcena ${data.propuesta.catorcena_inicio}, ${data.propuesta.anio_inicio}`;
     }
-    // Fallback: compute from inventario
     const catorcenas = inventario
       .filter(i => i.numero_catorcena && i.anio_catorcena)
       .map(i => ({ num: i.numero_catorcena!, year: i.anio_catorcena! }));
@@ -329,9 +339,13 @@ export function ClientePropuestaPage() {
       return `Catorcena ${sorted[0].num}, ${sorted[0].year}`;
     }
     return 'N/A';
-  }, [data, inventario]);
+  }, [data, inventario, tipoPeriodo]);
 
   const periodoFin = useMemo(() => {
+    if (tipoPeriodo === 'mensual' && data?.cotizacion?.fecha_fin) {
+      const d = new Date(data.cotizacion.fecha_fin);
+      if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+    }
     if (data?.propuesta?.catorcena_fin && data?.propuesta?.anio_fin) {
       return `Catorcena ${data.propuesta.catorcena_fin}, ${data.propuesta.anio_fin}`;
     }
@@ -344,14 +358,14 @@ export function ClientePropuestaPage() {
       return `Catorcena ${last.num}, ${last.year}`;
     }
     return 'N/A';
-  }, [data, inventario]);
+  }, [data, inventario, tipoPeriodo]);
 
   // Handlers
   const handleDownloadCSV = () => {
     const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Articulo', 'Caras', 'Tarifa', 'Periodo'];
     const rows = inventario.map(i => [
       i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.tipo_de_mueble, i.articulo,
-      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i)
+      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo)
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -482,8 +496,8 @@ export function ClientePropuestaPage() {
     // Period
     y = addSectionTitle('PERIODO DE CAMPAÑA', y);
     y = createFieldRow([
-      { label: 'Catorcena de Inicio', value: periodoInicio },
-      { label: 'Catorcena de Fin', value: periodoFin },
+      { label: tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Catorcena de Inicio', value: periodoInicio },
+      { label: tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Catorcena de Fin', value: periodoFin },
     ], y);
     y += 5;
 
@@ -514,7 +528,7 @@ export function ClientePropuestaPage() {
     if (inventario.length > 0) {
       const grouped: Record<string, Record<string, typeof inventario>> = {};
       inventario.forEach(item => {
-        const catKey = formatInicioPeriodo(item);
+        const catKey = formatInicioPeriodo(item, tipoPeriodo);
         const artKey = item.articulo || 'Sin articulo';
         if (!grouped[catKey]) grouped[catKey] = {};
         if (!grouped[catKey][artKey]) grouped[catKey][artKey] = [];
@@ -552,7 +566,7 @@ export function ClientePropuestaPage() {
               i.tipo_de_mueble || '-',
               i.tipo_de_cara || '-',
               String(i.caras_totales || 0),
-              formatInicioPeriodo(i),
+              formatInicioPeriodo(i, tipoPeriodo),
             ]),
             startY: y,
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -1091,7 +1105,7 @@ export function ClientePropuestaPage() {
                         <p><strong>Caras:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(selectedMarker.tarifa_publica || 0)}</p>
                         {selectedMarker.numero_catorcena && (
-                          <p><strong>Periodo:</strong> Catorcena {selectedMarker.numero_catorcena}, {selectedMarker.anio_catorcena}</p>
+                          <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const d = new Date(selectedMarker.inicio_periodo); return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : `Catorcena ${selectedMarker.numero_catorcena}, ${selectedMarker.anio_catorcena}`; })() : `Catorcena ${selectedMarker.numero_catorcena}, ${selectedMarker.anio_catorcena}`}</p>
                         )}
                       </div>
                     </div>

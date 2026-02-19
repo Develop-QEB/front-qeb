@@ -379,6 +379,11 @@ const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad
   return null;
 };
 
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
+
 interface SAPCuicItem {
   CUIC: number;
   T0_U_RazonSocial: string;
@@ -714,10 +719,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const [notas, setNotas] = useState('');
 
   // Dates
+  const [tipoPeriodo, setTipoPeriodo] = useState<'catorcena' | 'mensual'>('catorcena');
   const [yearInicio, setYearInicio] = useState<number | undefined>();
   const [yearFin, setYearFin] = useState<number | undefined>();
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>();
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
+  // Mensual mode: month range
+  const [mesInicio, setMesInicio] = useState<number | undefined>(); // 1-12
+  const [mesFin, setMesFin] = useState<number | undefined>(); // 1-12
 
   // Caras data with full info per entry
   const [caras, setCaras] = useState<CaraEntry[]>([]);
@@ -731,6 +740,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     tipo: '' as 'Tradicional' | 'Digital' | '',
     nse: [] as string[],
     periodo: '',
+    // Custom period dates (mensual mode - per cara dates within month)
+    periodoInicioCustom: '',
+    periodoFinCustom: '',
     renta: 0,
     bonificacion: 0,
     tarifaPublica: 0,
@@ -908,10 +920,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setNombreCampania('');
       setDescripcion('');
       setNotas('');
+      setTipoPeriodo('catorcena');
       setYearInicio(undefined);
       setYearFin(undefined);
       setCatorcenaInicio(undefined);
       setCatorcenaFin(undefined);
+      setMesInicio(undefined);
+      setMesFin(undefined);
       setCaras([]);
       setArchivo(null);
       setTipoArchivo(null);
@@ -925,6 +940,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tipo: '',
         nse: [],
         periodo: '',
+        periodoInicioCustom: '',
+        periodoFinCustom: '',
         renta: 0,
         bonificacion: 0,
         tarifaPublica: 0,
@@ -997,8 +1014,48 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     return cats;
   }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
 
+  // Mes options with validation
+  const mesInicioOptions = useMemo(() => {
+    const all = Array.from({ length: 12 }, (_, i) => i + 1);
+    if (yearInicio && yearFin && yearInicio === yearFin && mesFin !== undefined) {
+      return all.filter(m => m <= mesFin);
+    }
+    return all;
+  }, [yearInicio, yearFin, mesFin]);
+
+  const mesFinOptions = useMemo(() => {
+    const all = Array.from({ length: 12 }, (_, i) => i + 1);
+    if (yearInicio && yearFin && yearInicio === yearFin && mesInicio !== undefined) {
+      return all.filter(m => m >= mesInicio);
+    }
+    return all;
+  }, [yearInicio, yearFin, mesInicio]);
+
   // Get periods from selected range
   const availablePeriods = useMemo(() => {
+    if (tipoPeriodo === 'mensual') {
+      // Generate monthly periods
+      if (!yearInicio || !yearFin || mesInicio === undefined || mesFin === undefined) return [];
+      const periods: { id: number; a_o: number; numero_catorcena: number; fecha_inicio: string; fecha_fin: string; label: string }[] = [];
+      let y = yearInicio, m = mesInicio;
+      while (y < yearFin || (y === yearFin && m <= mesFin)) {
+        const fechaIni = new Date(y, m - 1, 1);
+        const fechaFinMes = new Date(y, m, 0);
+        periods.push({
+          id: y * 100 + m,
+          a_o: y,
+          numero_catorcena: m,
+          fecha_inicio: fechaIni.toISOString().split('T')[0],
+          fecha_fin: fechaFinMes.toISOString().split('T')[0],
+          label: `${MESES[m - 1]} ${y}`,
+        });
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+      return periods;
+    }
+
+    // Catorcena mode
     if (!catorcenasData?.data || !yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
 
     return catorcenasData.data.filter(c => {
@@ -1007,31 +1064,57 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       if (c.a_o === yearFin && c.numero_catorcena > catorcenaFin) return false;
       return true;
     });
-  }, [catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+  }, [tipoPeriodo, catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin]);
 
-  // Calculate fecha_inicio and fecha_fin from catorcenas
+  // Calculate fecha_inicio and fecha_fin from catorcenas or months
   const fechaInicio = useMemo(() => {
+    if (tipoPeriodo === 'mensual') {
+      if (!yearInicio || mesInicio === undefined) return '';
+      return new Date(yearInicio, mesInicio - 1, 1).toISOString().split('T')[0];
+    }
     if (!catorcenasData?.data || !yearInicio || !catorcenaInicio) return '';
     const cat = catorcenasData.data.find(c => c.a_o === yearInicio && c.numero_catorcena === catorcenaInicio);
     return cat ? cat.fecha_inicio : '';
-  }, [catorcenasData, yearInicio, catorcenaInicio]);
+  }, [tipoPeriodo, catorcenasData, yearInicio, catorcenaInicio, mesInicio]);
 
   const fechaFin = useMemo(() => {
+    if (tipoPeriodo === 'mensual') {
+      if (!yearFin || mesFin === undefined) return '';
+      return new Date(yearFin, mesFin, 0).toISOString().split('T')[0];
+    }
     if (!catorcenasData?.data || !yearFin || !catorcenaFin) return '';
     const cat = catorcenasData.data.find(c => c.a_o === yearFin && c.numero_catorcena === catorcenaFin);
     return cat ? cat.fecha_fin : '';
-  }, [catorcenasData, yearFin, catorcenaFin]);
+  }, [tipoPeriodo, catorcenasData, yearFin, catorcenaFin, mesFin]);
 
   // Add cara entry
   const handleAddCara = async () => {
-    if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo) return;
+    if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0) return;
 
-    const [yearStr, catStr] = newCara.periodo.split('-');
-    const catorcenaYear = parseInt(yearStr);
-    const catorcenaNum = parseInt(catStr);
+    let catorcenaYear: number;
+    let catorcenaNum: number;
+    let periodoInicioVal: string;
+    let periodoFinVal: string;
 
-    const period = availablePeriods.find(p => p.a_o === catorcenaYear && p.numero_catorcena === catorcenaNum);
-    if (!period) return;
+    if (tipoPeriodo === 'mensual') {
+      // Mensual: month from dropdown + custom dates per cara
+      if (!newCara.periodo || !newCara.periodoInicioCustom || !newCara.periodoFinCustom) return;
+      const [yearStr, mesStr] = newCara.periodo.split('-');
+      catorcenaYear = parseInt(yearStr);
+      catorcenaNum = parseInt(mesStr); // month number (1-12) for grouping
+      periodoInicioVal = newCara.periodoInicioCustom;
+      periodoFinVal = newCara.periodoFinCustom;
+    } else {
+      // Catorcena mode
+      if (!newCara.periodo) return;
+      const [yearStr, catStr] = newCara.periodo.split('-');
+      catorcenaYear = parseInt(yearStr);
+      catorcenaNum = parseInt(catStr);
+      const period = availablePeriods.find(p => p.a_o === catorcenaYear && p.numero_catorcena === catorcenaNum);
+      if (!period) return;
+      periodoInicioVal = period.fecha_inicio;
+      periodoFinVal = period.fecha_fin;
+    }
 
     // Calculate descuento: if renta=100, bonif=10, then descuento is 10/(100+10) = 9.09%
     const totalCaras = newCara.renta + newCara.bonificacion;
@@ -1085,8 +1168,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       nse: newCara.nse,
       catorcenaNum,
       catorcenaYear,
-      periodoInicio: period.fecha_inicio,
-      periodoFin: period.fecha_fin,
+      periodoInicio: periodoInicioVal,
+      periodoFin: periodoFinVal,
       renta: newCara.renta,
       bonificacion: newCara.bonificacion,
       tarifaPublica: newCara.tarifaPublica,
@@ -1112,6 +1195,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setNewCara({
       ...newCara,
       periodo: '',
+      periodoInicioCustom: '',
+      periodoFinCustom: '',
       renta: 0,
       bonificacion: 0,
       // Keep articulo, estado, ciudades, formato, tipo, nse, tarifaPublica
@@ -1128,6 +1213,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tipo: '',
       nse: [],
       periodo: '',
+      periodoInicioCustom: '',
+      periodoFinCustom: '',
       renta: 0,
       bonificacion: 0,
       tarifaPublica: 0,
@@ -1154,6 +1241,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tipo: cara.tipo as 'Tradicional' | 'Digital' | '',
       nse: cara.nse,
       periodo: `${cara.catorcenaYear}-${cara.catorcenaNum}`,
+      periodoInicioCustom: tipoPeriodo === 'mensual' ? cara.periodoInicio : '',
+      periodoFinCustom: tipoPeriodo === 'mensual' ? cara.periodoFin : '',
       renta: cara.renta,
       bonificacion: cara.bonificacion,
       tarifaPublica: cara.tarifaPublica,
@@ -1171,13 +1260,22 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tipo: '',
       nse: [],
       periodo: '',
+      periodoInicioCustom: '',
+      periodoFinCustom: '',
       renta: 0,
       bonificacion: 0,
       tarifaPublica: 0,
     });
   };
 
-  // Group caras by catorcena
+  // Helper to format date for display
+  const formatDateShort = (dateStr: string) => {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  // Group caras by period (catorcena number or month number)
   const groupedCaras = useMemo(() => {
     const groups: Record<string, CaraEntry[]> = {};
     caras.forEach(cara => {
@@ -1185,7 +1283,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       if (!groups[key]) groups[key] = [];
       groups[key].push(cara);
     });
-    // Sort by year and catorcena
     return Object.entries(groups).sort((a, b) => {
       const [yearA, catA] = a[0].split('-').map(Number);
       const [yearB, catB] = b[0].split('-').map(Number);
@@ -1193,6 +1290,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       return catA - catB;
     });
   }, [caras]);
+
+  // Helper to get period label from group key
+  const getPeriodLabel = (key: string) => {
+    const [year, num] = key.split('-');
+    if (tipoPeriodo === 'mensual') {
+      const m = parseInt(num);
+      return `${MESES[m - 1] || `Mes ${num}`} ${year}`;
+    }
+    return `Catorcena ${num} / ${year}`;
+  };
 
   // Toggle catorcena expansion
   const toggleCatorcena = (key: string) => {
@@ -1277,10 +1384,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setNombreCampania('');
     setDescripcion('');
     setNotas('');
+    setTipoPeriodo('catorcena');
     setYearInicio(undefined);
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
+    setMesInicio(undefined);
+    setMesFin(undefined);
     setCaras([]);
     setArchivo(null);
     setTipoArchivo(null);
@@ -1317,6 +1427,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       asignados: selectedAsignados.map(u => ({ id: u.id, nombre: u.nombre })),
       fecha_inicio: fechaInicio,
       fecha_fin: fechaFin,
+      tipo_periodo: tipoPeriodo,
       archivo: archivo || undefined,
       tipo_archivo: tipoArchivo || undefined,
       IMU: imu,
@@ -1388,31 +1499,41 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         setTipoArchivo(sol.tipo_archivo || null);
       }
 
-      // Load catorcenas from cotizacion dates (like ViewSolicitudModal does)
+      // Load period type and dates from cotizacion
       const cotizacion = editSolicitudData.cotizacion;
+      const loadedTipoPeriodo = (cotizacion as any)?.tipo_periodo || 'catorcena';
+      setTipoPeriodo(loadedTipoPeriodo);
+
       if (cotizacion?.fecha_inicio && cotizacion?.fecha_fin) {
         const fechaInicioDate = new Date(cotizacion.fecha_inicio);
         const fechaFinDate = new Date(cotizacion.fecha_fin);
 
-        const inicioCat = catorcenasData.data.find(c => {
-          const cInicio = new Date(c.fecha_inicio);
-          const cFin = new Date(c.fecha_fin);
-          return fechaInicioDate >= cInicio && fechaInicioDate <= cFin;
-        });
+        if (loadedTipoPeriodo === 'mensual') {
+          setYearInicio(fechaInicioDate.getFullYear());
+          setYearFin(fechaFinDate.getFullYear());
+          setMesInicio(fechaInicioDate.getMonth() + 1);
+          setMesFin(fechaFinDate.getMonth() + 1);
+        } else {
+          const inicioCat = catorcenasData.data.find(c => {
+            const cInicio = new Date(c.fecha_inicio);
+            const cFin = new Date(c.fecha_fin);
+            return fechaInicioDate >= cInicio && fechaInicioDate <= cFin;
+          });
 
-        const finCat = catorcenasData.data.find(c => {
-          const cInicio = new Date(c.fecha_inicio);
-          const cFin = new Date(c.fecha_fin);
-          return fechaFinDate >= cInicio && fechaFinDate <= cFin;
-        });
+          const finCat = catorcenasData.data.find(c => {
+            const cInicio = new Date(c.fecha_inicio);
+            const cFin = new Date(c.fecha_fin);
+            return fechaFinDate >= cInicio && fechaFinDate <= cFin;
+          });
 
-        if (inicioCat) {
-          setYearInicio(inicioCat.a_o);
-          setCatorcenaInicio(inicioCat.numero_catorcena);
-        }
-        if (finCat) {
-          setYearFin(finCat.a_o);
-          setCatorcenaFin(finCat.numero_catorcena);
+          if (inicioCat) {
+            setYearInicio(inicioCat.a_o);
+            setCatorcenaInicio(inicioCat.numero_catorcena);
+          }
+          if (finCat) {
+            setYearFin(finCat.a_o);
+            setCatorcenaFin(finCat.numero_catorcena);
+          }
         }
       }
 
@@ -1424,37 +1545,39 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             ItemName: cara.articulo || ''
           };
 
-          // Find matching catorcena from catorcenasData by matching dates
+          // Find matching catorcena/month from dates
           let catNum = 1;
           let catYear = new Date().getFullYear();
           if (cara.inicio_periodo) {
             const initDate = new Date(cara.inicio_periodo);
             if (!isNaN(initDate.getTime())) {
-              // Normalize date to compare (remove time component)
-              const initDateStr = initDate.toISOString().split('T')[0];
-
-              // Find catorcena that matches this period
-              const matchingCat = catorcenasData.data.find(cat => {
-                const catStartStr = new Date(cat.fecha_inicio).toISOString().split('T')[0];
-                return catStartStr === initDateStr;
-              });
-
-              if (matchingCat) {
-                catNum = matchingCat.numero_catorcena;
-                catYear = matchingCat.a_o;
+              if (loadedTipoPeriodo === 'mensual') {
+                // Mensual mode: month number for grouping
+                catYear = initDate.getFullYear();
+                catNum = initDate.getMonth() + 1; // 1-12
               } else {
-                // Fallback: find catorcena where date falls within range
-                const matchingRange = catorcenasData.data.find(cat => {
-                  const catStart = new Date(cat.fecha_inicio);
-                  const catEnd = new Date(cat.fecha_fin);
-                  return initDate >= catStart && initDate <= catEnd;
+                // Catorcena mode: find matching catorcena
+                const initDateStr = initDate.toISOString().split('T')[0];
+                const matchingCat = catorcenasData.data.find(cat => {
+                  const catStartStr = new Date(cat.fecha_inicio).toISOString().split('T')[0];
+                  return catStartStr === initDateStr;
                 });
-                if (matchingRange) {
-                  catNum = matchingRange.numero_catorcena;
-                  catYear = matchingRange.a_o;
+
+                if (matchingCat) {
+                  catNum = matchingCat.numero_catorcena;
+                  catYear = matchingCat.a_o;
                 } else {
-                  // Last fallback: use year from date
-                  catYear = initDate.getFullYear();
+                  const matchingRange = catorcenasData.data.find(cat => {
+                    const catStart = new Date(cat.fecha_inicio);
+                    const catEnd = new Date(cat.fecha_fin);
+                    return initDate >= catStart && initDate <= catEnd;
+                  });
+                  if (matchingRange) {
+                    catNum = matchingRange.numero_catorcena;
+                    catYear = matchingRange.a_o;
+                  } else {
+                    catYear = initDate.getFullYear();
+                  }
                 }
               }
             }
@@ -1765,83 +1888,183 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
               {/* Date range */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-purple-400" />
-                  Rango de Fechas
-                </label>
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Años */}
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="text-xs text-zinc-500">Año Inicio</label>
-                      <select
-                        value={yearInicio || ''}
-                        onChange={(e) => {
-                          setYearInicio(e.target.value ? parseInt(e.target.value) : undefined);
-                          setCatorcenaInicio(undefined);
-                        }}
-                        className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {yearInicioOptions.map(y => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-zinc-500">Año Fin</label>
-                      <select
-                        value={yearFin || ''}
-                        onChange={(e) => {
-                          setYearFin(e.target.value ? parseInt(e.target.value) : undefined);
-                          setCatorcenaFin(undefined);
-                        }}
-                        className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {yearFinOptions.map(y => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Catorcenas */}
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="text-xs text-zinc-500">Catorcena Inicio</label>
-                      <select
-                        value={catorcenaInicio || ''}
-                        onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                        disabled={!yearInicio}
-                        className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {catorcenasInicioOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>
-                            Catorcena {c.numero_catorcena} / {c.a_o}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-zinc-500">Catorcena Fin</label>
-                      <select
-                        value={catorcenaFin || ''}
-                        onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                        disabled={!yearFin}
-                        className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {catorcenasFinOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>
-                            Catorcena {c.numero_catorcena} / {c.a_o}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-purple-400" />
+                    Rango de Fechas
+                  </label>
+                  {/* Toggle Catorcena / Mensual */}
+                  <div className="flex items-center bg-zinc-800 rounded-lg border border-zinc-700 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTipoPeriodo('catorcena');
+                        setMesInicio(undefined);
+                        setMesFin(undefined);
+                        setCaras([]);
+                      }}
+                      className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'catorcena' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : 'text-zinc-400 hover:text-zinc-300'}`}
+                    >
+                      Catorcena
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTipoPeriodo('mensual');
+                        setCatorcenaInicio(undefined);
+                        setCatorcenaFin(undefined);
+                        setCaras([]);
+                      }}
+                      className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'mensual' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : 'text-zinc-400 hover:text-zinc-300'}`}
+                    >
+                      Mensual
+                    </button>
                   </div>
                 </div>
+
+                {tipoPeriodo === 'catorcena' ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Años */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="text-xs text-zinc-500">Año Inicio</label>
+                        <select
+                          value={yearInicio || ''}
+                          onChange={(e) => {
+                            setYearInicio(e.target.value ? parseInt(e.target.value) : undefined);
+                            setCatorcenaInicio(undefined);
+                          }}
+                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearInicioOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs text-zinc-500">Año Fin</label>
+                        <select
+                          value={yearFin || ''}
+                          onChange={(e) => {
+                            setYearFin(e.target.value ? parseInt(e.target.value) : undefined);
+                            setCatorcenaFin(undefined);
+                          }}
+                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearFinOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    {/* Catorcenas */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="text-xs text-zinc-500">Catorcena Inicio</label>
+                        <select
+                          value={catorcenaInicio || ''}
+                          onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearInicio}
+                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {catorcenasInicioOptions.map(c => (
+                            <option key={c.id} value={c.numero_catorcena}>
+                              Catorcena {c.numero_catorcena} / {c.a_o}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs text-zinc-500">Catorcena Fin</label>
+                        <select
+                          value={catorcenaFin || ''}
+                          onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearFin}
+                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {catorcenasFinOptions.map(c => (
+                            <option key={c.id} value={c.numero_catorcena}>
+                              Catorcena {c.numero_catorcena} / {c.a_o}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Años */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="text-xs text-zinc-500">Año Inicio</label>
+                        <select
+                          value={yearInicio || ''}
+                          onChange={(e) => {
+                            setYearInicio(e.target.value ? parseInt(e.target.value) : undefined);
+                            setMesInicio(undefined);
+                          }}
+                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearInicioOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs text-zinc-500">Año Fin</label>
+                        <select
+                          value={yearFin || ''}
+                          onChange={(e) => {
+                            setYearFin(e.target.value ? parseInt(e.target.value) : undefined);
+                            setMesFin(undefined);
+                          }}
+                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearFinOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    {/* Meses */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="text-xs text-zinc-500">Mes Inicio</label>
+                        <select
+                          value={mesInicio || ''}
+                          onChange={(e) => setMesInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearInicio}
+                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {mesInicioOptions.map(m => (
+                            <option key={m} value={m}>{MESES[m - 1]}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs text-zinc-500">Mes Fin</label>
+                        <select
+                          value={mesFin || ''}
+                          onChange={(e) => setMesFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearFin}
+                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {mesFinOptions.map(m => (
+                            <option key={m} value={m}>{MESES[m - 1]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Descripción (large) */}
@@ -2005,24 +2228,69 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 </div>
 
                 {/* Row 3: Periodo, Renta, Bonificación, Tarifa Pública */}
-                <div className="grid grid-cols-4 gap-3 mb-4">
+                <div className={`grid ${tipoPeriodo === 'mensual' ? 'grid-cols-6' : 'grid-cols-4'} gap-3 mb-4`}>
                   {/* Periodo */}
-                  <div>
-                    <label className="text-xs text-zinc-500">Periodo</label>
-                    <select
-                      value={newCara.periodo}
-                      onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value })}
-                      disabled={availablePeriods.length === 0}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                    >
-                      <option value="">Seleccionar</option>
-                      {availablePeriods.map(p => (
-                        <option key={`${p.a_o}-${p.numero_catorcena}`} value={`${p.a_o}-${p.numero_catorcena}`}>
-                          Catorcena {p.numero_catorcena} / {p.a_o}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {tipoPeriodo === 'mensual' ? (
+                    <>
+                      <div>
+                        <label className="text-xs text-zinc-500">Mes</label>
+                        <select
+                          value={newCara.periodo}
+                          onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value, periodoInicioCustom: '', periodoFinCustom: '' })}
+                          disabled={availablePeriods.length === 0}
+                          className="w-full px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {availablePeriods.map(p => (
+                            <option key={`${p.a_o}-${p.numero_catorcena}`} value={`${p.a_o}-${p.numero_catorcena}`}>
+                              {MESES[p.numero_catorcena - 1]} {p.a_o}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-zinc-500">Fecha Inicio</label>
+                        <input
+                          type="date"
+                          value={newCara.periodoInicioCustom}
+                          onChange={(e) => setNewCara({ ...newCara, periodoInicioCustom: e.target.value })}
+                          disabled={!newCara.periodo}
+                          min={newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return `${y}-${String(m).padStart(2, '0')}-01`; })() : undefined}
+                          max={newCara.periodoFinCustom || (newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return new Date(parseInt(y), parseInt(m), 0).toISOString().split('T')[0]; })() : undefined)}
+                          className="w-full px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-zinc-500">Fecha Fin</label>
+                        <input
+                          type="date"
+                          value={newCara.periodoFinCustom}
+                          onChange={(e) => setNewCara({ ...newCara, periodoFinCustom: e.target.value })}
+                          disabled={!newCara.periodo}
+                          min={newCara.periodoInicioCustom || (newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return `${y}-${String(m).padStart(2, '0')}-01`; })() : undefined)}
+                          max={newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return new Date(parseInt(y), parseInt(m), 0).toISOString().split('T')[0]; })() : undefined}
+                          className="w-full px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <label className="text-xs text-zinc-500">Periodo</label>
+                      <select
+                        value={newCara.periodo}
+                        onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value })}
+                        disabled={availablePeriods.length === 0}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                      >
+                        <option value="">Seleccionar</option>
+                        {availablePeriods.map(p => (
+                          <option key={`${p.a_o}-${p.numero_catorcena}`} value={`${p.a_o}-${p.numero_catorcena}`}>
+                            Catorcena {p.numero_catorcena} / {p.a_o}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {/* Renta */}
                   <div>
@@ -2110,7 +2378,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <button
                     type="button"
                     onClick={handleAddCara}
-                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo}
+                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom))}
                     className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors`}
                   >
                     {editingCaraId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -2147,7 +2415,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 ) : (
                   <div>
                     {groupedCaras.map(([key, items]) => {
-                      const [year, cat] = key.split('-');
                       const isExpanded = expandedCatorcenas.has(key);
                       const groupTotal = items.reduce((acc, c) => acc + c.precioTotal, 0);
                       const groupRenta = items.reduce((acc, c) => acc + c.renta, 0);
@@ -2155,7 +2422,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                       return (
                         <div key={key}>
-                          {/* Catorcena header */}
+                          {/* Period header */}
                           <button
                             type="button"
                             onClick={() => toggleCatorcena(key)}
@@ -2163,7 +2430,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           >
                             <div className="flex items-center gap-3">
                               {isExpanded ? <ChevronDown className="h-4 w-4 text-zinc-400" /> : <ChevronRight className="h-4 w-4 text-zinc-400" />}
-                              <span className="font-medium text-white">Catorcena {cat} / {year}</span>
+                              <span className="font-medium text-white">{getPeriodLabel(key)}</span>
                               <span className="text-xs text-zinc-500">({items.length} caras)</span>
                             </div>
                             <div className="flex items-center gap-4 text-sm">
@@ -2383,12 +2650,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 ) : (
                   <div className="divide-y divide-zinc-700/50">
                     {groupedCaras.map(([key, items]) => {
-                      const [year, cat] = key.split('-');
                       const groupTotal = items.reduce((acc, c) => acc + c.precioTotal, 0);
                       const groupRenta = items.reduce((acc, c) => acc + c.renta, 0);
                       const groupBonif = items.reduce((acc, c) => acc + c.bonificacion, 0);
 
-                      // Group by articulo within this catorcena
+                      // Group by articulo within this period
                       const byArticulo = items.reduce((acc, cara) => {
                         const artKey = cara.articulo.ItemCode;
                         if (!acc[artKey]) {
@@ -2409,10 +2675,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                       return (
                         <div key={key} className="bg-zinc-900/30">
-                          {/* Catorcena header */}
+                          {/* Period header */}
                           <div className="flex items-center justify-between px-4 py-3 bg-zinc-800/30">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium text-white">Catorcena {cat} / {year}</span>
+                              <span className="font-medium text-white">{getPeriodLabel(key)}</span>
                               <span className="text-xs text-zinc-500">({Object.keys(byArticulo).length} artículos)</span>
                             </div>
                             <div className="flex items-center gap-4 text-sm">

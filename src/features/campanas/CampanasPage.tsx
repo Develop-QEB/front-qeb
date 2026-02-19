@@ -45,6 +45,19 @@ function getTagColor(name: string) {
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
 }
 
+const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MESES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+function getMonthLabel(dateStr: string): string {
+  const d = new Date(dateStr);
+  return !isNaN(d.getTime()) ? `${MESES_FULL[d.getMonth()]} ${d.getFullYear()}` : '-';
+}
+
+function getMonthShort(dateStr: string): string {
+  const d = new Date(dateStr);
+  return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : '-';
+}
+
 // Status Colors - colores únicos por cada tipo de status
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   'Aprobada': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
@@ -781,6 +794,9 @@ export function CampanasPage() {
 
   const getGroupValue = (item: Campana, field: GroupByField): string => {
     if (field === 'catorcena_inicio') {
+      if ((item as any).tipo_periodo === 'mensual' && item.fecha_inicio) {
+        return getMonthLabel(item.fecha_inicio);
+      }
       return item.catorcena_inicio_num && item.catorcena_inicio_anio
         ? `Catorcena ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
         : 'Sin catorcena';
@@ -984,7 +1000,21 @@ export function CampanasPage() {
     }> = {};
 
     filteredData.forEach(item => {
-      if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
+      const isMensual = (item as any).tipo_periodo === 'mensual';
+      if (isMensual && item.fecha_inicio) {
+        // For mensual campaigns, group by month derived from fecha_inicio
+        const d = new Date(item.fecha_inicio);
+        const mes = d.getMonth() + 1; // 1-12
+        const anio = d.getFullYear();
+        const key = `${anio}-${String(mes).padStart(2, '0')}`;
+        if (!groups[key]) {
+          groups[key] = {
+            catorcena: { num: mes, anio, isMensual: true } as any,
+            campanas: []
+          };
+        }
+        groups[key].campanas.push(item);
+      } else if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
         const key = `${item.catorcena_inicio_anio}-${String(item.catorcena_inicio_num).padStart(2, '0')}`;
         if (!groups[key]) {
           groups[key] = {
@@ -1184,16 +1214,16 @@ export function CampanasPage() {
     if (!filteredData.length) return;
 
     const headers = [
-      'Periodo', 'Creador', 'Campaña', 'Cliente', 'Estatus', 'Actividad', 'Catorcena Inicio', 'Catorcena Fin', 'APS'
+      'Periodo', 'Creador', 'Campaña', 'Cliente', 'Estatus', 'Actividad', 'Periodo Inicio', 'Periodo Fin', 'APS'
     ];
     const rows = filteredData.map(c => {
       const periodStatus = getPeriodStatus(c.fecha_inicio, c.fecha_fin);
-      const catIni = c.catorcena_inicio_num && c.catorcena_inicio_anio
-        ? `Cat ${c.catorcena_inicio_num} ${c.catorcena_inicio_anio}`
-        : '-';
-      const catFin = c.catorcena_fin_num && c.catorcena_fin_anio
-        ? `Cat ${c.catorcena_fin_num} ${c.catorcena_fin_anio}`
-        : '-';
+      const catIni = (c as any).tipo_periodo === 'mensual'
+        ? getMonthShort(c.fecha_inicio)
+        : (c.catorcena_inicio_num && c.catorcena_inicio_anio ? `Cat ${c.catorcena_inicio_num} ${c.catorcena_inicio_anio}` : '-');
+      const catFin = (c as any).tipo_periodo === 'mensual'
+        ? getMonthShort(c.fecha_fin)
+        : (c.catorcena_fin_num && c.catorcena_fin_anio ? `Cat ${c.catorcena_fin_num} ${c.catorcena_fin_anio}` : '-');
       return [
         periodStatus,
         c.creador_nombre || '',
@@ -1240,12 +1270,17 @@ export function CampanasPage() {
     const periodStatus = getPeriodStatus(item.fecha_inicio, item.fecha_fin);
     const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
 
-    const catIni = item.catorcena_inicio_num && item.catorcena_inicio_anio
-      ? `Cat ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
-      : '-';
-    const catFin = item.catorcena_fin_num && item.catorcena_fin_anio
-      ? `Cat ${item.catorcena_fin_num}, ${item.catorcena_fin_anio}`
-      : '-';
+    const isMensual = (item as any).tipo_periodo === 'mensual';
+    const catIni = isMensual && item.fecha_inicio
+      ? getMonthShort(item.fecha_inicio)
+      : item.catorcena_inicio_num && item.catorcena_inicio_anio
+        ? `Cat ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
+        : '-';
+    const catFin = isMensual && item.fecha_fin
+      ? getMonthShort(item.fecha_fin)
+      : item.catorcena_fin_num && item.catorcena_fin_anio
+        ? `Cat ${item.catorcena_fin_num}, ${item.catorcena_fin_anio}`
+        : '-';
 
     return (
       <tr key={`campana-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
@@ -1315,9 +1350,14 @@ export function CampanasPage() {
             </span>
           )}
         </td>
-        {/* Cat. Inicio - Badge style */}
+        {/* Cat. Inicio / Periodo Inicio - Badge style */}
         <td className="px-4 py-3">
-          {item.catorcena_inicio_num && item.catorcena_inicio_anio ? (
+          {isMensual && item.fecha_inicio ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
+              <Calendar className="h-3 w-3" />
+              {getMonthShort(item.fecha_inicio)}
+            </span>
+          ) : item.catorcena_inicio_num && item.catorcena_inicio_anio ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
               <Calendar className="h-3 w-3" />
               {item.catorcena_inicio_num}/{item.catorcena_inicio_anio}
@@ -1326,9 +1366,14 @@ export function CampanasPage() {
             <span className="text-zinc-500 text-xs">-</span>
           )}
         </td>
-        {/* Cat. Fin - Badge style */}
+        {/* Cat. Fin / Periodo Fin - Badge style */}
         <td className="px-4 py-3">
-          {item.catorcena_fin_num && item.catorcena_fin_anio ? (
+          {isMensual && item.fecha_fin ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
+              <Calendar className="h-3 w-3" />
+              {getMonthShort(item.fecha_fin)}
+            </span>
+          ) : item.catorcena_fin_num && item.catorcena_fin_anio ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
               <Calendar className="h-3 w-3" />
               {item.catorcena_fin_num}/{item.catorcena_fin_anio}
@@ -2231,7 +2276,9 @@ export function CampanasPage() {
                       )}
                       <Calendar className="h-5 w-5 text-purple-400" />
                       <span className="font-semibold text-white text-sm">
-                        Catorcena {catorcena.num}, {catorcena.anio}
+                        {(catorcena as any).isMensual
+                          ? `${MESES_FULL[catorcena.num - 1]} ${catorcena.anio}`
+                          : `Catorcena ${catorcena.num}, ${catorcena.anio}`}
                       </span>
                       <span className="px-2.5 py-1 rounded-full text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30">
                         {campanas.length} campañas

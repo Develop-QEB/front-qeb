@@ -37,7 +37,13 @@ interface POIMarker {
 }
 
 // Helper functions
-function formatInicioPeriodo(item: InventarioReservado): string {
+const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+    const d = new Date(item.inicio_periodo);
+    if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+  }
   if (item.numero_catorcena && item.anio_catorcena) {
     return `Catorcena ${item.numero_catorcena}, ${item.anio_catorcena}`;
   }
@@ -169,6 +175,8 @@ export function CompartirPropuestaPage() {
     enabled: propuestaId > 0,
   });
 
+  const tipoPeriodo = (details?.cotizacion as any)?.tipo_periodo || 'catorcena';
+
   // Computed data
   const kpis = useMemo(() => {
     if (!details?.caras) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
@@ -249,7 +257,7 @@ export function CompartirPropuestaPage() {
     const catorcenaMap = new Map<string, Map<string, InventarioReservado[]>>();
 
     filteredInventario.forEach(item => {
-      const catKey = formatInicioPeriodo(item);
+      const catKey = formatInicioPeriodo(item, tipoPeriodo);
       const artKey = item.articulo || 'Sin articulo';
       if (!catorcenaMap.has(catKey)) catorcenaMap.set(catKey, new Map());
       const artMap = catorcenaMap.get(catKey)!;
@@ -276,8 +284,12 @@ export function CompartirPropuestaPage() {
     });
   }, [filteredInventario]);
 
-  // Catorcena period display
+  // Period display
   const periodoInicio = useMemo(() => {
+    if (tipoPeriodo === 'mensual' && details?.cotizacion?.fecha_inicio) {
+      const d = new Date(details.cotizacion.fecha_inicio);
+      if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+    }
     if (details?.propuesta?.catorcena_inicio && details?.propuesta?.anio_inicio) {
       return `Catorcena ${details.propuesta.catorcena_inicio}, ${details.propuesta.anio_inicio}`;
     }
@@ -290,9 +302,13 @@ export function CompartirPropuestaPage() {
       return `Catorcena ${sorted[0].num}, ${sorted[0].year}`;
     }
     return 'N/A';
-  }, [details, inventario]);
+  }, [details, inventario, tipoPeriodo]);
 
   const periodoFin = useMemo(() => {
+    if (tipoPeriodo === 'mensual' && details?.cotizacion?.fecha_fin) {
+      const d = new Date(details.cotizacion.fecha_fin);
+      if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+    }
     if (details?.propuesta?.catorcena_fin && details?.propuesta?.anio_fin) {
       return `Catorcena ${details.propuesta.catorcena_fin}, ${details.propuesta.anio_fin}`;
     }
@@ -306,7 +322,7 @@ export function CompartirPropuestaPage() {
       return `Catorcena ${last.num}, ${last.year}`;
     }
     return 'N/A';
-  }, [details, inventario]);
+  }, [details, inventario, tipoPeriodo]);
 
   // Handlers
   const handleCopyLink = () => {
@@ -321,7 +337,7 @@ export function CompartirPropuestaPage() {
     const headers = ['Código', 'Plaza', 'Ubicación', 'Tipo Cara', 'Formato', 'Caras', 'Tarifa', 'Periodo'];
     const rows = inventario.map(i => [
       i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.tipo_de_mueble,
-      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i)
+      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo)
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -425,7 +441,7 @@ export function CompartirPropuestaPage() {
               Tipo: ${i.tipo_de_cara || 'N/A'}<br/>
               Formato: ${i.tipo_de_mueble || 'N/A'}<br/>
               Caras: ${i.caras_totales}<br/>
-              Periodo: ${i.numero_catorcena ? `Catorcena ${i.numero_catorcena}, ${i.anio_catorcena}` : 'N/A'}
+              Periodo: ${tipoPeriodo === 'mensual' && i.inicio_periodo ? (() => { const d = new Date(i.inicio_periodo); return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : 'N/A'; })() : i.numero_catorcena ? `Catorcena ${i.numero_catorcena}, ${i.anio_catorcena}` : 'N/A'}
             ]]>
           </description>
           <Point>
@@ -649,9 +665,13 @@ export function CompartirPropuestaPage() {
         doc.text('Periodo:', marginX + 150, y);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(60, 60, 60);
-        const periodoText = first.year === last.year && first.num === last.num
-          ? `Catorcena ${first.num}, ${first.year}`
-          : `Catorcena ${first.num}/${first.year} - Catorcena ${last.num}/${last.year}`;
+        const periodoText = tipoPeriodo === 'mensual'
+          ? (first.year === last.year && first.num === last.num
+            ? `${MESES_LABEL[first.num - 1]} ${first.year}`
+            : `${MESES_LABEL[first.num - 1]} ${first.year} - ${MESES_LABEL[last.num - 1]} ${last.year}`)
+          : (first.year === last.year && first.num === last.num
+            ? `Catorcena ${first.num}, ${first.year}`
+            : `Catorcena ${first.num}/${first.year} - Catorcena ${last.num}/${last.year}`);
         doc.text(periodoText, marginX + 170, y);
       }
     }
@@ -702,7 +722,7 @@ export function CompartirPropuestaPage() {
       // Group by catorcena first, then by articulo
       const grouped: Record<string, Record<string, typeof inventario>> = {};
       inventario.forEach(item => {
-        const catKey = formatInicioPeriodo(item);
+        const catKey = formatInicioPeriodo(item, tipoPeriodo);
         const artKey = item.articulo || 'Sin artículo';
         if (!grouped[catKey]) grouped[catKey] = {};
         if (!grouped[catKey][artKey]) grouped[catKey][artKey] = [];
@@ -1402,7 +1422,7 @@ export function CompartirPropuestaPage() {
                         <p><strong>Caras:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(selectedMarker.tarifa_publica || 0)}</p>
                         {selectedMarker.numero_catorcena && (
-                          <p><strong>Periodo:</strong> Catorcena {selectedMarker.numero_catorcena}, {selectedMarker.anio_catorcena}</p>
+                          <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const d = new Date(selectedMarker.inicio_periodo); return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : `Catorcena ${selectedMarker.numero_catorcena}, ${selectedMarker.anio_catorcena}`; })() : `Catorcena ${selectedMarker.numero_catorcena}, ${selectedMarker.anio_catorcena}`}</p>
                         )}
                       </div>
                     </div>

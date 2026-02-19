@@ -499,10 +499,13 @@ function SearchableSelect({
 
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
+const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const permissions = usePermissions(user?.rol);
+  const tipoPeriodo = (campana as any)?.tipo_periodo || 'catorcena';
 
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
@@ -1254,20 +1257,26 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const carasGroupedByCatorcena = useMemo(() => {
     const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
     caras.forEach(cara => {
-      const periodo = cara.inicio_periodo || 'Sin periodo';
+      let periodo = cara.inicio_periodo || 'Sin periodo';
+      if (tipoPeriodo === 'mensual' && cara.inicio_periodo) {
+        const d = new Date(cara.inicio_periodo);
+        if (!isNaN(d.getTime())) {
+          periodo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+        }
+      }
       if (!groups[periodo]) {
-        // Try to find catorcena number from catorcenasData
-        const catorcenaInfo = catorcenasData?.data?.find(c => c.fecha_inicio === periodo);
-        groups[periodo] = {
-          caras: [],
-          catorcenaNum: catorcenaInfo?.numero_catorcena,
-          year: catorcenaInfo?.a_o
-        };
+        if (tipoPeriodo === 'mensual') {
+          const d = new Date(periodo);
+          groups[periodo] = { caras: [], catorcenaNum: d.getMonth() + 1, year: d.getFullYear() };
+        } else {
+          const catorcenaInfo = catorcenasData?.data?.find(c => c.fecha_inicio === periodo);
+          groups[periodo] = { caras: [], catorcenaNum: catorcenaInfo?.numero_catorcena, year: catorcenaInfo?.a_o };
+        }
       }
       groups[periodo].caras.push(cara);
     });
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [caras, catorcenasData]);
+  }, [caras, catorcenasData, tipoPeriodo]);
 
   // Years options (filtered like EditSolicitudModal)
   const yearInicioOptions = useMemo(() => {
@@ -4177,12 +4186,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       />
                     </div>
 
-                    {/* Catorcena - solo una, filtrada por rango de campana */}
+                    {/* Periodo - catorcena o mes, filtrada por rango de campana */}
                     <div className="mb-4">
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">
-                          Catorcena
-                          {campana.catorcena_inicio_num && campana.catorcena_inicio_anio && campana.catorcena_fin_num && campana.catorcena_fin_anio && (
+                          {tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}
+                          {tipoPeriodo !== 'mensual' && campana.catorcena_inicio_num && campana.catorcena_inicio_anio && campana.catorcena_fin_num && campana.catorcena_fin_anio && (
                             <span className="text-zinc-600 ml-1">
                               (Rango: {campana.catorcena_inicio_num}/{campana.catorcena_inicio_anio} - {campana.catorcena_fin_num}/{campana.catorcena_fin_anio})
                             </span>
@@ -4193,16 +4202,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           onChange={(e) => {
                             if (e.target.value) {
                               const [year, cat] = e.target.value.split('-').map(Number);
-                              const period = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
-                              setNewCara({
-                                ...newCara,
-                                catorcena_inicio: cat,
-                                anio_inicio: year,
-                                catorcena_fin: cat,
-                                anio_fin: year,
-                                inicio_periodo: period?.fecha_inicio || '',
-                                fin_periodo: period?.fecha_fin || ''
-                              });
+                              if (tipoPeriodo === 'mensual') {
+                                const fechaIni = new Date(year, cat - 1, 1);
+                                const fechaFin = new Date(year, cat, 0);
+                                setNewCara({
+                                  ...newCara,
+                                  catorcena_inicio: cat,
+                                  anio_inicio: year,
+                                  catorcena_fin: cat,
+                                  anio_fin: year,
+                                  inicio_periodo: fechaIni.toISOString().split('T')[0],
+                                  fin_periodo: fechaFin.toISOString().split('T')[0]
+                                });
+                              } else {
+                                const period = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
+                                setNewCara({
+                                  ...newCara,
+                                  catorcena_inicio: cat,
+                                  anio_inicio: year,
+                                  catorcena_fin: cat,
+                                  anio_fin: year,
+                                  inicio_periodo: period?.fecha_inicio || '',
+                                  fin_periodo: period?.fecha_fin || ''
+                                });
+                              }
                             } else {
                               setNewCara({
                                 ...newCara,
@@ -4217,22 +4240,42 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           }}
                           className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
                         >
-                          <option value="">Seleccionar catorcena</option>
-                          {catorcenasData?.data
-                            .filter(c => {
-                              // Filtrar solo catorcenas dentro del rango de la campana
-                              if (!campana.catorcena_inicio_num || !campana.catorcena_inicio_anio || !campana.catorcena_fin_num || !campana.catorcena_fin_anio) {
-                                return true; // Si no hay rango, mostrar todas
+                          <option value="">{tipoPeriodo === 'mensual' ? 'Seleccionar mes' : 'Seleccionar catorcena'}</option>
+                          {tipoPeriodo === 'mensual' ? (
+                            (() => {
+                              const options: { year: number; month: number }[] = [];
+                              if (campana.fecha_inicio && campana.fecha_fin) {
+                                const start = new Date(campana.fecha_inicio);
+                                const end = new Date(campana.fecha_fin);
+                                let y = start.getFullYear(), m = start.getMonth() + 1;
+                                const endY = end.getFullYear(), endM = end.getMonth() + 1;
+                                while (y < endY || (y === endY && m <= endM)) {
+                                  options.push({ year: y, month: m });
+                                  m++;
+                                  if (m > 12) { m = 1; y++; }
+                                }
                               }
-                              const catValue = c.a_o * 100 + c.numero_catorcena;
-                              const minValue = campana.catorcena_inicio_anio * 100 + campana.catorcena_inicio_num;
-                              const maxValue = campana.catorcena_fin_anio * 100 + campana.catorcena_fin_num;
-                              return catValue >= minValue && catValue <= maxValue;
-                            })
-                            .map(c => (
-                              <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
-                                Catorcena {c.numero_catorcena} / {c.a_o}
-                              </option>
+                              return options.map(o => (
+                                <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>
+                                  {MESES_LABEL[o.month - 1]} {o.year}
+                                </option>
+                              ));
+                            })()
+                          ) : (
+                            catorcenasData?.data
+                              .filter(c => {
+                                if (!campana.catorcena_inicio_num || !campana.catorcena_inicio_anio || !campana.catorcena_fin_num || !campana.catorcena_fin_anio) {
+                                  return true;
+                                }
+                                const catValue = c.a_o * 100 + c.numero_catorcena;
+                                const minValue = campana.catorcena_inicio_anio * 100 + campana.catorcena_inicio_num;
+                                const maxValue = campana.catorcena_fin_anio * 100 + campana.catorcena_fin_num;
+                                return catValue >= minValue && catValue <= maxValue;
+                              })
+                              .map(c => (
+                                <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
+                                  Catorcena {c.numero_catorcena} / {c.a_o}
+                                </option>
                             ))}
                         </select>
                       </div>
@@ -4367,9 +4410,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   ) : (
                     carasGroupedByCatorcena.map(([periodo, groupData]) => {
                       const isCatorcenaExpanded = expandedCatorcenas.has(periodo);
-                      const catorcenaLabel = groupData.catorcenaNum
+                      const catorcenaLabel = tipoPeriodo === 'mensual' && groupData.catorcenaNum
+                        ? `${MESES_LABEL[groupData.catorcenaNum - 1]} ${groupData.year || ''}`
+                        : groupData.catorcenaNum
                         ? `Catorcena #${groupData.catorcenaNum}${groupData.year ? ` - ${groupData.year}` : ''}`
-                        : `Periodo: ${new Date(periodo).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}`;
+                        : (() => {
+                            const d = new Date(periodo);
+                            return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : `Periodo: ${periodo}`;
+                          })();
 
                       return (
                         <div key={periodo}>

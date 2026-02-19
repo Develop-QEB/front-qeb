@@ -55,6 +55,23 @@ import { campanasService, InventarioConArte, TareaCampana, ArteExistente, Digita
 import { proveedoresService } from '../../services/proveedores.service';
 import { Proveedor, Catorcena } from '../../types';
 import { solicitudesService } from '../../services/solicitudes.service';
+
+const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MESES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+function getPeriodoLabel(item: { catorcena: number; anio: number; inicio_periodo?: string }, tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+    const d = new Date(item.inicio_periodo);
+    return !isNaN(d.getTime()) ? `${MESES_FULL[d.getMonth()]} ${d.getFullYear()}` : `Catorcena ${item.catorcena} - ${item.anio}`;
+  }
+  return `Catorcena ${item.catorcena} - ${item.anio}`;
+}
+function getPeriodoShort(item: { catorcena: number; anio: number; inicio_periodo?: string }, tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+    const d = new Date(item.inicio_periodo);
+    return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : `${item.catorcena}/${item.anio}`;
+  }
+  return `${item.catorcena}/${item.anio}`;
+}
 import { Badge } from '../../components/ui/badge';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { useAuthStore } from '../../store/authStore';
@@ -516,10 +533,10 @@ function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }:
 }
 
 // Función para obtener la clave de agrupación basada en el campo
-function getGroupKeyForField(item: InventoryRow, field: GroupByField): string {
+function getGroupKeyForField(item: InventoryRow, field: GroupByField, tipoPeriodo?: string): string {
   switch (field) {
     case 'catorcena':
-      return `Catorcena ${item.catorcena} - ${item.anio}`;
+      return getPeriodoLabel(item, tipoPeriodo);
     case 'aps':
       return `APS ${item.aps ?? 'Sin asignar'}`;
     case 'grupo':
@@ -1048,7 +1065,9 @@ function UploadArtModal({
           key = `APS ${item.aps}`;
           break;
         case 'catorcena':
-          key = `Catorcena ${item.catorcena}`;
+          key = tipoPeriodo === 'mensual' && item.inicio_periodo
+            ? (() => { const d = new Date(item.inicio_periodo); return !isNaN(d.getTime()) ? `${MESES_FULL[d.getMonth()]} ${d.getFullYear()}` : `Catorcena ${item.catorcena}`; })()
+            : `Catorcena ${item.catorcena}`;
           break;
         case 'grupo':
           if (item.grupo_id) {
@@ -1611,7 +1630,7 @@ function UploadArtModal({
                 >
                   <option value="none">Sin agrupar</option>
                   <option value="aps">Por APS</option>
-                  <option value="catorcena">Por Catorcena</option>
+                  <option value="catorcena">{tipoPeriodo === 'mensual' ? 'Por Periodo' : 'Por Catorcena'}</option>
                   <option value="grupo">Por Grupo</option>
                 </select>
                 <select
@@ -1621,7 +1640,7 @@ function UploadArtModal({
                 >
                   <option value="codigo">Codigo</option>
                   <option value="aps">APS</option>
-                  <option value="catorcena">Catorcena</option>
+                  <option value="catorcena">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</option>
                 </select>
               </div>
 
@@ -2217,7 +2236,7 @@ function TestigoTaskView({
 
     const groups: Record<string, InventoryRow[]> = {};
     filteredData.forEach(item => {
-      const keyParts = activeGroupings.map(field => getGroupKeyForField(item, field));
+      const keyParts = activeGroupings.map(field => getGroupKeyForField(item, field, tipoPeriodo));
       const key = keyParts.join(' > ');
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
@@ -2313,7 +2332,7 @@ function TestigoTaskView({
             </p>
           </div>
           <div>
-            <span className="text-zinc-500">Catorcena:</span>
+            <span className="text-zinc-500">{tipoPeriodo === 'mensual' ? 'Periodo:' : 'Catorcena:'}</span>
             <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
           </div>
           <div>
@@ -2393,7 +2412,7 @@ function TestigoTaskView({
                         <th className="p-2 font-medium text-purple-300">Ciudad</th>
                         <th className="p-2 font-medium text-purple-300">Mueble</th>
                         <th className="p-2 font-medium text-purple-300">Medidas</th>
-                        <th className="p-2 font-medium text-purple-300">Catorcena</th>
+                        <th className="p-2 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2414,7 +2433,7 @@ function TestigoTaskView({
                           <td className="p-2 text-zinc-300">{item.ciudad}</td>
                           <td className="p-2 text-zinc-300">{item.mueble}</td>
                           <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                          <td className="p-2 text-zinc-400">C{item.catorcena}</td>
+                          <td className="p-2 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2433,7 +2452,7 @@ function TestigoTaskView({
                   <th className="p-3 font-medium text-purple-300">Plaza</th>
                   <th className="p-3 font-medium text-purple-300">Mueble</th>
                   <th className="p-3 font-medium text-purple-300">Medidas</th>
-                  <th className="p-3 font-medium text-purple-300">Catorcena</th>
+                  <th className="p-3 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2455,7 +2474,7 @@ function TestigoTaskView({
                     <td className="p-3 text-zinc-400">{item.plaza}</td>
                     <td className="p-3 text-zinc-300">{item.mueble}</td>
                     <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                    <td className="p-3 text-zinc-400">C{item.catorcena}</td>
+                    <td className="p-3 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2792,9 +2811,14 @@ function TaskDetailModal({
     );
   }, [usuariosRecepcionData]);
 
-  // Función para obtener texto de catorcena desde fecha_fin
+  // Función para obtener texto de catorcena/periodo desde fecha_fin
   const getCatorcenaFromFechaFin = useMemo(() => {
-    if (!task?.fecha_fin || !catorcenasData?.data) return null;
+    if (!task?.fecha_fin) return null;
+    if (tipoPeriodo === 'mensual') {
+      const d = new Date(task.fecha_fin);
+      return !isNaN(d.getTime()) ? `${MESES_FULL[d.getMonth()]} ${d.getFullYear()}` : null;
+    }
+    if (!catorcenasData?.data) return null;
     const fechaFin = new Date(task.fecha_fin);
     const catorcena = catorcenasData.data.find((c: { fecha_inicio: string; fecha_fin: string; numero_catorcena: number; a_o: number }) => {
       const inicio = new Date(c.fecha_inicio);
@@ -2805,7 +2829,7 @@ function TaskDetailModal({
       return `Catorcena ${catorcena.numero_catorcena}, ${catorcena.a_o}`;
     }
     return null;
-  }, [task?.fecha_fin, catorcenasData?.data]);
+  }, [task?.fecha_fin, catorcenasData?.data, tipoPeriodo]);
 
   // Estados para el sistema de decisiones de revisión
   const [decisiones, setDecisiones] = useState<DecisionesState>({});
@@ -3036,7 +3060,7 @@ function TaskDetailModal({
 
     const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
     taskInventory.forEach(item => {
-      const catorcenaKey = `Catorcena ${item.catorcena} - ${item.anio}`;
+      const catorcenaKey = getPeriodoLabel(item, tipoPeriodo);
       const apsKey = `APS ${item.aps ?? 'Sin asignar'}`;
       let grupoKey: string;
       if (item.grupo_id) {
@@ -3135,7 +3159,7 @@ function TaskDetailModal({
 
     const getGroupKey = (item: InventoryRow, field: GroupByField): string => {
       switch (field) {
-        case 'catorcena': return `Catorcena ${item.catorcena} - ${item.anio}`;
+        case 'catorcena': return getPeriodoLabel(item, tipoPeriodo);
         case 'aps': return `APS ${item.aps ?? 'Sin asignar'}`;
         case 'grupo':
           if (item.grupo_id) {
@@ -3439,7 +3463,7 @@ function TaskDetailModal({
 
     const groups: Record<string, InventoryRow[]> = {};
     filteredDataResumen.forEach(item => {
-      const keyParts = activeGroupingsResumen.map(field => getGroupKeyForField(item, field));
+      const keyParts = activeGroupingsResumen.map(field => getGroupKeyForField(item, field, tipoPeriodo));
       const key = keyParts.join(' > ');
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
@@ -3453,7 +3477,7 @@ function TaskDetailModal({
 
     const groups: Record<string, InventoryRow[]> = {};
     filteredDataEditar.forEach(item => {
-      const keyParts = activeGroupingsEditar.map(field => getGroupKeyForField(item, field));
+      const keyParts = activeGroupingsEditar.map(field => getGroupKeyForField(item, field, tipoPeriodo));
       const key = keyParts.join(' > ');
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
@@ -3982,7 +4006,7 @@ function TaskDetailModal({
       posY += 18;
 
       // Tabla de items
-      const headers = ['Cant.', 'Ancho', 'Alto', 'Catorcena', 'Formato', 'Plaza', 'URL Imagen'];
+      const headers = ['Cant.', 'Ancho', 'Alto', tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena', 'Formato', 'Plaza', 'URL Imagen'];
       const colWidths = [15, 18, 18, 38, 28, 30, 33];
       const availableWidth = pageWidth - 30;
       const rowHeight = 12;
@@ -4021,9 +4045,11 @@ function TaskDetailModal({
         doc.rect(startX, posY, availableWidth, rowHeight, 'F');
 
         // Formatear catorcena
-        const catorcenaText = item.catorcena && item.anio
-          ? `Cat: ${item.catorcena}, ${item.anio}`
-          : '-';
+        const catorcenaText = tipoPeriodo === 'mensual' && item.inicio_periodo
+          ? (() => { const d = new Date(item.inicio_periodo); return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : '-'; })()
+          : item.catorcena && item.anio
+            ? `Cat: ${item.catorcena}, ${item.anio}`
+            : '-';
 
         const imageUrl = grupo.archivo ? (getImageUrl(grupo.archivo) || grupo.archivo) : '';
 
@@ -4378,7 +4404,7 @@ function TaskDetailModal({
                     <p className="text-white font-medium">{task.asignado || '-'}</p>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Catorcena de entrega:</span>
+                    <span className="text-zinc-500">{tipoPeriodo === 'mensual' ? 'Periodo de entrega:' : 'Catorcena de entrega:'}</span>
                     <p className="text-white font-medium">{impresionesData?.catorcena_entrega || getCatorcenaFromFechaFin || '-'}</p>
                   </div>
                   <div className="md:col-span-3">
@@ -4602,7 +4628,7 @@ function TaskDetailModal({
                 <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
                   <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
                     <h4 className="text-sm font-medium text-purple-300">
-                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por Catorcena &gt; APS &gt; Grupo
+                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por {tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'} &gt; APS &gt; Grupo
                     </h4>
                   </div>
                   <div className="max-h-[400px] overflow-y-auto divide-y divide-border">
@@ -4815,7 +4841,7 @@ function TaskDetailModal({
                 <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
                   <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
                     <h4 className="text-sm font-medium text-purple-300">
-                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por Catorcena &gt; APS &gt; Grupo
+                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por {tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'} &gt; APS &gt; Grupo
                     </h4>
                   </div>
                   <div className="max-h-[400px] overflow-y-auto divide-y divide-border">
@@ -5384,7 +5410,7 @@ function TaskDetailModal({
                     </p>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Catorcena:</span>
+                    <span className="text-zinc-500">{tipoPeriodo === 'mensual' ? 'Periodo:' : 'Catorcena:'}</span>
                     <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
                   </div>
                   <div>
@@ -5474,7 +5500,7 @@ function TaskDetailModal({
                                 <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                 <th className="p-2 font-medium text-purple-300">Mueble</th>
                                 <th className="p-2 font-medium text-purple-300">Medidas</th>
-                                <th className="p-2 font-medium text-purple-300">Catorcena</th>
+                                <th className="p-2 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -5495,7 +5521,7 @@ function TaskDetailModal({
                                   <td className="p-2 text-zinc-300">{item.ciudad}</td>
                                   <td className="p-2 text-zinc-300">{item.mueble}</td>
                                   <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                                  <td className="p-2 text-zinc-400">C{item.catorcena}</td>
+                                  <td className="p-2 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -5514,7 +5540,7 @@ function TaskDetailModal({
                           <th className="p-3 font-medium text-purple-300">Plaza</th>
                           <th className="p-3 font-medium text-purple-300">Mueble</th>
                           <th className="p-3 font-medium text-purple-300">Medidas</th>
-                          <th className="p-3 font-medium text-purple-300">Catorcena</th>
+                          <th className="p-3 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -5536,7 +5562,7 @@ function TaskDetailModal({
                             <td className="p-3 text-zinc-400">{item.plaza}</td>
                             <td className="p-3 text-zinc-300">{item.mueble}</td>
                             <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                            <td className="p-3 text-zinc-400">C{item.catorcena}</td>
+                            <td className="p-3 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -5644,7 +5670,7 @@ function TaskDetailModal({
                         <p className="text-white font-medium">{task.asignado || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Catorcena:</span>
+                        <span className="text-zinc-500 text-xs">{tipoPeriodo === 'mensual' ? 'Periodo:' : 'Catorcena:'}</span>
                         <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
                       </div>
                       <div>
@@ -5907,7 +5933,7 @@ function TaskDetailModal({
                       {/* Botón exportar CSV */}
                       <button
                         onClick={() => {
-                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Catorcena', 'Estado Arte'];
+                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena', 'Estado Arte'];
                           const rows = filteredProgramacionModalData.map(item => [
                             item.id,
                             item.codigo_unico,
@@ -5917,7 +5943,7 @@ function TaskDetailModal({
                             item.mueble,
                             item.ciudad,
                             item.nse,
-                            item.catorcena ? `C${item.catorcena}` : '-',
+                            tipoPeriodo === 'mensual' ? getPeriodoShort(item, tipoPeriodo) : (item.catorcena ? `C${item.catorcena}` : '-'),
                             item.estado_arte || '-',
                           ]);
                           const csvContent = [
@@ -6421,7 +6447,7 @@ function TaskDetailModal({
                                 <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                 <th className="p-2 font-medium text-purple-300">Mueble</th>
                                 <th className="p-2 font-medium text-purple-300">Medidas</th>
-                                <th className="p-2 font-medium text-purple-300">Catorcena</th>
+                                <th className="p-2 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -6442,7 +6468,7 @@ function TaskDetailModal({
                                   <td className="p-2 text-zinc-300">{item.ciudad}</td>
                                   <td className="p-2 text-zinc-300">{item.mueble}</td>
                                   <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                                  <td className="p-2 text-zinc-400">C{item.catorcena}</td>
+                                  <td className="p-2 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -6461,7 +6487,7 @@ function TaskDetailModal({
                           <th className="p-3 font-medium text-purple-300">Plaza</th>
                           <th className="p-3 font-medium text-purple-300">Mueble</th>
                           <th className="p-3 font-medium text-purple-300">Medidas</th>
-                          <th className="p-3 font-medium text-purple-300">Catorcena</th>
+                          <th className="p-3 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
                           <th className="p-3 font-medium text-purple-300">Estado</th>
                         </tr>
                       </thead>
@@ -6501,7 +6527,7 @@ function TaskDetailModal({
                             <td className="p-3 text-zinc-400">{item.plaza}</td>
                             <td className="p-3 text-zinc-300">{item.mueble}</td>
                             <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                            <td className="p-3 text-zinc-400">C{item.catorcena}</td>
+                            <td className="p-3 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                             <td className="p-3">
                               <span className={`px-2 py-0.5 rounded text-[10px] ${
                                 item.estado_arte === 'aprobado' ? 'bg-green-500/20 text-green-400' :
@@ -9513,6 +9539,8 @@ export function TareaSeguimientoPage() {
     enabled: campanaId > 0,
   });
 
+  const tipoPeriodo = (campana as any)?.tipo_periodo || 'catorcena';
+
   // Inventario SIN arte (para tab "Subir Artes")
   // Se carga siempre inicialmente para determinar el tab por defecto
   const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte, isFetched: isFetchedSinArte } = useQuery({
@@ -11021,7 +11049,7 @@ export function TareaSeguimientoPage() {
 
     // Usar filteredTestigoData para la tab de testigo
     filteredTestigoData.forEach((item) => {
-      const key = getGroupKeyForField(item, groupField);
+      const key = getGroupKeyForField(item, groupField, tipoPeriodo);
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     });
@@ -11045,9 +11073,9 @@ export function TareaSeguimientoPage() {
     const sortedInventory = [...filteredInventory].sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
     sortedInventory.forEach((item) => {
-      const level1Key = activeGroupingsVersionario[0] ? getGroupKeyForField(item, activeGroupingsVersionario[0]) : 'Todo';
-      const level2Key = activeGroupingsVersionario[1] ? getGroupKeyForField(item, activeGroupingsVersionario[1]) : 'Items';
-      const level3Key = activeGroupingsVersionario[2] ? getGroupKeyForField(item, activeGroupingsVersionario[2]) : 'Items';
+      const level1Key = activeGroupingsVersionario[0] ? getGroupKeyForField(item, activeGroupingsVersionario[0], tipoPeriodo) : 'Todo';
+      const level2Key = activeGroupingsVersionario[1] ? getGroupKeyForField(item, activeGroupingsVersionario[1], tipoPeriodo) : 'Items';
+      const level3Key = activeGroupingsVersionario[2] ? getGroupKeyForField(item, activeGroupingsVersionario[2], tipoPeriodo) : 'Items';
 
       if (!groups[level1Key]) groups[level1Key] = {};
       if (!groups[level1Key][level2Key]) groups[level1Key][level2Key] = {};
@@ -11087,9 +11115,9 @@ export function TareaSeguimientoPage() {
     const sortedInventory = [...filteredInventory].sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
     sortedInventory.forEach((item) => {
-      const level1Key = activeGroupingsAtender[0] ? getGroupKeyForField(item, activeGroupingsAtender[0]) : 'Todo';
-      const level2Key = activeGroupingsAtender[1] ? getGroupKeyForField(item, activeGroupingsAtender[1]) : 'Items';
-      const level3Key = activeGroupingsAtender[2] ? getGroupKeyForField(item, activeGroupingsAtender[2]) : 'Items';
+      const level1Key = activeGroupingsAtender[0] ? getGroupKeyForField(item, activeGroupingsAtender[0], tipoPeriodo) : 'Todo';
+      const level2Key = activeGroupingsAtender[1] ? getGroupKeyForField(item, activeGroupingsAtender[1], tipoPeriodo) : 'Items';
+      const level3Key = activeGroupingsAtender[2] ? getGroupKeyForField(item, activeGroupingsAtender[2], tipoPeriodo) : 'Items';
 
       if (!groups[level1Key]) groups[level1Key] = {};
       if (!groups[level1Key][level2Key]) groups[level1Key][level2Key] = {};
@@ -11128,9 +11156,9 @@ export function TareaSeguimientoPage() {
     const sortedInventory = [...filteredProgramacionData].sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
     sortedInventory.forEach((item) => {
-      const level1Key = activeGroupingsProgramacion[0] ? getGroupKeyForField(item, activeGroupingsProgramacion[0]) : 'Todo';
-      const level2Key = activeGroupingsProgramacion[1] ? getGroupKeyForField(item, activeGroupingsProgramacion[1]) : 'Items';
-      const level3Key = activeGroupingsProgramacion[2] ? getGroupKeyForField(item, activeGroupingsProgramacion[2]) : 'Items';
+      const level1Key = activeGroupingsProgramacion[0] ? getGroupKeyForField(item, activeGroupingsProgramacion[0], tipoPeriodo) : 'Todo';
+      const level2Key = activeGroupingsProgramacion[1] ? getGroupKeyForField(item, activeGroupingsProgramacion[1], tipoPeriodo) : 'Items';
+      const level3Key = activeGroupingsProgramacion[2] ? getGroupKeyForField(item, activeGroupingsProgramacion[2], tipoPeriodo) : 'Items';
 
       if (!groups[level1Key]) groups[level1Key] = {};
       if (!groups[level1Key][level2Key]) groups[level1Key][level2Key] = {};
@@ -11169,9 +11197,9 @@ export function TareaSeguimientoPage() {
     const sortedInventory = [...filteredTestigoData].sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
     sortedInventory.forEach((item) => {
-      const level1Key = activeGroupingsTestigo[0] ? getGroupKeyForField(item, activeGroupingsTestigo[0]) : 'Todo';
-      const level2Key = activeGroupingsTestigo[1] ? getGroupKeyForField(item, activeGroupingsTestigo[1]) : 'Items';
-      const level3Key = activeGroupingsTestigo[2] ? getGroupKeyForField(item, activeGroupingsTestigo[2]) : 'Items';
+      const level1Key = activeGroupingsTestigo[0] ? getGroupKeyForField(item, activeGroupingsTestigo[0], tipoPeriodo) : 'Todo';
+      const level2Key = activeGroupingsTestigo[1] ? getGroupKeyForField(item, activeGroupingsTestigo[1], tipoPeriodo) : 'Items';
+      const level3Key = activeGroupingsTestigo[2] ? getGroupKeyForField(item, activeGroupingsTestigo[2], tipoPeriodo) : 'Items';
 
       if (!groups[level1Key]) groups[level1Key] = {};
       if (!groups[level1Key][level2Key]) groups[level1Key][level2Key] = {};
@@ -12859,7 +12887,7 @@ export function TareaSeguimientoPage() {
                       <th className="p-2 font-medium text-purple-300">Plaza</th>
                       <th className="p-2 font-medium text-purple-300">Mueble</th>
                       <th className="p-2 font-medium text-purple-300">Medidas</th>
-                      <th className="p-2 font-medium text-purple-300">Catorcena</th>
+                      <th className="p-2 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
                       <th className="p-2 font-medium text-purple-300">Tarea Impresión</th>
                     </tr>
                   </thead>
@@ -12908,7 +12936,7 @@ export function TareaSeguimientoPage() {
                         <td className="p-2 text-zinc-400">{item.plaza}</td>
                         <td className="p-2 text-zinc-300">{item.mueble}</td>
                         <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                        <td className="p-2 text-zinc-400">C{item.catorcena}</td>
+                        <td className="p-2 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                         <td className="p-2 text-zinc-400 text-[10px]">{(item as any).tarea_titulo || '-'}</td>
                       </tr>
                     ))}
@@ -13904,7 +13932,7 @@ export function TareaSeguimientoPage() {
                                 <tr className="border-b border-border text-left">
                                   <th className="p-2 pl-6 font-medium text-purple-300">Código</th>
                                   <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
-                                  <th className="p-2 font-medium text-purple-300">Catorcena</th>
+                                  <th className="p-2 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
                                   <th className="p-2 font-medium text-purple-300">APS</th>
                                   <th className="p-2 font-medium text-purple-300">Plaza</th>
                                   <th className="p-2 font-medium text-purple-300">Ciudad</th>
@@ -13916,7 +13944,7 @@ export function TareaSeguimientoPage() {
                                   <tr key={item.id} className="border-b border-border/50 hover:bg-zinc-800/30">
                                     <td className="p-2 pl-6 text-white font-mono">{item.codigo_unico}</td>
                                     <td className="p-2 text-zinc-300">{item.tipo_de_cara}</td>
-                                    <td className="p-2 text-zinc-300">{item.catorcena}</td>
+                                    <td className="p-2 text-zinc-300">{getPeriodoShort(item, tipoPeriodo)}</td>
                                     <td className="p-2 text-zinc-300">{item.aps || '-'}</td>
                                     <td className="p-2 text-zinc-300">{item.plaza}</td>
                                     <td className="p-2 text-zinc-300">{item.ciudad}</td>

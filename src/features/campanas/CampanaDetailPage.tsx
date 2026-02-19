@@ -56,6 +56,8 @@ function formatAsCatorcena(dateStr: string): string {
 }
 
 
+const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
 // Helper to find catorcena from date using API data
 function dateToCatorcena(dateStr: string, catorcenas: Catorcena[]): { catorcena: string; year: number } | null {
   if (!dateStr || !catorcenas.length) return null;
@@ -71,10 +73,22 @@ function dateToCatorcena(dateStr: string, catorcenas: Catorcena[]): { catorcena:
   return null;
 }
 
-function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[]): string {
+function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[], tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual') {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return `${MESES_LABEL[date.getMonth()]} ${date.getFullYear()}`;
+    }
+    return dateStr;
+  }
   const result = dateToCatorcena(dateStr, catorcenas);
   if (result) {
     return `${result.catorcena}, ${result.year}`;
+  }
+  // Fallback: show month name for monthly periods
+  const date = new Date(dateStr);
+  if (!isNaN(date.getTime())) {
+    return `${MESES_LABEL[date.getMonth()]} ${date.getFullYear()}`;
   }
   return dateStr;
 }
@@ -479,8 +493,15 @@ function calcularCatorcena(fecha: Date): number {
   return Math.ceil(diaDelAnio / 14);
 }
 
-// Helper para formatear inicio_periodo como "Catorcena X, Año YYYY"
-function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS): string {
+// Helper para formatear inicio_periodo como "Catorcena X, Año YYYY" o "Mes YYYY"
+function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS, tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+    const fecha = new Date(item.inicio_periodo);
+    if (!isNaN(fecha.getTime())) {
+      return `${MESES_LABEL[fecha.getMonth()]} ${fecha.getFullYear()}`;
+    }
+  }
+
   if (item.numero_catorcena && item.anio_catorcena) {
     return `Catorcena ${item.numero_catorcena}, ${item.anio_catorcena}`;
   }
@@ -525,9 +546,9 @@ function formatArticulo(item: InventarioReservado | InventarioConAPS): string {
 }
 
 // Helper para obtener el valor de agrupación formateado
-function getGroupValue(item: InventarioReservado | InventarioConAPS, field: GroupByField): string {
+function getGroupValue(item: InventarioReservado | InventarioConAPS, field: GroupByField, tipoPeriodo?: string): string {
   if (field === 'inicio_periodo') {
-    return formatInicioPeriodo(item);
+    return formatInicioPeriodo(item, tipoPeriodo);
   }
   if (field === 'articulo') {
     return formatArticulo(item);
@@ -638,7 +659,7 @@ export function CampanaDetailPage() {
     queryFn: () => solicitudesService.getCatorcenas(),
   });
   const catorcenas = catorcenasData?.data || [];
-
+  const tipoPeriodo = (campana as any)?.tipo_periodo || 'catorcena';
 
   // Calcular centro del mapa basado en inventario
   const mapCenter = useMemo(() => {
@@ -933,7 +954,7 @@ export function CampanaDetailPage() {
     const grouped: Record<string, InventarioReservado[] | Record<string, InventarioReservado[]>> = {};
 
     filteredInventarioReservado.forEach(item => {
-      const firstKey = getGroupValue(item, activeGroupings[0]);
+      const firstKey = getGroupValue(item, activeGroupings[0], tipoPeriodo);
 
       if (activeGroupings.length === 1) {
         if (!grouped[firstKey]) {
@@ -944,7 +965,7 @@ export function CampanaDetailPage() {
         if (!grouped[firstKey]) {
           grouped[firstKey] = {};
         }
-        const secondKey = getGroupValue(item, activeGroupings[1]);
+        const secondKey = getGroupValue(item, activeGroupings[1], tipoPeriodo);
         if (!(grouped[firstKey] as Record<string, InventarioReservado[]>)[secondKey]) {
           (grouped[firstKey] as Record<string, InventarioReservado[]>)[secondKey] = [];
         }
@@ -1105,7 +1126,7 @@ export function CampanaDetailPage() {
     const grouped: GroupedLevel1 = {};
 
     filteredInventarioAPS.forEach(item => {
-      const firstKey = getGroupValue(item, activeGroupingsAPS[0]);
+      const firstKey = getGroupValue(item, activeGroupingsAPS[0], tipoPeriodo);
 
       if (activeGroupingsAPS.length === 1) {
         if (!grouped[firstKey]) {
@@ -1116,7 +1137,7 @@ export function CampanaDetailPage() {
         if (!grouped[firstKey]) {
           grouped[firstKey] = {};
         }
-        const secondKey = getGroupValue(item, activeGroupingsAPS[1]);
+        const secondKey = getGroupValue(item, activeGroupingsAPS[1], tipoPeriodo);
         if (!(grouped[firstKey] as GroupedLevel2)[secondKey]) {
           (grouped[firstKey] as GroupedLevel2)[secondKey] = [];
         }
@@ -1126,11 +1147,11 @@ export function CampanaDetailPage() {
         if (!grouped[firstKey]) {
           grouped[firstKey] = {};
         }
-        const secondKey = getGroupValue(item, activeGroupingsAPS[1]);
+        const secondKey = getGroupValue(item, activeGroupingsAPS[1], tipoPeriodo);
         if (!(grouped[firstKey] as GroupedLevel2)[secondKey]) {
           (grouped[firstKey] as GroupedLevel2)[secondKey] = {};
         }
-        const thirdKey = getGroupValue(item, activeGroupingsAPS[2]);
+        const thirdKey = getGroupValue(item, activeGroupingsAPS[2], tipoPeriodo);
         if (!((grouped[firstKey] as GroupedLevel2)[secondKey] as GroupedLevel3)[thirdKey]) {
           ((grouped[firstKey] as GroupedLevel2)[secondKey] as GroupedLevel3)[thirdKey] = [];
         }
@@ -1418,7 +1439,7 @@ export function CampanaDetailPage() {
                 <div className="flex justify-between items-center py-1.5 border-b border-border/50">
                   <span className="text-xs text-muted-foreground">Inicio</span>
                   <span className="text-xs px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                    {getCatorcenaDisplay(campana.fecha_inicio, catorcenas)}
+                    {getCatorcenaDisplay(campana.fecha_inicio, catorcenas, tipoPeriodo)}
                   </span>
                 </div>
               )}
@@ -1426,7 +1447,7 @@ export function CampanaDetailPage() {
                 <div className="flex justify-between items-center py-1.5 border-b border-border/50">
                   <span className="text-xs text-muted-foreground">Fin</span>
                   <span className="text-xs px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                    {getCatorcenaDisplay(campana.fecha_fin, catorcenas)}
+                    {getCatorcenaDisplay(campana.fecha_fin, catorcenas, tipoPeriodo)}
                   </span>
                 </div>
               )}
