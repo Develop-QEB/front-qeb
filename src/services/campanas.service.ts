@@ -311,6 +311,10 @@ export interface OrdenMontajeINVIAN {
   status_campania: string | null;
   catorcena_numero: number | null;
   catorcena_year: number | null;
+  rsv_id?: number | null;
+  tradicional_digital?: string | null;
+  indicaciones?: string | null;
+  num_artes_digitales?: number | null;
 }
 
 export interface ComentarioRevisionArte {

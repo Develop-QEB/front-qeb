@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import {
   X, Download, Filter, ChevronDown, ChevronRight, Calendar, Loader2, FileSpreadsheet,
   Monitor,
-  Building2, ClipboardList, Layers, ArrowUpDown, ArrowUp, ArrowDown, Plus, Trash2, Check
+  Building2, ClipboardList, Layers, ArrowUpDown, ArrowUp, ArrowDown, Plus, Trash2, Check,
+  Image, Link2, Film, FileText, ChevronLeft, Play
 } from 'lucide-react';
-import { campanasService, OrdenMontajeCAT, OrdenMontajeINVIAN } from '../../services/campanas.service';
+import { campanasService, OrdenMontajeCAT, OrdenMontajeINVIAN, ImagenDigital } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import * as XLSX from 'xlsx';
@@ -41,6 +42,168 @@ const getFileUrl = (url: string | undefined | null): string | null => {
   // Si no tiene slash al inicio, agregarlo
   return `${STATIC_URL}/${url}`;
 };
+
+// Helper to check if URL is an image
+const isImageUrl = (url: string | null | undefined): boolean => {
+  if (!url) return false;
+  const ext = url.split(/[?#]/)[0].split('.').pop()?.toLowerCase();
+  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext || '');
+};
+
+// Digital Gallery Modal for Órdenes de Montaje
+function OMDigitalGalleryModal({
+  isOpen,
+  onClose,
+  imagenes,
+  isLoading,
+  title,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  imagenes: ImagenDigital[];
+  isLoading: boolean;
+  title?: string;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const handlePrev = () => {
+    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : imagenes.length - 1));
+  };
+
+  const handleNext = () => {
+    setCurrentIndex((prev) => (prev < imagenes.length - 1 ? prev + 1 : 0));
+  };
+
+  useEffect(() => {
+    if (isOpen) setCurrentIndex(0);
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const currentImage = imagenes[currentIndex];
+  const getImgUrl = (img: ImagenDigital | undefined) => {
+    if (!img) return null;
+    return getFileUrl(img.archivoData || img.archivo);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="relative bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-zinc-700 flex-shrink-0">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Film className="h-5 w-5 text-cyan-400" />
+            {title || 'Galería Digital'}
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-600/30 text-cyan-300 border border-cyan-500/30">
+              {imagenes.length} archivo{imagenes.length !== 1 ? 's' : ''}
+            </span>
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-zinc-800 rounded-lg transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-hidden p-4 flex flex-col">
+          {isLoading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+            </div>
+          ) : imagenes.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center text-zinc-500">
+              <div className="text-center">
+                <Film className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                <p>No hay archivos digitales</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex-1 relative bg-black rounded-lg flex items-center justify-center min-h-[300px]">
+                {currentImage?.tipo === 'video' ? (
+                  <video
+                    key={currentImage.id}
+                    src={getImgUrl(currentImage) || ''}
+                    controls
+                    controlsList="nodownload"
+                    className="max-w-full max-h-[450px] rounded"
+                    style={{ minHeight: '200px' }}
+                  />
+                ) : (
+                  <img
+                    key={currentImage?.id}
+                    src={getImgUrl(currentImage) || ''}
+                    alt={`Imagen ${currentIndex + 1}`}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                )}
+
+                {imagenes.length > 1 && (
+                  <>
+                    <button
+                      onClick={handlePrev}
+                      className="absolute left-2 p-2 bg-black/50 hover:bg-black/70 rounded-full transition-colors"
+                    >
+                      <ChevronLeft className="h-6 w-6" />
+                    </button>
+                    <button
+                      onClick={handleNext}
+                      className="absolute right-2 p-2 bg-black/50 hover:bg-black/70 rounded-full transition-colors"
+                    >
+                      <ChevronRight className="h-6 w-6" />
+                    </button>
+                  </>
+                )}
+
+                <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded text-xs">
+                  Spot {currentImage?.spot} de {imagenes.length}
+                </div>
+              </div>
+
+              {imagenes.length > 1 && (
+                <div className="mt-3 flex gap-2 overflow-x-auto py-2 px-1">
+                  {imagenes.map((img, index) => (
+                    <button
+                      key={img.id}
+                      onClick={() => setCurrentIndex(index)}
+                      className={`relative flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-all ${
+                        index === currentIndex
+                          ? 'border-cyan-400 ring-2 ring-cyan-400/30'
+                          : 'border-transparent hover:border-cyan-400/50'
+                      }`}
+                    >
+                      {img.tipo === 'video' ? (
+                        <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                          <Play className="h-6 w-6 text-cyan-400" />
+                        </div>
+                      ) : (
+                        <img
+                          src={getImgUrl(img) || ''}
+                          alt={`Thumbnail ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-center py-0.5">
+                        {img.spot}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 p-4 border-t border-zinc-700 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface OrdenesMontajeModalProps {
   isOpen: boolean;
@@ -214,6 +377,28 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const [invianSortField, setInvianSortField] = useState<string | null>(null);
   const [invianSortDirection, setInvianSortDirection] = useState<'asc' | 'desc'>('desc');
   const [invianExpandedGroups, setInvianExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Digital Gallery state
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [galleryImages, setGalleryImages] = useState<ImagenDigital[]>([]);
+  const [isGalleryLoading, setIsGalleryLoading] = useState(false);
+  const [galleryTitle, setGalleryTitle] = useState('');
+
+  const handleOpenGallery = useCallback(async (item: OrdenMontajeINVIAN) => {
+    if (!item.CodigoContrato || !item.rsv_id) return;
+    setIsGalleryOpen(true);
+    setIsGalleryLoading(true);
+    setGalleryTitle(`Artes - ${item.Campania || 'Campaña'}`);
+    try {
+      const images = await campanasService.getImagenesDigitales(item.CodigoContrato, item.rsv_id);
+      setGalleryImages(images);
+    } catch (err) {
+      console.error('Error loading gallery images:', err);
+      setGalleryImages([]);
+    } finally {
+      setIsGalleryLoading(false);
+    }
+  }, []);
 
   // Popup visibility
   const [showFilterPopup, setShowFilterPopup] = useState(false);
@@ -590,8 +775,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Fin o Segmento': item.FinSegmento || '',
         'Arte': item.Arte || '',
         'Código de arte (Opcional)': item.CodigoArte || '',
+        'Nombre Arte': item.ArteUrl?.split('/').pop() || '',
         'Arte Url (Opcional)': getFileUrl(item.ArteUrl) || '',
         'Origen del arte (Opcional)': item.OrigenArte || '',
+        'Indicaciones': item.indicaciones || '',
         'Unidad': item.Unidad || '',
         'Cara': item.Cara || '',
         'Ciudad': item.Ciudad || '',
@@ -1211,7 +1398,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Vendedor</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Inicio/Periodo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Fin/Segmento</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Archivo</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Nombre Arte</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Artes</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Indicaciones</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Unidad</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cara</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Ciudad</th>
@@ -1226,7 +1415,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           onClick={() => toggleGroup(groupName)}
                           className="bg-cyan-500/10 border-b border-cyan-500/20 cursor-pointer hover:bg-cyan-500/15 transition-colors"
                         >
-                          <td colSpan={13} className="px-4 py-2">
+                          <td colSpan={16} className="px-4 py-2">
                             <div className="flex items-center gap-2">
                               {invianExpandedGroups.has(groupName) ? (
                                 <ChevronDown className="h-4 w-4 text-cyan-400" />
@@ -1241,18 +1430,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           </td>
                         </tr>
                         {invianExpandedGroups.has(groupName) && items.map((item, idx) => (
-                          <INVIANRow key={`${groupName}-${idx}`} item={item} />
+                          <INVIANRow key={`${groupName}-${idx}`} item={item} onOpenGallery={handleOpenGallery} />
                         ))}
                       </React.Fragment>
                     ))
                   ) : (
                     filteredINVIANData.map((item, idx) => (
-                      <INVIANRow key={idx} item={item} />
+                      <INVIANRow key={idx} item={item} onOpenGallery={handleOpenGallery} />
                     ))
                   )}
                   {filteredINVIANData.length === 0 && (
                     <tr>
-                      <td colSpan={13} className="px-4 py-12 text-center">
+                      <td colSpan={16} className="px-4 py-12 text-center">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
                           <FileSpreadsheet className="w-8 h-8 text-purple-400" />
                         </div>
@@ -1266,6 +1455,15 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
           )}
         </div>
       </div>
+
+      {/* Digital Gallery Modal */}
+      <OMDigitalGalleryModal
+        isOpen={isGalleryOpen}
+        onClose={() => { setIsGalleryOpen(false); setGalleryImages([]); }}
+        imagenes={galleryImages}
+        isLoading={isGalleryLoading}
+        title={galleryTitle}
+      />
     </div>
   );
 }
@@ -1312,10 +1510,13 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
   );
 }
 
-function INVIANRow({ item }: { item: OrdenMontajeINVIAN }) {
+function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGallery: (item: OrdenMontajeINVIAN) => void }) {
   const operacionColor = item.Operacion === 'BONIFICACION'
     ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
     : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+
+  const arteUrl = getFileUrl(item.ArteUrl);
+  const fileName = item.ArteUrl?.split('/').pop() || null;
 
   return (
     <tr className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
@@ -1342,23 +1543,56 @@ function INVIANRow({ item }: { item: OrdenMontajeINVIAN }) {
       </td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.InicioPeriodo || '-'}</td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.FinSegmento || '-'}</td>
+      {/* Nombre Arte */}
+      <td className="px-3 py-2 text-xs text-zinc-300 max-w-[150px] truncate" title={fileName || ''}>
+        {fileName || '-'}
+      </td>
+      {/* Artes */}
       <td className="px-3 py-2 text-xs">
         {(() => {
-          const arteUrl = getFileUrl(item.ArteUrl);
-          return arteUrl ? (
-            <a
-              href={arteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 hover:underline truncate max-w-[150px] block"
-              title={arteUrl}
-            >
-              {arteUrl.split('/').pop() || 'Ver archivo'}
-            </a>
-          ) : (
-            <span className="text-zinc-500">-</span>
-          );
+          if ((item.num_artes_digitales || 0) > 1) {
+            return (
+              <button
+                onClick={() => onOpenGallery(item)}
+                className="flex items-center gap-1 px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 transition-colors text-[10px] font-medium"
+                title={`${item.num_artes_digitales} artes digitales`}
+              >
+                <Film className="h-3 w-3" />
+                {item.num_artes_digitales}
+              </button>
+            );
+          }
+          if (arteUrl && isImageUrl(item.ArteUrl)) {
+            return (
+              <a href={arteUrl} target="_blank" rel="noopener noreferrer" title="Ver imagen">
+                <img
+                  src={arteUrl}
+                  alt="Arte"
+                  className="w-10 h-[30px] object-cover rounded border border-zinc-700 hover:border-purple-400 transition-colors"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              </a>
+            );
+          }
+          if (arteUrl) {
+            return (
+              <a
+                href={arteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
+                title={arteUrl}
+              >
+                <Link2 className="h-3.5 w-3.5" />
+              </a>
+            );
+          }
+          return <span className="text-zinc-500">-</span>;
         })()}
+      </td>
+      {/* Indicaciones */}
+      <td className="px-3 py-2 text-xs text-zinc-300 max-w-[180px] truncate" title={item.indicaciones || ''}>
+        {item.indicaciones || '-'}
       </td>
       <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.Unidad || '-'}</td>
       <td className="px-3 py-2 text-xs text-zinc-300">{item.Cara || '-'}</td>
