@@ -5,7 +5,8 @@ import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, Layers,
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
-  ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2
+  ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2,
+  Image, FileText, DollarSign, Hash, Gift
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -2071,6 +2072,18 @@ export function CampanasPage() {
                               <Minus className="h-3 w-3" /> Sin APS
                             </span>
                           )}
+                          {/* Resumen de campaña: caras, bonificación, inversión */}
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Caras totales">
+                            <Hash className="h-3 w-3" /> {campana.total_caras || 0}
+                          </span>
+                          {Number(campana.bonificacion) > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 flex items-center gap-1" title="Bonificación">
+                              <Gift className="h-3 w-3" /> {campana.bonificacion}
+                            </span>
+                          )}
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-green-500/15 text-green-300 border border-green-500/25 flex items-center gap-1" title="Inversión">
+                            <DollarSign className="h-3 w-3" /> {campana.inversion != null ? `$${Number(campana.inversion).toLocaleString()}` : '-'}
+                          </span>
                           <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => handleOpenCampana(campana.id)}
@@ -2195,12 +2208,48 @@ export function CampanasPage() {
                                                 </button>
                                                 {isGrupoExpanded && (
                                                   <div className="pl-5 py-1 space-y-0.5">
+                                                    {/* Resumen del grupo */}
+                                                    {(() => {
+                                                      const plazas = [...new Set(grupo.items.map(i => i.plaza).filter(Boolean))];
+                                                      const formato = (grupo.items[0] as any)?.formato || null;
+                                                      const sumTarifa = grupo.items.reduce((s, i) => s + (Number((i as any).tarifa_publica_sc) || 0), 0);
+                                                      const sumRenta = grupo.items.reduce((s, i) => s + (Number((i as any).renta) || 0), 0);
+                                                      const sumBonif = grupo.items.reduce((s, i) => s + (Number((i as any).bonificacion_sc) || 0), 0);
+                                                      return (
+                                                        <div className="flex flex-wrap items-center gap-2 py-1.5 px-1 mb-1 border-b border-zinc-800/40">
+                                                          {plazas.length > 0 && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Plaza(s)">
+                                                              <MapPin className="h-2.5 w-2.5" /> {plazas.join(', ')}
+                                                            </span>
+                                                          )}
+                                                          {formato && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-500/15 text-violet-300 border border-violet-500/25" title="Formato">
+                                                              {formato}
+                                                            </span>
+                                                          )}
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25" title="Tarifa pública">
+                                                            Tarifa: ${sumTarifa.toLocaleString()}
+                                                          </span>
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-green-500/15 text-green-300 border border-green-500/25" title="Renta">
+                                                            Renta: ${sumRenta.toLocaleString()}
+                                                          </span>
+                                                          {sumBonif > 0 && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/25" title="Bonificación">
+                                                              Bonif: {sumBonif}
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      );
+                                                    })()}
                                                     {grupo.items.map(inv => {
                                                       const estatusArteColor = getEstatusArteColor((inv as any).estatus_arte);
+                                                      const hasArte = inv.archivo != null && inv.archivo !== '';
+                                                      const indicacionesProg = (inv as any).indicaciones_programacion;
                                                       return (
-                                                        <div key={inv.id} className="flex items-center gap-2 text-[10px] text-zinc-500 py-0.5">
+                                                        <div key={inv.id} className="flex items-center gap-2 text-[10px] text-zinc-500 py-0.5 flex-wrap">
                                                           <MapPin className="h-2.5 w-2.5 text-zinc-600" />
                                                           <span className="text-zinc-400 font-mono">{inv.codigo_unico}</span>
+                                                          <Image className={`h-2.5 w-2.5 ${hasArte ? 'text-green-400' : 'text-zinc-600'}`} title={hasArte ? 'Arte subido' : 'Sin arte'} />
                                                           {(inv as any).estatus_arte && (
                                                             <span className={`px-1.5 py-0.5 rounded text-[9px] ${estatusArteColor.bg} ${estatusArteColor.text} border ${estatusArteColor.border}`}>
                                                               {(inv as any).estatus_arte}
@@ -2208,6 +2257,14 @@ export function CampanasPage() {
                                                           )}
                                                           <span className="text-zinc-600">•</span>
                                                           <span>{inv.plaza || 'Sin plaza'}</span>
+                                                          {indicacionesProg && (
+                                                            <>
+                                                              <span className="text-zinc-600">•</span>
+                                                              <span className="text-orange-300/80 flex items-center gap-0.5" title="Indicaciones de programación">
+                                                                <FileText className="h-2.5 w-2.5" /> {indicacionesProg}
+                                                              </span>
+                                                            </>
+                                                          )}
                                                         </div>
                                                       );
                                                     })}
@@ -2265,6 +2322,21 @@ export function CampanasPage() {
                           En curso
                         </span>
                       )}
+                      {/* Totales agregados de la catorcena */}
+                      {(() => {
+                        const totalCaras = campanas.reduce((s, c) => s + (Number(c.total_caras) || 0), 0);
+                        const totalInversion = campanas.reduce((s, c) => s + (Number(c.inversion) || 0), 0);
+                        return (
+                          <>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Total caras">
+                              <Hash className="h-3 w-3" /> {totalCaras} caras
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-green-500/15 text-green-300 border border-green-500/25 flex items-center gap-1" title="Inversión total">
+                              <DollarSign className="h-3 w-3" /> ${totalInversion.toLocaleString()}
+                            </span>
+                          </>
+                        );
+                      })()}
                     </button>
 
                     {/* Contenido expandible de catorcena */}

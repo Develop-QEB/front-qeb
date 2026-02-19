@@ -108,6 +108,11 @@ export interface InventarioConAPS extends InventarioReservado {
   arte_aprobado?: string | null;
   instalado?: boolean | null;
   estatus_arte?: 'Carga Artes' | 'Revision Artes' | 'Artes Aprobados' | 'En Impresion' | 'Artes Recibidos' | 'Instalado' | null;
+  formato?: string | null;
+  tarifa_publica_sc?: number | null;
+  bonificacion_sc?: number | null;
+  renta?: number | null;
+  indicaciones_programacion?: string | null;
 }
 
 export interface InventarioConArte {
