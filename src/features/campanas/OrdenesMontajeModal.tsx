@@ -499,7 +499,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     return Array.from(catorcenasSet.entries()).map(([id, data]) => ({
       id,
-      label: `Catorcena ${data.numero} del ${data.year}`,
+      label: `Cat ${data.numero} / ${data.year}`,
       numero: data.numero,
       year: data.year,
     })).sort((a, b) => {

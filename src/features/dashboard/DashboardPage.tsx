@@ -1352,7 +1352,7 @@ function CatorcenaIndicator({ catorcena, filteredCatorcena }: { catorcena: any; 
       <Calendar className={`h-4 w-4 ${isFiltered ? 'text-purple-400' : 'text-emerald-400'}`} />
       <div>
         <span className={`text-[10px] font-medium uppercase tracking-wider ${isFiltered ? 'text-purple-400' : 'text-emerald-400'}`}>
-          {isFiltered ? 'Catorcena Filtrada' : 'Catorcena Actual'}
+          {isFiltered ? 'Periodo Filtrado' : 'Periodo Actual'}
         </span>
         <span className="text-white text-sm font-semibold ml-2">Cat. {displayCatorcena.numero} / {displayCatorcena.ano}</span>
       </div>
@@ -1475,7 +1475,7 @@ export function DashboardPage() {
                 <FilterSelect label="Formato" value={filters.formato || ''} onChange={(v) => { setFilters(p => ({ ...p, formato: v || undefined })); setInventoryPage(1); }} options={filterOptions?.formatos || []} />
                 <FilterSelect label="NSE" value={filters.nse || ''} onChange={(v) => { setFilters(p => ({ ...p, nse: v || undefined })); setInventoryPage(1); }} options={filterOptions?.nses || []} />
                 <div className="md:col-span-2">
-                  <label className="text-[10px] text-purple-400/70 uppercase tracking-wider mb-1 block font-medium">Catorcena</label>
+                  <label className="text-[10px] text-purple-400/70 uppercase tracking-wider mb-1 block font-medium">Periodo</label>
                   <select
                     value={filters.catorcena_id?.toString() || ''}
                     onChange={(e) => { setFilters(p => ({ ...p, catorcena_id: e.target.value ? parseInt(e.target.value) : undefined })); setInventoryPage(1); }}

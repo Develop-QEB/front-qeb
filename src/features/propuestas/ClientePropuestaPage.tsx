@@ -145,11 +145,14 @@ const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Jul
 
 function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): string {
   if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
-    const d = new Date(item.inicio_periodo);
-    if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+    const parts = item.inicio_periodo.split('-');
+    if (parts.length >= 2) {
+      const m = parseInt(parts[1]);
+      return `${MESES_LABEL[m - 1]} ${parts[0]}`;
+    }
   }
   if (item.numero_catorcena && item.anio_catorcena) {
-    return `Catorcena ${item.numero_catorcena}, ${item.anio_catorcena}`;
+    return `Cat ${item.numero_catorcena} / ${item.anio_catorcena}`;
   }
   return 'Sin asignar';
 }
@@ -325,29 +328,29 @@ export function ClientePropuestaPage() {
   // Period display helpers
   const periodoInicio = useMemo(() => {
     if (tipoPeriodo === 'mensual' && data?.cotizacion?.fecha_inicio) {
-      const d = new Date(data.cotizacion.fecha_inicio);
-      if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+      const parts = data.cotizacion.fecha_inicio.split('-');
+      if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
     }
     if (data?.propuesta?.catorcena_inicio && data?.propuesta?.anio_inicio) {
-      return `Catorcena ${data.propuesta.catorcena_inicio}, ${data.propuesta.anio_inicio}`;
+      return `Cat ${data.propuesta.catorcena_inicio} / ${data.propuesta.anio_inicio}`;
     }
     const catorcenas = inventario
       .filter(i => i.numero_catorcena && i.anio_catorcena)
       .map(i => ({ num: i.numero_catorcena!, year: i.anio_catorcena! }));
     if (catorcenas.length > 0) {
       const sorted = catorcenas.sort((a, b) => a.year !== b.year ? a.year - b.year : a.num - b.num);
-      return `Catorcena ${sorted[0].num}, ${sorted[0].year}`;
+      return `Cat ${sorted[0].num} / ${sorted[0].year}`;
     }
     return 'N/A';
   }, [data, inventario, tipoPeriodo]);
 
   const periodoFin = useMemo(() => {
     if (tipoPeriodo === 'mensual' && data?.cotizacion?.fecha_fin) {
-      const d = new Date(data.cotizacion.fecha_fin);
-      if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+      const parts = data.cotizacion.fecha_fin.split('-');
+      if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
     }
     if (data?.propuesta?.catorcena_fin && data?.propuesta?.anio_fin) {
-      return `Catorcena ${data.propuesta.catorcena_fin}, ${data.propuesta.anio_fin}`;
+      return `Cat ${data.propuesta.catorcena_fin} / ${data.propuesta.anio_fin}`;
     }
     const catorcenas = inventario
       .filter(i => i.numero_catorcena && i.anio_catorcena)
@@ -355,7 +358,7 @@ export function ClientePropuestaPage() {
     if (catorcenas.length > 0) {
       const sorted = catorcenas.sort((a, b) => a.year !== b.year ? a.year - b.year : a.num - b.num);
       const last = sorted[sorted.length - 1];
-      return `Catorcena ${last.num}, ${last.year}`;
+      return `Cat ${last.num} / ${last.year}`;
     }
     return 'N/A';
   }, [data, inventario, tipoPeriodo]);
@@ -496,8 +499,8 @@ export function ClientePropuestaPage() {
     // Period
     y = addSectionTitle('PERIODO DE CAMPAÑA', y);
     y = createFieldRow([
-      { label: tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Catorcena de Inicio', value: periodoInicio },
-      { label: tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Catorcena de Fin', value: periodoFin },
+      { label: tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Fecha Inicio', value: periodoInicio },
+      { label: tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Fecha Fin', value: periodoFin },
     ], y);
     y += 5;
 
@@ -1105,7 +1108,7 @@ export function ClientePropuestaPage() {
                         <p><strong>Caras:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(selectedMarker.tarifa_publica || 0)}</p>
                         {selectedMarker.numero_catorcena && (
-                          <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const d = new Date(selectedMarker.inicio_periodo); return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : `Catorcena ${selectedMarker.numero_catorcena}, ${selectedMarker.anio_catorcena}`; })() : `Catorcena ${selectedMarker.numero_catorcena}, ${selectedMarker.anio_catorcena}`}</p>
+                          <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const parts = selectedMarker.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`; })() : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`}</p>
                         )}
                       </div>
                     </div>

@@ -60,15 +60,15 @@ const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Se
 const MESES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 function getPeriodoLabel(item: { catorcena: number; anio: number; inicio_periodo?: string }, tipoPeriodo?: string): string {
   if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
-    const d = new Date(item.inicio_periodo);
-    return !isNaN(d.getTime()) ? `${MESES_FULL[d.getMonth()]} ${d.getFullYear()}` : `Catorcena ${item.catorcena} - ${item.anio}`;
+    const parts = item.inicio_periodo.split('-');
+    return parts.length >= 2 ? `${MESES_FULL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${item.catorcena} / ${item.anio}`;
   }
-  return `Catorcena ${item.catorcena} - ${item.anio}`;
+  return `Cat ${item.catorcena} / ${item.anio}`;
 }
 function getPeriodoShort(item: { catorcena: number; anio: number; inicio_periodo?: string }, tipoPeriodo?: string): string {
   if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
-    const d = new Date(item.inicio_periodo);
-    return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : `${item.catorcena}/${item.anio}`;
+    const parts = item.inicio_periodo.split('-');
+    return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${item.catorcena} / ${item.anio}`;
   }
   return `${item.catorcena}/${item.anio}`;
 }
@@ -161,7 +161,7 @@ interface InventoryFilters {
 // Opciones para los selectores
 const GROUP_BY_OPTIONS: { value: GroupByField; label: string }[] = [
   { value: 'none', label: 'Sin agrupar' },
-  { value: 'catorcena', label: 'Por Catorcena' },
+  { value: 'catorcena', label: 'Por Periodo' },
   { value: 'ciudad', label: 'Por Ciudad' },
   { value: 'plaza', label: 'Por Plaza' },
   { value: 'mueble', label: 'Por Mueble' },
@@ -171,7 +171,7 @@ const GROUP_BY_OPTIONS: { value: GroupByField; label: string }[] = [
 
 const SORT_OPTIONS: { value: SortField; label: string }[] = [
   { value: 'codigo_unico', label: 'Código' },
-  { value: 'catorcena', label: 'Catorcena' },
+  { value: 'catorcena', label: 'Periodo' },
   { value: 'ciudad', label: 'Ciudad' },
   { value: 'plaza', label: 'Plaza' },
   { value: 'mueble', label: 'Mueble' },
@@ -300,7 +300,7 @@ const FILTER_FIELDS_INVENTARIO: FilterFieldConfig[] = [
   { field: 'ubicacion', label: 'Ubicación', type: 'string' },
   { field: 'nse', label: 'NSE', type: 'string' },
   { field: 'tipo_de_cara', label: 'Tipo Cara', type: 'string' },
-  { field: 'catorcena', label: 'Catorcena', type: 'number' },
+  { field: 'catorcena', label: 'Periodo', type: 'number' },
   { field: 'aps', label: 'APS', type: 'number' },
 ];
 
@@ -323,7 +323,7 @@ const FILTER_FIELDS_TAREAS: FilterFieldConfig[] = [
 
 // Opciones de agrupación para las tablas
 const GROUPING_OPTIONS_INVENTARIO: { field: GroupByField; label: string }[] = [
-  { field: 'catorcena', label: 'Catorcena' },
+  { field: 'catorcena', label: 'Periodo' },
   { field: 'aps', label: 'APS' },
   { field: 'grupo', label: 'Grupo' },
   { field: 'estado_arte', label: 'Estado Arte' },
@@ -1068,8 +1068,8 @@ function UploadArtModal({
           break;
         case 'catorcena':
           key = tipoPeriodo === 'mensual' && item.inicio_periodo
-            ? (() => { const d = new Date(item.inicio_periodo); return !isNaN(d.getTime()) ? `${MESES_FULL[d.getMonth()]} ${d.getFullYear()}` : `Catorcena ${item.catorcena}`; })()
-            : `Catorcena ${item.catorcena}`;
+            ? (() => { const parts = item.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_FULL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${item.catorcena}`; })()
+            : `Cat ${item.catorcena}`;
           break;
         case 'grupo':
           if (item.grupo_id) {
@@ -1632,7 +1632,7 @@ function UploadArtModal({
                 >
                   <option value="none">Sin agrupar</option>
                   <option value="aps">Por APS</option>
-                  <option value="catorcena">{tipoPeriodo === 'mensual' ? 'Por Periodo' : 'Por Catorcena'}</option>
+                  <option value="catorcena">Por Periodo</option>
                   <option value="grupo">Por Grupo</option>
                 </select>
                 <select
@@ -1642,7 +1642,7 @@ function UploadArtModal({
                 >
                   <option value="codigo">Codigo</option>
                   <option value="aps">APS</option>
-                  <option value="catorcena">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</option>
+                  <option value="catorcena">Periodo</option>
                 </select>
               </div>
 
@@ -2335,7 +2335,7 @@ function TestigoTaskView({
             </p>
           </div>
           <div>
-            <span className="text-zinc-500">{tipoPeriodo === 'mensual' ? 'Periodo:' : 'Catorcena:'}</span>
+            <span className="text-zinc-500">Periodo:</span>
             <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
           </div>
           <div>
@@ -2415,7 +2415,7 @@ function TestigoTaskView({
                         <th className="p-2 font-medium text-purple-300">Ciudad</th>
                         <th className="p-2 font-medium text-purple-300">Mueble</th>
                         <th className="p-2 font-medium text-purple-300">Medidas</th>
-                        <th className="p-2 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
+                        <th className="p-2 font-medium text-purple-300">Periodo</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2455,7 +2455,7 @@ function TestigoTaskView({
                   <th className="p-3 font-medium text-purple-300">Plaza</th>
                   <th className="p-3 font-medium text-purple-300">Mueble</th>
                   <th className="p-3 font-medium text-purple-300">Medidas</th>
-                  <th className="p-3 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
+                  <th className="p-3 font-medium text-purple-300">Periodo</th>
                 </tr>
               </thead>
               <tbody>
@@ -2829,7 +2829,7 @@ function TaskDetailModal({
       return fechaFin >= inicio && fechaFin <= fin;
     });
     if (catorcena) {
-      return `Catorcena ${catorcena.numero_catorcena}, ${catorcena.a_o}`;
+      return `Cat ${catorcena.numero_catorcena} / ${catorcena.a_o}`;
     }
     return null;
   }, [task?.fecha_fin, catorcenasData?.data, tipoPeriodo]);
@@ -4019,7 +4019,7 @@ function TaskDetailModal({
       posY += 18;
 
       // Tabla de items
-      const headers = ['Cant.', 'Ancho', 'Alto', tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena', 'Formato', 'Plaza', 'URL Imagen'];
+      const headers = ['Cant.', 'Ancho', 'Alto', 'Periodo', 'Formato', 'Plaza', 'URL Imagen'];
       const colWidths = [15, 18, 18, 38, 28, 30, 33];
       const availableWidth = pageWidth - 30;
       const rowHeight = 12;
@@ -4417,7 +4417,7 @@ function TaskDetailModal({
                     <p className="text-white font-medium">{task.asignado || '-'}</p>
                   </div>
                   <div>
-                    <span className="text-zinc-500">{tipoPeriodo === 'mensual' ? 'Periodo de entrega:' : 'Catorcena de entrega:'}</span>
+                    <span className="text-zinc-500">{tipoPeriodo === 'mensual' ? 'Periodo de entrega:' : 'Fecha de entrega:'}</span>
                     <p className="text-white font-medium">{impresionesData?.catorcena_entrega || getCatorcenaFromFechaFin || '-'}</p>
                   </div>
                   <div className="md:col-span-3">
@@ -4641,7 +4641,7 @@ function TaskDetailModal({
                 <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
                   <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
                     <h4 className="text-sm font-medium text-purple-300">
-                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por {tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'} &gt; APS &gt; Grupo
+                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por Periodo &gt; APS &gt; Grupo
                     </h4>
                   </div>
                   <div className="max-h-[400px] overflow-y-auto divide-y divide-border">
@@ -4854,7 +4854,7 @@ function TaskDetailModal({
                 <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
                   <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
                     <h4 className="text-sm font-medium text-purple-300">
-                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por {tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'} &gt; APS &gt; Grupo
+                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por Periodo &gt; APS &gt; Grupo
                     </h4>
                   </div>
                   <div className="max-h-[400px] overflow-y-auto divide-y divide-border">
@@ -5423,7 +5423,7 @@ function TaskDetailModal({
                     </p>
                   </div>
                   <div>
-                    <span className="text-zinc-500">{tipoPeriodo === 'mensual' ? 'Periodo:' : 'Catorcena:'}</span>
+                    <span className="text-zinc-500">Periodo:</span>
                     <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
                   </div>
                   <div>
@@ -5513,7 +5513,7 @@ function TaskDetailModal({
                                 <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                 <th className="p-2 font-medium text-purple-300">Mueble</th>
                                 <th className="p-2 font-medium text-purple-300">Medidas</th>
-                                <th className="p-2 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
+                                <th className="p-2 font-medium text-purple-300">Periodo</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -5553,7 +5553,7 @@ function TaskDetailModal({
                           <th className="p-3 font-medium text-purple-300">Plaza</th>
                           <th className="p-3 font-medium text-purple-300">Mueble</th>
                           <th className="p-3 font-medium text-purple-300">Medidas</th>
-                          <th className="p-3 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
+                          <th className="p-3 font-medium text-purple-300">Periodo</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -5687,7 +5687,7 @@ function TaskDetailModal({
                         <p className="text-white font-medium">{task.asignado || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Catorcena:</span>
+                        <span className="text-zinc-500 text-xs">Periodo:</span>
                         <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
                       </div>
                       <div>
@@ -5957,7 +5957,7 @@ function TaskDetailModal({
                       </div>
                       <button
                         onClick={() => {
-                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Catorcena', 'Estado Arte'];
+                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Periodo', 'Estado Arte'];
                           const rows = filteredProgramacionModalData.map(item => [
                             item.id,
                             item.codigo_unico,
@@ -6000,7 +6000,7 @@ function TaskDetailModal({
                           <th className="text-left p-2 text-zinc-400 font-medium">Mueble</th>
                           <th className="text-left p-2 text-zinc-400 font-medium">Ciudad</th>
                           <th className="text-left p-2 text-zinc-400 font-medium">NSE</th>
-                          <th className="text-left p-2 text-zinc-400 font-medium">Catorcena</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Periodo</th>
                           <th className="text-left p-2 text-zinc-400 font-medium">Estado Arte</th>
                         </tr>
                       </thead>
@@ -6084,7 +6084,7 @@ function TaskDetailModal({
                         <p className="text-white font-medium">{task.asignado || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">{tipoPeriodo === 'mensual' ? 'Periodo:' : 'Catorcena:'}</span>
+                        <span className="text-zinc-500 text-xs">Periodo:</span>
                         <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
                       </div>
                       <div>
@@ -6347,7 +6347,7 @@ function TaskDetailModal({
                       {/* Botón exportar CSV */}
                       <button
                         onClick={() => {
-                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena', 'Estado Arte'];
+                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Periodo', 'Estado Arte'];
                           const rows = filteredProgramacionModalData.map(item => [
                             item.id,
                             item.codigo_unico,
@@ -6861,7 +6861,7 @@ function TaskDetailModal({
                                 <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                 <th className="p-2 font-medium text-purple-300">Mueble</th>
                                 <th className="p-2 font-medium text-purple-300">Medidas</th>
-                                <th className="p-2 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
+                                <th className="p-2 font-medium text-purple-300">Periodo</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -6901,7 +6901,7 @@ function TaskDetailModal({
                           <th className="p-3 font-medium text-purple-300">Plaza</th>
                           <th className="p-3 font-medium text-purple-300">Mueble</th>
                           <th className="p-3 font-medium text-purple-300">Medidas</th>
-                          <th className="p-3 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
+                          <th className="p-3 font-medium text-purple-300">Periodo</th>
                           <th className="p-3 font-medium text-purple-300">Estado</th>
                         </tr>
                       </thead>
@@ -13346,7 +13346,7 @@ export function TareaSeguimientoPage() {
                       <th className="p-2 font-medium text-purple-300">Plaza</th>
                       <th className="p-2 font-medium text-purple-300">Mueble</th>
                       <th className="p-2 font-medium text-purple-300">Medidas</th>
-                      <th className="p-2 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
+                      <th className="p-2 font-medium text-purple-300">Periodo</th>
                       <th className="p-2 font-medium text-purple-300">Tarea Impresión</th>
                     </tr>
                   </thead>
@@ -14391,7 +14391,7 @@ export function TareaSeguimientoPage() {
                                 <tr className="border-b border-border text-left">
                                   <th className="p-2 pl-6 font-medium text-purple-300">Código</th>
                                   <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
-                                  <th className="p-2 font-medium text-purple-300">{tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}</th>
+                                  <th className="p-2 font-medium text-purple-300">Periodo</th>
                                   <th className="p-2 font-medium text-purple-300">APS</th>
                                   <th className="p-2 font-medium text-purple-300">Plaza</th>
                                   <th className="p-2 font-medium text-purple-300">Ciudad</th>

@@ -221,6 +221,33 @@ export const inventariosService = {
     return response.data.data;
   },
 
+  // Create inventario
+  async create(data: Record<string, unknown>): Promise<Inventario> {
+    const response = await api.post<ApiResponse<Inventario>>('/inventarios', data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear inventario');
+    }
+    return response.data.data;
+  },
+
+  // Update inventario
+  async update(id: number, data: Record<string, unknown>): Promise<Inventario> {
+    const response = await api.put<ApiResponse<Inventario>>(`/inventarios/${id}`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar inventario');
+    }
+    return response.data.data;
+  },
+
+  // Toggle block/unblock
+  async toggleBlock(id: number): Promise<Inventario> {
+    const response = await api.patch<ApiResponse<Inventario>>(`/inventarios/${id}/toggle-block`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al bloquear/desbloquear inventario');
+    }
+    return response.data.data;
+  },
+
   // Obtener espacios disponibles de un inventario
   async getEspaciosDisponibles(inventarioId: number, params: {
     fecha_inicio?: string;

@@ -71,7 +71,7 @@ function dateToCatorcena(dateStr: string, catorcenas: Catorcena[]): { catorcena:
     return date >= inicio && date <= fin;
   });
   if (catorcena) {
-    return { catorcena: `Catorcena ${catorcena.numero_catorcena}`, year: catorcena.a_o };
+    return { catorcena: `Cat ${catorcena.numero_catorcena}`, year: catorcena.a_o };
   }
   return null;
 }
@@ -81,7 +81,7 @@ function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[], tipoPerio
   if (tipoPeriodo === 'mensual') return getMonthLabel(dateStr);
   const result = dateToCatorcena(dateStr, catorcenas);
   if (result) {
-    return `${result.catorcena} - ${result.year}`;
+    return `${result.catorcena} / ${result.year}`;
   }
   return getMonthLabel(dateStr);
 }
@@ -131,7 +131,7 @@ function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Ca
       catorcenaStr = getMonthLabel(cara.inicio_periodo);
     } else {
       const catorcenaResult = dateToCatorcena(cara.inicio_periodo, catorcenas);
-      catorcenaStr = catorcenaResult ? `${catorcenaResult.catorcena} - ${catorcenaResult.year}` : getMonthLabel(cara.inicio_periodo);
+      catorcenaStr = catorcenaResult ? `${catorcenaResult.catorcena} / ${catorcenaResult.year}` : getMonthLabel(cara.inicio_periodo);
     }
     const articulo = cara.articulo || 'Sin artículo';
 
@@ -716,11 +716,11 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">{tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Catorcena Inicio'}</span>
+                      <span className="text-zinc-500 text-sm">{tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Fecha Inicio'}</span>
                       <span className="text-white text-sm">{data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">{tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Catorcena Fin'}</span>
+                      <span className="text-zinc-500 text-sm">{tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Fecha Fin'}</span>
                       <span className="text-white text-sm">{data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}</span>
                     </div>
                     {data.solicitud.descripcion && (

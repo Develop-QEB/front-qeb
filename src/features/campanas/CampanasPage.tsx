@@ -193,7 +193,7 @@ interface GroupConfig {
 const AVAILABLE_GROUPINGS: GroupConfig[] = [
   { field: 'status', label: 'Estatus' },
   { field: 'cliente_nombre', label: 'Cliente' },
-  { field: 'catorcena_inicio', label: 'Catorcena Inicio' },
+  { field: 'catorcena_inicio', label: 'Fecha Inicio' },
 ];
 
 // Campos disponibles para ordenar
@@ -480,7 +480,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Inicio</label>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Cat. Inicio</label>
                   <select
                     value={tempCatorcenaInicio || ''}
                     onChange={(e) => {
@@ -524,7 +524,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Fin</label>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Cat. Fin</label>
                   <select
                     value={tempCatorcenaFin || ''}
                     onChange={(e) => {
@@ -714,7 +714,7 @@ export function CampanasPage() {
         if (b.a_o !== a.a_o) return b.a_o - a.a_o;
         return b.numero_catorcena - a.numero_catorcena;
       })
-      .map(c => `Catorcena ${c.numero_catorcena}, ${c.a_o}`);
+      .map(c => `Cat ${c.numero_catorcena} / ${c.a_o}`);
   }, [catorcenasData]);
 
   // Filter data locally for search and catorcena inicio
@@ -735,8 +735,8 @@ export function CampanasPage() {
 
     // Filter by catorcena inicio
     if (selectedCatorcenaInicio && items.length > 0) {
-      // Parse "Catorcena X, YYYY" format
-      const match = selectedCatorcenaInicio.match(/Catorcena (\d+), (\d+)/);
+      // Parse "Cat X / YYYY" format
+      const match = selectedCatorcenaInicio.match(/Cat (\d+) \/ (\d+)/);
       if (match) {
         const catNum = parseInt(match[1]);
         const catYear = parseInt(match[2]);
@@ -799,8 +799,8 @@ export function CampanasPage() {
         return getMonthLabel(item.fecha_inicio);
       }
       return item.catorcena_inicio_num && item.catorcena_inicio_anio
-        ? `Catorcena ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
-        : 'Sin catorcena';
+        ? `Cat ${item.catorcena_inicio_num} / ${item.catorcena_inicio_anio}`
+        : 'Sin periodo';
     } else if (field === 'status') {
       return item.status || 'Sin status';
     } else if (field === 'cliente_nombre') {
@@ -1006,9 +1006,9 @@ export function CampanasPage() {
       const isMensual = (item as any).tipo_periodo === 'mensual';
       if (isMensual && item.fecha_inicio) {
         // For mensual campaigns, group by month derived from fecha_inicio
-        const d = new Date(item.fecha_inicio);
-        const mes = d.getMonth() + 1; // 1-12
-        const anio = d.getFullYear();
+        const parts = item.fecha_inicio.split('-');
+        const anio = parseInt(parts[0]);
+        const mes = parseInt(parts[1]); // 1-12
         const key = `${anio}-${String(mes).padStart(2, '0')}`;
         if (!groups[key]) {
           groups[key] = {
@@ -1377,7 +1377,7 @@ export function CampanasPage() {
           ) : item.catorcena_inicio_num && item.catorcena_inicio_anio ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
               <Calendar className="h-3 w-3" />
-              {item.catorcena_inicio_num}/{item.catorcena_inicio_anio}
+              Cat {item.catorcena_inicio_num} / {item.catorcena_inicio_anio}
             </span>
           ) : (
             <span className="text-zinc-500 text-xs">-</span>
@@ -1393,7 +1393,7 @@ export function CampanasPage() {
           ) : item.catorcena_fin_num && item.catorcena_fin_anio ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
               <Calendar className="h-3 w-3" />
-              {item.catorcena_fin_num}/{item.catorcena_fin_anio}
+              Cat {item.catorcena_fin_num} / {item.catorcena_fin_anio}
             </span>
           ) : (
             <span className="text-zinc-500 text-xs">-</span>
@@ -1903,8 +1903,8 @@ export function CampanasPage() {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Actividad</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Inicio</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Fin</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fecha Inicio</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fecha Fin</th>
                       <th className="px-4 py-3 text-center text-xs font-semibold text-purple-300 uppercase tracking-wider">APS</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Acciones</th>
                     </tr>
@@ -2351,7 +2351,7 @@ export function CampanasPage() {
                       <span className="font-semibold text-white text-sm">
                         {(catorcena as any).isMensual
                           ? `${MESES_FULL[catorcena.num - 1]} ${catorcena.anio}`
-                          : `Catorcena ${catorcena.num}, ${catorcena.anio}`}
+                          : `Cat ${catorcena.num} / ${catorcena.anio}`}
                       </span>
                       <span className="px-2.5 py-1 rounded-full text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30">
                         {campanas.length} campañas

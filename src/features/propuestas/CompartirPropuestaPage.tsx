@@ -41,11 +41,11 @@ const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Jul
 
 function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): string {
   if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
-    const d = new Date(item.inicio_periodo);
-    if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+    const parts = item.inicio_periodo.split('-');
+    if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
   }
   if (item.numero_catorcena && item.anio_catorcena) {
-    return `Catorcena ${item.numero_catorcena}, ${item.anio_catorcena}`;
+    return `Cat ${item.numero_catorcena} / ${item.anio_catorcena}`;
   }
   return 'Sin asignar';
 }
@@ -287,11 +287,11 @@ export function CompartirPropuestaPage() {
   // Period display
   const periodoInicio = useMemo(() => {
     if (tipoPeriodo === 'mensual' && details?.cotizacion?.fecha_inicio) {
-      const d = new Date(details.cotizacion.fecha_inicio);
-      if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+      const parts = details.cotizacion.fecha_inicio.split('-');
+      if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
     }
     if (details?.propuesta?.catorcena_inicio && details?.propuesta?.anio_inicio) {
-      return `Catorcena ${details.propuesta.catorcena_inicio}, ${details.propuesta.anio_inicio}`;
+      return `Cat ${details.propuesta.catorcena_inicio} / ${details.propuesta.anio_inicio}`;
     }
     if (!inventario) return 'N/A';
     const catorcenas = inventario
@@ -299,18 +299,18 @@ export function CompartirPropuestaPage() {
       .map(i => ({ num: i.numero_catorcena!, year: i.anio_catorcena! }));
     if (catorcenas.length > 0) {
       const sorted = catorcenas.sort((a, b) => a.year !== b.year ? a.year - b.year : a.num - b.num);
-      return `Catorcena ${sorted[0].num}, ${sorted[0].year}`;
+      return `Cat ${sorted[0].num} / ${sorted[0].year}`;
     }
     return 'N/A';
   }, [details, inventario, tipoPeriodo]);
 
   const periodoFin = useMemo(() => {
     if (tipoPeriodo === 'mensual' && details?.cotizacion?.fecha_fin) {
-      const d = new Date(details.cotizacion.fecha_fin);
-      if (!isNaN(d.getTime())) return `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}`;
+      const parts = details.cotizacion.fecha_fin.split('-');
+      if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
     }
     if (details?.propuesta?.catorcena_fin && details?.propuesta?.anio_fin) {
-      return `Catorcena ${details.propuesta.catorcena_fin}, ${details.propuesta.anio_fin}`;
+      return `Cat ${details.propuesta.catorcena_fin} / ${details.propuesta.anio_fin}`;
     }
     if (!inventario) return 'N/A';
     const catorcenas = inventario
@@ -319,7 +319,7 @@ export function CompartirPropuestaPage() {
     if (catorcenas.length > 0) {
       const sorted = catorcenas.sort((a, b) => a.year !== b.year ? a.year - b.year : a.num - b.num);
       const last = sorted[sorted.length - 1];
-      return `Catorcena ${last.num}, ${last.year}`;
+      return `Cat ${last.num} / ${last.year}`;
     }
     return 'N/A';
   }, [details, inventario, tipoPeriodo]);
@@ -441,7 +441,7 @@ export function CompartirPropuestaPage() {
               Tipo: ${i.tipo_de_cara || 'N/A'}<br/>
               Formato: ${i.tipo_de_mueble || 'N/A'}<br/>
               Caras: ${i.caras_totales}<br/>
-              Periodo: ${tipoPeriodo === 'mensual' && i.inicio_periodo ? (() => { const d = new Date(i.inicio_periodo); return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : 'N/A'; })() : i.numero_catorcena ? `Catorcena ${i.numero_catorcena}, ${i.anio_catorcena}` : 'N/A'}
+              Periodo: ${tipoPeriodo === 'mensual' && i.inicio_periodo ? (() => { const parts = i.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : 'N/A'; })() : i.numero_catorcena ? `Cat ${i.numero_catorcena} / ${i.anio_catorcena}` : 'N/A'}
             ]]>
           </description>
           <Point>
@@ -670,8 +670,8 @@ export function CompartirPropuestaPage() {
             ? `${MESES_LABEL[first.num - 1]} ${first.year}`
             : `${MESES_LABEL[first.num - 1]} ${first.year} - ${MESES_LABEL[last.num - 1]} ${last.year}`)
           : (first.year === last.year && first.num === last.num
-            ? `Catorcena ${first.num}, ${first.year}`
-            : `Catorcena ${first.num}/${first.year} - Catorcena ${last.num}/${last.year}`);
+            ? `Cat ${first.num} / ${first.year}`
+            : `Cat ${first.num} / ${first.year} - Cat ${last.num} / ${last.year}`);
         doc.text(periodoText, marginX + 170, y);
       }
     }
@@ -1422,7 +1422,7 @@ export function CompartirPropuestaPage() {
                         <p><strong>Caras:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(selectedMarker.tarifa_publica || 0)}</p>
                         {selectedMarker.numero_catorcena && (
-                          <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const d = new Date(selectedMarker.inicio_periodo); return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : `Catorcena ${selectedMarker.numero_catorcena}, ${selectedMarker.anio_catorcena}`; })() : `Catorcena ${selectedMarker.numero_catorcena}, ${selectedMarker.anio_catorcena}`}</p>
+                          <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const parts = selectedMarker.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`; })() : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`}</p>
                         )}
                       </div>
                     </div>

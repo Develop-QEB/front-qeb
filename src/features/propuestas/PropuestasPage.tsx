@@ -385,7 +385,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Inicio *</label>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Cat. Inicio *</label>
                   <select
                     value={tempCatorcenaInicio || ''}
                     onChange={(e) => {
@@ -429,7 +429,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Fin *</label>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Cat. Fin *</label>
                   <select
                     value={tempCatorcenaFin || ''}
                     onChange={(e) => {
@@ -1279,7 +1279,7 @@ export function PropuestasPage() {
           ) : item.catorcena_inicio ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
               <Calendar className="h-3 w-3" />
-              {item.catorcena_inicio}/{item.anio_inicio}
+              Cat {item.catorcena_inicio} / {item.anio_inicio}
             </span>
           ) : (
             <span className="text-zinc-500 text-xs">-</span>
@@ -1294,7 +1294,7 @@ export function PropuestasPage() {
           ) : item.catorcena_fin ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
               <Calendar className="h-3 w-3" />
-              {item.catorcena_fin}/{item.anio_fin}
+              Cat {item.catorcena_fin} / {item.anio_fin}
             </span>
           ) : (
             <span className="text-zinc-500 text-xs">-</span>

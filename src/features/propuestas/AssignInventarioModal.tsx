@@ -214,7 +214,7 @@ const FILTER_FIELDS_RESERVAS: FilterFieldConfig[] = [
   { field: 'tipo', label: 'Tipo', type: 'string' },
   { field: 'plaza', label: 'Plaza', type: 'string' },
   { field: 'formato', label: 'Formato', type: 'string' },
-  { field: 'catorcena', label: 'Catorcena', type: 'number' },
+  { field: 'catorcena', label: 'Periodo', type: 'number' },
   { field: 'anio', label: 'Año', type: 'number' },
 ];
 
@@ -238,7 +238,7 @@ interface GroupConfigReservas {
 }
 
 const AVAILABLE_GROUPINGS_RESERVAS: GroupConfigReservas[] = [
-  { field: 'catorcena', label: 'Catorcena' },
+  { field: 'catorcena', label: 'Periodo' },
   { field: 'grupo', label: 'Grupo Completo' },
   { field: 'articulo', label: 'Artículo' },
   { field: 'plaza', label: 'Plaza' },
@@ -1323,17 +1323,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
     caras.forEach(cara => {
       let periodo = cara.inicio_periodo || 'Sin periodo';
+      let parsedMonth: number | undefined;
+      let parsedYear: number | undefined;
       if (tipoPeriodo === 'mensual' && cara.inicio_periodo) {
-        // Normalize to month for grouping
-        const d = new Date(cara.inicio_periodo);
-        if (!isNaN(d.getTime())) {
-          periodo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+        // Parse date string directly to avoid timezone shifts
+        const parts = cara.inicio_periodo.split('-');
+        if (parts.length >= 2) {
+          parsedYear = parseInt(parts[0]);
+          parsedMonth = parseInt(parts[1]);
+          periodo = `${parsedYear}-${String(parsedMonth).padStart(2, '0')}-01`;
         }
       }
       if (!groups[periodo]) {
-        if (tipoPeriodo === 'mensual') {
-          const d = new Date(periodo);
-          groups[periodo] = { caras: [], catorcenaNum: d.getMonth() + 1, year: d.getFullYear() };
+        if (tipoPeriodo === 'mensual' && parsedMonth !== undefined && parsedYear !== undefined) {
+          groups[periodo] = { caras: [], catorcenaNum: parsedMonth, year: parsedYear };
+        } else if (tipoPeriodo === 'mensual') {
+          const parts = periodo.split('-');
+          groups[periodo] = { caras: [], catorcenaNum: parseInt(parts[1]) || undefined, year: parseInt(parts[0]) || undefined };
         } else {
           const catorcenaInfo = catorcenasData?.data?.find(c => c.fecha_inicio === periodo);
           groups[periodo] = { caras: [], catorcenaNum: catorcenaInfo?.numero_catorcena, year: catorcenaInfo?.a_o };
@@ -4592,7 +4598,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               scale: 10,
                               fillColor: reserva.codigo_unico?.includes('_Completo')
                                 ? '#a855f7' // Purple for Completo
-                                : reserva.tipo === 'Flujo' ? '#3b82f6' : reserva.tipo === 'Bonificacion' ? '#10b981' : '#f59e0b',
+                                : reserva.tipo === 'Flujo' ? '#3b82f6' : reserva.tipo === 'Bonificacion' ? '#10b981' : '#06b6d4',
                               fillOpacity: 0.9,
                               strokeColor: '#fff',
                               strokeWeight: 2,
@@ -4615,9 +4621,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Dirección del tráfico</div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
-                          <div>
-                            <span className="text-zinc-300">Flujo / Contraflujo</span>
-                          </div>
+                          <span className="text-zinc-300">Flujo</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-cyan-500 ring-1 ring-cyan-400/30" />
+                          <span className="text-zinc-300">Contraflujo</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
@@ -5075,7 +5083,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <div className="mb-4">
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">
-                          {tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'} {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
+                          Periodo {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
                           {tipoPeriodo !== 'mensual' && propuesta.catorcena_inicio && propuesta.anio_inicio && propuesta.catorcena_fin && propuesta.anio_fin && (
                             <span className="text-zinc-600 ml-1">
                               (Rango: {propuesta.catorcena_inicio}/{propuesta.anio_inicio} - {propuesta.catorcena_fin}/{propuesta.anio_fin})
@@ -5162,7 +5170,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               })
                               .map(c => (
                                 <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
-                                  Catorcena {c.numero_catorcena} / {c.a_o}
+                                  Cat {c.numero_catorcena} / {c.a_o}
                                 </option>
                               ))
                           )}
@@ -5352,10 +5360,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       const catorcenaLabel = tipoPeriodo === 'mensual' && groupData.catorcenaNum
                         ? `${MESES_LABEL[groupData.catorcenaNum - 1]} ${groupData.year || ''}`
                         : groupData.catorcenaNum
-                        ? `Catorcena #${groupData.catorcenaNum}${groupData.year ? ` - ${groupData.year}` : ''}`
+                        ? `Cat ${groupData.catorcenaNum} / ${groupData.year || ''}`
                         : (() => {
-                            const d = new Date(periodo);
-                            return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : `Periodo: ${periodo}`;
+                            const parts = periodo.split('-');
+                            if (parts.length >= 2) {
+                              const m = parseInt(parts[1]);
+                              return `${MESES_LABEL[m - 1] || periodo} ${parts[0]}`;
+                            }
+                            return `Periodo: ${periodo}`;
                           })();
 
                       return (
@@ -6120,7 +6132,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       scale: isSelected ? 12 : (hasSelection ? 6 : 8),
                                       fillColor: isCompleto ? '#a855f7' :
                                         reserva.tipo === 'Flujo' ? '#3b82f6' :
-                                        reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
+                                        reserva.tipo === 'Contraflujo' ? '#06b6d4' : '#10b981',
                                       fillOpacity: isSelected ? 1 : (hasSelection ? 0.3 : 0.9),
                                       strokeColor: isSelected ? '#fff' : (hasSelection ? 'transparent' : '#fff'),
                                       strokeWeight: isSelected ? 3 : 2,
@@ -6145,7 +6157,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   <span className="text-zinc-300">Flujo</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                                  <div className="w-2.5 h-2.5 rounded-full bg-cyan-500" />
                                   <span className="text-zinc-300">Contraflujo</span>
                                 </div>
                                 <div className="flex items-center gap-2">

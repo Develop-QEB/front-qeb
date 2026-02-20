@@ -1298,7 +1298,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       const m = parseInt(num);
       return `${MESES[m - 1] || `Mes ${num}`} ${year}`;
     }
-    return `Catorcena ${num} / ${year}`;
+    return `Cat ${num} / ${year}`;
   };
 
   // Toggle catorcena expansion
@@ -1962,7 +1962,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     {/* Catorcenas */}
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <label className="text-xs text-zinc-500">Catorcena Inicio</label>
+                        <label className="text-xs text-zinc-500">Cat. Inicio</label>
                         <select
                           value={catorcenaInicio || ''}
                           onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
@@ -1972,13 +1972,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           <option value="">Seleccionar</option>
                           {catorcenasInicioOptions.map(c => (
                             <option key={c.id} value={c.numero_catorcena}>
-                              Catorcena {c.numero_catorcena} / {c.a_o}
+                              Cat {c.numero_catorcena} / {c.a_o}
                             </option>
                           ))}
                         </select>
                       </div>
                       <div className="flex-1">
-                        <label className="text-xs text-zinc-500">Catorcena Fin</label>
+                        <label className="text-xs text-zinc-500">Cat. Fin</label>
                         <select
                           value={catorcenaFin || ''}
                           onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
@@ -1988,7 +1988,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           <option value="">Seleccionar</option>
                           {catorcenasFinOptions.map(c => (
                             <option key={c.id} value={c.numero_catorcena}>
-                              Catorcena {c.numero_catorcena} / {c.a_o}
+                              Cat {c.numero_catorcena} / {c.a_o}
                             </option>
                           ))}
                         </select>
@@ -2285,7 +2285,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         <option value="">Seleccionar</option>
                         {availablePeriods.map(p => (
                           <option key={`${p.a_o}-${p.numero_catorcena}`} value={`${p.a_o}-${p.numero_catorcena}`}>
-                            Catorcena {p.numero_catorcena} / {p.a_o}
+                            Cat {p.numero_catorcena} / {p.a_o}
                           </option>
                         ))}
                       </select>

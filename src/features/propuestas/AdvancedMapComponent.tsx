@@ -344,8 +344,8 @@ export function AdvancedMapComponent({
   // Color constants for consistency
   const COLORS = {
     // Traffic direction
-    flujo: '#3b82f6',        // Blue - Flujo/Contraflujo (same color)
-    contraflujo: '#3b82f6',  // Blue - same as flujo (no differentiation)
+    flujo: '#3b82f6',        // Blue - Flujo
+    contraflujo: '#06b6d4',  // Cyan - Contraflujo
     ambos: '#a855f7',        // Purple - Completos (F+C juntos)
     // Status
     seleccionado: '#facc15', // Yellow - Seleccionado
@@ -369,7 +369,8 @@ export function AdvancedMapComponent({
       return COLORS.ambos;  // Purple for complete pairs
     }
 
-    // Default: same color for Flujo and Contraflujo
+    // Differentiate Flujo vs Contraflujo
+    if (inv.tipo_de_cara === 'Contraflujo') return COLORS.contraflujo;
     return COLORS.flujo;
   };
 
@@ -696,9 +697,11 @@ export function AdvancedMapComponent({
               <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Dirección del tráfico</div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
-                <div>
-                  <span className="text-zinc-300">Flujo / Contraflujo</span>
-                </div>
+                <span className="text-zinc-300">Flujo</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-cyan-500 ring-1 ring-cyan-400/30" />
+                <span className="text-zinc-300">Contraflujo</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
@@ -797,7 +800,7 @@ export function AdvancedMapComponent({
           {inventarios.map(inv => (
             inv.latitud && inv.longitud && (
               <Marker
-                key={inv.id}
+                key={inv.espacio_id ? `${inv.id}_${inv.espacio_id}` : inv.id}
                 position={{ lat: inv.latitud, lng: inv.longitud }}
                 onClick={() => {
                   onToggleSelection(inv.id);

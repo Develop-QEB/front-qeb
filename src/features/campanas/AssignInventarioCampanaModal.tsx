@@ -205,7 +205,7 @@ const FILTER_FIELDS_RESERVAS: FilterFieldConfig[] = [
   { field: 'tipo', label: 'Tipo', type: 'string' },
   { field: 'plaza', label: 'Plaza', type: 'string' },
   { field: 'formato', label: 'Formato', type: 'string' },
-  { field: 'catorcena', label: 'Catorcena', type: 'number' },
+  { field: 'catorcena', label: 'Periodo', type: 'number' },
   { field: 'anio', label: 'Año', type: 'number' },
 ];
 
@@ -229,7 +229,7 @@ interface GroupConfigReservas {
 }
 
 const AVAILABLE_GROUPINGS_RESERVAS: GroupConfigReservas[] = [
-  { field: 'catorcena', label: 'Catorcena' },
+  { field: 'catorcena', label: 'Periodo' },
   { field: 'grupo', label: 'Grupo Completo' },
   { field: 'articulo', label: 'Artículo' },
   { field: 'plaza', label: 'Plaza' },
@@ -1258,16 +1258,24 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
     caras.forEach(cara => {
       let periodo = cara.inicio_periodo || 'Sin periodo';
+      let parsedMonth: number | undefined;
+      let parsedYear: number | undefined;
       if (tipoPeriodo === 'mensual' && cara.inicio_periodo) {
-        const d = new Date(cara.inicio_periodo);
-        if (!isNaN(d.getTime())) {
-          periodo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+        // Parse date string directly to avoid timezone shifts with new Date()
+        const parts = cara.inicio_periodo.split('-');
+        if (parts.length >= 2) {
+          parsedYear = parseInt(parts[0]);
+          parsedMonth = parseInt(parts[1]);
+          periodo = `${parsedYear}-${String(parsedMonth).padStart(2, '0')}-01`;
         }
       }
       if (!groups[periodo]) {
-        if (tipoPeriodo === 'mensual') {
-          const d = new Date(periodo);
-          groups[periodo] = { caras: [], catorcenaNum: d.getMonth() + 1, year: d.getFullYear() };
+        if (tipoPeriodo === 'mensual' && parsedMonth !== undefined && parsedYear !== undefined) {
+          groups[periodo] = { caras: [], catorcenaNum: parsedMonth, year: parsedYear };
+        } else if (tipoPeriodo === 'mensual') {
+          // Fallback: parse from periodo key directly
+          const parts = periodo.split('-');
+          groups[periodo] = { caras: [], catorcenaNum: parseInt(parts[1]) || undefined, year: parseInt(parts[0]) || undefined };
         } else {
           const catorcenaInfo = catorcenasData?.data?.find(c => c.fecha_inicio === periodo);
           groups[periodo] = { caras: [], catorcenaNum: catorcenaInfo?.numero_catorcena, year: catorcenaInfo?.a_o };
@@ -2464,7 +2472,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const hierarchy: Level0 = {};
 
     filteredReservados.forEach(r => {
-      const catorcenaKey = `Cat ${r.catorcena}/${r.anio}`;
+      const catorcenaKey = tipoPeriodo === 'mensual' && r.catorcena >= 1 && r.catorcena <= 12
+        ? `${MESES_LABEL[r.catorcena - 1]} ${r.anio}`
+        : `Cat ${r.catorcena} / ${r.anio}`;
       const articuloKey = r.articulo || 'Sin Artículo';
       const plazaKey = r.plaza || 'Sin Plaza';
       const formatoKey = r.formato || 'Sin Formato';
@@ -2478,7 +2488,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
 
     return hierarchy;
-  }, [filteredReservados]);
+  }, [filteredReservados, tipoPeriodo]);
 
   // Helper to get type breakdown for reservados tab
   const getReservadosBreakdown = (items: ReservaItem[]) => {
@@ -3919,62 +3929,85 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </div>
 
                   {/* Period - Same style as EditSolicitudModal */}
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Año Inicio</label>
-                      <select
-                        value={yearInicio || ''}
-                        onChange={(e) => { setYearInicio(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaInicio(undefined); }}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {yearInicioOptions.map(y => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
+                  {tipoPeriodo === 'mensual' ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Fecha Inicio</label>
+                        <input
+                          type="date"
+                          value={campana.fecha_inicio || ''}
+                          readOnly
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none cursor-default opacity-80"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Fecha Fin</label>
+                        <input
+                          type="date"
+                          value={campana.fecha_fin || ''}
+                          readOnly
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none cursor-default opacity-80"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Cat. Inicio</label>
-                      <select
-                        value={catorcenaInicio || ''}
-                        onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                        disabled={!yearInicio}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {catorcenasInicioOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
-                        ))}
-                      </select>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Año Inicio</label>
+                        <select
+                          value={yearInicio || ''}
+                          onChange={(e) => { setYearInicio(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaInicio(undefined); }}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearInicioOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Cat. Inicio</label>
+                        <select
+                          value={catorcenaInicio || ''}
+                          onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearInicio}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {catorcenasInicioOptions.map(c => (
+                            <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Año Fin</label>
+                        <select
+                          value={yearFin || ''}
+                          onChange={(e) => { setYearFin(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaFin(undefined); }}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearFinOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Cat. Fin</label>
+                        <select
+                          value={catorcenaFin || ''}
+                          onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearFin}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {catorcenasFinOptions.map(c => (
+                            <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Año Fin</label>
-                      <select
-                        value={yearFin || ''}
-                        onChange={(e) => { setYearFin(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaFin(undefined); }}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {yearFinOptions.map(y => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Cat. Fin</label>
-                      <select
-                        value={catorcenaFin || ''}
-                        onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                        disabled={!yearFin}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {catorcenasFinOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Notes and Description */}
                   <div className="grid grid-cols-2 gap-4">
@@ -4190,7 +4223,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <div className="mb-4">
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">
-                          {tipoPeriodo === 'mensual' ? 'Periodo' : 'Catorcena'}
+                          Periodo
                           {tipoPeriodo !== 'mensual' && campana.catorcena_inicio_num && campana.catorcena_inicio_anio && campana.catorcena_fin_num && campana.catorcena_fin_anio && (
                             <span className="text-zinc-600 ml-1">
                               (Rango: {campana.catorcena_inicio_num}/{campana.catorcena_inicio_anio} - {campana.catorcena_fin_num}/{campana.catorcena_fin_anio})
@@ -4274,9 +4307,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               })
                               .map(c => (
                                 <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
-                                  Catorcena {c.numero_catorcena} / {c.a_o}
+                                  Cat {c.numero_catorcena} / {c.a_o}
                                 </option>
-                            ))}
+                            )))}
                         </select>
                       </div>
                     </div>
@@ -4413,10 +4446,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       const catorcenaLabel = tipoPeriodo === 'mensual' && groupData.catorcenaNum
                         ? `${MESES_LABEL[groupData.catorcenaNum - 1]} ${groupData.year || ''}`
                         : groupData.catorcenaNum
-                        ? `Catorcena #${groupData.catorcenaNum}${groupData.year ? ` - ${groupData.year}` : ''}`
+                        ? `Cat ${groupData.catorcenaNum} / ${groupData.year || ''}`
                         : (() => {
-                            const d = new Date(periodo);
-                            return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : `Periodo: ${periodo}`;
+                            // Parse date string directly to avoid timezone issues
+                            const parts = periodo.split('-');
+                            if (parts.length >= 2) {
+                              const m = parseInt(parts[1]);
+                              return `${MESES_LABEL[m - 1] || periodo} ${parts[0]}`;
+                            }
+                            return `Periodo: ${periodo}`;
                           })();
 
                       return (
@@ -4602,7 +4640,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 // Helper to get group key based on field
                 const getFieldValue = (r: ReservaItem, field: GroupByFieldReservas): string => {
                   switch (field) {
-                    case 'catorcena': return `Cat ${r.catorcena}/${r.anio}`;
+                    case 'catorcena': return tipoPeriodo === 'mensual' && r.catorcena >= 1 && r.catorcena <= 12 ? `${MESES_LABEL[r.catorcena - 1]} ${r.anio}` : `Cat ${r.catorcena} / ${r.anio}`;
                     case 'tipo': return r.tipo;
                     case 'plaza': return r.plaza || 'Sin Plaza';
                     case 'formato': return r.formato || 'Sin Formato';

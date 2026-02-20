@@ -42,14 +42,14 @@ const chipStyles: Record<InfoItemType, string> = {
   default: 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30',
 };
 
-// Formatear fecha como "Catorcena X, YYYY"
+// Formatear fecha como "Cat X / YYYY"
 function formatAsCatorcena(dateStr: string): string {
   try {
     const fecha = new Date(dateStr);
     if (isNaN(fecha.getTime())) return dateStr;
     const catorcena = calcularCatorcena(fecha);
     const anio = fecha.getFullYear();
-    return `Catorcena ${catorcena}, ${anio}`;
+    return `Cat ${catorcena} / ${anio}`;
   } catch {
     return dateStr;
   }
@@ -68,27 +68,27 @@ function dateToCatorcena(dateStr: string, catorcenas: Catorcena[]): { catorcena:
     return date >= inicio && date <= fin;
   });
   if (found) {
-    return { catorcena: `Catorcena ${found.numero_catorcena}`, year: found.a_o };
+    return { catorcena: `Cat ${found.numero_catorcena}`, year: found.a_o };
   }
   return null;
 }
 
 function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[], tipoPeriodo?: string): string {
   if (tipoPeriodo === 'mensual') {
-    const date = new Date(dateStr);
-    if (!isNaN(date.getTime())) {
-      return `${MESES_LABEL[date.getMonth()]} ${date.getFullYear()}`;
+    const parts = dateStr.split('-');
+    if (parts.length >= 2) {
+      return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
     }
     return dateStr;
   }
   const result = dateToCatorcena(dateStr, catorcenas);
   if (result) {
-    return `${result.catorcena}, ${result.year}`;
+    return `${result.catorcena} / ${result.year}`;
   }
   // Fallback: show month name for monthly periods
-  const date = new Date(dateStr);
-  if (!isNaN(date.getTime())) {
-    return `${MESES_LABEL[date.getMonth()]} ${date.getFullYear()}`;
+  const parts = dateStr.split('-');
+  if (parts.length >= 2) {
+    return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
   }
   return dateStr;
 }
@@ -493,17 +493,17 @@ function calcularCatorcena(fecha: Date): number {
   return Math.ceil(diaDelAnio / 14);
 }
 
-// Helper para formatear inicio_periodo como "Catorcena X, Año YYYY" o "Mes YYYY"
+// Helper para formatear inicio_periodo como "Cat X / YYYY" o "Mes YYYY"
 function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS, tipoPeriodo?: string): string {
   if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
-    const fecha = new Date(item.inicio_periodo);
-    if (!isNaN(fecha.getTime())) {
-      return `${MESES_LABEL[fecha.getMonth()]} ${fecha.getFullYear()}`;
+    const parts = item.inicio_periodo.split('-');
+    if (parts.length >= 2) {
+      return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
     }
   }
 
   if (item.numero_catorcena && item.anio_catorcena) {
-    return `Catorcena ${item.numero_catorcena}, ${item.anio_catorcena}`;
+    return `Cat ${item.numero_catorcena} / ${item.anio_catorcena}`;
   }
 
   // Si tenemos la fecha de inicio_periodo, calcular la catorcena
@@ -511,7 +511,7 @@ function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS, tipoP
     const fecha = new Date(item.inicio_periodo);
     const catorcena = calcularCatorcena(fecha);
     const anio = fecha.getFullYear();
-    return `Catorcena ${catorcena}, ${anio}`;
+    return `Cat ${catorcena} / ${anio}`;
   }
 
   return 'Sin asignar';

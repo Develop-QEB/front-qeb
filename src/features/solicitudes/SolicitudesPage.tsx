@@ -338,7 +338,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Inicio</label>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Cat. Inicio</label>
                   <select
                     value={tempCatorcenaInicio || ''}
                     onChange={(e) => {
@@ -383,7 +383,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Fin</label>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Cat. Fin</label>
                   <select
                     value={tempCatorcenaFin || ''}
                     onChange={(e) => {
