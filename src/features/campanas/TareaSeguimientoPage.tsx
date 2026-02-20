@@ -591,6 +591,7 @@ const statusColors: Record<string, string> = {
   'Cancelado': 'bg-red-500/20 text-red-400',
   'Notificación': 'bg-purple-500/20 text-purple-400',
   'Enviada': 'bg-blue-500/20 text-blue-400',
+  'Activada': 'bg-blue-500/20 text-blue-400',
   'Finalizada': 'bg-green-500/20 text-green-400',
   validado: 'bg-green-500/20 text-green-400',
 };
@@ -1751,6 +1752,7 @@ const TIPOS_TAREA = [
   { value: 'Testigo', label: 'Testigo', description: 'Validación de instalación con evidencia fotográfica' },
   { value: 'Programación', label: 'Programación', description: 'Programación de artes digitales con indicaciones' },
   { value: 'Orden de Programación', label: 'Orden de Programación', description: 'Orden de programación para tráfico' },
+  { value: 'Orden de Instalación', label: 'Orden de Instalación', description: 'Orden de instalación para tráfico' },
 ];
 
 // ============================================================================
@@ -3011,7 +3013,7 @@ function TaskDetailModal({
   // Efecto para cargar archivos digitales para el tab "Resumen" en Programación si no están en evidencia
   useEffect(() => {
     const loadArchivosForResumen = async () => {
-      if (!isOpen || (task?.tipo !== 'Programación' && task?.tipo !== 'Orden de Programación')) {
+      if (!isOpen || (task?.tipo !== 'Programación' && task?.tipo !== 'Orden de Programación' && task?.tipo !== 'Orden de Instalación' && task?.tipo !== 'Instalación')) {
         setLoadedArchivosDigitales([]);
         return;
       }
@@ -5457,6 +5459,61 @@ function TaskDetailModal({
                 )}
               </div>
 
+              {/* Indicaciones de instalación (read-only, si existen en evidencia) */}
+              {task.evidencia && (() => {
+                try {
+                  const parsed = JSON.parse(task.evidencia);
+                  const indicaciones = parsed.indicaciones || {};
+                  const archivosEv = parsed.archivos || [];
+                  if (Object.keys(indicaciones).length === 0 && archivosEv.length === 0) return null;
+
+                  const displayItems = archivosEv.length > 0
+                    ? archivosEv.map((a: any) => ({ key: a.nombre, label: a.nombre, tipoArchivo: a.tipo }))
+                    : Object.keys(indicaciones).map((k: string) => ({ key: k, label: k, tipoArchivo: 'tradicional' }));
+
+                  return (
+                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                      <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Instalación</h4>
+                      <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
+                        {displayItems.map((item: any, idx: number) => {
+                          const indicacion = indicaciones[item.key] || '';
+                          const digitalFile = loadedArchivosDigitales.find(d => d.archivo === item.key);
+                          const fileUrl = digitalFile ? getImageUrl(digitalFile.archivoData || digitalFile.archivo) : null;
+                          return (
+                            <div key={idx} className="flex gap-3 p-2 border rounded-lg bg-purple-900/10 border-purple-500/20">
+                              <div className="flex-shrink-0 w-16 h-12 bg-zinc-800 rounded overflow-hidden">
+                                {fileUrl ? (
+                                  <img src={fileUrl} alt={item.label} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <Image className="h-4 w-4 text-zinc-600" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-xs text-white font-medium truncate">{(item.label as string).split('/').pop() || item.label}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${item.tipoArchivo === 'digital' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                    {item.tipoArchivo === 'digital' ? 'Digital' : 'Tradicional'}
+                                  </span>
+                                </div>
+                                <div className="bg-zinc-800/60 rounded p-1.5">
+                                  <p className="text-xs text-white whitespace-pre-wrap">
+                                    {indicacion || <span className="text-zinc-500 italic">Sin indicaciones</span>}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                } catch (e) {
+                  return null;
+                }
+              })()}
+
               {/* Lista de artes con filtros (mismo estilo que Revisión) */}
               <div className="bg-zinc-900/50 rounded-lg border border-border">
                 {/* Header con filtros - fuera del overflow para que los dropdowns se vean */}
@@ -5629,6 +5686,342 @@ function TaskDetailModal({
               ) : (
                 <div className="bg-zinc-800/50 border border-border rounded-lg p-4 text-center">
                   <p className="text-sm text-zinc-400">Tarea de instalación activa - Solo visualización</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* === VISTA ESPECIAL PARA ORDEN DE INSTALACIÓN === */}
+          {task.tipo === 'Orden de Instalación' && (
+            <div className="space-y-6">
+              {/* Tabs */}
+              <div className="flex gap-2 border-b border-border pb-2">
+                <button
+                  onClick={() => setProgramacionTab('resumen')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'resumen'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Resumen
+                </button>
+                <button
+                  onClick={() => setProgramacionTab('tabla')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'tabla'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Ver tabla ({taskInventory.length})
+                </button>
+              </div>
+
+              {/* Tab Resumen */}
+              {programacionTab === 'resumen' && (
+                <>
+                  {/* Info de la Orden */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Orden</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <p className="text-white font-medium">{task.titulo || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Estatus:</span>
+                        <p className={`font-medium ${
+                          task.estatus === 'Finalizada' ? 'text-green-400' :
+                          task.estatus === 'Activada' ? 'text-blue-400' :
+                          'text-yellow-400'
+                        }`}>
+                          {task.estatus}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Asignado:</span>
+                        <p className="text-white font-medium">{task.asignado || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Periodo:</span>
+                        <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Creador:</span>
+                        <p className="text-white">{task.creador || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <p className="text-white">{task.fecha_inicio || '-'}</p>
+                      </div>
+                      {task.descripcion && (
+                        <div className="col-span-2">
+                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <p className="text-white">{task.descripcion}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Badge de estado */}
+                  {task.estatus === 'Activada' && (
+                    <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-blue-400" />
+                      <span className="text-sm text-blue-300 font-medium">Activada - Esperando instalación por Operaciones</span>
+                    </div>
+                  )}
+                  {task.estatus === 'Finalizada' && (
+                    <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-400" />
+                      <span className="text-sm text-green-300 font-medium">Finalizada - Instalación completada por Operaciones</span>
+                    </div>
+                  )}
+
+                  {/* Indicaciones por Archivo */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Instalación por Archivo</h4>
+                    {(() => {
+                      let indicaciones: Record<string, string> = {};
+                      let archivosFromEvidencia: { nombre: string; tipo: string; archivoData?: string; spot?: number }[] = [];
+                      try {
+                        if (task.evidencia) {
+                          const parsed = JSON.parse(task.evidencia);
+                          indicaciones = parsed.indicaciones || {};
+                          archivosFromEvidencia = parsed.archivos || [];
+                        }
+                      } catch (e) {
+                        console.error('Error parsing orden instalacion evidencia:', e);
+                      }
+
+                      // Use loaded digital files as fallback for thumbnails
+                      const archivos = archivosFromEvidencia.length > 0 ? archivosFromEvidencia : [];
+                      const currentIndicaciones = Object.keys(ordenIndicaciones).length > 0 ? ordenIndicaciones : indicaciones;
+
+                      if (archivos.length === 0 && Object.keys(indicaciones).length === 0) {
+                        return (
+                          <div className="text-center py-8 text-zinc-500 text-sm">
+                            <Image className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                            No hay archivos asociados a esta orden
+                          </div>
+                        );
+                      }
+
+                      // Show archivos from evidencia, or just indicaciones keys
+                      const displayItems = archivos.length > 0
+                        ? archivos.map(a => ({ key: a.nombre, label: a.nombre, tipoArchivo: a.tipo }))
+                        : Object.keys(indicaciones).map(k => ({ key: k, label: k, tipoArchivo: 'tradicional' }));
+
+                      return (
+                        <div className="space-y-4">
+                          {displayItems.map((item, index) => {
+                            const indicacion = currentIndicaciones[item.key] || '';
+                            // Try to find loaded digital file for thumbnail
+                            const digitalFile = loadedArchivosDigitales.find(d => d.archivo === item.key);
+                            const fileUrl = digitalFile ? getImageUrl(digitalFile.archivoData || digitalFile.archivo) : null;
+
+                            return (
+                              <div key={index} className="flex gap-4 p-3 border rounded-lg bg-purple-900/10 border-purple-500/20">
+                                {/* Thumbnail */}
+                                <div className="flex-shrink-0 w-24 h-16 bg-zinc-800 rounded overflow-hidden">
+                                  {fileUrl ? (
+                                    <>
+                                      <img
+                                        src={fileUrl}
+                                        alt={item.label}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = 'none';
+                                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                        }}
+                                      />
+                                      <div className="w-full h-full flex items-center justify-center hidden">
+                                        <Image className="h-6 w-6 text-zinc-600" />
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-6 w-6 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Info y indicaciones */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Image className="h-4 w-4 text-green-400" />
+                                    <span className="text-sm text-white font-medium truncate" title={item.label}>
+                                      {item.label.split('/').pop() || item.label}
+                                    </span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${item.tipoArchivo === 'digital' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                      {item.tipoArchivo === 'digital' ? 'Digital' : 'Tradicional'}
+                                    </span>
+                                  </div>
+                                  {/* Indicaciones: editable when Pendiente, read-only otherwise */}
+                                  {task.estatus === 'Pendiente' ? (
+                                    <textarea
+                                      value={indicacion}
+                                      onChange={(e) => {
+                                        const newIndicaciones = { ...currentIndicaciones, [item.key]: e.target.value };
+                                        setOrdenIndicaciones(newIndicaciones);
+                                      }}
+                                      placeholder="Escribir indicaciones para este archivo..."
+                                      className="w-full bg-zinc-800/60 rounded p-2 text-xs text-white placeholder:text-zinc-500 border border-zinc-700 focus:border-purple-500 focus:outline-none resize-none"
+                                      rows={2}
+                                    />
+                                  ) : (
+                                    <div className="bg-zinc-800/60 rounded p-2">
+                                      <p className="text-xs text-white whitespace-pre-wrap">
+                                        {indicacion || <span className="text-zinc-500 italic">Sin indicaciones especificadas</span>}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Botón Activar (solo cuando estatus=Pendiente) */}
+                  {task.estatus === 'Pendiente' && (
+                    <div className="mt-4 flex justify-end gap-3">
+                      {/* Save indicaciones button */}
+                      {Object.keys(ordenIndicaciones).length > 0 && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              let evidenciaObj: any = {};
+                              try {
+                                if (task.evidencia) evidenciaObj = JSON.parse(task.evidencia);
+                              } catch (e) { /* ignore */ }
+                              const newEvidencia = JSON.stringify({
+                                ...evidenciaObj,
+                                indicaciones: ordenIndicaciones,
+                              });
+                              await onUpdateTask(task.id, { evidencia: newEvidencia });
+                              setOrdenIndicaciones({});
+                            } catch (e) {
+                              console.error('Error saving indicaciones:', e);
+                            }
+                          }}
+                          disabled={isUpdating}
+                          className="flex items-center gap-2 px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors disabled:opacity-50"
+                        >
+                          <Check className="h-4 w-4" />
+                          Guardar indicaciones
+                        </button>
+                      )}
+                      <button
+                        onClick={async () => {
+                          setIsSendingOrden(true);
+                          try {
+                            // Save indicaciones first if modified
+                            if (Object.keys(ordenIndicaciones).length > 0) {
+                              let evidenciaObj: any = {};
+                              try {
+                                if (task.evidencia) evidenciaObj = JSON.parse(task.evidencia);
+                              } catch (e) { /* ignore */ }
+                              const newEvidencia = JSON.stringify({
+                                ...evidenciaObj,
+                                indicaciones: ordenIndicaciones,
+                              });
+                              await onUpdateTask(task.id, { evidencia: newEvidencia });
+                            }
+                            await campanasService.activarOrdenInstalacion(campanaId, parseInt(task.id));
+                            setOrdenIndicaciones({});
+                            onClose();
+                          } catch (e) {
+                            console.error('Error activando orden:', e);
+                            alert(e instanceof Error ? e.message : 'Error al activar orden de instalación');
+                          } finally {
+                            setIsSendingOrden(false);
+                          }
+                        }}
+                        disabled={isSendingOrden || isUpdating}
+                        className="flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isSendingOrden ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Activando...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4" />
+                            Activar
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Tab Ver Tabla */}
+              {programacionTab === 'tabla' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-zinc-400">{filteredProgramacionModalData.length} de {taskInventory.length} items</span>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                        <input
+                          type="text"
+                          placeholder="Buscar por ID, código, nombre archivo..."
+                          value={programacionModalSearch}
+                          onChange={(e) => setProgramacionModalSearch(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                        />
+                        {programacionModalSearch && (
+                          <button
+                            onClick={() => setProgramacionModalSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto max-h-[400px] overflow-y-auto rounded-lg border border-border">
+                    <table className="w-full text-xs">
+                      <thead className="bg-zinc-800/80 sticky top-0 z-10">
+                        <tr>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">ID</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Código</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Tipo</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Ubicación</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Plaza</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Mueble</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Ciudad</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Periodo</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Estado Arte</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {filteredProgramacionModalData.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-zinc-800/30">
+                            <td className="px-3 py-2 text-white">{item.id}</td>
+                            <td className="px-3 py-2 text-white font-mono text-[10px]">{item.codigo_unico}</td>
+                            <td className="px-3 py-2 text-white">{item.tradicional_digital}</td>
+                            <td className="px-3 py-2 text-white">{item.ubicacion}</td>
+                            <td className="px-3 py-2 text-white">{item.plaza}</td>
+                            <td className="px-3 py-2 text-white">{item.mueble}</td>
+                            <td className="px-3 py-2 text-white">{item.ciudad}</td>
+                            <td className="px-3 py-2 text-white">{item.catorcena}</td>
+                            <td className="px-3 py-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${statusColors[item.estado_arte || ''] || 'bg-zinc-500/20 text-zinc-400'}`}>
+                                {item.estado_arte || '-'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -8187,6 +8580,17 @@ function CreateTaskModal({
   }[]>([]);
   const [isLoadingArchivosDigitales, setIsLoadingArchivosDigitales] = useState(false);
 
+  // Campos específicos para Instalación/Orden de Instalación - indicaciones por cada archivo
+  const [instalacionIndicaciones, setInstalacionIndicaciones] = useState<Record<string, string>>({});
+  const [archivosInstalacion, setArchivosInstalacion] = useState<{
+    nombre: string;
+    tipo: 'tradicional' | 'digital';
+    id?: number;
+    archivoData?: string;
+    spot?: number;
+  }[]>([]);
+  const [isLoadingArchivosInstalacion, setIsLoadingArchivosInstalacion] = useState(false);
+
   // Inicializar impresiones cuando cambia el inventario seleccionado (cantidad de ubicaciones por defecto)
   useEffect(() => {
     if (isOpen && selectedInventory.length > 0 && tipo === 'Impresión') {
@@ -8234,6 +8638,59 @@ function CreateTaskModal({
         }
       };
       loadDigitalFiles();
+    }
+  }, [isOpen, selectedInventory, tipo, campanaId]);
+
+  // Cargar archivos para Instalación / Orden de Instalación (tradicionales + digitales)
+  useEffect(() => {
+    if (isOpen && selectedInventory.length > 0 && (tipo === 'Instalación' || tipo === 'Orden de Instalación')) {
+      const loadInstalacionFiles = async () => {
+        setIsLoadingArchivosInstalacion(true);
+        try {
+          const archivos: typeof archivosInstalacion = [];
+          const archivosVistos = new Set<string>();
+
+          // 1. Archivos tradicionales (de archivo_arte, deduplicados)
+          selectedInventory.forEach(item => {
+            if (item.archivo_arte && !archivosVistos.has(item.archivo_arte)) {
+              archivosVistos.add(item.archivo_arte);
+              archivos.push({
+                nombre: item.archivo_arte,
+                tipo: 'tradicional',
+              });
+            }
+          });
+
+          // 2. Archivos digitales (via API)
+          const reservaIds = selectedInventory.flatMap(item =>
+            item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+          );
+          if (reservaIds.length > 0) {
+            const idsParam = reservaIds.join(',');
+            const imagenes = await campanasService.getImagenesDigitales(campanaId, idsParam);
+            imagenes.forEach(img => {
+              if (!archivosVistos.has(img.archivo)) {
+                archivosVistos.add(img.archivo);
+                archivos.push({
+                  nombre: img.archivo,
+                  tipo: 'digital',
+                  id: img.id,
+                  archivoData: img.archivoData,
+                  spot: img.spot,
+                });
+              }
+            });
+          }
+
+          setArchivosInstalacion(archivos);
+        } catch (error) {
+          console.error('Error al cargar archivos de instalación:', error);
+          setArchivosInstalacion([]);
+        } finally {
+          setIsLoadingArchivosInstalacion(false);
+        }
+      };
+      loadInstalacionFiles();
     }
   }, [isOpen, selectedInventory, tipo, campanaId]);
 
@@ -8366,11 +8823,38 @@ function CreateTaskModal({
       (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
+      // Indicaciones por archivo (si hay)
+      if (archivosInstalacion.length > 0) {
+        (payload as any).evidencia = JSON.stringify({
+          indicaciones: instalacionIndicaciones,
+          archivos: archivosInstalacion.map(a => ({
+            nombre: a.nombre,
+            tipo: a.tipo,
+          })),
+        });
+      }
       // Asignados múltiples para Instalación (área Operaciones)
       if (selectedAsignadosInstalacion.length > 0) {
         // Guardar IDs separados por coma
         (payload as any).id_asignado = selectedAsignadosInstalacion.map(u => u.id).join(', ');
         // Guardar nombres separados por coma
+        payload.asignado = selectedAsignadosInstalacion.map(u => u.nombre).join(', ');
+      }
+    } else if (tipo === 'Orden de Instalación') {
+      // Campos adicionales para Orden de Instalación (misma estructura que Instalación)
+      (payload as any).fecha_fin = fechaEntrega;
+      (payload as any).fecha_creacion = new Date().toISOString();
+      (payload as any).listado_inventario = selectedIds.join(',');
+      (payload as any).evidencia = JSON.stringify({
+        indicaciones: instalacionIndicaciones,
+        archivos: archivosInstalacion.map(a => ({
+          nombre: a.nombre,
+          tipo: a.tipo,
+        })),
+      });
+      // Asignados múltiples para Orden de Instalación (área Operaciones)
+      if (selectedAsignadosInstalacion.length > 0) {
+        (payload as any).id_asignado = selectedAsignadosInstalacion.map(u => u.id).join(', ');
         payload.asignado = selectedAsignadosInstalacion.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Impresión') {
@@ -8503,6 +8987,9 @@ function CreateTaskModal({
     // Reset campos de Programación
     setProgramacionIndicaciones({});
     setArchivosDigitalesProgramacion([]);
+    // Reset campos de Instalación indicaciones
+    setInstalacionIndicaciones({});
+    setArchivosInstalacion([]);
     // Reset campos de Programación (múltiples asignados área Operaciones)
     setSelectedAsignadosProgramacion([]);
     setAsignadoSearchProgramacion('');
@@ -8579,7 +9066,7 @@ function CreateTaskModal({
         {tipo && (
           <div className="space-y-4 border-t border-border pt-4">
             {/* Campos comunes - Título para tipos que no tienen formulario propio */}
-            {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Instalación' && tipo !== 'Testigo' && tipo !== 'Programación' && (
+            {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Instalación' && tipo !== 'Orden de Instalación' && tipo !== 'Testigo' && tipo !== 'Programación' && (
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
                 <input
@@ -8594,7 +9081,7 @@ function CreateTaskModal({
             )}
 
             {/* === FORMULARIO INSTALACIÓN === */}
-            {tipo === 'Instalación' && (
+            {(tipo === 'Instalación' || tipo === 'Orden de Instalación') && (
               <>
                 {/* Título */}
                 <div>
@@ -8723,6 +9210,48 @@ function CreateTaskModal({
                     disabled
                     className="w-full px-3 py-2 text-sm bg-zinc-800/50 border border-border rounded-lg text-zinc-400 cursor-not-allowed"
                   />
+                </div>
+                {/* Indicaciones por archivo (Instalación y Orden de Instalación) */}
+                <div className="border-t border-border pt-4">
+                  <h4 className="text-sm font-medium text-zinc-300 mb-3">Indicaciones por archivo</h4>
+                  {isLoadingArchivosInstalacion ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-500"></div>
+                      <span className="ml-2 text-xs text-zinc-400">Cargando archivos...</span>
+                    </div>
+                  ) : archivosInstalacion.length === 0 ? (
+                    <p className="text-xs text-zinc-500 italic">No se encontraron archivos para los items seleccionados</p>
+                  ) : (
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                      {archivosInstalacion.map((archivo, idx) => (
+                        <div key={`${archivo.tipo}-${archivo.nombre}-${idx}`} className="bg-zinc-800/50 rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            {archivo.archivoData && (
+                              <img
+                                src={archivo.archivoData}
+                                alt={archivo.nombre}
+                                className="w-10 h-10 object-cover rounded border border-border"
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-zinc-300 truncate">{archivo.nombre}</p>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${archivo.tipo === 'digital' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                {archivo.tipo === 'digital' ? 'Digital' : 'Tradicional'}
+                              </span>
+                            </div>
+                          </div>
+                          <textarea
+                            value={instalacionIndicaciones[archivo.nombre] || ''}
+                            onChange={(e) => setInstalacionIndicaciones(prev => ({ ...prev, [archivo.nombre]: e.target.value }))}
+                            rows={2}
+                            disabled={isSubmitting}
+                            className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
+                            placeholder="Indicaciones para este archivo..."
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -11211,9 +11740,9 @@ export function TareaSeguimientoPage() {
   const tasks = useMemo((): TaskRow[] => {
     return tareasAPI
       .filter((t) => {
-        if (t.estatus === 'Atendido' || t.estatus === 'Completado' || t.estatus === 'Finalizada') return false;
+        if (t.estatus === 'Atendido' || t.estatus === 'Completado' || t.estatus === 'Finalizada' || t.estatus === 'Activada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación'];
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación', 'Orden de Instalación'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
@@ -11241,9 +11770,9 @@ export function TareaSeguimientoPage() {
   const completedTasks = useMemo((): TaskRow[] => {
     return tareasAPI
       .filter((t) => {
-        if (t.estatus !== 'Atendido' && t.estatus !== 'Completado' && t.estatus !== 'Finalizada') return false;
+        if (t.estatus !== 'Atendido' && t.estatus !== 'Completado' && t.estatus !== 'Finalizada' && t.estatus !== 'Activada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación'];
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación', 'Orden de Instalación'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
@@ -11807,12 +12336,22 @@ export function TareaSeguimientoPage() {
         }
       } else if (hasIMU && !hasRecibido) {
         // Tradicionales con IMU: mostrar Impresión e Instalación
-        availableTipos = ['Impresión', 'Instalación'];
-        initialTipo = 'Impresión';
+        if (permissions.canCreateOrdenInstalacion) {
+          availableTipos = ['Impresión', 'Orden de Instalación', 'Instalación'];
+          initialTipo = 'Impresión';
+        } else {
+          availableTipos = ['Impresión', 'Instalación'];
+          initialTipo = 'Impresión';
+        }
       } else {
-        // Tradicionales sin IMU: solo Instalación
-        availableTipos = ['Instalación'];
-        initialTipo = 'Instalación';
+        // Tradicionales sin IMU: Instalación (y Orden de Instalación para Tráfico)
+        if (permissions.canCreateOrdenInstalacion) {
+          availableTipos = ['Orden de Instalación', 'Instalación'];
+          initialTipo = 'Orden de Instalación';
+        } else {
+          availableTipos = ['Instalación'];
+          initialTipo = 'Instalación';
+        }
       }
     } else if (allPendiente) {
       // Todos pendientes de revisión: solo mostrar Revisión de artes
@@ -11829,16 +12368,26 @@ export function TareaSeguimientoPage() {
           initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Programación' : 'Revisión de artes';
         }
       } else if (hasIMU && !hasRecibido) {
-        availableTipos = ['Instalación', 'Revisión de artes', 'Impresión'];
-        initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Impresión' : 'Revisión de artes';
+        if (permissions.canCreateOrdenInstalacion) {
+          availableTipos = ['Orden de Instalación', 'Instalación', 'Revisión de artes', 'Impresión'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Impresión' : 'Revisión de artes';
+        } else {
+          availableTipos = ['Instalación', 'Revisión de artes', 'Impresión'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Impresión' : 'Revisión de artes';
+        }
       } else {
-        availableTipos = ['Instalación', 'Revisión de artes'];
-        initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Instalación' : 'Revisión de artes';
+        if (permissions.canCreateOrdenInstalacion) {
+          availableTipos = ['Orden de Instalación', 'Instalación', 'Revisión de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Orden de Instalación' : 'Revisión de artes';
+        } else {
+          availableTipos = ['Instalación', 'Revisión de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Instalación' : 'Revisión de artes';
+        }
       }
     }
 
     return { initialTipo, availableTipos };
-  }, [selectedInventoryItems, activeMainTab, activeEstadoProgramacionTab, permissions.canCreateOrdenProgramacion]);
+  }, [selectedInventoryItems, activeMainTab, activeEstadoProgramacionTab, permissions.canCreateOrdenProgramacion, permissions.canCreateOrdenInstalacion]);
 
   // Verificar si alguno de los items seleccionados tiene relación con instalación
   const hasSelectedItemsWithInstalacion = useMemo(() => {
@@ -12874,7 +13423,7 @@ export function TareaSeguimientoPage() {
                       </>
                     )}
                   </button>
-                  {(permissions.canCreateTareasGestionArtes || permissions.canCreateOrdenProgramacion) && (
+                  {(permissions.canCreateTareasGestionArtes || permissions.canCreateOrdenProgramacion || permissions.canCreateOrdenInstalacion) && (
                     <button
                       onClick={handleCreateTaskClick}
                       disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
@@ -14857,11 +15406,12 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300">{task.titulo}</td>
                             <td className="p-2">
                               {/* Solo mostrar botón Abrir si: canOpenTasks=true Y (no tiene restricción O es tarea del tipo permitido) Y no está bloqueado por cannotOpenCorreccionTasks */}
-                              {permissions.canOpenTasks && !(permissions.cannotOpenCorreccionTasks && task.tipo === 'Correccion') && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks && !permissions.canOnlyOpenCorreccionTasks && !permissions.canOnlyOpenOrdenProgramacionTasks) ||
+                              {permissions.canOpenTasks && !(permissions.cannotOpenCorreccionTasks && task.tipo === 'Correccion') && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks && !permissions.canOnlyOpenCorreccionTasks && !permissions.canOnlyOpenOrdenProgramacionTasks && !permissions.canOnlyOpenOrdenInstalacionTasks) ||
                                 (permissions.canOnlyOpenImpresionTasks && task.tipo === 'Impresión') ||
                                 (permissions.canOnlyOpenRecepcionTasks && (task.tipo === 'Recepción' || task.tipo === 'Instalación' || task.tipo === 'Testigo' || task.tipo === 'Programación')) ||
-                                (permissions.canOnlyOpenCorreccionTasks && task.tipo === 'Correccion') ||
-                                (permissions.canOnlyOpenOrdenProgramacionTasks && task.tipo === 'Orden de Programación')) ? (
+                                (permissions.canOnlyOpenCorreccionTasks && (task.tipo === 'Correccion' || task.tipo === 'Instalación')) ||
+                                (permissions.canOnlyOpenOrdenProgramacionTasks && (task.tipo === 'Orden de Programación' || task.tipo === 'Orden de Instalación')) ||
+                                (permissions.canOnlyOpenOrdenInstalacionTasks && task.tipo === 'Orden de Instalación')) ? (
                                 <button
                                   onClick={() => {
                                     setSelectedTask(task);

@@ -821,6 +821,20 @@ export const campanasService = {
     return response.data.data;
   },
 
+  async activarOrdenInstalacion(campanaId: number, tareaId: number): Promise<{
+    orden: { id: number; estatus: string };
+    instalacion: { id: number; estatus: string };
+  }> {
+    const response = await api.post<ApiResponse<{
+      orden: { id: number; estatus: string };
+      instalacion: { id: number; estatus: string };
+    }>>(`/campanas/${campanaId}/tareas/${tareaId}/activar-orden-instalacion`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al activar orden de instalación');
+    }
+    return response.data.data;
+  },
+
   async deleteTarea(id: number, tareaId: number): Promise<void> {
     const response = await api.delete<ApiResponse<void>>(`/campanas/${id}/tareas/${tareaId}`);
     if (!response.data.success) {

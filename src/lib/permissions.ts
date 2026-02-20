@@ -97,6 +97,8 @@ export interface RolePermissions {
   cannotOpenCorreccionTasks: boolean; // No puede abrir tareas de tipo Corrección (para Diseñadores)
   canOpenTasks: boolean; // Puede abrir/ver detalle de tareas (false = solo visualización de la lista)
   canCreateOrdenProgramacion: boolean; // Puede crear tareas de Orden de Programación (para Tráfico)
+  canCreateOrdenInstalacion: boolean; // Puede crear tareas de Orden de Instalación (para Tráfico)
+  canOnlyOpenOrdenInstalacionTasks: boolean; // Solo puede abrir tareas de tipo Orden de Instalación (para Tráfico)
   canCreateInstalacionFromRecibido: boolean; // Crear tareas de Instalación desde tab Impresiones con estado recibido (Operaciones)
 
   // Inventarios
@@ -167,6 +169,8 @@ const defaultPermissions: RolePermissions = {
   cannotOpenCorreccionTasks: false,
   canOpenTasks: true,
   canCreateOrdenProgramacion: false,
+  canCreateOrdenInstalacion: false,
+  canOnlyOpenOrdenInstalacionTasks: false,
   canCreateInstalacionFromRecibido: false, // Default false - solo Operaciones
 
   canCreateInventarios: true,
@@ -245,7 +249,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // canEditGestionArtes: true (por defecto)
     canResolveProduccionTasks: false,
     canResolveCorreccionTasks: true, // SÍ puede resolver tareas de corrección de artes
-    canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de tipo Corrección
+    canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de tipo Corrección e Instalación
+    canOpenTasks: true,
+    canCreateTareasGestionArtes: true, // Puede crear tareas de Instalación
 
     // Inventarios: Oculto (ya se oculta con canSeeInventarios: false)
     canCreateInventarios: false,
@@ -694,7 +700,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canResolveRevisionArtesTasks: false,
     canResolveCorreccionTasks: true, // SÍ puede resolver tareas de corrección de artes
     canCreateTareasGestionArtes: true, // Puede crear tareas de Revisión de artes después de subir artes
-    canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de corrección
+    canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de corrección e Instalación
+    canOpenTasks: true,
 
     canCreateInventarios: false,
     canEditInventarios: false,
@@ -997,7 +1004,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateTareasGestionArtes: false,
     canOpenTasks: true,
     canCreateOrdenProgramacion: true,
+    canCreateOrdenInstalacion: true,
     canOnlyOpenOrdenProgramacionTasks: true,
+    canOnlyOpenOrdenInstalacionTasks: true,
 
     // Inventarios - solo visualización
     canCreateInventarios: false,
@@ -1060,7 +1069,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateTareasGestionArtes: false,
     canOpenTasks: true,
     canCreateOrdenProgramacion: true,
+    canCreateOrdenInstalacion: true,
     canOnlyOpenOrdenProgramacionTasks: true,
+    canOnlyOpenOrdenInstalacionTasks: true,
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -1126,7 +1137,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateTareasGestionArtes: false,
     canOpenTasks: true,
     canCreateOrdenProgramacion: true,
+    canCreateOrdenInstalacion: true,
     canOnlyOpenOrdenProgramacionTasks: true,
+    canOnlyOpenOrdenInstalacionTasks: true,
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -1192,7 +1205,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateTareasGestionArtes: false,
     canOpenTasks: true,
     canCreateOrdenProgramacion: true,
+    canCreateOrdenInstalacion: true,
     canOnlyOpenOrdenProgramacionTasks: true,
+    canOnlyOpenOrdenInstalacionTasks: true,
 
     // Inventarios - oculto
     canCreateInventarios: false,
