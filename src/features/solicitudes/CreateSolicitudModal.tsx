@@ -2298,8 +2298,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <input
                       type="number"
                       min={0}
-                      value={newCara.renta}
+                      value={newCara.renta || ''}
                       onChange={(e) => setNewCara({ ...newCara, renta: parseInt(e.target.value) || 0 })}
+                      placeholder='0'
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     />
                   </div>
@@ -2311,8 +2312,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       type="number"
                       min={0}
                       max={newCara.renta}
-                      value={newCara.bonificacion}
+                      value={newCara.bonificacion || ''}
                       onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                      placeholder='0'
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     />
                   </div>
