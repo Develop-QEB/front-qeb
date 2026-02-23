@@ -4852,7 +4852,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   {/* Notes and Description */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Notas</label>
+                      <label className="text-xs text-zinc-500">Notas Dirección</label>
                       <textarea
                         value={notas}
                         onChange={(e) => canEditResumen && setNotas(e.target.value)}
@@ -4862,7 +4862,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Descripción</label>
+                      <label className="text-xs text-zinc-500">Descripción Trafico</label>
                       <textarea
                         value={descripcion}
                         onChange={(e) => canEditResumen && setDescripcion(e.target.value)}

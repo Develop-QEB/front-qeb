@@ -725,8 +725,14 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     </div>
                     {data.solicitud.descripcion && (
                       <div className="pt-2 border-t border-zinc-700/50">
-                        <span className="text-zinc-500 text-sm block mb-1">Descripción</span>
+                        <span className="text-zinc-500 text-sm block mb-1">Descripción Trafico</span>
                         <span className="text-zinc-300 text-sm">{data.solicitud.descripcion}</span>
+                      </div>
+                    )}
+                    {data.solicitud.notas && (
+                      <div className="pt-2 border-t border-zinc-700/50">
+                        <span className="text-zinc-500 text-sm block mb-1">Notas Dirección</span>
+                        <span className="text-zinc-300 text-sm">{data.solicitud.notas}</span>
                       </div>
                     )}
                   </div>

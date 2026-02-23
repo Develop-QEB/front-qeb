@@ -699,7 +699,7 @@ export function ClientePropuestaPage() {
               <h2 className="text-2xl font-bold mb-2 text-[#0054A6]">
                 {data?.cotizacion?.nombre_campania || 'Propuesta'}
               </h2>
-              <p className="text-gray-600">{data?.propuesta?.descripcion || ''}</p>
+               {/* <p className="text-gray-600">{data?.propuesta?.descripcion || ''}</p> */}
             </div>
             <div className="bg-[#7AB800]/10 text-[#7AB800] px-3 py-1 rounded-full text-sm font-medium">
               {data?.propuesta?.status || 'Propuesta'}

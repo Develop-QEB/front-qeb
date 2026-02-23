@@ -1499,18 +1499,21 @@ export function CampanaDetailPage() {
               <InfoItem label="Actualizado" value={campana.updated_at} type="date" />
             </div>
 
-            {(campana.observaciones || campana.descripcion || campana.notas) && (
+            {(campana.descripcion || campana.observaciones) && (
               <>
-                <h3 className="text-sm font-semibold mb-2 mt-4 text-purple-300 uppercase tracking-wide">Notas</h3>
+                <h3 className="text-sm font-semibold mb-2 mt-4 text-purple-300 uppercase tracking-wide">Descripción Tráfico</h3>
                 {campana.descripcion && (
                   <p className="text-sm text-muted-foreground mb-2">{campana.descripcion}</p>
                 )}
                 {campana.observaciones && (
                   <p className="text-sm text-muted-foreground mb-2">{campana.observaciones}</p>
                 )}
-                {campana.notas && (
-                  <p className="text-sm text-muted-foreground">{campana.notas}</p>
-                )}
+              </>
+            )}
+            {campana.notas && (
+              <>
+                <h3 className="text-sm font-semibold mb-2 mt-4 text-purple-300 uppercase tracking-wide">Notas Dirección</h3>
+                <p className="text-sm text-muted-foreground">{campana.notas}</p>
               </>
             )}
           </div>

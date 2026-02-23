@@ -8,6 +8,7 @@ import { formatDate } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import { useSocketCampana } from '../../hooks/useSocket';
 import { getPermissions } from '../../lib/permissions';
+import { useFormPersist } from '../../hooks/useFormPersist';
 
 interface StatusCampanaModalProps {
   isOpen: boolean;
@@ -28,8 +29,21 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
   const [selectedStatus, setSelectedStatus] = useState(campana.status || '');
-  const [comment, setComment] = useState('');
+  const { save: saveDraft, load: loadDraft, clear: clearDraft } = useFormPersist(`qeb_campana_comment_${campana.id}`);
+  const [comment, setComment] = useState(() => {
+    const draft = loadDraft<{ comment: string }>();
+    return draft?.comment || '';
+  });
   const commentsEndRef = useRef<HTMLDivElement>(null);
+
+  // Guardar borrador del comentario en localStorage
+  useEffect(() => {
+    if (comment) {
+      saveDraft({ comment });
+    } else {
+      clearDraft();
+    }
+  }, [comment, saveDraft, clearDraft]);
 
   // WebSocket para actualizar comentarios en tiempo real
   useSocketCampana(isOpen ? campana.id : null);

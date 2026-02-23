@@ -13,6 +13,7 @@ import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import type { SapDatabase } from '../../store/environmentStore';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
+import { useFormPersist } from '../../hooks/useFormPersist';
 
 // Tarifa publica lookup map based on ItemCode (full SAP codes with tarifa_publica values)
 const TARIFA_PUBLICA_MAP: Record<string, number> = {
@@ -755,6 +756,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // IMU
   const [imu, setImu] = useState(false);
 
+  // Draft persistence
+  const [restoredFromDraft, setRestoredFromDraft] = useState(false);
+  const { save: saveDraft, load: loadDraft, clear: clearDraft } = useFormPersist('qeb_solicitud_draft');
+
   // Expanded catorcenas in table
   const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
 
@@ -900,9 +905,68 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     };
   }, [isOpen]);
 
+  // Cargar borrador de localStorage al montar (solo en modo crear)
+  useEffect(() => {
+    if (isEditMode) return;
+    const draft = loadDraft<{
+      step: number;
+      selectedCuic: typeof selectedCuic;
+      selectedAsignados: typeof selectedAsignados;
+      nombreCampania: string;
+      descripcion: string;
+      notas: string;
+      yearInicio?: number;
+      yearFin?: number;
+      catorcenaInicio?: number;
+      catorcenaFin?: number;
+      caras: typeof caras;
+      imu: boolean;
+      newCara: typeof newCara;
+    }>();
+    if (!draft) return;
+    const hasData = draft.nombreCampania || draft.selectedCuic || draft.caras?.length > 0;
+    if (!hasData) return;
+    if (draft.step) setStep(draft.step);
+    if (draft.selectedCuic) setSelectedCuic(draft.selectedCuic);
+    if (draft.selectedAsignados?.length) setSelectedAsignados(draft.selectedAsignados);
+    if (draft.nombreCampania) setNombreCampania(draft.nombreCampania);
+    if (draft.descripcion) setDescripcion(draft.descripcion);
+    if (draft.notas) setNotas(draft.notas);
+    if (draft.yearInicio !== undefined) setYearInicio(draft.yearInicio);
+    if (draft.yearFin !== undefined) setYearFin(draft.yearFin);
+    if (draft.catorcenaInicio !== undefined) setCatorcenaInicio(draft.catorcenaInicio);
+    if (draft.catorcenaFin !== undefined) setCatorcenaFin(draft.catorcenaFin);
+    if (draft.caras?.length) setCaras(draft.caras);
+    if (draft.imu !== undefined) setImu(draft.imu);
+    if (draft.newCara) setNewCara(draft.newCara);
+    setRestoredFromDraft(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Guardar borrador en localStorage cuando cambia el estado (solo en modo crear)
+  useEffect(() => {
+    if (isEditMode) return;
+    if (!nombreCampania && !selectedCuic && !caras.length && !descripcion && !notas) return;
+    saveDraft({
+      step,
+      selectedCuic,
+      selectedAsignados,
+      nombreCampania,
+      descripcion,
+      notas,
+      yearInicio,
+      yearFin,
+      catorcenaInicio,
+      catorcenaFin,
+      caras,
+      imu,
+      newCara,
+    });
+  }, [step, selectedCuic, selectedAsignados, nombreCampania, descripcion, notas, yearInicio, yearFin, catorcenaInicio, catorcenaFin, caras, imu, newCara, isEditMode, saveDraft]);
+
   // Reset form when opening modal in create mode
   useEffect(() => {
-    if (isOpen && !isEditMode) {
+    if (isOpen && !isEditMode && !restoredFromDraft) {
       // Reset all form state for a fresh start
       setStep(1);
       setSelectedCuic(null);
@@ -947,12 +1011,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tarifaPublica: 0,
       });
     }
-  }, [isOpen, isEditMode, currentUser]);
+  }, [isOpen, isEditMode, currentUser, restoredFromDraft]);
 
   // Reset form state when switching between different solicitudes in edit mode
   useEffect(() => {
     if (isOpen && isEditMode && editSolicitudId) {
       // Reset state before loading new solicitud data
+      setRestoredFromDraft(false);
       setSelectedCuic(null);
       setSelectedAsignados([]);
       setNombreCampania('');
@@ -1378,6 +1443,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Reset form
   const resetForm = () => {
+    clearDraft();
+    setRestoredFromDraft(false);
     setStep(1);
     setSelectedCuic(null);
     setSelectedAsignados([]);
@@ -1628,7 +1695,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
       <div className="relative w-full max-w-5xl max-h-[95vh] h-[95vh] bg-zinc-900 rounded-2xl border border-zinc-700 shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
@@ -1687,6 +1754,20 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             ))}
           </div>
         </div>
+
+        {/* Banner de borrador restaurado */}
+        {restoredFromDraft && !isEditMode && (
+          <div className="mx-4 mt-2 mb-1 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
+            <span>Borrador restaurado. Puedes continuar donde lo dejaste.</span>
+            <button
+              type="button"
+              onClick={() => { clearDraft(); resetForm(); }}
+              className="ml-3 underline hover:text-amber-100 transition-colors whitespace-nowrap"
+            >
+              Descartar
+            </button>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-6">
@@ -1862,28 +1943,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           {/* Step 2: Campaña */}
           {step === 2 && (
             <div className="space-y-6">
-              {/* Campaign name and notas */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-300">Nombre de Campaña</label>
-                  <input
-                    type="text"
-                    value={nombreCampania}
-                    onChange={(e) => setNombreCampania(e.target.value)}
-                    placeholder="Nombre de la campaña..."
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-300">Notas</label>
-                  <input
-                    type="text"
-                    value={notas}
-                    onChange={(e) => setNotas(e.target.value)}
-                    placeholder="Notas breves..."
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                  />
-                </div>
+              {/* Campaign name */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-zinc-300">Nombre de Campaña</label>
+                <input
+                  type="text"
+                  value={nombreCampania}
+                  onChange={(e) => setNombreCampania(e.target.value)}
+                  placeholder="Nombre de la campaña..."
+                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
               </div>
 
               {/* Date range */}
@@ -2067,13 +2136,25 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 )}
               </div>
 
-              {/* Descripción (large) */}
+              {/* Descripción */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Descripción</label>
+                <label className="text-sm font-medium text-zinc-300">Descripción Trafico</label>
                 <textarea
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
                   placeholder="Descripción detallada de la campaña..."
+                  rows={4}
+                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+                />
+              </div>
+
+              {/* Notas */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-zinc-300">Notas Dirección</label>
+                <textarea
+                  value={notas}
+                  onChange={(e) => setNotas(e.target.value)}
+                  placeholder="Notas breves..."
                   rows={4}
                   className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
                 />

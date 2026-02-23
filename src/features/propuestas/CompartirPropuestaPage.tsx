@@ -907,9 +907,6 @@ export function CompartirPropuestaPage() {
             {details?.cotizacion?.nombre_campania || 'Propuesta sin nombre'}
           </h2>
           <p className="text-zinc-400">{details?.propuesta?.descripcion || 'Sin descripción'}</p>
-          {details?.propuesta?.notas && (
-            <p className="text-sm text-zinc-500 mt-2">Notas: {details.propuesta.notas}</p>
-          )}
           <div className="flex gap-4 mt-4 text-sm">
             <span className="text-purple-300">
               Inicio: <span className="text-white font-medium">{periodoInicio}</span>
