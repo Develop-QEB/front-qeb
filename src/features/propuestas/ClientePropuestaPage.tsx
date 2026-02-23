@@ -58,6 +58,7 @@ interface InventarioReservado {
   tarifa_publica: number | null;
   numero_catorcena?: number | null;
   anio_catorcena?: number | null;
+  inicio_periodo?: string | null;
 }
 
 interface PublicPropuestaData {

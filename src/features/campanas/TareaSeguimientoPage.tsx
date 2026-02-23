@@ -972,6 +972,7 @@ function UploadArtModal({
   isSubmitting,
   error,
   campanaId,
+  tipoPeriodo = 'catorcena',
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -983,6 +984,7 @@ function UploadArtModal({
   isSubmitting: boolean;
   error: string | null;
   campanaId: number;
+  tipoPeriodo?: string;
 }) {
   const [selectedOption, setSelectedOption] = useState<UploadOption>('file');
   const [existingArtUrl, setExistingArtUrl] = useState('');
@@ -2141,6 +2143,7 @@ function TestigoTaskView({
   campanaId,
   getCatorcenaFromFechaFin,
   canResolveProduccionTasks = true,
+  tipoPeriodo = 'catorcena',
 }: {
   task: TaskRow;
   taskInventory: InventoryRow[];
@@ -2149,6 +2152,7 @@ function TestigoTaskView({
   campanaId: number;
   getCatorcenaFromFechaFin: string | null;
   canResolveProduccionTasks?: boolean;
+  tipoPeriodo?: string;
 }) {
   const queryClient = useQueryClient();
   const [testigoFile, setTestigoFile] = useState<File | null>(null);
@@ -2630,6 +2634,7 @@ function TaskDetailModal({
   canResolveRevisionArtesTasks = true,
   canResolveCorreccionTasks = true,
   digitalSummaryMap,
+  tipoPeriodo = 'catorcena',
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -2653,6 +2658,7 @@ function TaskDetailModal({
   canResolveRevisionArtesTasks?: boolean;
   canResolveCorreccionTasks?: boolean;
   digitalSummaryMap: Map<number, DigitalFileSummary>;
+  tipoPeriodo?: string;
 }) {
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
@@ -7040,6 +7046,7 @@ function TaskDetailModal({
               campanaId={campanaId}
               getCatorcenaFromFechaFin={getCatorcenaFromFechaFin}
               canResolveProduccionTasks={canResolveProduccionTasks}
+              tipoPeriodo={tipoPeriodo}
             />
           )}
 
@@ -15685,6 +15692,7 @@ export function TareaSeguimientoPage() {
         isSubmitting={assignArteMutation.isPending}
         error={uploadArtError}
         campanaId={campanaId}
+        tipoPeriodo={tipoPeriodo}
       />
 
       {/* Digital Gallery Modal */}
@@ -15925,6 +15933,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
         canResolveRevisionArtesTasks={permissions.canResolveRevisionArtesTasks}
         canResolveCorreccionTasks={permissions.canResolveCorreccionTasks}
         digitalSummaryMap={digitalSummaryMap}
+        tipoPeriodo={tipoPeriodo}
       />
 
       {/* Modal para ver archivo testigo */}
