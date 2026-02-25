@@ -59,8 +59,13 @@ export const inventariosService = {
     return response.data.data;
   },
 
-  async getStats(): Promise<InventarioStats> {
-    const response = await api.get<ApiResponse<InventarioStats>>('/inventarios/stats');
+  async getStats(params?: {
+    search?: string;
+    tipo?: string;
+    estatus?: string;
+    plaza?: string;
+  }): Promise<InventarioStats> {
+    const response = await api.get<ApiResponse<InventarioStats>>('/inventarios/stats', { params });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener estadisticas');
     }

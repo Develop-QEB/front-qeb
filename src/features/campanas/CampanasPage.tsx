@@ -692,6 +692,21 @@ export function CampanasPage() {
       }),
   });
 
+  // Stats query — global KPIs with same filters
+  const { data: statsData, isLoading: isLoadingStats } = useQuery({
+    queryKey: ['campanas-stats', status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
+    queryFn: () =>
+      campanasService.getStats({
+        status: status || undefined,
+        search: debouncedSearch || undefined,
+        yearInicio,
+        yearFin,
+        catorcenaInicio,
+        catorcenaFin,
+        tipoPeriodo: tipoPeriodo || undefined,
+      }),
+  });
+
   // Get current catorcena
   const currentCatorcena = useMemo((): Catorcena | null => {
     if (!catorcenasData?.data) return null;
@@ -1071,21 +1086,16 @@ export function CampanasPage() {
       });
   }, [filteredData, activeGroupings]);
 
-  // Estadísticas para gráfica de Status
+  // Estadísticas para gráfica de Status — from global stats
   const statusChartData = useMemo(() => {
-    const counts: Record<string, number> = {};
-
-    filteredData.forEach(item => {
-      const status = item.status?.toLowerCase() || 'sin status';
-      counts[status] = (counts[status] || 0) + 1;
-    });
+    if (!statsData?.byStatus) return [];
 
     let fallbackIndex = 0;
-    return Object.entries(counts)
+    return Object.entries(statsData.byStatus)
       .map(([name, value]) => {
-        let color = CHART_COLORS.status[name as keyof typeof CHART_COLORS.status];
+        const key = name.toLowerCase();
+        let color = CHART_COLORS.status[key as keyof typeof CHART_COLORS.status];
         if (!color) {
-          // Usar color del array fallback para estatus no definidos
           color = CHART_COLORS.statusFallback[fallbackIndex % CHART_COLORS.statusFallback.length];
           fallbackIndex++;
         }
@@ -1096,7 +1106,7 @@ export function CampanasPage() {
         };
       })
       .sort((a, b) => b.value - a.value);
-  }, [filteredData]);
+  }, [statsData]);
 
   // Estadísticas para gráfica de Categoría de Mercado
   const categoryChartData = useMemo(() => {
@@ -1473,7 +1483,7 @@ export function CampanasPage() {
             <div>
               <p className="text-zinc-400 text-sm font-medium mb-1">Total Campañas</p>
               <h3 className="text-4xl font-bold text-white tracking-tight">
-                {isLoading ? '...' : filteredData.length.toLocaleString()}
+                {isLoadingStats ? '...' : (statsData?.total ?? 0).toLocaleString()}
               </h3>
             </div>
             <div className="mt-4 flex items-center gap-2">
@@ -1485,7 +1495,7 @@ export function CampanasPage() {
 
           {/* Chart Card: Status Distribution */}
           <div className="col-span-1 md:col-span-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-4 flex items-center relative overflow-hidden">
-            {!isLoading && statusChartData.length > 0 ? (
+            {!isLoadingStats && statusChartData.length > 0 ? (
               <div className="w-full h-[140px] flex items-center">
                 <div className="h-full min-w-[140px]">
                   <ResponsiveContainer width="100%" height="100%">
@@ -1541,7 +1551,7 @@ export function CampanasPage() {
               </div>
             ) : (
               <div className="w-full h-[140px] flex items-center justify-center text-zinc-500 text-sm">
-                {isLoading ? 'Cargando...' : 'Sin datos'}
+                {isLoadingStats ? 'Cargando...' : 'Sin datos'}
               </div>
             )}
           </div>
@@ -1553,7 +1563,7 @@ export function CampanasPage() {
               <p className="text-zinc-400 text-sm font-medium mb-1">Con APS</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-bold text-emerald-400">
-                  {isLoading ? '...' : filteredData.filter(c => c.has_aps).length.toLocaleString()}
+                  {isLoadingStats ? '...' : (statsData?.conAps ?? 0).toLocaleString()}
                 </h3>
                 <span className="text-xs text-emerald-500/80 font-medium">asignados</span>
               </div>
@@ -1562,12 +1572,12 @@ export function CampanasPage() {
             <div className="mt-4 w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500"
-                style={{ width: `${filteredData.length ? (filteredData.filter(c => c.has_aps).length / filteredData.length) * 100 : 0}%` }}
+                style={{ width: `${statsData?.total ? ((statsData.conAps / statsData.total) * 100) : 0}%` }}
               />
             </div>
             <div className="mt-2 flex justify-between text-[10px] text-zinc-500">
-              <span>Sin APS: {filteredData.filter(c => !c.has_aps).length}</span>
-              <span>{filteredData.length ? Math.round((filteredData.filter(c => c.has_aps).length / filteredData.length) * 100) : 0}%</span>
+              <span>Sin APS: {statsData?.sinAps ?? 0}</span>
+              <span>{statsData?.total ? Math.round((statsData.conAps / statsData.total) * 100) : 0}%</span>
             </div>
           </div>
         </div>

@@ -2,13 +2,13 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Map, List, History, X, Loader2, AlertCircle, Calendar as CalendarIcon,
-  Plus, Edit2, Ban, CheckCircle, Package, MapPin, DollarSign, ChevronDown, ChevronRight,
+  Plus, Edit2, Ban, CheckCircle, Package, MapPin, ChevronDown, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Monitor, Ruler
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { inventariosService } from '../../services/inventarios.service';
 import { Inventario } from '../../types';
-import { formatCurrency } from '../../lib/utils';
+
 import { InventarioMap } from './InventarioMap';
 
 const ESTATUS_STYLES: Record<string, { bg: string; text: string; border: string }> = {
@@ -124,6 +124,18 @@ export function InventariosPage() {
   const { data: tipos } = useQuery({ queryKey: ['inventarios', 'tipos'], queryFn: () => inventariosService.getTipos() });
   const { data: plazas } = useQuery({ queryKey: ['inventarios', 'plazas'], queryFn: () => inventariosService.getPlazas() });
   const { data: estatusList } = useQuery({ queryKey: ['inventarios', 'estatus'], queryFn: () => inventariosService.getEstatus() });
+
+  // Stats query — global KPIs with same filters
+  const { data: statsData, isLoading: isLoadingStats } = useQuery({
+    queryKey: ['inventarios-stats', search, tipo, estatus, plaza],
+    queryFn: () =>
+      inventariosService.getStats({
+        search: search || undefined,
+        tipo: tipo || undefined,
+        estatus: estatus || undefined,
+        plaza: plaza || undefined,
+      }),
+  });
 
   const { data: historialData, isLoading: isLoadingHistorial } = useQuery({
     queryKey: ['inventario-historial', selectedId],
@@ -306,15 +318,15 @@ export function InventariosPage() {
       <Header title="Inventarios" />
 
       <div className="p-6 space-y-5">
-        {/* KPI Cards - Same style as CampanasPage */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Total */}
-          <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+          <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none group-hover:bg-purple-500/20 transition-all duration-500" />
             <div>
               <p className="text-zinc-400 text-sm font-medium mb-1">Total Inventarios</p>
               <h3 className="text-4xl font-bold text-white tracking-tight">
-                {isLoading ? '...' : totalItems.toLocaleString()}
+                {isLoadingStats ? '...' : (statsData?.total ?? 0).toLocaleString()}
               </h3>
             </div>
             <div className="mt-4 flex items-center gap-2">
@@ -324,34 +336,14 @@ export function InventariosPage() {
             </div>
           </div>
 
-          {/* Status breakdown */}
-          <div className="col-span-1 md:col-span-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 relative overflow-hidden">
-            <p className="text-zinc-400 text-sm font-medium mb-3">Distribución por Estatus (página actual)</p>
-            <div className="flex flex-wrap gap-2">
-              {['Disponible', 'Reservado', 'Ocupado', 'Mantenimiento', 'Bloqueado'].map(est => {
-                const count = data?.data?.filter(i => i.estatus === est).length || 0;
-                const style = getEstatusStyle(est);
-                return (
-                  <div key={est} className="flex items-center gap-2 p-2.5 rounded-xl bg-zinc-800/30 border border-zinc-800/50 min-w-[110px]">
-                    <div className={`w-2 h-8 rounded-full ${style.bg.replace('/20', '')}`} style={{ backgroundColor: est === 'Disponible' ? '#10b981' : est === 'Reservado' ? '#f59e0b' : est === 'Ocupado' ? '#06b6d4' : est === 'Bloqueado' ? '#ef4444' : '#71717a' }} />
-                    <div>
-                      <div className="text-sm font-bold text-white">{count}</div>
-                      <div className="text-[10px] text-zinc-400 uppercase tracking-wide">{est}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Bloqueados */}
-          <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+          <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-red-500/10 rounded-full blur-2xl -mr-5 -mb-5 pointer-events-none group-hover:bg-red-500/20 transition-all duration-500" />
             <div>
               <p className="text-zinc-400 text-sm font-medium mb-1">Bloqueados</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-bold text-red-400">
-                  {isLoading ? '...' : (data?.data?.filter(i => i.estatus === 'Bloqueado').length || 0)}
+                  {isLoadingStats ? '...' : (statsData?.bloqueados ?? 0)}
                 </h3>
                 <span className="text-xs text-red-500/80 font-medium">ocultos</span>
               </div>
@@ -359,12 +351,12 @@ export function InventariosPage() {
             <div className="mt-4 w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-red-500 to-orange-500 transition-all duration-500"
-                style={{ width: `${data?.data?.length ? ((data.data.filter(i => i.estatus === 'Bloqueado').length / data.data.length) * 100) : 0}%` }}
+                style={{ width: `${statsData?.total ? ((statsData.bloqueados / statsData.total) * 100) : 0}%` }}
               />
             </div>
             <div className="mt-2 flex justify-between text-[10px] text-zinc-500">
-              <span>Activos: {(data?.data?.length || 0) - (data?.data?.filter(i => i.estatus === 'Bloqueado').length || 0)}</span>
-              <span>{data?.data?.length ? Math.round(((data.data.filter(i => i.estatus === 'Bloqueado').length) / data.data.length) * 100) : 0}%</span>
+              <span>Activos: {(statsData?.total ?? 0) - (statsData?.bloqueados ?? 0)}</span>
+              <span>{statsData?.total ? Math.round((statsData.bloqueados / statsData.total) * 100) : 0}%</span>
             </div>
           </div>
         </div>
@@ -492,7 +484,6 @@ export function InventariosPage() {
                           { col: 'plaza' as SortCol, label: 'Plaza', sortable: true },
                           { col: '' as SortCol, label: 'Cara', sortable: false },
                           { col: '' as SortCol, label: 'Dimensiones', sortable: false },
-                          { col: 'tarifa_publica' as SortCol, label: 'Tarifa', sortable: true },
                           { col: 'estatus' as SortCol, label: 'Estatus', sortable: true },
                         ].map(({ col, label, sortable }) => (
                           <th
@@ -511,7 +502,8 @@ export function InventariosPage() {
                     </thead>
                     <tbody>
                       {sortedData.map(item => {
-                        const estStyle = getEstatusStyle(item.estatus);
+                        const realEstatus = item.estatus_real || item.estatus;
+                        const estStyle = getEstatusStyle(realEstatus);
                         const isBlocked = item.estatus === 'Bloqueado';
                         return (
                           <tr key={item.id} className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${isBlocked ? 'opacity-40' : ''}`}>
@@ -547,14 +539,8 @@ export function InventariosPage() {
                               </span>
                             </td>
                             <td className="px-4 py-3">
-                              <span className="inline-flex items-center gap-1 text-sm text-zinc-300">
-                                <DollarSign className="h-3 w-3 text-zinc-600" />
-                                {formatCurrency(item.tarifa_publica)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${estStyle.bg} ${estStyle.text} border ${estStyle.border}`}>
-                                {item.estatus || 'Sin estatus'}
+                                {item.estatus_real || item.estatus || 'Sin estatus'}
                               </span>
                             </td>
                             <td className="px-4 py-3">

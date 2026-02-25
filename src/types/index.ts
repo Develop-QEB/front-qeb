@@ -131,6 +131,7 @@ export interface Inventario {
   orientacion: string | null;
   tarifa_piso: number | null;
   tarifa_publica: number | null;
+  estatus_real?: string | null;
 }
 
 // Inventario para mapa (campos reducidos)
@@ -158,6 +159,8 @@ export interface InventarioStats {
   disponibles: number;
   ocupados: number;
   mantenimiento: number;
+  reservados: number;
+  bloqueados: number;
   porTipo: { tipo: string; cantidad: number }[];
   porPlaza: { plaza: string; cantidad: number }[];
 }
@@ -323,6 +326,9 @@ export interface CampanaStats {
   total: number;
   activas: number;
   inactivas: number;
+  byStatus: Record<string, number>;
+  conAps: number;
+  sinAps: number;
 }
 
 export interface CampanaWithComments extends Campana {
