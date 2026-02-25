@@ -14,6 +14,17 @@ const tutorials = [
       'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_4a12c5d8-6fa6-418e-ac55-415ea0b724e1/page/1770993940788.png',
     paddingBottom: 'calc(55.66% + 25px)',
   },
+  {
+    id: 'Gestion-Solicitudes',
+    category: 'Comercial',
+    title: 'Gestion de Solicitudes',
+    demoUrl: 'https://app.storylane.io/demo/aasux8feuib8?embed=inline_overlay',
+    width: 2560,
+    height: 1425,
+    previewImage:
+      'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_6c04e8be-d673-40bf-a4eb-f4344fc91ebf/page/1771447559402.png',
+    paddingBottom: 'calc(55.66% + 25px)',
+  }
 ];
 
 const categories = [...new Set(tutorials.map((t) => t.category))];
