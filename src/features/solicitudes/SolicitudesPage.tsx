@@ -502,6 +502,7 @@ export function SolicitudesPage() {
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
+  const [tipoPeriodo, setTipoPeriodo] = useState('');
   const [sortBy, setSortBy] = useState('fecha');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [groupBy, setGroupBy] = useState('');
@@ -579,7 +580,7 @@ export function SolicitudesPage() {
 
   // Fetch solicitudes
   const { data, isLoading } = useQuery({
-    queryKey: ['solicitudes', page, status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy],
+    queryKey: ['solicitudes', page, status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo],
     queryFn: () =>
       solicitudesService.getAll({
         page,
@@ -593,6 +594,7 @@ export function SolicitudesPage() {
         sortBy,
         sortOrder,
         groupBy: groupBy || undefined,
+        tipoPeriodo: tipoPeriodo || undefined,
       }),
   });
 
@@ -779,6 +781,7 @@ export function SolicitudesPage() {
 
   const clearAllFilters = () => {
     setStatus('');
+    setTipoPeriodo('');
     setYearInicio(undefined);
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
@@ -844,6 +847,45 @@ export function SolicitudesPage() {
         </td>
         <td className="px-4 py-3">
           <span className="font-medium text-emerald-400">{formatCurrency(item.presupuesto)}</span>
+        </td>
+        <td className="px-4 py-3">
+          {(item as any).tipo_periodo ? (
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+              (item as any).tipo_periodo === 'mensual'
+                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+            }`}>
+              {(item as any).tipo_periodo === 'mensual' ? 'Mensual' : 'Catorcena'}
+            </span>
+          ) : <span className="text-zinc-600 text-xs">-</span>}
+        </td>
+        <td className="px-4 py-3">
+          {(() => {
+            const tp = (item as any).tipo_periodo;
+            if (tp === 'mensual' && (item as any).periodo_fecha_inicio) {
+              const d = new Date((item as any).periodo_fecha_inicio);
+              const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+              return <span className="text-zinc-300 text-xs">{meses[d.getMonth()]} {d.getFullYear()}</span>;
+            }
+            if ((item as any).catorcena_inicio) {
+              return <span className="text-zinc-300 text-xs">Cat {(item as any).catorcena_inicio} / {(item as any).anio_inicio}</span>;
+            }
+            return <span className="text-zinc-600 text-xs">-</span>;
+          })()}
+        </td>
+        <td className="px-4 py-3">
+          {(() => {
+            const tp = (item as any).tipo_periodo;
+            if (tp === 'mensual' && (item as any).periodo_fecha_fin) {
+              const d = new Date((item as any).periodo_fecha_fin);
+              const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+              return <span className="text-zinc-300 text-xs">{meses[d.getMonth()]} {d.getFullYear()}</span>;
+            }
+            if ((item as any).catorcena_fin) {
+              return <span className="text-zinc-300 text-xs">Cat {(item as any).catorcena_fin} / {(item as any).anio_fin}</span>;
+            }
+            return <span className="text-zinc-600 text-xs">-</span>;
+          })()}
         </td>
         <td className="px-4 py-3">
           <span className="text-zinc-300 text-xs">{item.asignado || '-'}</span>
@@ -1208,6 +1250,18 @@ export function SolicitudesPage() {
 
                 <div className="h-4 w-px bg-zinc-700 mx-1" />
 
+                {/* Tipo Periodo Filter */}
+                <span className="text-xs text-zinc-500 mr-1">Periodo:</span>
+                <FilterChip
+                  label="Tipo Periodo"
+                  options={['catorcena', 'mensual']}
+                  value={tipoPeriodo}
+                  onChange={(val) => { setTipoPeriodo(val); setPage(1); }}
+                  onClear={() => { setTipoPeriodo(''); setPage(1); }}
+                />
+
+                <div className="h-4 w-px bg-zinc-700 mx-1" />
+
                 {/* Current Catorcena Indicator */}
                 {currentCatorcena && (
                   <>
@@ -1322,6 +1376,9 @@ export function SolicitudesPage() {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Descripcion</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Presupuesto</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Tipo</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Inicio</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fin</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Asignado</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Status</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider"></th>

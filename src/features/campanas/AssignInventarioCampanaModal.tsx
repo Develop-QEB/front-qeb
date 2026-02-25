@@ -130,12 +130,11 @@ const getFormatoFromArticulo = (itemName: string): string => {
 };
 
 // Tipo auto-detection from article name
-const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' | '' => {
-  if (!itemName) return '';
+const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
+  if (!itemName) return 'Tradicional';
   const name = itemName.toUpperCase();
   if (name.includes('DIGITAL') || name.includes('DIG')) return 'Digital';
-  if (name.includes('TRADICIONAL') || name.includes('RENTA')) return 'Tradicional';
-  return '';
+  return 'Tradicional';
 };
 
 // Get tarifa from ItemCode

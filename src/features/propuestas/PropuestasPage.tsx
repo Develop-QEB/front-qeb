@@ -987,6 +987,7 @@ export function PropuestasPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [tipoPeriodo, setTipoPeriodo] = useState('');
   const [yearInicio, setYearInicio] = useState<number | undefined>(undefined);
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
@@ -1048,7 +1049,7 @@ export function PropuestasPage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['propuestas', page, status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy],
+    queryKey: ['propuestas', page, status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo],
     queryFn: () =>
       propuestasService.getAll({
         page,
@@ -1060,13 +1061,14 @@ export function PropuestasPage() {
         catorcenaInicio,
         catorcenaFin,
         soloAtendidas: true,
+        tipoPeriodo: tipoPeriodo || undefined,
       }),
   });
 
   const allStatuses = STATUS_OPTIONS;
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0);
+  const hasActiveFilters = !!(status || tipoPeriodo || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0);
 
   // Get unique values for each field (for advanced filter dropdowns)
   const getUniqueFieldValues = useMemo(() => {
@@ -1119,6 +1121,7 @@ export function PropuestasPage() {
 
   const clearAllFilters = () => {
     setStatus('');
+    setTipoPeriodo('');
     setYearInicio(undefined);
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
@@ -1621,6 +1624,18 @@ export function PropuestasPage() {
                   value={status}
                   onChange={(val) => { setStatus(val); setPage(1); }}
                   onClear={() => { setStatus(''); setPage(1); }}
+                />
+
+                <div className="h-4 w-px bg-zinc-700 mx-1" />
+
+                {/* Tipo Periodo Filter */}
+                <span className="text-xs text-zinc-500 mr-1">Periodo:</span>
+                <FilterChip
+                  label="Tipo Periodo"
+                  options={['catorcena', 'mensual']}
+                  value={tipoPeriodo}
+                  onChange={(val) => { setTipoPeriodo(val); setPage(1); }}
+                  onClear={() => { setTipoPeriodo(''); setPage(1); }}
                 />
 
                 <div className="h-4 w-px bg-zinc-700 mx-1" />

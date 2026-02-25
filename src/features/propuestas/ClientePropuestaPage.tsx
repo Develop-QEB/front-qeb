@@ -557,19 +557,21 @@ export function ClientePropuestaPage() {
           doc.setFontSize(8);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(255, 255, 255);
+          const groupTarifaUnit = items.length > 0 ? (Number(items[0].tarifa_publica) || 0) : 0;
           doc.text(`${articulo}`, marginX + 10, y + 4);
           doc.setFont('helvetica', 'normal');
-          doc.text(`Caras: ${groupCaras}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
+          doc.text(`Caras: ${groupCaras}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
           y += 8;
 
           autoTable(doc, {
-            head: [['Ciudad', 'Ubicacion', 'Formato', 'Orientacion', 'Caras', 'Periodo']],
+            head: [['Ciudad', 'Ubicacion', 'Formato', 'Caras', 'Latitud', 'Longitud', 'Periodo']],
             body: items.map(i => [
               i.plaza || '-',
               (i.ubicacion || '-').substring(0, 50),
               i.tipo_de_mueble || '-',
-              i.tipo_de_cara || '-',
               String(i.caras_totales || 0),
+              i.latitud?.toFixed(6) || '-',
+              i.longitud?.toFixed(6) || '-',
               formatInicioPeriodo(i, tipoPeriodo),
             ]),
             startY: y,
@@ -578,10 +580,13 @@ export function ClientePropuestaPage() {
             headStyles: { fillColor: [230, 240, 250], textColor: [PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]], fontStyle: 'bold', fontSize: 7 },
             alternateRowStyles: { fillColor: [250, 252, 255] },
             columnStyles: {
-              0: { cellWidth: 35 },
-              1: { cellWidth: 80 },
-              4: { halign: 'center', cellWidth: 20 },
-              5: { cellWidth: 45 },
+              0: { cellWidth: 30 },
+              1: { cellWidth: 65 },
+              2: { cellWidth: 30 },
+              3: { halign: 'center', cellWidth: 18 },
+              4: { cellWidth: 28 },
+              5: { cellWidth: 28 },
+              6: { cellWidth: 40 },
             },
           });
 
@@ -916,6 +921,7 @@ export function ClientePropuestaPage() {
                               </div>
                               <div className="flex items-center gap-3 text-xs">
                                 <span className="text-gray-400">Caras: <span className="text-gray-700 font-medium">{artGroup.totalCaras}</span></span>
+                                <span className="text-amber-600">Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
                                 <span className="text-[#7AB800]">{formatCurrency(artGroup.totalInversion)}</span>
                               </div>
                             </button>
@@ -928,12 +934,6 @@ export function ClientePropuestaPage() {
                                     <span className="text-xs text-gray-400">Formatos:</span>
                                     {artGroup.formatos.map(f => (
                                       <span key={f} className="px-2 py-0.5 bg-blue-50 text-[#0054A6] rounded text-[10px] font-medium border border-blue-100">{f}</span>
-                                    ))}
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-xs text-gray-400">Tipos:</span>
-                                    {artGroup.tipos.map(t => (
-                                      <span key={t} className="px-2 py-0.5 bg-green-50 text-[#7AB800] rounded text-[10px] font-medium border border-green-100">{t}</span>
                                     ))}
                                   </div>
                                   <div className="flex items-center gap-1.5">
@@ -950,8 +950,9 @@ export function ClientePropuestaPage() {
                                       <tr className="bg-[#0054A6]/5">
                                         <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Plaza</th>
                                         <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Formato</th>
-                                        <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Tipo</th>
                                         <th className="px-3 py-2 text-center text-xs font-semibold text-[#0054A6]">Caras</th>
+                                        <th className="px-3 py-2 text-right text-xs font-semibold text-[#0054A6]">Lat</th>
+                                        <th className="px-3 py-2 text-right text-xs font-semibold text-[#0054A6]">Long</th>
                                         <th className="px-3 py-2 text-right text-xs font-semibold text-amber-600">Tarifa</th>
                                         <th className="px-3 py-2 text-right text-xs font-semibold text-[#7AB800]">Inversion</th>
                                       </tr>
@@ -963,8 +964,9 @@ export function ClientePropuestaPage() {
                                           <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
                                             <td className="px-3 py-2 text-gray-700 text-xs">{item.plaza || '-'}</td>
                                             <td className="px-3 py-2 text-gray-600 text-xs">{item.tipo_de_mueble || '-'}</td>
-                                            <td className="px-3 py-2 text-gray-600 text-xs">{item.tipo_de_cara || '-'}</td>
                                             <td className="px-3 py-2 text-center font-semibold text-gray-800 text-xs">{item.caras_totales}</td>
+                                            <td className="px-3 py-2 text-right text-gray-400 text-xs font-mono">{item.latitud?.toFixed(6) || '-'}</td>
+                                            <td className="px-3 py-2 text-right text-gray-400 text-xs font-mono">{item.longitud?.toFixed(6) || '-'}</td>
                                             <td className="px-3 py-2 text-right text-amber-600 text-xs">{formatCurrency(item.tarifa_publica || 0)}</td>
                                             <td className="px-3 py-2 text-right text-[#7AB800] font-medium text-xs">{formatCurrency(inv)}</td>
                                           </tr>

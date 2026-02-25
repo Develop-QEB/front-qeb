@@ -1470,9 +1470,15 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
 // Row components
 function CATRow({ item }: { item: OrdenMontajeCAT }) {
-  const negociacionColor = item.negociacion === 'BONIFICACION'
-    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+  const getNegociacionColor = (neg: string | null) => {
+    switch (neg) {
+      case 'BONIFICACION': return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+      case 'CORTESIA': return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
+      case 'INTERCAMBIO': return 'bg-purple-500/20 text-purple-300 border-purple-500/30';
+      default: return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+    }
+  };
+  const negociacionColor = getNegociacionColor(item.negociacion);
 
   return (
     <tr className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
@@ -1511,9 +1517,16 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
 }
 
 function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGallery: (item: OrdenMontajeINVIAN) => void }) {
-  const operacionColor = item.Operacion === 'BONIFICACION'
-    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+  const getOperacionColor = (op: string | null) => {
+    switch (op) {
+      case 'BONIFICACION': return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+      case 'CORTESIA': return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
+      case 'INTERCAMBIO': return 'bg-purple-500/20 text-purple-300 border-purple-500/30';
+      default: return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+    }
+  };
+  const operacionColor = getOperacionColor(item.Operacion);
+  const tipoDistColor = getOperacionColor(item.TipoDistribucion);
 
   const arteUrl = getFileUrl(item.ArteUrl);
   const fileName = item.ArteUrl?.split('/').pop() || null;
@@ -1598,7 +1611,7 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
       <td className="px-3 py-2 text-xs text-zinc-300">{item.Cara || '-'}</td>
       <td className="px-3 py-2 text-xs text-zinc-300">{item.Ciudad || '-'}</td>
       <td className="px-3 py-2">
-        <span className={`px-2 py-0.5 rounded-full text-[10px] border ${operacionColor}`}>
+        <span className={`px-2 py-0.5 rounded-full text-[10px] border ${tipoDistColor}`}>
           {item.TipoDistribucion || '-'}
         </span>
       </td>

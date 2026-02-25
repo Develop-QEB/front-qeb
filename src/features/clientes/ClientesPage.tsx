@@ -523,6 +523,7 @@ export function ClientesPage() {
   // Estado para el modal de ver cliente
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Estados para filtros avanzados
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -1034,6 +1035,15 @@ export function ClientesPage() {
                 />
               </div>
 
+              {/* Nuevo Cliente + Acciones */}
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white text-sm font-medium transition-all shadow-lg shadow-purple-500/20"
+              >
+                <Plus className="h-4 w-4" />
+                Nuevo Cliente
+              </button>
+
               {/* Botones de Acción: Filtrar, Agrupar, Ordenar */}
               <div className="flex items-center gap-2">
                 {/* Botón de Filtros */}
@@ -1427,6 +1437,92 @@ export function ClientesPage() {
         onClose={() => { setShowViewModal(false); setSelectedCliente(null); }}
         cliente={selectedCliente}
       />
+
+      {/* Create Client Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowCreateModal(false)}>
+          <div className="bg-zinc-900 border border-purple-500/20 rounded-2xl w-full max-w-lg mx-4 overflow-hidden shadow-2xl shadow-purple-500/10" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40 px-6 py-4 border-b border-purple-500/20">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Plus className="h-5 w-5 text-purple-400" />
+                Nuevo Cliente Manual
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1">CUIC: <span className="text-purple-300 font-mono">0</span> (sin SAP)</p>
+            </div>
+            {/* Form */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.target as HTMLFormElement;
+                const data = {
+                  CUIC: 0,
+                  T0_U_RazonSocial: (form.elements.namedItem('razon_social') as HTMLInputElement).value,
+                  T0_U_Cliente: (form.elements.namedItem('cliente') as HTMLInputElement).value,
+                  T1_U_Cliente: (form.elements.namedItem('cliente') as HTMLInputElement).value,
+                  T2_U_Marca: (form.elements.namedItem('marca') as HTMLInputElement).value || null,
+                  T2_U_Producto: (form.elements.namedItem('producto') as HTMLInputElement).value || null,
+                  T2_U_Categoria: (form.elements.namedItem('categoria') as HTMLInputElement).value || null,
+                  T1_U_UnidadNegocio: (form.elements.namedItem('unidad_negocio') as HTMLInputElement).value || null,
+                  T0_U_Agencia: (form.elements.namedItem('agencia') as HTMLInputElement).value || null,
+                  T0_U_Asesor: (form.elements.namedItem('asesor') as HTMLInputElement).value || null,
+                  sap_database: null,
+                };
+                try {
+                  await createMutation.mutateAsync(data);
+                  setShowCreateModal(false);
+                } catch (err) {
+                  console.error('Error creating client:', err);
+                }
+              }}
+              className="p-6 space-y-4"
+            >
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="text-xs text-zinc-400 mb-1 block">Razón Social *</label>
+                  <input name="razon_social" required className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Razón social del cliente" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs text-zinc-400 mb-1 block">Cliente *</label>
+                  <input name="cliente" required className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Nombre del cliente" />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 mb-1 block">Marca</label>
+                  <input name="marca" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Marca" />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 mb-1 block">Producto</label>
+                  <input name="producto" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Producto" />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 mb-1 block">Categoría</label>
+                  <input name="categoria" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Categoría" />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 mb-1 block">Unidad de Negocio</label>
+                  <input name="unidad_negocio" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Unidad de negocio" />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 mb-1 block">Agencia</label>
+                  <input name="agencia" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Agencia" />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 mb-1 block">Asesor</label>
+                  <input name="asesor" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Asesor" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 rounded-lg border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 text-sm transition-all">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={createMutation.isPending} className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white text-sm font-medium transition-all disabled:opacity-50">
+                  {createMutation.isPending ? 'Creando...' : 'Crear Cliente'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

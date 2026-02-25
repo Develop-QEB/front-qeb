@@ -629,6 +629,7 @@ export function CampanasPage() {
   }, [searchParams, setSearchParams]);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
+  const [tipoPeriodo, setTipoPeriodo] = useState('');
   const [yearInicio, setYearInicio] = useState<number | undefined>(undefined);
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
@@ -677,7 +678,7 @@ export function CampanasPage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, debouncedSearch],
+    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, debouncedSearch, tipoPeriodo],
     queryFn: () =>
       campanasService.getAll({
         page,
@@ -687,6 +688,7 @@ export function CampanasPage() {
         yearFin,
         catorcenaInicio,
         catorcenaFin,
+        tipoPeriodo: tipoPeriodo || undefined,
       }),
   });
 
@@ -1213,6 +1215,7 @@ export function CampanasPage() {
   const clearAllFilters = () => {
     setSearch('');
     setStatus('');
+    setTipoPeriodo('');
     setYearInicio(undefined);
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
@@ -1741,6 +1744,18 @@ export function CampanasPage() {
                   value={status}
                   onChange={(val) => { setStatus(val); setPage(1); }}
                   onClear={() => { setStatus(''); setPage(1); }}
+                />
+
+                <div className="h-4 w-px bg-zinc-700 mx-1" />
+
+                {/* Tipo Periodo Filter */}
+                <span className="text-xs text-zinc-500 mr-1">Periodo:</span>
+                <FilterChip
+                  label="Tipo Periodo"
+                  options={['catorcena', 'mensual']}
+                  value={tipoPeriodo}
+                  onChange={(val) => { setTipoPeriodo(val); setPage(1); }}
+                  onClear={() => { setTipoPeriodo(''); setPage(1); }}
                 />
 
                 <div className="h-4 w-px bg-zinc-700 mx-1" />

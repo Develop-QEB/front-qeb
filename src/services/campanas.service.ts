@@ -277,7 +277,7 @@ export interface OrdenMontajeCAT {
   unidad_negocio: string | null;
   campania: string | null;
   numero_articulo: string | null;
-  negociacion: 'BONIFICACION' | 'RENTA';
+  negociacion: 'BONIFICACION' | 'RENTA' | 'CORTESIA' | 'INTERCAMBIO';
   caras: number;
   tarifa: number | null;
   monto_total: number | null;
@@ -316,6 +316,7 @@ export interface OrdenMontajeINVIAN {
   tradicional_digital?: string | null;
   indicaciones?: string | null;
   num_artes_digitales?: number | null;
+  cortesia?: number | null;
 }
 
 export interface ComentarioRevisionArte {
@@ -469,6 +470,7 @@ export interface CampanasParams {
   yearFin?: number;
   catorcenaInicio?: number;
   catorcenaFin?: number;
+  tipoPeriodo?: string;
 }
 
 export const campanasService = {

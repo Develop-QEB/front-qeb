@@ -13,6 +13,7 @@ export interface SolicitudesParams {
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   groupBy?: string;
+  tipoPeriodo?: string;
 }
 
 export interface CatorcenasResponse {

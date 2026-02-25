@@ -750,22 +750,24 @@ export function CompartirPropuestaPage() {
           doc.setFontSize(8);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(...WHITE);
+          const groupTarifaUnit = items.length > 0 ? (Number(items[0].tarifa_publica) || 0) : 0;
           doc.text(`${articulo}`, marginX + 10, y + 4);
           doc.setFont('helvetica', 'normal');
-          doc.text(`Caras: ${groupCaras}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
+          doc.text(`Caras: ${groupCaras}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
           y += 8;
 
           // === TABLE FOR THIS ARTICULO ===
           const tableData = items.map(i => [
             String(i.id),
             (i.ubicacion || '').substring(0, 50),
-            i.tipo_de_cara || '',
             i.tipo_de_mueble || i.mueble || '',
             i.municipio || '',
+            i.latitud?.toFixed(6) || '-',
+            i.longitud?.toFixed(6) || '-',
           ]);
 
           autoTable(doc, {
-            head: [['ID', 'Ubicación', 'Tipo Cara', 'Mueble', 'Municipio']],
+            head: [['ID', 'Ubicación', 'Mueble', 'Municipio', 'Latitud', 'Longitud']],
             body: tableData,
             startY: y,
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -774,10 +776,11 @@ export function CompartirPropuestaPage() {
             alternateRowStyles: { fillColor: [250, 252, 255] },
             columnStyles: {
               0: { cellWidth: 18 },
-              1: { cellWidth: 80 },
-              2: { cellWidth: 25 },
-              3: { cellWidth: 40 },
-              4: { cellWidth: 40 },
+              1: { cellWidth: 70 },
+              2: { cellWidth: 35 },
+              3: { cellWidth: 35 },
+              4: { cellWidth: 28 },
+              5: { cellWidth: 28 },
             },
           });
 
@@ -1228,6 +1231,7 @@ export function CompartirPropuestaPage() {
                                 </div>
                                 <div className="flex items-center gap-3 text-xs">
                                   <span className="text-zinc-400">Caras: <span className="text-white font-medium">{artGroup.totalCaras}</span></span>
+                                  <span className="text-amber-300">Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
                                   <span className="text-emerald-400">{formatCurrency(artGroup.totalInversion)}</span>
                                 </div>
                               </button>
@@ -1252,12 +1256,6 @@ export function CompartirPropuestaPage() {
                                     ))}
                                   </div>
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-xs text-zinc-500">Tipos:</span>
-                                    {artGroup.tipos.map(t => (
-                                      <span key={t} className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded text-[10px] font-medium border border-violet-400/20">{t}</span>
-                                    ))}
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
                                     <span className="text-xs text-zinc-500">Plazas:</span>
                                     {artGroup.plazas.map(p => (
                                       <span key={p} className="px-2 py-0.5 bg-zinc-700 text-zinc-300 rounded text-[10px] font-medium">{p}</span>
@@ -1273,8 +1271,9 @@ export function CompartirPropuestaPage() {
                                         <th className="px-3 py-2 text-left text-xs font-semibold text-purple-200">Codigo</th>
                                         <th className="px-3 py-2 text-left text-xs font-semibold text-purple-200">Plaza</th>
                                         <th className="px-3 py-2 text-left text-xs font-semibold text-purple-200">Formato</th>
-                                        <th className="px-3 py-2 text-left text-xs font-semibold text-purple-200">Tipo</th>
                                         <th className="px-3 py-2 text-center text-xs font-semibold text-purple-200">Caras</th>
+                                        <th className="px-3 py-2 text-right text-xs font-semibold text-purple-200">Lat</th>
+                                        <th className="px-3 py-2 text-right text-xs font-semibold text-purple-200">Long</th>
                                         <th className="px-3 py-2 text-right text-xs font-semibold text-amber-300">Tarifa</th>
                                         <th className="px-3 py-2 text-right text-xs font-semibold text-emerald-300">Inversion</th>
                                       </tr>
@@ -1290,8 +1289,9 @@ export function CompartirPropuestaPage() {
                                             <td className="px-3 py-2 text-blue-300 font-mono text-xs">{item.codigo_unico}</td>
                                             <td className="px-3 py-2 text-zinc-300 text-xs">{item.plaza || '-'}</td>
                                             <td className="px-3 py-2 text-zinc-400 text-xs">{item.tipo_de_mueble || '-'}</td>
-                                            <td className="px-3 py-2 text-zinc-400 text-xs">{item.tipo_de_cara || '-'}</td>
                                             <td className="px-3 py-2 text-center font-semibold text-white text-xs">{item.caras_totales}</td>
+                                            <td className="px-3 py-2 text-right text-zinc-500 text-xs font-mono">{item.latitud?.toFixed(6) || '-'}</td>
+                                            <td className="px-3 py-2 text-right text-zinc-500 text-xs font-mono">{item.longitud?.toFixed(6) || '-'}</td>
                                             <td className="px-3 py-2 text-right text-amber-300 text-xs">{formatCurrency(item.tarifa_publica || 0)}</td>
                                             <td className="px-3 py-2 text-right text-emerald-300 font-medium text-xs">{formatCurrency(inv)}</td>
                                           </tr>

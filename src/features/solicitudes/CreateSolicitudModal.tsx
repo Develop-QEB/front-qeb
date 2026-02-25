@@ -274,12 +274,11 @@ const getFormatoFromArticulo = (itemName: string): string => {
 };
 
 // Tipo auto-detection from article name (Tradicional or Digital)
-const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' | '' => {
-  if (!itemName) return '';
+const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
+  if (!itemName) return 'Tradicional';
   const name = itemName.toUpperCase();
   if (name.includes('DIGITAL') || name.includes('DIG')) return 'Digital';
-  if (name.includes('TRADICIONAL') || name.includes('RENTA')) return 'Tradicional';
-  return '';
+  return 'Tradicional';
 };
 
 // Get tarifa and costo from ItemCode - exact match first, then default calculation
@@ -363,18 +362,33 @@ const CIUDAD_ESTADO_MAP: Record<string, string> = {
 // Some entries are state-level (no specific ciudad should be set)
 const STATE_LEVEL_ENTRIES = ['CDMX', 'CIUDAD DE MEXICO', 'DF', 'ESTADO DE MEXICO', 'MEXICO'];
 
-// Extract city from article name and return estado/ciudad
-const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string | null } | null => {
+// Multi-city auto-fill rules for specific article patterns
+const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudades: string[] }[] = [
+  { pattern: /\bPUERTO VALLARTA\b|\ PV\b/, estado: 'Jalisco', ciudades: ['Puerto Vallarta'] },
+  { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudades: ['Guadalajara', 'Zapopan', 'Tlaquepaque'] },
+  { pattern: /\bMTY\b|\bMONTERREY\b/, estado: 'Nuevo León', ciudades: ['Monterrey', 'San Pedro', 'San Nicolas', 'Apodaca', 'Escobedo', 'Santa Catarina'] },
+  { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b/, estado: 'Ciudad de México', ciudades: ['Ciudad de Mexico', 'Toluca', 'Naucalpan', 'Ecatepec'] },
+];
+
+// Extract city from article name and return estado/ciudades
+const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudades: string[] } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
+  // Check multi-city rules first (order matters: PV before GD)
+  for (const rule of MULTI_CITY_RULES) {
+    if (rule.pattern.test(name)) {
+      return { estado: rule.estado, ciudades: rule.ciudades };
+    }
+  }
+
+  // Fallback to single-city CIUDAD_ESTADO_MAP
   for (const [ciudad, estado] of Object.entries(CIUDAD_ESTADO_MAP)) {
     if (name.includes(ciudad)) {
-      // If this is a state-level entry, don't return a ciudad
       if (STATE_LEVEL_ENTRIES.includes(ciudad)) {
-        return { estado, ciudad: null };
+        return { estado, ciudades: [] };
       }
-      return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
+      return { estado, ciudades: [ciudad.charAt(0) + ciudad.slice(1).toLowerCase()] };
     }
   }
   return null;
@@ -2207,19 +2221,24 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     onChange={(item) => {
                       // Auto-set tarifa publica from ItemCode mapping
                       const tarifa = getTarifaFromItemCode(item.ItemCode);
-                      // Auto-set estado and ciudad from ItemName
+                      // Auto-set estado and ciudades from ItemName
                       const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
                       // Auto-set formato from ItemName
                       const formato = getFormatoFromArticulo(item.ItemName);
                       // Auto-set tipo from ItemName
                       const tipo = getTipoFromName(item.ItemName);
+                      // Detect CT (cortesia) articles
+                      const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
+                      const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
+                      const isTarifaCero = isCortesia || isIntercambio;
 
                       setNewCara({
                         ...newCara,
                         articulo: item,
-                        tarifaPublica: tarifa.tarifa_publica,
+                        tarifaPublica: isTarifaCero ? 0 : tarifa.tarifa_publica,
+                        renta: isCortesia ? 0 : newCara.renta,
                         estado: ciudadEstado?.estado || newCara.estado,
-                        ciudades: ciudadEstado?.ciudad ? [ciudadEstado.ciudad] : newCara.ciudades,
+                        ciudades: ciudadEstado?.ciudades && ciudadEstado.ciudades.length > 0 ? ciudadEstado.ciudades : newCara.ciudades,
                         formato: formato || newCara.formato,
                         tipo: tipo || newCara.tipo,
                       });
@@ -2375,24 +2394,32 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                   {/* Renta */}
                   <div>
-                    <label className="text-xs text-zinc-500">Renta</label>
+                    <label className="text-xs text-zinc-500">
+                      Renta
+                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && (
+                        <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
+                      )}
+                    </label>
                     <input
                       type="number"
                       min={0}
                       value={newCara.renta || ''}
                       onChange={(e) => setNewCara({ ...newCara, renta: parseInt(e.target.value) || 0 })}
                       placeholder='0'
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT')}
+                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed"
                     />
                   </div>
 
                   {/* Bonificacion */}
                   <div>
-                    <label className="text-xs text-zinc-500">Bonificación</label>
+                    <label className="text-xs text-zinc-500">
+                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
+                    </label>
                     <input
                       type="number"
                       min={0}
-                      max={newCara.renta}
+                      max={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? undefined : newCara.renta}
                       value={newCara.bonificacion || ''}
                       onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
                       placeholder='0'
@@ -2408,7 +2435,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       value={newCara.tarifaPublica || ''}
                       onChange={(e) => setNewCara({ ...newCara, tarifaPublica: parseFloat(e.target.value) || 0 })}
                       placeholder="0"
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-emerald-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN')}
+                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-emerald-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed"
                     />
                   </div>
                 </div>
@@ -2432,6 +2460,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     ))}
                   </div>
                 </div>
+
+                {/* Preview: Cortesia info */}
+                {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && newCara.bonificacion > 0 && (
+                  <div className="mt-4 p-3 bg-cyan-500/10 rounded-lg border border-cyan-500/20 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-cyan-300 font-medium">Cortesía</span>
+                      <span className="text-cyan-300">{newCara.bonificacion} caras (sin costo)</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Preview calculation */}
                 {newCara.renta > 0 && newCara.tarifaPublica > 0 && (

@@ -131,12 +131,11 @@ const getFormatoFromArticulo = (itemName: string): string => {
 };
 
 // Tipo auto-detection from article name
-const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' | '' => {
-  if (!itemName) return '';
+const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
+  if (!itemName) return 'Tradicional';
   const name = itemName.toUpperCase();
   if (name.includes('DIGITAL') || name.includes('DIG')) return 'Digital';
-  if (name.includes('TRADICIONAL') || name.includes('RENTA')) return 'Tradicional';
-  return '';
+  return 'Tradicional';
 };
 
 // Get tarifa from ItemCode
@@ -1061,9 +1060,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Calculate KPIs for caras
   const carasKPIs = useMemo(() => {
     const totalRenta = caras.reduce((acc, c) => acc + (c.caras || 0), 0);
-    const totalBonificacion = caras.reduce((acc, c) => acc + (c.bonificacion || 0), 0);
+    const totalBonificacion = caras.filter(c => !(c.articulo || '').toUpperCase().startsWith('CT')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
+    const totalCortesia = caras.filter(c => (c.articulo || '').toUpperCase().startsWith('CT')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
     const totalInversion = caras.reduce((acc, c) => acc + ((c.caras || 0) * (c.tarifa_publica || 0)), 0);
-    return { totalRenta, totalBonificacion, totalInversion };
+    return { totalRenta, totalBonificacion, totalCortesia, totalInversion };
   }, [caras]);
 
   // Merge all reservas by grupo_completo_id (for display)
@@ -2579,11 +2579,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       }
     };
 
+    const isCT = (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT');
     setConfirmModal({
       isOpen: true,
-      title: 'Confirmar Bonificación',
-      message: `¿Estás seguro de bonificar ${selectedInventory.size} espacios?`,
-      confirmText: 'Bonificar',
+      title: isCT ? 'Confirmar Cortesía' : 'Confirmar Bonificación',
+      message: `¿Estás seguro de ${isCT ? 'asignar como cortesía' : 'bonificar'} ${selectedInventory.size} espacios?`,
+      confirmText: isCT ? 'Cortesía' : 'Bonificar',
       onConfirm: runBonificacion,
     });
   };
@@ -3162,25 +3163,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 </div>
               </div>
 
-              {/* Bonificacion KPI */}
+              {/* Bonificacion/Cortesia KPI */}
               <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-zinc-400 flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                    Bonificación
+                    <div className={`w-2 h-2 rounded-full ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500' : 'bg-emerald-500'}`} />
+                    {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                   </span>
-                  <span className="text-sm font-bold text-emerald-400">
+                  <span className={`text-sm font-bold ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'}`}>
                     {(selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion} / {selectedCaraForSearch?.bonificacion || 0}
                   </span>
                 </div>
                 <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all"
+                    className={`h-full bg-gradient-to-r ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'from-cyan-500 to-cyan-400' : 'from-emerald-500 to-emerald-400'} rounded-full transition-all`}
                     style={{ width: `${Math.min(100, ((selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion) / (selectedCaraForSearch?.bonificacion || 1) * 100)}%` }}
                   />
                 </div>
                 <div className="mt-1 text-xs text-zinc-500">
-                  <span className="text-emerald-400 font-medium">{remainingToAssign.bonificacion}</span> restantes
+                  <span className={`${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'} font-medium`}>{remainingToAssign.bonificacion}</span> restantes
                 </div>
               </div>
 
@@ -3819,17 +3820,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <button
                         onClick={handleReserveAsBonificacion}
                         disabled={isSaving || selectedInventory.size === 0 || remainingToAssign.bonificacion <= 0}
-                        className="flex-1 px-4 py-2.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-sm font-medium hover:bg-emerald-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className={`flex-1 px-4 py-2.5 ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/30' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30'} border rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
                       >
                         {isSaving ? (
                           <>
-                            <div className="h-4 w-4 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin" />
+                            <div className={`h-4 w-4 border-2 ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'border-cyan-300' : 'border-emerald-300'} border-t-transparent rounded-full animate-spin`} />
                             Guardando...
                           </>
                         ) : (
                           <>
                             <Gift className="h-4 w-4" />
-                            Bonificación
+                            {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                           </>
                         )}
                       </button>
@@ -3904,12 +3905,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           onClick={() => setReservadosTipoFilter(opt)}
                           className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${reservadosTipoFilter === opt
                             ? opt === 'Todos' ? 'bg-zinc-600 text-white shadow'
-                              : opt === 'Bonificacion' ? 'bg-emerald-500 text-white shadow'
+                              : opt === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500 text-white shadow' : 'bg-emerald-500 text-white shadow')
                               : 'bg-blue-500 text-white shadow'
                             : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
                           }`}
                         >
-                          {opt === 'Bonificacion' ? 'Bonif.' : opt}
+                          {opt === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif.') : opt}
                         </button>
                       ))}
                     </div>
@@ -4140,9 +4141,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   </td>
                                   <td className="px-4 py-2">
                                     <span className={`px-2 py-1 rounded-full text-xs ${
-                                      reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+                                      reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
                                     }`}>
-                                      {reserva.tipo}
+                                      {reserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : reserva.tipo}
                                     </span>
                                   </td>
                                   <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
@@ -4190,9 +4191,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </td>
                               <td className="px-4 py-2">
                                 <span className={`px-2 py-1 rounded-full text-xs ${
-                                  reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+                                  reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
                                 }`}>
-                                  {reserva.tipo}
+                                  {reserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : reserva.tipo}
                                 </span>
                               </td>
                               <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
@@ -4420,10 +4421,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                         <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
                                                           ? 'bg-blue-500/20 text-blue-300'
                                                           : reserva.tipo === 'Bonificacion'
-                                                            ? 'bg-emerald-500/20 text-emerald-300'
+                                                            ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300')
                                                             : 'bg-amber-500/20 text-amber-300'
                                                           }`}>
-                                                          {reserva.tipo}
+                                                          {reserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : reserva.tipo}
                                                         </span>
                                                       )}
                                                     </td>
@@ -4484,10 +4485,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <span className={`px-2 py-1 rounded-full text-xs ${editingReserva.tipo === 'Flujo'
                           ? 'bg-blue-500/20 text-blue-300'
                           : editingReserva.tipo === 'Bonificacion'
-                            ? 'bg-emerald-500/20 text-emerald-300'
+                            ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300')
                             : 'bg-amber-500/20 text-amber-300'
                           }`}>
-                          {editingReserva.tipo}
+                          {editingReserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : editingReserva.tipo}
                         </span>
                       </div>
                       <div>
@@ -4548,7 +4549,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           <span className="text-blue-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Contraflujo').length}</span> Contraflujo
                         </span>
                         <span className="text-zinc-500">
-                          <span className="text-emerald-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Bonificacion').length}</span> Bonificación
+                          <span className={`${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'} font-medium`}>{currentCaraReservas.filter(r => r.tipo === 'Bonificacion').length}</span> {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                         </span>
                       </div>
                       <span className="text-zinc-400">
@@ -4642,7 +4643,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-emerald-500 ring-1 ring-emerald-400/30" />
                           <div>
-                            <span className="text-zinc-300">Bonificación</span>
+                            <span className="text-zinc-300">{(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}</span>
                           </div>
                         </div>
                       </div>
@@ -5003,6 +5004,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <span className="text-zinc-400">
                       Bonificación: <span className="text-emerald-300 font-medium">{carasKPIs.totalBonificacion}</span>
                     </span>
+                    {carasKPIs.totalCortesia > 0 && (
+                      <span className="text-zinc-400">
+                        Cortesía: <span className="text-cyan-300 font-medium">{carasKPIs.totalCortesia}</span>
+                      </span>
+                    )}
                     <span className="text-zinc-400">
                       Inversión: <span className="text-amber-300 font-medium">{formatCurrency(carasKPIs.totalInversion)}</span>
                     </span>
@@ -5040,10 +5046,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
                             const formato = getFormatoFromArticulo(item.ItemName);
                             const tipo = getTipoFromName(item.ItemName);
+                            const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
+                            const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
+                            const isTarifaCero = isCortesia || isIntercambio;
                             setNewCara({
                               ...newCara,
                               articulo: item.ItemCode,
-                              tarifa_publica: tarifa,
+                              tarifa_publica: isTarifaCero ? 0 : tarifa,
+                              caras: isCortesia ? 0 : newCara.caras,
+                              caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
+                              caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,
                               estados: ciudadEstado?.estado || newCara.estados,
                               // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
                               ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
@@ -5248,26 +5260,30 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </div>
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras en Renta</label>
+                        <label className="text-xs text-zinc-500">
+                          Caras en Renta
+                          {newCara.articulo?.toUpperCase().startsWith('CT') && (
+                            <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
+                          )}
+                        </label>
                         <input
                           type="number"
                           value={newCara.caras || ''}
                           onChange={(e) => {
                             if (!canEditResumen) return;
                             const val = parseInt(e.target.value) || 0;
-                            // Auto-calculate flujo and contraflujo (half and half)
                             const flujo = Math.ceil(val / 2);
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras Bonificadas</label>
+                        <label className="text-xs text-zinc-500">{newCara.articulo?.toUpperCase().startsWith('CT') ? 'Cortesía' : 'Caras Bonificadas'}</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
@@ -5283,8 +5299,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           type="number"
                           value={newCara.tarifa_publica || ''}
                           onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          disabled={!canEditResumen}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -5962,8 +5978,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           <span className="text-zinc-500 text-[11px]">{reserva.formato}</span>
                                           <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
                                             reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
-                                            reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
-                                          }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                            reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
+                                          }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif') : reserva.tipo}</span>
                                         </label>
                                       ))
                                     ) : (
@@ -6011,8 +6027,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                       <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
                                                       <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
                                                         reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
-                                                        reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
-                                                      }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                                        reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
+                                                      }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif') : reserva.tipo}</span>
                                                     </label>
                                                   ))
                                                 ) : (
@@ -6166,7 +6182,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                  <span className="text-zinc-300">Bonificación</span>
+                                  <span className="text-zinc-300">{(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}</span>
                                 </div>
                               </div>
 
