@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/authStore';
 import { notificacionesService } from '../../services/notificaciones.service';
 import { UserAvatar } from '../ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
+import { useMemo } from 'react';
 
 interface HeaderProps {
   title: string;
@@ -17,14 +18,31 @@ export function Header({ title }: HeaderProps) {
 
   // Fetch notification stats for the badge
   // Sin polling - actualizaciones via WebSocket
-  const { data: stats } = useQuery({
-    queryKey: ['notificaciones-stats'],
-    queryFn: () => notificacionesService.getStats(),
-    staleTime: 5 * 60 * 1000, // 5 minutos - datos se consideran frescos
+  const { data: notifData } = useQuery({
+    queryKey: ['notificaciones', 'notificaciones', '', '', 'created_at', 'desc'],
+    queryFn: () => notificacionesService.getAll({ limit: 200 }), 
+    staleTime: 5 * 60 * 1000,
     enabled: !!user,
-  });
+});
 
-  const unreadCount = stats?.no_leidas || 0;
+const unreadCount = useMemo(() => {
+  if (!notifData?.data || !user) return 0;
+  const userId = String(user.id);
+  //console.log('match test:', String("1057460,1057602").split(',').map(s => s.trim()).includes("1057602"));
+  return notifData.data.filter(n => {
+    if (n.estatus === 'Atendido') return false;
+    if (n.tipo === 'Notificación') {
+      return n.id_responsable !== undefined &&
+             n.id_responsable !== null &&
+             String(n.id_responsable) === userId;
+    }
+    // Tareas: filtrar por id_asignado
+    if (n.id_asignado !== undefined && n.id_asignado !== null) {
+      return String(n.id_asignado).split(',').map(s => s.trim()).includes(userId);
+    }
+    return false;
+  }).length;
+}, [notifData?.data, user?.id]);
 
   return (
     <header className="sticky top-0 z-[50] flex h-16 items-center gap-4 border-b border-purple-900/30 bg-[#1a1025]/80 backdrop-blur-sm px-6">

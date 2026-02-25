@@ -2143,17 +2143,23 @@ export function CampanasPage() {
                               <Minus className="h-3 w-3" /> Sin APS
                             </span>
                           )}
-                          {/* Resumen de campaña: caras, bonificación, inversión */}
-                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Caras totales">
-                            <Hash className="h-3 w-3" /> {campana.total_caras || 0}
-                          </span>
+                          {/* Resumen de campaña: circuitos (grupos), bonificación, inversión */}
+                          {(() => {
+                            const inv = campanaInventarios[campana.id] || [];
+                            const gruposUnicos = new Set(inv.map(i => i.solicitud_caras_id).filter(Boolean));
+                            return (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Circuitos (grupos)">
+                                <Layers className="h-3 w-3" /> Circuitos {gruposUnicos.size || campana.total_caras || 0}
+                              </span>
+                            );
+                          })()}
                           {Number(campana.bonificacion) > 0 && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 flex items-center gap-1" title="Bonificación">
                               <Gift className="h-3 w-3" /> {campana.bonificacion}
                             </span>
                           )}
                           <span className="px-2 py-0.5 rounded-full text-[10px] bg-green-500/15 text-green-300 border border-green-500/25 flex items-center gap-1" title="Inversión">
-                            <DollarSign className="h-3 w-3" /> {campana.inversion != null ? `$${Number(campana.inversion).toLocaleString()}` : '-'}
+                            <DollarSign className="h-3 w-3" /> {campana.inversion != null && Number(campana.inversion) > 0 ? `$${Number(campana.inversion).toLocaleString()}` : 'Sin inversión'}
                           </span>
                           <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
                             <button
@@ -2235,8 +2241,14 @@ export function CampanasPage() {
                                                 >
                                                   {isGrupoExpanded ? <ChevronDown className="h-3 w-3 text-zinc-500" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
                                                   <ClipboardList className="h-3 w-3 text-purple-400" />
-                                                  <span className="text-[11px] text-zinc-300">{grupo.key}</span>
-                                                  <span className="text-[10px] text-zinc-600">({grupo.items.length})</span>
+                                                  <span className="text-[11px] text-zinc-300">
+                                                    {[
+                                                      (grupo.items[0] as any)?.formato,
+                                                      grupo.items[0]?.plaza,
+                                                      grupo.items[0]?.articulo
+                                                    ].filter(Boolean).join(' · ') || grupo.key}
+                                                  </span>
+                                                  <span className="text-[10px] text-zinc-600">({grupo.items.length} caras)</span>
                                                   {/* 5 iconos de etapas de Gestión de Artes */}
                                                   {(() => {
                                                     const total = grupo.items.length;
@@ -2283,11 +2295,21 @@ export function CampanasPage() {
                                                     {(() => {
                                                       const plazas = [...new Set(grupo.items.map(i => i.plaza).filter(Boolean))];
                                                       const formato = (grupo.items[0] as any)?.formato || null;
+                                                      const carasTotales = grupo.items.length;
                                                       const sumTarifa = grupo.items.reduce((s, i) => s + (Number((i as any).tarifa_publica_sc) || 0), 0);
                                                       const sumRenta = grupo.items.reduce((s, i) => s + (Number((i as any).renta) || 0), 0);
                                                       const sumBonif = grupo.items.reduce((s, i) => s + (Number((i as any).bonificacion_sc) || 0), 0);
+                                                      const inversionTotal = sumTarifa;
+                                                      // Contar artes subidos
+                                                      const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
+                                                      // Indicaciones de programación/instalación del grupo
+                                                      const conIndicacionesProg = grupo.items.filter(i => (i as any).indicaciones_programacion).length;
+                                                      const conIndicacionesInst = grupo.items.filter(i => (i as any).indicaciones_instalacion).length;
                                                       return (
                                                         <div className="flex flex-wrap items-center gap-2 py-1.5 px-1 mb-1 border-b border-zinc-800/40">
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Caras totales">
+                                                            <Hash className="h-2.5 w-2.5" /> {carasTotales} caras
+                                                          </span>
                                                           {plazas.length > 0 && (
                                                             <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Plaza(s)">
                                                               <MapPin className="h-2.5 w-2.5" /> {plazas.join(', ')}
@@ -2299,14 +2321,30 @@ export function CampanasPage() {
                                                             </span>
                                                           )}
                                                           <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25" title="Tarifa pública">
-                                                            Tarifa: ${sumTarifa.toLocaleString()}
+                                                            {sumTarifa > 0 ? <>Tarifa: {'$'}{sumTarifa.toLocaleString()}</> : 'Sin tarifa'}
                                                           </span>
                                                           <span className="px-1.5 py-0.5 rounded text-[9px] bg-green-500/15 text-green-300 border border-green-500/25" title="Renta">
-                                                            Renta: ${sumRenta.toLocaleString()}
+                                                            {sumRenta > 0 ? <>Renta: {'$'}{sumRenta.toLocaleString()}</> : 'Sin renta'}
+                                                          </span>
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/25" title="Inversión total (tarifa)">
+                                                            {inversionTotal > 0 ? <>Inversión: {'$'}{inversionTotal.toLocaleString()}</> : 'Sin inversión'}
                                                           </span>
                                                           {sumBonif > 0 && (
                                                             <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/25" title="Bonificación">
                                                               Bonif: {sumBonif}
+                                                            </span>
+                                                          )}
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 flex items-center gap-1" title="Artes subidos">
+                                                            <Image className="h-2.5 w-2.5" /> {artesSubidos}/{carasTotales}
+                                                          </span>
+                                                          {conIndicacionesProg > 0 && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-orange-500/15 text-orange-300 border border-orange-500/25 flex items-center gap-1" title="Con indicaciones de programación">
+                                                              <FileText className="h-2.5 w-2.5" /> Prog: {conIndicacionesProg}
+                                                            </span>
+                                                          )}
+                                                          {conIndicacionesInst > 0 && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-rose-500/15 text-rose-300 border border-rose-500/25 flex items-center gap-1" title="Con indicaciones de instalación">
+                                                              <FileText className="h-2.5 w-2.5" /> Inst: {conIndicacionesInst}
                                                             </span>
                                                           )}
                                                         </div>
@@ -2316,11 +2354,15 @@ export function CampanasPage() {
                                                       const estatusArteColor = getEstatusArteColor((inv as any).estatus_arte);
                                                       const hasArte = inv.archivo != null && inv.archivo !== '';
                                                       const indicacionesProg = (inv as any).indicaciones_programacion;
+                                                      const indicacionesInst = (inv as any).indicaciones_instalacion;
                                                       return (
                                                         <div key={inv.id} className="flex items-center gap-2 text-[10px] text-zinc-500 py-0.5 flex-wrap">
                                                           <MapPin className="h-2.5 w-2.5 text-zinc-600" />
                                                           <span className="text-zinc-400 font-mono">{inv.codigo_unico}</span>
-                                                          <span title={hasArte ? 'Arte subido' : 'Sin arte'}><Image className={`h-2.5 w-2.5 ${hasArte ? 'text-green-400' : 'text-zinc-600'}`} /></span>
+                                                          <span title={hasArte ? 'Arte subido' : 'Sin arte'} className="flex items-center gap-0.5">
+                                                            <Image className={`h-2.5 w-2.5 ${hasArte ? 'text-green-400' : 'text-zinc-600'}`} />
+                                                            {hasArte && <span className="text-green-400/70">Arte</span>}
+                                                          </span>
                                                           {(inv as any).estatus_arte && (
                                                             <span className={`px-1.5 py-0.5 rounded text-[9px] ${estatusArteColor.bg} ${estatusArteColor.text} border ${estatusArteColor.border}`}>
                                                               {(inv as any).estatus_arte}
@@ -2332,7 +2374,15 @@ export function CampanasPage() {
                                                             <>
                                                               <span className="text-zinc-600">•</span>
                                                               <span className="text-orange-300/80 flex items-center gap-0.5" title="Indicaciones de programación">
-                                                                <FileText className="h-2.5 w-2.5" /> {indicacionesProg}
+                                                                <FileText className="h-2.5 w-2.5" /> Prog: {indicacionesProg}
+                                                              </span>
+                                                            </>
+                                                          )}
+                                                          {indicacionesInst && (
+                                                            <>
+                                                              <span className="text-zinc-600">•</span>
+                                                              <span className="text-rose-300/80 flex items-center gap-0.5" title="Indicaciones de instalación">
+                                                                <FileText className="h-2.5 w-2.5" /> Inst: {indicacionesInst}
                                                               </span>
                                                             </>
                                                           )}
@@ -2395,19 +2445,17 @@ export function CampanasPage() {
                           En curso
                         </span>
                       )}
-                      {/* Totales agregados de la catorcena */}
+                      {/* Inversión total de la catorcena */}
                       {(() => {
-                        const totalCaras = campanas.reduce((s, c) => s + (Number(c.total_caras) || 0), 0);
                         const totalInversion = campanas.reduce((s, c) => s + (Number(c.inversion) || 0), 0);
-                        return (
-                          <>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Total caras">
-                              <Hash className="h-3 w-3" /> {totalCaras} caras
-                            </span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-green-500/15 text-green-300 border border-green-500/25 flex items-center gap-1" title="Inversión total">
-                              <DollarSign className="h-3 w-3" /> ${totalInversion.toLocaleString()}
-                            </span>
-                          </>
+                        return totalInversion > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-green-500/15 text-green-300 border border-green-500/25 flex items-center gap-1" title="Inversión total">
+                            <DollarSign className="h-3 w-3" /> {'$'}{totalInversion.toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/15 text-zinc-400 border border-zinc-500/25 flex items-center gap-1" title="Sin inversión registrada">
+                            Sin inversión
+                          </span>
                         );
                       })()}
                     </button>

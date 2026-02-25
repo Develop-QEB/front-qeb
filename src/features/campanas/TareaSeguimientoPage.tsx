@@ -2647,7 +2647,7 @@ function TaskDetailModal({
   onCorrect: (reservaIds: number[], instrucciones: string) => void;
   onUpdateArte: (reservaIds: number[], archivo: string) => void;
   onUpdateArteDigital: (reservaIds: number[], files: { file: File; spot: number }[], deleteArchivos?: string[]) => Promise<void>;
-  onTaskComplete: (taskId: string, observaciones?: string) => Promise<void>;
+  onTaskComplete: (taskId: string, observaciones?: string, archivoTestigo?: string) => Promise<void>;
   onSendToReview: (reservaIds: number[], responsableOriginal: string) => Promise<void>;
   onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string, asignadoId?: string) => Promise<void>;
   onCreateRecepcionFaltante: (faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[], observaciones: string) => Promise<void>;
@@ -2899,6 +2899,8 @@ function TaskDetailModal({
   const [cantidadesRecibidas, setCantidadesRecibidas] = useState<Record<string, number>>({});
   const [observacionesRecepcion, setObservacionesRecepcion] = useState('');
   const [isFinalizandoRecepcion, setIsFinalizandoRecepcion] = useState(false);
+  const [recepcionFiles, setRecepcionFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [isUploadingRecepcion, setIsUploadingRecepcion] = useState(false);
 
   // Parsear datos de impresiones desde evidencia (para tareas de Impresión y Recepción)
   const impresionesData = useMemo(() => {
@@ -3652,9 +3654,9 @@ function TaskDetailModal({
       // Rechazar y crear tarea de corrección con todos los rechazados
       if (rechazados.length > 0) {
         const todosIds = rechazados.flatMap(r => r.ids);
-        const descripcion = rechazados.map(r =>
-          `**${r.items.map(i => i.codigo_unico).join(', ')}:**\n${r.motivo}`
-        ).join('\n\n---\n\n');
+        // Solo guardar el motivo de rechazo (sin códigos de inventario para no exceder VARCHAR(255))
+        // Los códigos ya están en el inventario asociado a la tarea
+        const descripcion = rechazados.map(r => r.motivo).join(' | ');
 
         // Subir imagen de rechazo si existe (usar la primera que encuentre)
         let imagenRechazoUrl: string | undefined;
@@ -4282,8 +4284,26 @@ function TaskDetailModal({
         await onCreateRecepcionFaltante(faltantesPorArte, observacionesRecepcion);
       }
 
-      // Actualizar la tarea actual como completada (con observaciones si las hay)
-      await onTaskComplete(task.id, observacionesRecepcion || undefined);
+      // Subir fotos comprobatorias si existen
+      let archivoTestigoUrl: string | undefined;
+      if (recepcionFiles.length > 0) {
+        setIsUploadingRecepcion(true);
+        try {
+          const uploadedUrls: string[] = [];
+          for (const { file } of recepcionFiles) {
+            const uploadResult = await campanasService.uploadTestigoFile(file);
+            uploadedUrls.push(uploadResult.url);
+          }
+          archivoTestigoUrl = JSON.stringify(uploadedUrls);
+        } catch (uploadErr) {
+          console.error('Error al subir fotos comprobatorias:', uploadErr);
+        } finally {
+          setIsUploadingRecepcion(false);
+        }
+      }
+
+      // Actualizar la tarea actual como completada (con observaciones y foto comprobatoria)
+      await onTaskComplete(task.id, observacionesRecepcion || undefined, archivoTestigoUrl);
 
       // Cerrar modal
       onClose();
@@ -4306,6 +4326,7 @@ function TaskDetailModal({
       // Reset estados de Recepción
       setCantidadesRecibidas({});
       setObservacionesRecepcion('');
+      setRecepcionFiles([]);
     }
   }, [isOpen]);
 
@@ -5089,7 +5110,7 @@ function TaskDetailModal({
                                     {faltante.cantidad} faltante{faltante.cantidad !== 1 ? 's' : ''}
                                   </p>
                                   <p className="text-xs text-zinc-500 truncate">
-                                    {faltante.arte ? faltante.arte.split('/').pop() : 'Sin arte asignado'}
+                                    {!faltante.arte ? 'Sin arte asignado' : faltante.arte.startsWith('data:') ? 'Arte' : faltante.arte.split('/').pop()}
                                   </p>
                                 </div>
 
@@ -5144,7 +5165,7 @@ function TaskDetailModal({
                         const impresionesEntries = Object.entries(impresionesDesglose);
                         if (impresionesEntries.length > 0) {
                           return impresionesEntries.map(([arteUrl, cantidad]) => {
-                            const nombreArchivo = arteUrl.split('/').pop() || 'arte';
+                            const nombreArchivo = arteUrl.startsWith('data:') ? 'Arte' : (arteUrl.split('/').pop() || 'arte');
                             const imageUrl = getImageUrl(arteUrl);
                             return (
                               <div key={arteUrl} className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
@@ -5255,7 +5276,7 @@ function TaskDetailModal({
                                 {cantidad} {cantidad !== 1 ? 'ubicaciones' : 'ubicación'}
                               </p>
                               <p className="text-xs text-zinc-500 truncate">
-                                {grupo.archivo ? grupo.archivo.split('/').pop() : 'Sin arte asignado'}
+                                {!grupo.archivo ? 'Sin arte asignado' : grupo.archivo.startsWith('data:') ? `Arte (${grupo.items[0]?.codigo_unico || 'imagen'})` : grupo.archivo.split('/').pop()}
                               </p>
                             </div>
 
@@ -5354,6 +5375,61 @@ function TaskDetailModal({
                         className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
                       />
                     </div>
+
+                    {/* Fotos comprobatorias */}
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-400 mb-1">Fotos comprobatorias (opcional)</label>
+                      {recepcionFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {recepcionFiles.map((item, idx) => (
+                            <div key={idx} className="relative group">
+                              <img src={item.preview} alt={`Foto ${idx + 1}`} className="h-20 w-20 object-cover rounded border border-border" />
+                              <button
+                                type="button"
+                                onClick={() => setRecepcionFiles(prev => prev.filter((_, i) => i !== idx))}
+                                className="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="border-2 border-dashed border-purple-500/30 rounded-lg p-3 text-center hover:border-purple-500/50 transition-colors">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/jpg"
+                          multiple
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            files.forEach(file => {
+                              if (file.size > 10 * 1024 * 1024) {
+                                alert(`${file.name} supera 10MB`);
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                setRecepcionFiles(prev => [...prev, { file, preview: ev.target?.result as string }]);
+                              };
+                              reader.readAsDataURL(file);
+                            });
+                            e.target.value = '';
+                          }}
+                          className="hidden"
+                          id="recepcion-file-input"
+                          disabled={isFinalizandoRecepcion}
+                        />
+                        <label htmlFor="recepcion-file-input" className="cursor-pointer">
+                          <div className="space-y-1 py-1">
+                            <Upload className="h-6 w-6 text-zinc-500 mx-auto" />
+                            <p className="text-xs text-zinc-400">
+                              {recepcionFiles.length > 0 ? 'Agregar más fotos' : 'Sube fotos como comprobante del pedido'}
+                            </p>
+                            <p className="text-[10px] text-zinc-500">JPG o PNG (máx. 10MB cada una)</p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -5367,6 +5443,35 @@ function TaskDetailModal({
                     <div className="mt-3 pt-3 border-t border-green-500/20">
                       <p className="text-xs font-medium text-zinc-400 mb-1">Observaciones:</p>
                       <p className="text-sm text-zinc-300 bg-zinc-800/50 rounded p-2">{task.contenido}</p>
+                    </div>
+                  )}
+                  {task.archivo_testigo && (
+                    <div className="mt-3 pt-3 border-t border-green-500/20">
+                      <p className="text-xs font-medium text-zinc-400 mb-2">Fotos comprobatorias:</p>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {(() => {
+                          // Soportar JSON array (múltiples) o string simple (una sola)
+                          let urls: string[] = [];
+                          try {
+                            const parsed = JSON.parse(task.archivo_testigo);
+                            urls = Array.isArray(parsed) ? parsed : [task.archivo_testigo];
+                          } catch {
+                            urls = [task.archivo_testigo];
+                          }
+                          return urls.map((url, idx) => {
+                            const imgUrl = getImageUrl(url) || url;
+                            return (
+                              <img
+                                key={idx}
+                                src={imgUrl}
+                                alt={`Comprobante ${idx + 1}`}
+                                className="max-h-[150px] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => window.open(imgUrl, '_blank')}
+                              />
+                            );
+                          });
+                        })()}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -5473,9 +5578,28 @@ function TaskDetailModal({
                   const archivosEv = parsed.archivos || [];
                   if (Object.keys(indicaciones).length === 0 && archivosEv.length === 0) return null;
 
-                  const displayItems = archivosEv.length > 0
-                    ? archivosEv.map((a: any) => ({ key: a.nombre, label: a.nombre, tipoArchivo: a.tipo }))
-                    : Object.keys(indicaciones).map((k: string) => ({ key: k, label: k, tipoArchivo: 'tradicional' }));
+                  // Build display items: prefer archivos with key (new format), fallback to indicaciones keys
+                  let displayItems: { key: string; label: string; tipoArchivo: string }[];
+                  const hasValidArchivos = archivosEv.length > 0 && archivosEv[0]?.key;
+                  if (hasValidArchivos) {
+                    // New format: archivos have key + nombre
+                    displayItems = archivosEv.map((a: any, idx: number) => ({
+                      key: a.key,
+                      label: a.nombre || `Arte ${idx + 1}`,
+                      tipoArchivo: a.tipo || 'tradicional',
+                    }));
+                  } else {
+                    // Fallback: use indicaciones keys directly
+                    displayItems = Object.keys(indicaciones).map((k: string, idx: number) => {
+                      // Match with archivos by index if available
+                      const archivo = archivosEv[idx];
+                      return {
+                        key: k,
+                        label: k.startsWith('arte_') ? `Arte ${idx + 1}` : (k.startsWith('data:') ? `Arte ${idx + 1}` : (k.split('/').pop() || `Arte ${idx + 1}`)),
+                        tipoArchivo: archivo?.tipo || 'tradicional',
+                      };
+                    });
+                  }
 
                   return (
                     <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
@@ -5483,13 +5607,16 @@ function TaskDetailModal({
                       <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
                         {displayItems.map((item: any, idx: number) => {
                           const indicacion = indicaciones[item.key] || '';
-                          const digitalFile = loadedArchivosDigitales.find(d => d.archivo === item.key);
-                          const fileUrl = digitalFile ? getImageUrl(digitalFile.archivoData || digitalFile.archivo) : null;
+                          // Get image preview from taskInventory (deduplicated archivo_arte)
+                          const uniqueArtes = [...new Set(taskInventory.map(i => i.archivo_arte).filter(Boolean))];
+                          const arteUrl = uniqueArtes[idx] || null;
+                          const fileUrl = arteUrl ? (arteUrl.startsWith('data:') ? arteUrl : getImageUrl(arteUrl)) : null;
+                          const displayLabel = item.label || `Arte ${idx + 1}`;
                           return (
                             <div key={idx} className="flex gap-3 p-2 border rounded-lg bg-purple-900/10 border-purple-500/20">
-                              <div className="flex-shrink-0 w-16 h-12 bg-zinc-800 rounded overflow-hidden">
+                              <div className="flex-shrink-0 w-16 h-12 bg-zinc-800 rounded overflow-hidden cursor-pointer" onClick={() => fileUrl && window.open(fileUrl, '_blank')}>
                                 {fileUrl ? (
-                                  <img src={fileUrl} alt={item.label} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  <img src={fileUrl} alt={displayLabel} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                 ) : (
                                   <div className="w-full h-full flex items-center justify-center">
                                     <Image className="h-4 w-4 text-zinc-600" />
@@ -5498,7 +5625,7 @@ function TaskDetailModal({
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-xs text-white font-medium truncate">{(item.label as string).split('/').pop() || item.label}</span>
+                                  <span className="text-xs text-white font-medium truncate">{displayLabel}</span>
                                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${item.tipoArchivo === 'digital' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
                                     {item.tipoArchivo === 'digital' ? 'Digital' : 'Tradicional'}
                                   </span>
@@ -5815,7 +5942,7 @@ function TaskDetailModal({
 
                       // Show archivos from evidencia, or just indicaciones keys
                       const displayItems = archivos.length > 0
-                        ? archivos.map(a => ({ key: a.nombre, label: a.nombre, tipoArchivo: a.tipo }))
+                        ? archivos.map(a => ({ key: a.key || a.nombre, label: a.nombre, tipoArchivo: a.tipo }))
                         : Object.keys(indicaciones).map(k => ({ key: k, label: k, tipoArchivo: 'tradicional' }));
 
                       return (
@@ -5990,6 +6117,35 @@ function TaskDetailModal({
                           </button>
                         )}
                       </div>
+                      <button
+                        onClick={() => {
+                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'Periodo', 'Estado Arte'];
+                          const rows = filteredProgramacionModalData.map(item => [
+                            item.id,
+                            item.codigo_unico,
+                            item.tradicional_digital,
+                            item.ubicacion,
+                            item.plaza,
+                            item.mueble,
+                            item.ciudad,
+                            item.catorcena,
+                            item.estado_arte,
+                          ]);
+                          const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${(c || '').toString().replace(/"/g, '""')}"`).join(','))].join('\n');
+                          const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `orden_instalacion_${task.id}_inventario.csv`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-600/30 transition-colors"
+                        title="Descargar tabla como CSV"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        CSV
+                      </button>
                     </div>
                   </div>
                   <div className="overflow-x-auto max-h-[400px] overflow-y-auto rounded-lg border border-border">
@@ -7099,53 +7255,21 @@ function TaskDetailModal({
                         <h5 className="text-sm font-medium text-red-300">Motivo del Rechazo</h5>
                       </div>
                       {(() => {
-                        // Parsear la descripción para extraer códigos y motivo
                         const desc = task.descripcion || '';
 
-                        // Extraer códigos: todo lo que está entre ** y :** (los : están dentro del **)
-                        const codigosMatch = desc.match(/\*\*(.+?):\*\*/);
-                        const codigosAfectados = codigosMatch ? codigosMatch[1].trim() : null;
-
-                        // Extraer motivo: todo lo que está después de **códigos:** hasta "Por favor" o fin
-                        let motivoRechazo = '';
-                        if (codigosAfectados) {
-                          // Buscar el texto después de **códigos:**
-                          const afterCodigos = desc.split(/\*\*[^*]+:\*\*\s*/)[1];
-                          if (afterCodigos) {
-                            // Quitar "Por favor corrige..." si existe
-                            motivoRechazo = afterCodigos.split(/Por favor/i)[0].trim();
-                          }
-                        }
-
-                        // Si no se pudo extraer, limpiar la descripción completa
-                        if (!motivoRechazo) {
-                          motivoRechazo = desc
-                            .replace(/Artes rechazados con el siguiente motivo:\s*/i, '')
-                            .replace(/\*\*[^*]+:\*\*\s*/g, '')
-                            .replace(/Por favor corrige los artes y vuelve a enviar a revisión\./i, '')
-                            .trim();
-                        }
+                        // Limpiar prefijos/sufijos del formato viejo y extraer solo el motivo real
+                        let motivoRechazo = desc
+                          .replace(/^Artes rechazados con el siguiente motivo:\s*/i, '')
+                          .replace(/Por favor corrige los artes y vuelve a enviar a revisión\.?\s*/gi, '')
+                          .replace(/\*\*[^*]+:\*\*\s*/g, '')
+                          .replace(/---/g, '')
+                          .trim();
 
                         return (
                           <div className="space-y-3">
-                            {codigosAfectados && (
-                              <div>
-                                <span className="text-zinc-400 text-xs uppercase tracking-wide">Artes afectados:</span>
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {codigosAfectados.split(',').map((codigo, idx) => (
-                                    <span key={idx} className="px-2 py-0.5 bg-zinc-800 rounded text-xs text-zinc-300 font-mono">
-                                      {codigo.trim()}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            <div>
-                              <span className="text-zinc-400 text-xs uppercase tracking-wide">Motivo:</span>
-                              <p className="mt-1 text-white text-sm bg-zinc-800/50 rounded p-2 border-l-2 border-red-500">
-                                {motivoRechazo || 'Sin motivo especificado'}
-                              </p>
-                            </div>
+                            <p className="text-white text-sm bg-zinc-800/50 rounded p-2 border-l-2 border-red-500">
+                              {motivoRechazo || 'Sin motivo especificado'}
+                            </p>
                             {/* Imagen de referencia del rechazo (si existe en evidencia) */}
                             {(() => {
                               try {
@@ -8591,6 +8715,7 @@ function CreateTaskModal({
   const [instalacionIndicaciones, setInstalacionIndicaciones] = useState<Record<string, string>>({});
   const [archivosInstalacion, setArchivosInstalacion] = useState<{
     nombre: string;
+    nombreLegible?: string;
     tipo: 'tradicional' | 'digital';
     id?: number;
     archivoData?: string;
@@ -8661,9 +8786,16 @@ function CreateTaskModal({
           selectedInventory.forEach(item => {
             if (item.archivo_arte && !archivosVistos.has(item.archivo_arte)) {
               archivosVistos.add(item.archivo_arte);
+              // Generar nombre legible: si es base64/URL larga, usar nombre del item
+              const isDataUrl = item.archivo_arte.startsWith('data:');
+              const nombreLegible = isDataUrl
+                ? `Arte - ${item.codigo_unico || item.clave || 'Archivo'}`
+                : (item.archivo_arte.split('/').pop() || 'Arte');
               archivos.push({
                 nombre: item.archivo_arte,
                 tipo: 'tradicional',
+                archivoData: isDataUrl ? item.archivo_arte : getImageUrl(item.archivo_arte) || undefined,
+                nombreLegible,
               });
             }
           });
@@ -8832,12 +8964,23 @@ function CreateTaskModal({
       (payload as any).listado_inventario = selectedIds.join(',');
       // Indicaciones por archivo (si hay)
       if (archivosInstalacion.length > 0) {
-        (payload as any).evidencia = JSON.stringify({
-          indicaciones: instalacionIndicaciones,
-          archivos: archivosInstalacion.map(a => ({
-            nombre: a.nombre,
+        // Usar keys cortas (arte_0, arte_1...) en vez del nombre/base64 para no exceder VARCHAR(10000)
+        const indicacionesCompactas: Record<string, string> = {};
+        const archivosCompactos = archivosInstalacion.map((a, i) => {
+          const shortKey = `arte_${i}`;
+          // Mapear la indicación del nombre original al key corto
+          if (instalacionIndicaciones[a.nombre]) {
+            indicacionesCompactas[shortKey] = instalacionIndicaciones[a.nombre];
+          }
+          return {
+            key: shortKey,
+            nombre: a.nombreLegible || (a.nombre.startsWith('data:') ? `Arte ${i + 1}` : (a.nombre.split('/').pop() || `Arte ${i + 1}`)),
             tipo: a.tipo,
-          })),
+          };
+        });
+        (payload as any).evidencia = JSON.stringify({
+          indicaciones: indicacionesCompactas,
+          archivos: archivosCompactos,
         });
       }
       // Asignados múltiples para Instalación (área Operaciones)
@@ -8852,12 +8995,22 @@ function CreateTaskModal({
       (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
-      (payload as any).evidencia = JSON.stringify({
-        indicaciones: instalacionIndicaciones,
-        archivos: archivosInstalacion.map(a => ({
-          nombre: a.nombre,
+      // Usar keys cortas para no exceder VARCHAR(10000)
+      const indicacionesCompactasOI: Record<string, string> = {};
+      const archivosCompactosOI = archivosInstalacion.map((a, i) => {
+        const shortKey = `arte_${i}`;
+        if (instalacionIndicaciones[a.nombre]) {
+          indicacionesCompactasOI[shortKey] = instalacionIndicaciones[a.nombre];
+        }
+        return {
+          key: shortKey,
+          nombre: a.nombreLegible || (a.nombre.startsWith('data:') ? `Arte ${i + 1}` : (a.nombre.split('/').pop() || `Arte ${i + 1}`)),
           tipo: a.tipo,
-        })),
+        };
+      });
+      (payload as any).evidencia = JSON.stringify({
+        indicaciones: indicacionesCompactasOI,
+        archivos: archivosCompactosOI,
       });
       // Asignados múltiples para Orden de Instalación (área Operaciones)
       if (selectedAsignadosInstalacion.length > 0) {
@@ -9230,23 +9383,28 @@ function CreateTaskModal({
                     <p className="text-xs text-zinc-500 italic">No se encontraron archivos para los items seleccionados</p>
                   ) : (
                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-                      {archivosInstalacion.map((archivo, idx) => (
-                        <div key={`${archivo.tipo}-${archivo.nombre}-${idx}`} className="bg-zinc-800/50 rounded-lg p-3 space-y-2">
+                      {archivosInstalacion.map((archivo, idx) => {
+                        const displayName = archivo.nombreLegible || (archivo.nombre.startsWith('data:') ? `Arte ${idx + 1}` : (archivo.nombre.split('/').pop() || `Arte ${idx + 1}`));
+                        const previewSrc = archivo.archivoData || (archivo.nombre.startsWith('data:') ? archivo.nombre : getImageUrl(archivo.nombre));
+                        return (
+                        <div key={`${archivo.tipo}-${idx}`} className="bg-zinc-800/50 rounded-lg p-3 space-y-2">
                           <div className="flex items-center gap-2">
-                            {archivo.archivoData && (
+                            {previewSrc && (
                               <img
-                                src={archivo.archivoData}
-                                alt={archivo.nombre}
-                                className="w-10 h-10 object-cover rounded border border-border"
+                                src={previewSrc}
+                                alt={displayName}
+                                className="w-12 h-12 object-cover rounded border border-border cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={() => window.open(previewSrc, '_blank')}
                               />
                             )}
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-zinc-300 truncate">{archivo.nombre}</p>
+                              <p className="text-xs font-medium text-zinc-300 truncate">{displayName}</p>
                               <span className={`text-[10px] px-1.5 py-0.5 rounded ${archivo.tipo === 'digital' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
                                 {archivo.tipo === 'digital' ? 'Digital' : 'Tradicional'}
                               </span>
                             </div>
                           </div>
+                          <label className="block text-[10px] text-zinc-500 mb-1">Indicaciones para este archivo</label>
                           <textarea
                             value={instalacionIndicaciones[archivo.nombre] || ''}
                             onChange={(e) => setInstalacionIndicaciones(prev => ({ ...prev, [archivo.nombre]: e.target.value }))}
@@ -9256,7 +9414,8 @@ function CreateTaskModal({
                             placeholder="Indicaciones para este archivo..."
                           />
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -15490,19 +15649,30 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300">{task.asignado}</td>
                             <td className="p-2 text-zinc-300 max-w-[150px] truncate">{task.descripcion}</td>
                             <td className="p-2">
-                              {task.tipo === 'Testigo' && task.archivo_testigo && (
+                              <div className="flex items-center gap-1">
                                 <button
                                   onClick={() => {
-                                    setSelectedTestigoFile(task.archivo_testigo ?? null);
-                                    setIsTestigoFileModalOpen(true);
+                                    setSelectedTask(task);
+                                    setIsTaskDetailModalOpen(true);
                                   }}
-                                  className="flex items-center gap-1 px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-                                  title="Ver archivo testigo"
+                                  className="px-2 py-1 text-[10px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
                                 >
-                                  <Eye className="h-3 w-3" />
-                                  Ver
+                                  Abrir
                                 </button>
-                              )}
+                                {(task.tipo === 'Testigo' || task.tipo === 'Recepción') && task.archivo_testigo && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedTestigoFile(task.archivo_testigo ?? null);
+                                      setIsTestigoFileModalOpen(true);
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-1 text-[10px] bg-zinc-700 hover:bg-zinc-600 text-white rounded transition-colors"
+                                    title="Ver foto"
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                    Foto
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -15728,11 +15898,7 @@ export function TareaSeguimientoPage() {
           if (selectedTask && selectedTask.creador) {
             const tareaData: Parameters<typeof createTareaMutation.mutateAsync>[0] = {
               titulo: `Corrección de artes - Rechazo`,
-              descripcion: `Artes rechazados con el siguiente motivo:
-
-${comentario || 'Sin motivo especificado'}
-
-Por favor corrige los artes y vuelve a enviar a revisión.`,
+              descripcion: (comentario || 'Sin motivo especificado').substring(0, 255),
               tipo: 'Correccion',
               asignado: selectedTask.creador,
               ids_reservas: reservaIds.join(','),
@@ -15803,12 +15969,13 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
           queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
           queryClient.invalidateQueries({ queryKey: ['digital-file-summaries', campanaId] });
         }}
-        onTaskComplete={async (taskId, observaciones) => {
+        onTaskComplete={async (taskId, observaciones, archivoTestigo) => {
           await updateTareaMutation.mutateAsync({
             tareaId: parseInt(taskId),
             data: {
               estatus: 'Atendido',
-              ...(observaciones && { contenido: observaciones })
+              ...(observaciones && { contenido: observaciones }),
+              ...(archivoTestigo && { archivo_testigo: archivoTestigo }),
             }
           });
         }}
@@ -15938,21 +16105,23 @@ Por favor registra la cantidad de impresiones recibidas.`,
 
       {/* Modal para ver archivo testigo */}
       {isTestigoFileModalOpen && selectedTestigoFile && (() => {
-        // Construir URL completa del archivo
-        const fileUrl = selectedTestigoFile.startsWith('http')
-          ? selectedTestigoFile
-          : `${STATIC_URL}${selectedTestigoFile}`;
-        const isPdf = selectedTestigoFile.toLowerCase().endsWith('.pdf');
-        const fileName = selectedTestigoFile.split('/').pop() || 'archivo';
+        // Soportar JSON array (múltiples) o string simple (una sola)
+        let fileUrls: string[] = [];
+        try {
+          const parsed = JSON.parse(selectedTestigoFile);
+          fileUrls = Array.isArray(parsed) ? parsed : [selectedTestigoFile];
+        } catch {
+          fileUrls = [selectedTestigoFile];
+        }
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsTestigoFileModalOpen(false)} />
-            <div className="relative bg-card border border-border rounded-xl w-full max-w-md mx-4 p-6">
+            <div className="relative bg-card border border-border rounded-xl w-full max-w-lg mx-4 p-6 max-h-[80vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <Eye className="h-5 w-5 text-purple-400" />
-                  Archivo Testigo
+                  {fileUrls.length > 1 ? `Fotos comprobatorias (${fileUrls.length})` : 'Foto comprobatoria'}
                 </h3>
                 <button
                   onClick={() => setIsTestigoFileModalOpen(false)}
@@ -15961,27 +16130,36 @@ Por favor registra la cantidad de impresiones recibidas.`,
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-full p-4 bg-zinc-900/50 rounded-lg border border-border">
-                  <div className="flex items-center gap-3">
-                    <div className="p-3 bg-purple-600/20 rounded-lg">
-                      {isPdf ? <FileText className="h-8 w-8 text-purple-400" /> : <Image className="h-8 w-8 text-purple-400" />}
+              <div className="flex flex-col gap-3">
+                {fileUrls.map((url, idx) => {
+                  const resolvedUrl = getImageUrl(url) || (url.startsWith('http') ? url : `${STATIC_URL}${url}`);
+                  const isPdf = url.toLowerCase().endsWith('.pdf');
+                  return (
+                    <div key={idx} className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
+                      {isPdf ? (
+                        <div className="flex items-center gap-3 p-4">
+                          <FileText className="h-8 w-8 text-purple-400 flex-shrink-0" />
+                          <p className="text-sm text-white truncate flex-1">{url.split('/').pop()}</p>
+                        </div>
+                      ) : (
+                        <img
+                          src={resolvedUrl}
+                          alt={`Comprobante ${idx + 1}`}
+                          className="w-full max-h-[250px] object-contain"
+                        />
+                      )}
+                      <a
+                        href={resolvedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 text-sm transition-colors"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        Abrir {fileUrls.length > 1 ? `foto ${idx + 1}` : 'foto'}
+                      </a>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{fileName}</p>
-                      <p className="text-xs text-zinc-400">{isPdf ? 'Documento PDF' : 'Imagen'}</p>
-                    </div>
-                  </div>
-                </div>
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-                >
-                  <ExternalLink className="h-5 w-5" />
-                  Abrir archivo
-                </a>
+                  );
+                })}
               </div>
             </div>
           </div>
