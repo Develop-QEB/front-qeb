@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { GoogleMap, useLoadScript, Circle, InfoWindow } from '@react-google-maps/api';
-import { usePrefetch } from '../../hooks/usePrefetch';
+
 import { useSocketDashboard } from '../../hooks/useSocket';
 import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer';
 import {
@@ -1378,14 +1378,6 @@ export function DashboardPage() {
 
   // WebSocket para actualizaciones en tiempo real
   useSocketDashboard();
-
-  // Prefetch todas las vistas al cargar el dashboard
-  const { prefetchAll } = usePrefetch();
-
-  useEffect(() => {
-    // Precargar datos de todas las vistas en background
-    prefetchAll();
-  }, [prefetchAll]);
 
   const { data: filterOptions } = useQuery({
     queryKey: ['dashboard', 'filter-options'],

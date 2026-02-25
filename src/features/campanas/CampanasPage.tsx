@@ -684,6 +684,7 @@ export function CampanasPage() {
         page,
         limit,
         status: status || undefined,
+        search: debouncedSearch || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,

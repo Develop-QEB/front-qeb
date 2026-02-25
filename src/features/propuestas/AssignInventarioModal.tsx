@@ -145,23 +145,34 @@ const getTarifaFromItemCode = (itemCode: string): number => {
   return TARIFA_PUBLICA_MAP[code] || 850;
 };
 
+// Multi-city auto-fill rules for specific article patterns
+const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = [
+  { pattern: /\bMTY\b|\bMONTERREY\b|\bMY\b/, estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
+  { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
+  { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
+  { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
+];
+
 // Extract city/state from article name (sorted by length to avoid false positives)
 const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
+  // Check multi-city rules first
+  for (const rule of MULTI_CITY_RULES) {
+    if (rule.pattern.test(name)) {
+      return { estado: rule.estado, ciudad: rule.ciudad };
+    }
+  }
+
   // Sort cities by length (longest first) to match more specific names before generic ones
-  // This prevents "MEXICO" from matching before "CIUDAD DE MEXICO"
   const sortedCities = Object.entries(CIUDAD_ESTADO_MAP).sort((a, b) => b[0].length - a[0].length);
 
-  // Ciudades que no existen como tal y solo deben poner el estado (Ciudad de México)
   const CIUDADES_SIN_CIUDAD = ['CDMX', 'CIUDAD DE MEXICO', 'MEXICO', 'DF'];
 
   for (const [ciudad, estado] of sortedCities) {
-    // Use word boundary check - city must be preceded and followed by non-letter chars
     const regex = new RegExp(`(^|[^A-Z])${ciudad.replace(/\s+/g, '\\s+')}([^A-Z]|$)`, 'i');
     if (regex.test(name)) {
-      // Si es una ciudad que no existe (CDMX, etc.), solo devolver estado sin ciudad
       if (CIUDADES_SIN_CIUDAD.includes(ciudad)) {
         return { estado, ciudad: '' };
       }

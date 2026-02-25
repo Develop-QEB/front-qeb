@@ -366,7 +366,8 @@ const STATE_LEVEL_ENTRIES = ['CDMX', 'CIUDAD DE MEXICO', 'DF', 'ESTADO DE MEXICO
 const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudades: string[] }[] = [
   { pattern: /\bPUERTO VALLARTA\b|\ PV\b/, estado: 'Jalisco', ciudades: ['Puerto Vallarta'] },
   { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudades: ['Guadalajara', 'Zapopan', 'Tlaquepaque'] },
-  { pattern: /\bMTY\b|\bMONTERREY\b/, estado: 'Nuevo León', ciudades: ['Monterrey', 'San Pedro', 'San Nicolas', 'Apodaca', 'Escobedo', 'Santa Catarina'] },
+  { pattern: /\bMTY\b|\bMONTERREY\b|\bMY\b/, estado: 'Nuevo León', ciudades: ['Monterrey', 'Guadalupe', 'San Nicolás de los Garza', 'Santa Catarina'] },
+  { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudades: ['Veracruz', 'Alvarado', 'Boca del Río'] },
   { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b/, estado: 'Ciudad de México', ciudades: ['Ciudad de Mexico', 'Toluca', 'Naucalpan', 'Ecatepec'] },
 ];
 
