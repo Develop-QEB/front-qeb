@@ -5942,7 +5942,7 @@ function TaskDetailModal({
 
                       // Show archivos from evidencia, or just indicaciones keys
                       const displayItems = archivos.length > 0
-                        ? archivos.map(a => ({ key: a.nombre, label: a.nombre, tipoArchivo: a.tipo }))
+                        ? archivos.map(a => ({ key: a.key || a.nombre, label: a.nombre, tipoArchivo: a.tipo }))
                         : Object.keys(indicaciones).map(k => ({ key: k, label: k, tipoArchivo: 'tradicional' }));
 
                       return (
@@ -6117,6 +6117,35 @@ function TaskDetailModal({
                           </button>
                         )}
                       </div>
+                      <button
+                        onClick={() => {
+                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'Periodo', 'Estado Arte'];
+                          const rows = filteredProgramacionModalData.map(item => [
+                            item.id,
+                            item.codigo_unico,
+                            item.tradicional_digital,
+                            item.ubicacion,
+                            item.plaza,
+                            item.mueble,
+                            item.ciudad,
+                            item.catorcena,
+                            item.estado_arte,
+                          ]);
+                          const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${(c || '').toString().replace(/"/g, '""')}"`).join(','))].join('\n');
+                          const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `orden_instalacion_${task.id}_inventario.csv`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-600/30 transition-colors"
+                        title="Descargar tabla como CSV"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        CSV
+                      </button>
                     </div>
                   </div>
                   <div className="overflow-x-auto max-h-[400px] overflow-y-auto rounded-lg border border-border">
