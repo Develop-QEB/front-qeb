@@ -273,6 +273,49 @@ const getFormatoFromArticulo = (itemName: string): string => {
   return '';
 };
 
+// Mapeo formato → tipo de periodo requerido
+// CATORCENAL: PB y Columna, Kioscos, Digital PB y Columna, Boleros
+// MENSUAL: Mi Macro, Puentes Peatonales, Carteleras Digitales/Unipolares, Bajo Puentes
+// Formatos mensuales (no existen en tabla inventarios, lista fija)
+const FORMATOS_MENSUALES = [
+  'MI MACRO',
+  'MI MACRO Vidrio Int',
+  'MI MACRO Vidrio Ext',
+  'MI MACRO MUPI Int',
+  'MI MACRO Parabus',
+  'MI MACRO Modulos',
+  'Puente Peatonal',
+  'Bajo Puente',
+  'Bajo Puente Gran Terraza',
+  'Bajo Puente Circuito Geografos',
+  'Bajo Puente Circuito del Parque',
+  'Bajo Puente Fuentes',
+  'Bajo Puente Colorines Bloque 1',
+  'Bajo Puente Colorines Bloque 2',
+  'Bajo Puente Colorines Bloque 3',
+  'Bajo Puente Colorines Bloque 4',
+  'Cartelera Digital',
+  'Unipolar',
+];
+
+const FORMATOS_MENSUALES_SET = new Set(FORMATOS_MENSUALES);
+
+const getRequiredPeriodoForFormato = (formato: string): 'catorcena' | 'mensual' => {
+  if (FORMATOS_MENSUALES_SET.has(formato)) return 'mensual';
+  return 'catorcena';
+};
+
+const getRequiredPeriodoForArticulo = (itemName: string): 'catorcena' | 'mensual' => {
+  if (!itemName) return 'catorcena';
+  const name = itemName.toUpperCase();
+  if (name.includes('MI MACRO')) return 'mensual';
+  if (name.includes('PUENTE PEATONAL')) return 'mensual';
+  if (name.includes('BAJO PUENTE')) return 'mensual';
+  if (name.includes('CARTELERA')) return 'mensual';
+  if (name.includes('UNIPOLAR')) return 'mensual';
+  return 'catorcena';
+};
+
 // Tipo auto-detection from article name (Tradicional or Digital)
 const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
   if (!itemName) return 'Tradicional';
@@ -888,6 +931,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: 1,
   });
+
+  // Filter articulos by current tipoPeriodo
+  const articulosFiltrados = useMemo(() => {
+    if (!articulosData) return [];
+    return articulosData.filter(a => getRequiredPeriodoForArticulo(a.ItemName) === tipoPeriodo);
+  }, [articulosData, tipoPeriodo]);
 
   // Function to force refresh data
   const handleRefreshSap = () => {
@@ -1986,6 +2035,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setMesInicio(undefined);
                         setMesFin(undefined);
                         setCaras([]);
+                        // Clear articulo/formato if incompatible with new period type
+                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'catorcena') {
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                        } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'catorcena') {
+                          setNewCara(prev => ({ ...prev, formato: '' }));
+                        }
                       }}
                       className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'catorcena' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : 'text-zinc-400 hover:text-zinc-300'}`}
                     >
@@ -1998,6 +2053,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setCatorcenaInicio(undefined);
                         setCatorcenaFin(undefined);
                         setCaras([]);
+                        // Clear articulo/formato if incompatible with new period type
+                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'mensual') {
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                        } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'mensual') {
+                          setNewCara(prev => ({ ...prev, formato: '' }));
+                        }
                       }}
                       className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'mensual' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : 'text-zinc-400 hover:text-zinc-300'}`}
                     >
@@ -2217,7 +2278,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   </label>
                   <SearchableSelect
                     label="Seleccionar artículo"
-                    options={articulosData || []}
+                    options={articulosFiltrados}
                     value={newCara.articulo}
                     onChange={(item) => {
                       // Auto-set tarifa publica from ItemCode mapping
@@ -2304,12 +2365,20 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     >
                       <option value="">Seleccionar</option>
-                      {filteredFormatos.map(f => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
-                      {inventarioFilters?.formatos.filter(f => !filteredFormatos.includes(f)).map(f => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
+                      {tipoPeriodo === 'mensual' ? (
+                        FORMATOS_MENSUALES.map(f => (
+                          <option key={f} value={f}>{f}</option>
+                        ))
+                      ) : (
+                        <>
+                          {filteredFormatos.map(f => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                          {inventarioFilters?.formatos.filter(f => !filteredFormatos.includes(f)).map(f => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </>
+                      )}
                     </select>
                   </div>
 
@@ -2356,8 +2425,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           value={newCara.periodoInicioCustom}
                           onChange={(e) => setNewCara({ ...newCara, periodoInicioCustom: e.target.value })}
                           disabled={!newCara.periodo}
-                          min={newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return `${y}-${String(m).padStart(2, '0')}-01`; })() : undefined}
-                          max={newCara.periodoFinCustom || (newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return new Date(parseInt(y), parseInt(m), 0).toISOString().split('T')[0]; })() : undefined)}
+                          min={availablePeriods.length > 0 ? availablePeriods[0].fecha_inicio : undefined}
+                          max={newCara.periodoFinCustom || (availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined)}
                           className="w-full px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
                         />
                       </div>
@@ -2368,8 +2437,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           value={newCara.periodoFinCustom}
                           onChange={(e) => setNewCara({ ...newCara, periodoFinCustom: e.target.value })}
                           disabled={!newCara.periodo}
-                          min={newCara.periodoInicioCustom || (newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return `${y}-${String(m).padStart(2, '0')}-01`; })() : undefined)}
-                          max={newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return new Date(parseInt(y), parseInt(m), 0).toISOString().split('T')[0]; })() : undefined}
+                          min={newCara.periodoInicioCustom || (availablePeriods.length > 0 ? availablePeriods[0].fecha_inicio : undefined)}
+                          max={availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined}
                           className="w-full px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
                         />
                       </div>
