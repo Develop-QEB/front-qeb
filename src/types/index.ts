@@ -315,6 +315,7 @@ export interface Campana {
   catorcena_fin_anio: number | null;
   tipo_periodo: string | null;
   has_aps: boolean | number | null;
+  reservas_count?: number | null;
   propuesta_id: number | null;
   // SAP integration fields
   card_code?: string | null;

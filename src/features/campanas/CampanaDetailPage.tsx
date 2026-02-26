@@ -1419,6 +1419,11 @@ export function CampanaDetailPage() {
             <Badge variant={statusVariants[campana.status] || 'secondary'} className="text-xs sm:text-sm">
               {campana.status}
             </Badge>
+            {campana.reservas_count != null && campana.total_caras && Number(campana.reservas_count) < Number(campana.total_caras) && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                Incompleta ({campana.reservas_count}/{campana.total_caras} caras)
+              </span>
+            )}
           </div>
         </div>
 

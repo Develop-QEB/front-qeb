@@ -1359,15 +1359,22 @@ export function CampanasPage() {
         </td>
         {/* Status */}
         <td className="px-4 py-3">
-          <button
-            onClick={() => {
-              setStatusCampana(item);
-              setStatusModalOpen(true);
-            }}
-            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
-          >
-            {item.status}
-          </button>
+          <div className="flex flex-col gap-1 items-start">
+            <button
+              onClick={() => {
+                setStatusCampana(item);
+                setStatusModalOpen(true);
+              }}
+              className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+            >
+              {item.status}
+            </button>
+            {item.reservas_count != null && item.total_caras && Number(item.reservas_count) < Number(item.total_caras) && (
+              <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                Incompleta
+              </span>
+            )}
+          </div>
         </td>
         {/* Actividad */}
         <td className="px-4 py-3">
