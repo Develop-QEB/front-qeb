@@ -2,9 +2,14 @@ import { useEffect, useRef } from 'react';
 import { X, BookOpen } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-const tutorials = [
+type Tutorial =
+  | { id: string; type: 'demo'; category: string; title: string; demoUrl: string; width: number; height: number; previewImage: string; paddingBottom: string }
+  | { id: string; type: 'pdf'; category: string; title: string; pdfUrl: string };
+
+const tutorials: Tutorial[] = [
   {
     id: 'asesores-solicitudes',
+    type: 'demo' as const,
     category: 'Asesores',
     title: 'Crear - Ver - Editar Solicitudes',
     demoUrl: 'https://app.storylane.io/demo/qwp95lfqu2k0?embed=inline_overlay',
@@ -16,7 +21,8 @@ const tutorials = [
   },
   {
     id: 'Gestion-Solicitudes',
-    category: 'Comercial',
+    type: 'demo' as const,
+    category: 'Asesores',
     title: 'Gestion de Solicitudes',
     demoUrl: 'https://app.storylane.io/demo/aasux8feuib8?embed=inline_overlay',
     width: 2560,
@@ -24,7 +30,14 @@ const tutorials = [
     previewImage:
       'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_6c04e8be-d673-40bf-a4eb-f4344fc91ebf/page/1771447559402.png',
     paddingBottom: 'calc(55.66% + 25px)',
-  }
+  },
+  { 
+    id: 'manual-asesores', 
+    type: 'pdf' as const, 
+    category: 'Asesores', 
+    title: 'Manual-Asesor-Comercial-QEB', 
+    pdfUrl: 'https://drive.google.com/file/d/1mXExe-3UJ_zFTG4IkgKLwi_x6AtF0bko/preview'
+  },
 ];
 
 const categories = [...new Set(tutorials.map((t) => t.category))];
@@ -60,6 +73,7 @@ export function AyudaModal({ isOpen, onClose, tutorialId, onSelect }: Props) {
   }, [isOpen, onClose]);
 
   const handlePlay = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (selected.type !== 'demo') return;
     const sl = (window as any).Storylane;
     if (sl) sl.Play({ type: 'preview_embed', demo_type: 'image', width: selected.width, height: selected.height, element: e.currentTarget, demo_url: selected.demoUrl });
   };
@@ -112,22 +126,30 @@ export function AyudaModal({ isOpen, onClose, tutorialId, onSelect }: Props) {
           </div>
 
           <div className="flex-1 p-5 overflow-auto">
-            {/* key={tutorialId} fuerza re-mount al cambiar tutorial, reseteando el player */}
-            <div key={tutorialId} className="sl-embed-container" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(63,95,172,0.35)', boxShadow: '0px 0px 18px rgba(26,19,72,0.15)', borderRadius: '10px' }}>
-              <div className="sl-preview-heading" style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(40,37,54,0.9)', zIndex: 999999, fontFamily: 'Poppins, Arial, sans-serif', borderRadius: '10px' }}>
-                <div style={{ color: '#fff', marginBottom: '20px', fontSize: 'clamp(18px,2vw,26px)', fontWeight: 500, textAlign: 'center', maxWidth: '60%', textShadow: '0px 1px 2px rgba(26,19,72,0.40)' }}>
-                  {selected.title}
+            {selected.type === 'pdf' ? (
+              <iframe
+                key={tutorialId}
+                src={(selected as any).pdfUrl}
+                style={{ width: '100%', height: '100%', border: 'none', borderRadius: '10px' }}
+              />
+            ) : (
+              /* key={tutorialId} fuerza re-mount al cambiar tutorial, reseteando el player */
+              <div key={tutorialId} className="sl-embed-container" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(63,95,172,0.35)', boxShadow: '0px 0px 18px rgba(26,19,72,0.15)', borderRadius: '10px' }}>
+                <div className="sl-preview-heading" style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(40,37,54,0.9)', zIndex: 999999, fontFamily: 'Poppins, Arial, sans-serif', borderRadius: '10px' }}>
+                  <div style={{ color: '#fff', marginBottom: '20px', fontSize: 'clamp(18px,2vw,26px)', fontWeight: 500, textAlign: 'center', maxWidth: '60%', textShadow: '0px 1px 2px rgba(26,19,72,0.40)' }}>
+                    {selected.title}
+                  </div>
+                  <button onClick={handlePlay} className="sl-preview-cta" style={{ backgroundColor: '#9939EB', border: 'none', borderRadius: '8px', boxShadow: '0px 0px 15px rgba(26,19,72,0.45)', color: '#fff', fontFamily: 'Poppins, Arial, sans-serif', fontSize: 'clamp(14px,1.4vw,18px)', fontWeight: 600, height: 'clamp(38px,3.5vw,48px)', padding: '0 20px', cursor: 'pointer' }}>
+                    VER DEMO
+                  </button>
                 </div>
-                <button onClick={handlePlay} className="sl-preview-cta" style={{ backgroundColor: '#9939EB', border: 'none', borderRadius: '8px', boxShadow: '0px 0px 15px rgba(26,19,72,0.45)', color: '#fff', fontFamily: 'Poppins, Arial, sans-serif', fontSize: 'clamp(14px,1.4vw,18px)', fontWeight: 600, height: 'clamp(38px,3.5vw,48px)', padding: '0 20px', cursor: 'pointer' }}>
-                  VER DEMO
-                </button>
-              </div>
-              <div className="sl-embed" data-sl-demo-type="image" style={{ position: 'relative', paddingBottom: selected.paddingBottom, width: '100%', height: 0, overflow: 'hidden' }}>
-                <div className="sl-preview" style={{ width: '100%', height: '100%', zIndex: 99999, position: 'absolute', background: `url('${selected.previewImage}') no-repeat`, backgroundSize: '100% 100%', borderRadius: 'inherit' }} />
+                <div className="sl-embed" data-sl-demo-type="image" style={{ position: 'relative', paddingBottom: selected.paddingBottom, width: '100%', height: 0, overflow: 'hidden' }}>
+                  <div className="sl-preview" style={{ width: '100%', height: '100%', zIndex: 99999, position: 'absolute', background: `url('${selected.previewImage}') no-repeat`, backgroundSize: '100% 100%', borderRadius: 'inherit' }} />
+                  <iframe className="sl-demo" src="" name="sl-embed" allow="fullscreen" allowFullScreen style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }} />
+                </div>
                 <iframe className="sl-demo" src="" name="sl-embed" allow="fullscreen" allowFullScreen style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }} />
               </div>
-              <iframe className="sl-demo" src="" name="sl-embed" allow="fullscreen" allowFullScreen style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }} />
-            </div>
+            )}
           </div>
         </div>
       </div>
