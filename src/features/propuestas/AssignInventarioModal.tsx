@@ -5447,7 +5447,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
-                                  <div className="flex-1 grid grid-cols-6 gap-3 text-sm">
+                                  <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
                                     <div>
                                       <span className="text-zinc-500 text-xs">Formato</span>
                                       <p className="text-white font-medium">{cara.formato || '-'}</p>
@@ -5465,6 +5465,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     <div>
                                       <span className="text-zinc-500 text-xs">Artículo</span>
                                       <p className="text-zinc-300 text-xs">{cara.articulo || '-'}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">F. Inicio</span>
+                                      <p className="text-zinc-300 text-xs">{cara.inicio_periodo ? new Date(cara.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">F. Fin</span>
+                                      <p className="text-zinc-300 text-xs">{cara.fin_periodo ? new Date(cara.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Caras</span>

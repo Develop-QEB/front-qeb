@@ -324,6 +324,7 @@ export interface OrdenMontajeINVIAN {
   indicaciones?: string | null;
   num_artes_digitales?: number | null;
   cortesia?: number | null;
+  numero_articulo?: string | null;
 }
 
 export interface ComentarioRevisionArte {

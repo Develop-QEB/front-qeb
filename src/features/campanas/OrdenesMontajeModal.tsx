@@ -7,6 +7,7 @@ import {
   Image, Link2, Film, FileText, ChevronLeft, Play
 } from 'lucide-react';
 import { campanasService, OrdenMontajeCAT, OrdenMontajeINVIAN, ImagenDigital } from '../../services/campanas.service';
+import { ALLOWED_DIGITAL_ITEM_CODES } from '../../config/allowedDigitalArticles';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import * as XLSX from 'xlsx';
@@ -211,7 +212,7 @@ interface OrdenesMontajeModalProps {
   canExport?: boolean;
 }
 
-type TabType = 'cat' | 'digital' | 'invian';
+type TabType = 'cat' | 'digital' | 'invian' | 'invian-digital';
 
 // Status options for filter
 const STATUS_OPTIONS = ['Aprobada', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
@@ -446,7 +447,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       catorcenaInicio,
       catorcenaFin,
     }),
-    enabled: isOpen && activeTab === 'invian',
+    enabled: isOpen && (activeTab === 'invian' || activeTab === 'invian-digital'),
   });
 
   const years = catorcenasData?.years || [];
@@ -705,6 +706,68 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [filteredINVIANData, invianGroupings]);
 
+  // Filtered INVIAN Digital data (same as INVIAN but only allowed digital articles)
+  const filteredINVIANDigitalData = useMemo(() => {
+    let items = invianData || [];
+
+    // Filter by allowed digital article codes
+    items = items.filter(item => item.numero_articulo != null && ALLOWED_DIGITAL_ITEM_CODES.has(item.numero_articulo));
+
+    // Filter by date range
+    if (fechaInicio || fechaFin) {
+      items = items.filter(item => {
+        const fecha = item.fecha_inicio ? new Date(item.fecha_inicio) : null;
+        if (!fecha) return false;
+        const isAfterInicio = !fechaInicio || fecha >= fechaInicio;
+        const isBeforeFin = !fechaFin || fecha <= fechaFin;
+        return isAfterInicio && isBeforeFin;
+      });
+    }
+
+    // Filter by catorcenas
+    if (selectedCatorcenas.length > 0) {
+      items = items.filter(item => {
+        if (!item.catorcena_numero || !item.catorcena_year) return false;
+        const catorcenaId = `${item.catorcena_numero}-${item.catorcena_year}`;
+        return selectedCatorcenas.includes(catorcenaId);
+      });
+    }
+
+    // Apply advanced filters
+    if (invianFilters.length > 0) {
+      items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], invianFilters) as unknown as OrdenMontajeINVIAN[];
+    }
+
+    // Apply sorting
+    if (invianSortField && items.length > 0) {
+      items.sort((a, b) => {
+        const aVal = a[invianSortField as keyof OrdenMontajeINVIAN];
+        const bVal = b[invianSortField as keyof OrdenMontajeINVIAN];
+        const aStr = String(aVal || '').toLowerCase();
+        const bStr = String(bVal || '').toLowerCase();
+        if (aStr < bStr) return invianSortDirection === 'asc' ? -1 : 1;
+        if (aStr > bStr) return invianSortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return items;
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection]);
+
+  // Group INVIAN Digital data
+  const groupedINVIANDigitalData = useMemo(() => {
+    if (invianGroupings.length === 0 || !filteredINVIANDigitalData.length) return null;
+
+    const groups: Record<string, OrdenMontajeINVIAN[]> = {};
+    filteredINVIANDigitalData.forEach(item => {
+      const key = getINVIANGroupValue(item, invianGroupings[0]);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  }, [filteredINVIANDigitalData, invianGroupings]);
+
   // Calculate totals - ensure numeric addition (based on filtered data)
   const catTotals = useMemo(() => {
     if (!filteredCATData || filteredCATData.length === 0) return { caras: 0, tarifa: 0, monto: 0 };
@@ -790,6 +853,35 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Orden Montaje INVIAN');
       XLSX.writeFile(wb, `orden_montaje_invian_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } else if (activeTab === 'invian-digital' && filteredINVIANDigitalData.length > 0) {
+      const wsData = filteredINVIANDigitalData.map(item => ({
+        'Campaña': item.Campania || '',
+        'Anunciante': item.Anunciante || '',
+        'Operación': item.Operacion || '',
+        'Código de contrato (Opcional)': item.CodigoContrato || '',
+        'Precio por cara (Opcional)': Number(item.PrecioPorCara) || 0,
+        'Vendedor': item.Vendedor || '',
+        'Descripción (Opcional)': item.Descripcion || '',
+        'Inicio o Periodo': item.InicioPeriodo || '',
+        'Fin o Segmento': item.FinSegmento || '',
+        'Arte': item.Arte || '',
+        'Código de arte (Opcional)': item.CodigoArte || '',
+        'Nombre Arte': item.ArteUrl?.split('/').pop() || '',
+        'Arte Url (Opcional)': getFileUrl(item.ArteUrl) || '',
+        'Origen del arte (Opcional)': item.OrigenArte || '',
+        'Indicaciones': item.indicaciones || '',
+        'Unidad': item.Unidad || '',
+        'Cara': item.Cara || '',
+        'Ciudad': item.Ciudad || '',
+        'Tipo de Distribución': item.TipoDistribucion || '',
+        'Reproducciones': item.Reproducciones || '',
+        'Artículo': item.numero_articulo || '',
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Orden Montaje INVIAN Digital');
+      XLSX.writeFile(wb, `orden_montaje_invian_digital_${new Date().toISOString().split('T')[0]}.xlsx`);
     }
   };
 
@@ -814,6 +906,22 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     INVIAN_FILTER_FIELDS.forEach(fieldConfig => {
       const values = new Set<string>();
       invianData.forEach(item => {
+        const val = item[fieldConfig.field as keyof OrdenMontajeINVIAN];
+        if (val !== null && val !== undefined && val !== '') values.add(String(val));
+      });
+      valuesMap[fieldConfig.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [invianData]);
+
+  // Unique values for INVIAN Digital filters
+  const getINVIANDigitalUniqueValues = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    if (!invianData) return valuesMap;
+    const digitalItems = invianData.filter(item => item.numero_articulo != null && ALLOWED_DIGITAL_ITEM_CODES.has(item.numero_articulo));
+    INVIAN_FILTER_FIELDS.forEach(fieldConfig => {
+      const values = new Set<string>();
+      digitalItems.forEach(item => {
         const val = item[fieldConfig.field as keyof OrdenMontajeINVIAN];
         if (val !== null && val !== undefined && val !== '') values.add(String(val));
       });
@@ -926,15 +1034,15 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const currentFilterFields = activeTab === 'cat' || activeTab === 'digital' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
   const currentGroupOptions = activeTab === 'cat' || activeTab === 'digital' ? CAT_GROUPINGS : INVIAN_GROUPINGS;
   const currentSortOptions = activeTab === 'cat' || activeTab === 'digital' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
-  const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' ? getCATUniqueValues : getINVIANUniqueValues;
+  const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' ? getCATUniqueValues : activeTab === 'invian-digital' ? getINVIANDigitalUniqueValues : getINVIANUniqueValues;
 
   const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin;
 
   if (!isOpen) return null;
 
   const isLoading = activeTab === 'cat' || activeTab === 'digital' ? isLoadingCAT : isLoadingINVIAN;
-  const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'digital' ? filteredDigitalData.length : filteredINVIANData.length;
-  const totalCount = activeTab === 'cat' ? (catData?.length || 0) : activeTab === 'digital' ? filteredDigitalData.length : (invianData?.length || 0);
+  const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : filteredINVIANData.length;
+  const totalCount = activeTab === 'cat' ? (catData?.length || 0) : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : (invianData?.length || 0);
 
   return (
     <div
@@ -1001,6 +1109,17 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
             >
               <FileSpreadsheet className="h-4 w-4" />
               INVIAN
+            </button>
+            <button
+              onClick={() => setActiveTab('invian-digital')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'invian-digital'
+                  ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white shadow-lg shadow-violet-500/25'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Monitor className="h-4 w-4" />
+              INVIAN Digital
             </button>
           </div>
 
@@ -1408,47 +1527,55 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                   </tr>
                 </thead>
                 <tbody>
-                  {groupedINVIANData ? (
-                    groupedINVIANData.map(([groupName, items]) => (
-                      <React.Fragment key={groupName}>
-                        <tr
-                          onClick={() => toggleGroup(groupName)}
-                          className="bg-cyan-500/10 border-b border-cyan-500/20 cursor-pointer hover:bg-cyan-500/15 transition-colors"
-                        >
-                          <td colSpan={16} className="px-4 py-2">
-                            <div className="flex items-center gap-2">
-                              {invianExpandedGroups.has(groupName) ? (
-                                <ChevronDown className="h-4 w-4 text-cyan-400" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4 text-cyan-400" />
-                              )}
-                              <span className="font-semibold text-white text-sm">{groupName}</span>
-                              <span className="px-2 py-0.5 rounded-full text-xs bg-cyan-500/20 text-cyan-300">
-                                {items.length} registros
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                        {invianExpandedGroups.has(groupName) && items.map((item, idx) => (
-                          <INVIANRow key={`${groupName}-${idx}`} item={item} onOpenGallery={handleOpenGallery} />
-                        ))}
-                      </React.Fragment>
-                    ))
-                  ) : (
-                    filteredINVIANData.map((item, idx) => (
-                      <INVIANRow key={idx} item={item} onOpenGallery={handleOpenGallery} />
-                    ))
-                  )}
-                  {filteredINVIANData.length === 0 && (
-                    <tr>
-                      <td colSpan={16} className="px-4 py-12 text-center">
-                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
-                          <FileSpreadsheet className="w-8 h-8 text-purple-400" />
-                        </div>
-                        <p className="text-zinc-500">No se encontraron registros</p>
-                      </td>
-                    </tr>
-                  )}
+                  {(() => {
+                    const currentData = activeTab === 'invian-digital' ? filteredINVIANDigitalData : filteredINVIANData;
+                    const currentGrouped = activeTab === 'invian-digital' ? groupedINVIANDigitalData : groupedINVIANData;
+                    return (
+                      <>
+                        {currentGrouped ? (
+                          currentGrouped.map(([groupName, items]) => (
+                            <React.Fragment key={groupName}>
+                              <tr
+                                onClick={() => toggleGroup(groupName)}
+                                className="bg-cyan-500/10 border-b border-cyan-500/20 cursor-pointer hover:bg-cyan-500/15 transition-colors"
+                              >
+                                <td colSpan={16} className="px-4 py-2">
+                                  <div className="flex items-center gap-2">
+                                    {invianExpandedGroups.has(groupName) ? (
+                                      <ChevronDown className="h-4 w-4 text-cyan-400" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-cyan-400" />
+                                    )}
+                                    <span className="font-semibold text-white text-sm">{groupName}</span>
+                                    <span className="px-2 py-0.5 rounded-full text-xs bg-cyan-500/20 text-cyan-300">
+                                      {items.length} registros
+                                    </span>
+                                  </div>
+                                </td>
+                              </tr>
+                              {invianExpandedGroups.has(groupName) && items.map((item, idx) => (
+                                <INVIANRow key={`${groupName}-${idx}`} item={item} onOpenGallery={handleOpenGallery} />
+                              ))}
+                            </React.Fragment>
+                          ))
+                        ) : (
+                          currentData.map((item, idx) => (
+                            <INVIANRow key={idx} item={item} onOpenGallery={handleOpenGallery} />
+                          ))
+                        )}
+                        {currentData.length === 0 && (
+                          <tr>
+                            <td colSpan={16} className="px-4 py-12 text-center">
+                              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
+                                <FileSpreadsheet className="w-8 h-8 text-purple-400" />
+                              </div>
+                              <p className="text-zinc-500">No se encontraron registros{activeTab === 'invian-digital' ? ' digitales' : ''}</p>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>

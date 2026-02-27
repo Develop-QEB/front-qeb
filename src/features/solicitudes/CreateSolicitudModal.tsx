@@ -273,6 +273,49 @@ const getFormatoFromArticulo = (itemName: string): string => {
   return '';
 };
 
+// Mapeo formato → tipo de periodo requerido
+// CATORCENAL: PB y Columna, Kioscos, Digital PB y Columna, Boleros
+// MENSUAL: Mi Macro, Puentes Peatonales, Carteleras Digitales/Unipolares, Bajo Puentes
+// Formatos mensuales (no existen en tabla inventarios, lista fija)
+const FORMATOS_MENSUALES = [
+  'MI MACRO',
+  'MI MACRO Vidrio Int',
+  'MI MACRO Vidrio Ext',
+  'MI MACRO MUPI Int',
+  'MI MACRO Parabus',
+  'MI MACRO Modulos',
+  'Puente Peatonal',
+  'Bajo Puente',
+  'Bajo Puente Gran Terraza',
+  'Bajo Puente Circuito Geografos',
+  'Bajo Puente Circuito del Parque',
+  'Bajo Puente Fuentes',
+  'Bajo Puente Colorines Bloque 1',
+  'Bajo Puente Colorines Bloque 2',
+  'Bajo Puente Colorines Bloque 3',
+  'Bajo Puente Colorines Bloque 4',
+  'Cartelera Digital',
+  'Unipolar',
+];
+
+const FORMATOS_MENSUALES_SET = new Set(FORMATOS_MENSUALES);
+
+const getRequiredPeriodoForFormato = (formato: string): 'catorcena' | 'mensual' => {
+  if (FORMATOS_MENSUALES_SET.has(formato)) return 'mensual';
+  return 'catorcena';
+};
+
+const getRequiredPeriodoForArticulo = (itemName: string): 'catorcena' | 'mensual' => {
+  if (!itemName) return 'catorcena';
+  const name = itemName.toUpperCase();
+  if (name.includes('MI MACRO')) return 'mensual';
+  if (name.includes('PUENTE PEATONAL')) return 'mensual';
+  if (name.includes('BAJO PUENTE')) return 'mensual';
+  if (name.includes('CARTELERA')) return 'mensual';
+  if (name.includes('UNIPOLAR')) return 'mensual';
+  return 'catorcena';
+};
+
 // Tipo auto-detection from article name (Tradicional or Digital)
 const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
   if (!itemName) return 'Tradicional';
@@ -889,6 +932,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     retry: 1,
   });
 
+  // Filter articulos by current tipoPeriodo
+  const articulosFiltrados = useMemo(() => {
+    if (!articulosData) return [];
+    return articulosData.filter(a => getRequiredPeriodoForArticulo(a.ItemName) === tipoPeriodo);
+  }, [articulosData, tipoPeriodo]);
+
   // Function to force refresh data
   const handleRefreshSap = () => {
     clearSapCache();
@@ -1403,7 +1452,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const totalCarasAll = totalRenta + totalBonificacion;
     // Tarifa Efectiva = Inversión Total / Total Caras (renta + bonificación)
     const tarifaEfectiva = totalCarasAll > 0 ? totalPrecio / totalCarasAll : 0;
-    return { totalRenta, totalBonificacion, totalCaras: totalRenta, totalPrecio, tarifaEfectiva };
+    // Regla: si el total global es impar, todas requieren autorización DG
+    const totalCarasImpar = totalCarasAll > 0 && totalCarasAll % 2 !== 0;
+    return { totalRenta, totalBonificacion, totalCaras: totalRenta, totalPrecio, tarifaEfectiva, totalCarasImpar };
   }, [caras]);
 
   // Handle file upload
@@ -1990,6 +2041,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setMesInicio(undefined);
                         setMesFin(undefined);
                         setCaras([]);
+                        // Clear articulo/formato if incompatible with new period type
+                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'catorcena') {
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                        } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'catorcena') {
+                          setNewCara(prev => ({ ...prev, formato: '' }));
+                        }
                       }}
                       className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'catorcena' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : 'text-zinc-400 hover:text-zinc-300'}`}
                     >
@@ -2002,6 +2059,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setCatorcenaInicio(undefined);
                         setCatorcenaFin(undefined);
                         setCaras([]);
+                        // Clear articulo/formato if incompatible with new period type
+                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'mensual') {
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                        } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'mensual') {
+                          setNewCara(prev => ({ ...prev, formato: '' }));
+                        }
                       }}
                       className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'mensual' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : 'text-zinc-400 hover:text-zinc-300'}`}
                     >
@@ -2221,7 +2284,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   </label>
                   <SearchableSelect
                     label="Seleccionar artículo"
-                    options={articulosData || []}
+                    options={articulosFiltrados}
                     value={newCara.articulo}
                     onChange={(item) => {
                       // Auto-set tarifa publica from ItemCode mapping
@@ -2308,12 +2371,20 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     >
                       <option value="">Seleccionar</option>
-                      {filteredFormatos.map(f => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
-                      {inventarioFilters?.formatos.filter(f => !filteredFormatos.includes(f)).map(f => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
+                      {tipoPeriodo === 'mensual' ? (
+                        FORMATOS_MENSUALES.map(f => (
+                          <option key={f} value={f}>{f}</option>
+                        ))
+                      ) : (
+                        <>
+                          {filteredFormatos.map(f => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                          {inventarioFilters?.formatos.filter(f => !filteredFormatos.includes(f)).map(f => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </>
+                      )}
                     </select>
                   </div>
 
@@ -2360,8 +2431,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           value={newCara.periodoInicioCustom}
                           onChange={(e) => setNewCara({ ...newCara, periodoInicioCustom: e.target.value })}
                           disabled={!newCara.periodo}
-                          min={newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return `${y}-${String(m).padStart(2, '0')}-01`; })() : undefined}
-                          max={newCara.periodoFinCustom || (newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return new Date(parseInt(y), parseInt(m), 0).toISOString().split('T')[0]; })() : undefined)}
+                          min={availablePeriods.length > 0 ? availablePeriods[0].fecha_inicio : undefined}
+                          max={newCara.periodoFinCustom || (availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined)}
                           className="w-full px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
                         />
                       </div>
@@ -2372,8 +2443,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           value={newCara.periodoFinCustom}
                           onChange={(e) => setNewCara({ ...newCara, periodoFinCustom: e.target.value })}
                           disabled={!newCara.periodo}
-                          min={newCara.periodoInicioCustom || (newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return `${y}-${String(m).padStart(2, '0')}-01`; })() : undefined)}
-                          max={newCara.periodo ? (() => { const [y, m] = newCara.periodo.split('-'); return new Date(parseInt(y), parseInt(m), 0).toISOString().split('T')[0]; })() : undefined}
+                          min={newCara.periodoInicioCustom || (availablePeriods.length > 0 ? availablePeriods[0].fecha_inicio : undefined)}
+                          max={availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined}
                           className="w-full px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
                         />
                       </div>
@@ -2614,38 +2685,40 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-right text-zinc-300">{formatCurrency(cara.tarifaPublica)}</td>
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
-                                          <div className="flex flex-col gap-0.5">
-                                            {/* Si ambos están aprobados, mostrar "Aprobado" */}
-                                            {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
-                                                Aprobado
-                                              </span>
-                                            )}
-                                            {/* Si cualquiera está rechazado */}
-                                            {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">
-                                                Rechazado
-                                              </span>
-                                            )}
-                                            {/* Si DG está pendiente (y ninguno rechazado) */}
-                                            {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dcm !== 'rechazado' && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
-                                                Pend. DG
-                                              </span>
-                                            )}
-                                            {/* Si DCM está pendiente (y ninguno rechazado) */}
-                                            {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
-                                                Pend. DCM
-                                              </span>
-                                            )}
-                                            {/* Si ninguno tiene estado */}
-                                            {!cara.autorizacion_dg && !cara.autorizacion_dcm && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-600/30 text-zinc-400">
-                                                Por evaluar
-                                              </span>
-                                            )}
-                                          </div>
+                                          {(() => {
+                                            // Si total global es impar, todas requieren DG
+                                            const dgEfectivo = totals.totalCarasImpar ? 'pendiente' : cara.autorizacion_dg;
+                                            const dcmEfectivo = cara.autorizacion_dcm;
+                                            return (
+                                              <div className="flex flex-col gap-0.5">
+                                                {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                                                    Aprobado
+                                                  </span>
+                                                )}
+                                                {(dgEfectivo === 'rechazado' || dcmEfectivo === 'rechazado') && (
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">
+                                                    Rechazado
+                                                  </span>
+                                                )}
+                                                {dgEfectivo === 'pendiente' && dcmEfectivo !== 'rechazado' && (
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title={totals.totalCarasImpar ? 'Total de caras impar - Requiere autorización DG' : 'Requiere autorización DG'}>
+                                                    Pend. DG
+                                                  </span>
+                                                )}
+                                                {dcmEfectivo === 'pendiente' && dgEfectivo !== 'rechazado' && (
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
+                                                    Pend. DCM
+                                                  </span>
+                                                )}
+                                                {!dgEfectivo && !dcmEfectivo && (
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-600/30 text-zinc-400">
+                                                    Por evaluar
+                                                  </span>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
                                         </td>
                                         <td className="px-2 py-2 text-center">
                                           <div className="flex items-center justify-center gap-1">
@@ -2688,6 +2761,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           <span className="text-amber-400 font-bold">{formatCurrency(totals.totalPrecio)}</span>
                         </div>
                       </div>
+                      {totals.totalCarasImpar && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded px-3 py-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                          <span>Total de caras impar ({totals.totalRenta + totals.totalBonificacion}) — Todas las caras requieren autorización DG</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
