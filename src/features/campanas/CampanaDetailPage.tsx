@@ -427,11 +427,30 @@ interface TableColumn {
 
 const TABLE_COLUMNS: TableColumn[] = [
   { field: 'codigo_unico', label: 'Código' },
-  { field: 'solicitud_caras_id', label: 'Grupo ID' },
-  { field: 'mueble', label: 'Mueble' },
-  { field: 'estado', label: 'Estado' },
-  { field: 'tipo_de_cara', label: 'Tipo' },
+  { field: 'articulo', label: 'Artículo' },
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'tipo_de_cara', label: 'Formato' },
   { field: 'caras_totales', label: 'Caras' },
+  { field: 'tarifa_publica', label: 'Tarifa' },
+  { field: 'total_inversion', label: 'Inversión' },
+  { field: 'latitud', label: 'Lat' },
+  { field: 'longitud', label: 'Lon' },
+  { field: 'medidas', label: 'Medidas' },
+];
+
+const TABLE_COLUMNS_APS: TableColumn[] = [
+  { field: 'codigo_unico', label: 'Código' },
+  { field: 'articulo', label: 'Artículo' },
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'formato', label: 'Formato' },
+  { field: 'caras_totales', label: 'Caras' },
+  { field: 'tarifa_publica', label: 'Tarifa' },
+  { field: 'total_inversion', label: 'Inversión' },
+  { field: 'latitud', label: 'Lat' },
+  { field: 'longitud', label: 'Lon' },
+  { field: 'medidas', label: 'Medidas' },
+  { field: 'aps', label: 'APS' },
+  { field: 'estatus_reserva', label: 'Estatus' },
 ];
 
 const OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
@@ -444,6 +463,89 @@ const OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | '
   { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
   { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
 ];
+
+function fmtMoney(n: number): string {
+  return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+function GroupSummaryInline({ items, groupField }: { items: InventarioReservado[]; groupField: string }) {
+  if (groupField === 'aps') return null;
+  const carasTotal = items.reduce((s, i) => s + (Number(i.caras_totales) || 0), 0);
+  const getTarifa = (i: InventarioReservado) => Number(i.tarifa_publica_sc) || Number(i.tarifa_publica) || 0;
+  const totalInversion = items.reduce((s, i) => s + getTarifa(i) * (Number(i.caras_totales) || 0), 0);
+  const tarifas = [...new Set(items.map(i => Math.round(getTarifa(i))).filter(t => t > 0))];
+  const uniformTarifa = tarifas.length === 1 ? tarifas[0] : 0;
+  const showTarifa = groupField !== 'inicio_periodo' && uniformTarifa > 0;
+  return (
+    <div className="flex items-center gap-2 text-[10px] ml-2 shrink-0">
+      <span className="text-zinc-400">Caras: <span className="text-white font-medium">{carasTotal}</span></span>
+      {showTarifa && <span className="text-zinc-400">Tarifa: <span className="text-amber-400 font-medium">{fmtMoney(uniformTarifa)}</span></span>}
+      {totalInversion > 0 && <span className="text-zinc-400">Inv: <span className="text-emerald-400 font-medium">{fmtMoney(totalInversion)}</span></span>}
+    </div>
+  );
+}
+
+function GroupMetaBadges({ items, skipFields }: { items: InventarioReservado[]; skipFields: string[] }) {
+  const plazas = [...new Set(items.map(i => i.plaza).filter(Boolean))] as string[];
+  const formatos = [...new Set(items.map(i => i.formato ?? i.tipo_de_cara).filter(Boolean))] as string[];
+  const articulos = [...new Set(items.map(i => i.articulo).filter(Boolean))] as string[];
+  const showPlazas = !skipFields.includes('plaza') && plazas.length > 0;
+  const showArticulos = !skipFields.includes('articulo') && articulos.length > 0;
+  const showFormatos = !skipFields.includes('formato') && formatos.length > 0;
+  if (!showPlazas && !showArticulos && !showFormatos) return null;
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1 px-2 py-1.5 mb-1 border-b border-purple-900/10">
+      {showPlazas && (
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-zinc-500">Plaza:</span>
+          {plazas.slice(0, 3).map(p => <span key={p} className="px-1.5 py-0.5 bg-zinc-800 text-zinc-300 rounded text-[10px]">{p}</span>)}
+          {plazas.length > 3 && <span className="text-[10px] text-zinc-500">+{plazas.length - 3}</span>}
+        </div>
+      )}
+      {showArticulos && (
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-zinc-500">Art:</span>
+          {articulos.slice(0, 2).map(a => <span key={a} className="px-1.5 py-0.5 bg-violet-900/40 text-violet-300 rounded text-[10px]">{a}</span>)}
+          {articulos.length > 2 && <span className="text-[10px] text-zinc-500">+{articulos.length - 2}</span>}
+        </div>
+      )}
+      {showFormatos && (
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-zinc-500">Formato:</span>
+          {formatos.slice(0, 2).map(f => <span key={f} className="px-1.5 py-0.5 bg-purple-900/40 text-purple-300 rounded text-[10px]">{f}</span>)}
+          {formatos.length > 2 && <span className="text-[10px] text-zinc-500">+{formatos.length - 2}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5') {
+  if (col.field === 'codigo_unico') return <td key={col.field} className={`${p} text-white font-medium`}>{item.codigo_unico || '-'}</td>;
+  if (col.field === 'caras_totales') return <td key={col.field} className={`${p} text-center`}><span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">{item.caras_totales}</span></td>;
+  if (col.field === 'renta') return <td key={col.field} className={`${p} text-center text-violet-300 text-[10px]`}>{item.renta != null ? item.renta : '-'}</td>;
+  if (col.field === 'bonificacion_sc') return <td key={col.field} className={`${p} text-center text-pink-300 text-[10px]`}>{item.bonificacion_sc != null ? item.bonificacion_sc : '-'}</td>;
+  if (col.field === 'tarifa_publica') {
+    const t = Number(item.tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
+    return <td key={col.field} className={`${p} text-amber-400 text-right font-mono text-[10px]`}>{t > 0 ? fmtMoney(t) : '-'}</td>;
+  }
+  if (col.field === 'total_inversion') {
+    const t = Number(item.tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
+    const inv = t * (Number(item.caras_totales) || 0);
+    return <td key={col.field} className={`${p} text-emerald-400 text-right font-mono font-medium text-[10px]`}>{inv > 0 ? fmtMoney(inv) : '-'}</td>;
+  }
+  if (col.field === 'latitud') return <td key={col.field} className={`${p} text-zinc-500 font-mono text-[10px]`}>{item.latitud != null ? item.latitud.toFixed(5) : '-'}</td>;
+  if (col.field === 'longitud') return <td key={col.field} className={`${p} text-zinc-500 font-mono text-[10px]`}>{item.longitud != null ? item.longitud.toFixed(5) : '-'}</td>;
+  if (col.field === 'medidas') return <td key={col.field} className={`${p} text-zinc-400 text-[10px]`}>{item.ancho && item.alto ? `${item.ancho}×${item.alto}` : '-'}</td>;
+  const value = item[col.field as keyof InventarioReservado];
+  return <td key={col.field} className={`${p} text-zinc-300`}>{value !== null && value !== undefined ? String(value) : '-'}</td>;
+}
+
+function renderAPSCell(item: InventarioConAPS, col: TableColumn, p = 'p-1.5') {
+  if (col.field === 'aps') return <td key={col.field} className={`${p} text-center`}><span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium">{item.aps}</span></td>;
+  if (col.field === 'estatus_reserva') return <td key={col.field} className={p}><span className={`px-1.5 py-0.5 rounded text-[10px] ${item.estatus_reserva === 'confirmado' ? 'bg-green-500/20 text-green-400' : item.estatus_reserva === 'pendiente' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-zinc-500/20 text-zinc-400'}`}>{item.estatus_reserva || 'N/A'}</span></td>;
+  return renderReservadoCell(item, col, p);
+}
 
 // Función para aplicar filtros a los datos
 function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
@@ -1046,7 +1148,7 @@ export function CampanaDetailPage() {
 
   // Columnas visibles (excluye las que están agrupadas) - Inventario APS
   const visibleColumnsAPS = useMemo(() => {
-    return TABLE_COLUMNS.filter(col => !activeGroupingsAPS.includes(col.field as GroupByField));
+    return TABLE_COLUMNS_APS.filter(col => !activeGroupingsAPS.includes(col.field as GroupByField));
   }, [activeGroupingsAPS]);
 
   // Toggle agrupación (con APS) - soporta hasta 3 niveles
@@ -1607,7 +1709,7 @@ export function CampanaDetailPage() {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 p-3 md:p-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
             {/* Columna izquierda: Mapa */}
             <div className="h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative map-dark-controls">
               {!isLoaded || isLoadingInventario ? (
@@ -1995,22 +2097,7 @@ export function CampanaDetailPage() {
                               )}
                             </button>
                           </td>
-                          {visibleColumnsReservado.map(col => {
-                            const value = item[col.field as keyof InventarioReservado];
-                            if (col.field === 'codigo_unico') {
-                              return <td key={col.field} className="p-2 text-white font-medium">{value || '-'}</td>;
-                            }
-                            if (col.field === 'caras_totales') {
-                              return (
-                                <td key={col.field} className="p-2 text-center">
-                                  <span className="px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-400">
-                                    {value}
-                                  </span>
-                                </td>
-                              );
-                            }
-                            return <td key={col.field} className="p-2 text-zinc-300">{value || '-'}</td>;
-                          })}
+                          {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-2'))}
                         </tr>
                       ))}
                     </tbody>
@@ -2065,7 +2152,8 @@ export function CampanaDetailPage() {
                                 {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[0])?.label}:
                               </span>
                               <span className="text-xs text-white">{groupKey}</span>
-                              <span className="ml-auto text-[10px] text-muted-foreground">
+                              <GroupSummaryInline items={allGroupItems} groupField={activeGroupings[0]} />
+                              <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                 {totalItems} items
                               </span>
                             </button>
@@ -2074,6 +2162,7 @@ export function CampanaDetailPage() {
                           {/* Contenido expandido */}
                           {isExpanded && (
                             <div className="px-2 py-1">
+                              <GroupMetaBadges items={allGroupItems} skipFields={activeGroupings} />
                               {isNested && nestedGroups ? (
                                 // Segundo nivel de agrupación
                                 <div className="space-y-1">
@@ -2113,13 +2202,16 @@ export function CampanaDetailPage() {
                                               {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}:
                                             </span>
                                             <span className="text-[10px] text-white">{subGroupKey}</span>
-                                            <span className="ml-auto text-[10px] text-muted-foreground">
+                                            <GroupSummaryInline items={subItems} groupField={activeGroupings[1]} />
+                                            <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                               {subItems.length}
-                                          </span>
+                                            </span>
                                           </button>
                                         </div>
                                         {isSubExpanded && (
-                                          <table className="w-full text-xs">
+                                          <div>
+                                            <GroupMetaBadges items={subItems} skipFields={activeGroupings} />
+                                            <table className="w-full text-xs">
                                             <thead>
                                               <tr className="border-b border-border/30 text-left">
                                                 <th className="p-1.5 w-8"></th>
@@ -2151,26 +2243,12 @@ export function CampanaDetailPage() {
                                                       )}
                                                     </button>
                                                   </td>
-                                                  {visibleColumnsReservado.map(col => {
-                                                    const value = item[col.field as keyof InventarioReservado];
-                                                    if (col.field === 'codigo_unico') {
-                                                      return <td key={col.field} className="p-1.5 text-white font-medium">{value || '-'}</td>;
-                                                    }
-                                                    if (col.field === 'caras_totales') {
-                                                      return (
-                                                        <td key={col.field} className="p-1.5 text-center">
-                                                          <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
-                                                            {value}
-                                                          </span>
-                                                        </td>
-                                                      );
-                                                    }
-                                                    return <td key={col.field} className="p-1.5 text-zinc-400">{value !== null && value !== undefined ? String(value) : '-'}</td>;
-                                                  })}
+                                                  {visibleColumnsReservado.map(col => renderReservadoCell(item, col))}
                                                 </tr>
                                               ))}
                                             </tbody>
                                           </table>
+                                          </div>
                                         )}
                                       </div>
                                     );
@@ -2210,22 +2288,7 @@ export function CampanaDetailPage() {
                                             )}
                                           </button>
                                         </td>
-                                        {visibleColumnsReservado.map(col => {
-                                          const value = item[col.field as keyof InventarioReservado];
-                                          if (col.field === 'codigo_unico') {
-                                            return <td key={col.field} className="p-1.5 text-white font-medium">{value || '-'}</td>;
-                                          }
-                                          if (col.field === 'caras_totales') {
-                                            return (
-                                              <td key={col.field} className="p-1.5 text-center">
-                                                <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
-                                                  {value}
-                                                </span>
-                                              </td>
-                                            );
-                                          }
-                                          return <td key={col.field} className="p-1.5 text-zinc-400">{value !== null && value !== undefined ? String(value) : '-'}</td>;
-                                        })}
+                                        {visibleColumnsReservado.map(col => renderReservadoCell(item, col))}
                                       </tr>
                                     ))}
                                   </tbody>
@@ -2279,7 +2342,7 @@ export function CampanaDetailPage() {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 p-3 md:p-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
             {/* Columna izquierda: Mapa */}
             <div className="h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative map-dark-controls">
               {!isLoaded || isLoadingAPS ? (
@@ -2658,13 +2721,9 @@ export function CampanaDetailPage() {
                           )}
                         </button>
                       </th>
-                      <th className="p-2 font-medium text-purple-300">Código</th>
-                      <th className="p-2 font-medium text-purple-300">Tipo</th>
-                      <th className="p-2 font-medium text-purple-300">Plaza</th>
-                      <th className="p-2 font-medium text-purple-300">Ubicación</th>
-                      <th className="p-2 font-medium text-purple-300">Caras</th>
-                      <th className="p-2 font-medium text-purple-300">APS</th>
-                      <th className="p-2 font-medium text-purple-300">Estatus</th>
+                      {visibleColumnsAPS.map(col => (
+                        <th key={col.field} className="p-2 font-medium text-purple-300">{col.label}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -2690,33 +2749,7 @@ export function CampanaDetailPage() {
                             )}
                           </button>
                         </td>
-                        <td className="p-2 text-white font-medium">{item.codigo_unico}</td>
-                        <td className="p-2 text-zinc-300">{item.tipo_de_cara || '-'}</td>
-                        <td className="p-2 text-zinc-300">{item.plaza || '-'}</td>
-                        <td className="p-2 text-zinc-400 max-w-[150px] truncate" title={item.mueble || ''}>
-                          {item.mueble || '-'}
-                        </td>
-                        <td className="p-2 text-center">
-                          <span className="px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-400">
-                            {item.caras_totales}
-                          </span>
-                        </td>
-                        <td className="p-2 text-center">
-                          <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium">
-                            {item.aps}
-                          </span>
-                        </td>
-                        <td className="p-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                            item.estatus_reserva === 'confirmado'
-                              ? 'bg-green-500/20 text-green-400'
-                              : item.estatus_reserva === 'pendiente'
-                              ? 'bg-yellow-500/20 text-yellow-400'
-                              : 'bg-zinc-500/20 text-zinc-400'
-                          }`}>
-                            {item.estatus_reserva || 'N/A'}
-                          </span>
-                        </td>
+                        {visibleColumnsAPS.map(col => renderAPSCell(item, col, 'p-2'))}
                       </tr>
                     ))}
                   </tbody>
@@ -2781,7 +2814,8 @@ export function CampanaDetailPage() {
                               {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[0])?.label}:
                             </span>
                             <span className="text-xs text-white">{groupKey}</span>
-                            <span className="ml-auto text-[10px] text-muted-foreground">
+                            <GroupSummaryInline items={allGroupItemsAPS} groupField={activeGroupingsAPS[0]} />
+                            <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                               {totalItems} items
                             </span>
                           </button>
@@ -2790,6 +2824,7 @@ export function CampanaDetailPage() {
                         {/* Contenido expandido */}
                         {isExpanded && (
                           <div className="px-2 py-1">
+                            <GroupMetaBadges items={allGroupItemsAPS} skipFields={activeGroupingsAPS[0] === 'aps' ? [...activeGroupingsAPS, 'plaza', 'formato'] : activeGroupingsAPS} />
                             {isLevel1Array ? (
                               // Solo 1 nivel - mostrar items directamente
                               <table className="w-full text-xs">
@@ -2824,22 +2859,7 @@ export function CampanaDetailPage() {
                                           )}
                                         </button>
                                       </td>
-                                      {visibleColumnsAPS.map(col => {
-                                        const value = item[col.field as keyof InventarioConAPS];
-                                        if (col.field === 'codigo_unico') {
-                                          return <td key={col.field} className="p-1.5 text-white font-medium">{value || '-'}</td>;
-                                        }
-                                        if (col.field === 'caras_totales') {
-                                          return (
-                                            <td key={col.field} className="p-1.5 text-center">
-                                              <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
-                                                {value}
-                                              </span>
-                                            </td>
-                                          );
-                                        }
-                                        return <td key={col.field} className="p-1.5 text-zinc-400">{value !== null && value !== undefined ? String(value) : '-'}</td>;
-                                      })}
+                                      {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
                                     </tr>
                                   ))}
                                 </tbody>
@@ -2887,13 +2907,15 @@ export function CampanaDetailPage() {
                                             {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[1])?.label}:
                                           </span>
                                           <span className="text-[10px] text-white">{subGroupKey}</span>
-                                          <span className="ml-auto text-[10px] text-muted-foreground">
+                                          <GroupSummaryInline items={allSubItemsAPS} groupField={activeGroupingsAPS[1]} />
+                                          <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                             {subTotalItems}
                                           </span>
                                         </button>
                                       </div>
                                       {isSubExpanded && (
                                         <div className="px-2 py-1">
+                                          <GroupMetaBadges items={allSubItemsAPS} skipFields={activeGroupingsAPS[1] === 'aps' ? [...activeGroupingsAPS, 'plaza', 'formato'] : activeGroupingsAPS} />
                                           {isLevel2Array ? (
                                             // Solo 2 niveles - mostrar items
                                             <table className="w-full text-xs">
@@ -2928,22 +2950,7 @@ export function CampanaDetailPage() {
                                                         )}
                                                       </button>
                                                     </td>
-                                                    {visibleColumnsAPS.map(col => {
-                                                      const value = item[col.field as keyof InventarioConAPS];
-                                                      if (col.field === 'codigo_unico') {
-                                                        return <td key={col.field} className="p-1.5 text-white font-medium">{value || '-'}</td>;
-                                                      }
-                                                      if (col.field === 'caras_totales') {
-                                                        return (
-                                                          <td key={col.field} className="p-1.5 text-center">
-                                                            <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
-                                                              {value}
-                                                            </span>
-                                                          </td>
-                                                        );
-                                                      }
-                                                      return <td key={col.field} className="p-1.5 text-zinc-400">{value !== null && value !== undefined ? String(value) : '-'}</td>;
-                                                    })}
+                                                    {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
                                                   </tr>
                                                 ))}
                                               </tbody>
@@ -2988,64 +2995,53 @@ export function CampanaDetailPage() {
                                                           {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[2])?.label}:
                                                         </span>
                                                         <span className="text-[10px] text-white">{thirdGroupKey}</span>
-                                                        <span className="ml-auto text-[10px] text-muted-foreground">
+                                                        <GroupSummaryInline items={thirdItems} groupField={activeGroupingsAPS[2]} />
+                                                        <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                                           {thirdItems.length}
                                                         </span>
                                                       </button>
                                                     </div>
                                                     {isThirdExpanded && (
-                                                      <table className="w-full text-xs">
-                                                        <thead>
-                                                          <tr className="border-b border-border/30 text-left">
-                                                            <th className="p-1.5 w-8"></th>
-                                                            {visibleColumnsAPS.map(col => (
-                                                              <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
-                                                            ))}
-                                                          </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                          {thirdItems.map((item) => (
-                                                            <tr
-                                                              key={item.rsv_ids}
-                                                              id={`row-aps-${item.rsv_ids}`}
-                                                              className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
-                                                                selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
-                                                              }`}
-                                                            >
-                                                              <td className="p-1.5 w-8">
-                                                                <button
-                                                                  onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
-                                                                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
-                                                                    selectedItemsAPS.has(String(item.rsv_ids))
-                                                                      ? 'bg-cyan-600 border-cyan-600'
-                                                                      : 'border-cyan-500/50 hover:border-cyan-400'
-                                                                  }`}
-                                                                >
-                                                                  {selectedItemsAPS.has(String(item.rsv_ids)) && (
-                                                                    <Check className="h-2.5 w-2.5 text-white" />
-                                                                  )}
-                                                                </button>
-                                                              </td>
-                                                              {visibleColumnsAPS.map(col => {
-                                                                const value = item[col.field as keyof InventarioConAPS];
-                                                                if (col.field === 'codigo_unico') {
-                                                                  return <td key={col.field} className="p-1.5 text-white font-medium">{value || '-'}</td>;
-                                                                }
-                                                                if (col.field === 'caras_totales') {
-                                                                  return (
-                                                                    <td key={col.field} className="p-1.5 text-center">
-                                                                      <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
-                                                                        {value}
-                                                                      </span>
-                                                                    </td>
-                                                                  );
-                                                                }
-                                                                return <td key={col.field} className="p-1.5 text-zinc-400">{value !== null && value !== undefined ? String(value) : '-'}</td>;
-                                                              })}
+                                                      <div>
+                                                        <GroupMetaBadges items={thirdItems} skipFields={activeGroupingsAPS[2] === 'aps' ? [...activeGroupingsAPS, 'plaza', 'formato'] : activeGroupingsAPS} />
+                                                        <table className="w-full text-xs">
+                                                          <thead>
+                                                            <tr className="border-b border-border/30 text-left">
+                                                              <th className="p-1.5 w-8"></th>
+                                                              {visibleColumnsAPS.map(col => (
+                                                                <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                                              ))}
                                                             </tr>
-                                                          ))}
-                                                        </tbody>
-                                                      </table>
+                                                          </thead>
+                                                          <tbody>
+                                                            {thirdItems.map((item) => (
+                                                              <tr
+                                                                key={item.rsv_ids}
+                                                                id={`row-aps-${item.rsv_ids}`}
+                                                                className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
+                                                                  selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
+                                                                }`}
+                                                              >
+                                                                <td className="p-1.5 w-8">
+                                                                  <button
+                                                                    onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                                                    className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                                      selectedItemsAPS.has(String(item.rsv_ids))
+                                                                        ? 'bg-cyan-600 border-cyan-600'
+                                                                        : 'border-cyan-500/50 hover:border-cyan-400'
+                                                                    }`}
+                                                                  >
+                                                                    {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                                                      <Check className="h-2.5 w-2.5 text-white" />
+                                                                    )}
+                                                                  </button>
+                                                                </td>
+                                                                {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
+                                                              </tr>
+                                                            ))}
+                                                          </tbody>
+                                                        </table>
+                                                      </div>
                                                     )}
                                                   </div>
                                                 );

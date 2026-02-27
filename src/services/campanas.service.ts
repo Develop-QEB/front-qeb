@@ -101,6 +101,12 @@ export interface InventarioReservado {
   numero_catorcena?: number | null;
   anio_catorcena?: number | null;
   tarifa_publica?: number | null;
+  tarifa_publica_sc?: number | null;
+  formato?: string | null;
+  bonificacion_sc?: number | null;
+  renta?: number | null;
+  ancho?: number | null;
+  alto?: number | null;
 }
 
 export interface InventarioConAPS extends InventarioReservado {

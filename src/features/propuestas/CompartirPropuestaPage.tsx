@@ -677,17 +677,17 @@ export function CompartirPropuestaPage() {
     }
     y += 8;
 
-    if (details?.propuesta?.descripcion) {
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(...IMU_BLUE);
-      doc.text('Descripción:', marginX, y);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(60, 60, 60);
-      const desc = doc.splitTextToSize(details.propuesta.descripcion, pageWidth - marginX * 2 - 35);
-      doc.text(desc, marginX + 28, y);
-      y += desc.length * 5 + 2;
-    }
-    y += 8;
+    //if (details?.propuesta?.descripcion) {
+      //doc.setFont('helvetica', 'bold');
+      //doc.setTextColor(...IMU_BLUE);
+      //doc.text('Descripción:', marginX, y);
+      //doc.setFont('helvetica', 'normal');
+      //doc.setTextColor(60, 60, 60);
+      //const desc = doc.splitTextToSize(details.propuesta.descripcion, pageWidth - marginX * 2 - 35);
+      //doc.text(desc, marginX + 28, y);
+      //y += desc.length * 5 + 2;
+    //}
+    //y += 8;
 
     // KPIs with IMU colored boxes
     doc.setFillColor(...IMU_BLUE);
