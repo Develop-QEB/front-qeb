@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Map, List, History, X, Loader2, AlertCircle, Calendar as CalendarIcon,
   Plus, Edit2, Ban, CheckCircle, Package, MapPin, ChevronDown, ChevronRight,
-  Eye, EyeOff, ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Monitor, Ruler
+  Eye, EyeOff, ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Monitor, Ruler,
+  Upload, Download, AlertTriangle, CheckCircle2, FileText
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { inventariosService } from '../../services/inventarios.service';
@@ -110,6 +111,14 @@ export function InventariosPage() {
   const [isHistorialOpen, setIsHistorialOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+
+  // Bulk upload state
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [bulkCsvData, setBulkCsvData] = useState<Record<string, string>[]>([]);
+  const [bulkValidation, setBulkValidation] = useState<{ valid: number; errors: { fila: number; campo: string; mensaje: string }[]; duplicatesInCsv: number }>({ valid: 0, errors: [], duplicatesInCsv: 0 });
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ insertados: number; duplicados: number; errores: { fila: number; campo: string; mensaje: string }[]; total: number } | null>(null);
+  const bulkInputRef = useRef<HTMLInputElement>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [formData, setFormData] = useState<Record<string, string>>({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
@@ -196,6 +205,178 @@ export function InventariosPage() {
   };
 
   const openCreate = () => { setFormData({ ...EMPTY_FORM }); setIsCreateOpen(true); };
+
+  // Bulk upload helpers
+  const BULK_REQUIRED_FIELDS = ['codigo_unico', 'tipo_de_mueble', 'tipo_de_cara', 'tradicional_digital', 'plaza', 'estado', 'municipio'];
+
+  const HEADER_MAP: Record<string, string> = {
+    'codigounico': 'codigo_unico', 'codigo': 'codigo', 'codigocorto': 'codigo',
+    'tipodemueble': 'tipo_de_mueble', 'tipomueble': 'tipo_de_mueble', 'formato': 'tipo_de_mueble',
+    'tipodecara': 'tipo_de_cara', 'tipocara': 'tipo_de_cara',
+    'tradicionaldigital': 'tradicional_digital', 'traddigital': 'tradicional_digital', 'tipo': 'tradicional_digital',
+    'ubicacion': 'ubicacion', 'cara': 'cara', 'mueble': 'mueble',
+    'latitud': 'latitud', 'longitud': 'longitud', 'plaza': 'plaza',
+    'estado': 'estado', 'municipio': 'municipio', 'ciudad': 'municipio',
+    'cp': 'cp', 'codigopostal': 'cp', 'sentido': 'sentido',
+    'ancho': 'ancho', 'alto': 'alto', 'orientacion': 'orientacion',
+    'nivelsocioeconomico': 'nivel_socioeconomico', 'nse': 'nivel_socioeconomico',
+    'isla': 'isla', 'muebleisla': 'mueble_isla',
+    'totalspacios': 'total_espacios', 'totalespacios': 'total_espacios', 'espacios': 'total_espacios',
+    'tarifapublica': 'tarifa_publica', 'tarifapiso': 'tarifa_piso',
+    'estatus': 'estatus', 'status': 'estatus',
+    'entrecalle1': 'entre_calle_1', 'entrecalle2': 'entre_calle_2',
+    'muebleformato': 'mueble',
+  };
+
+  const normalizeHeader = (text: string): string => {
+    return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_\-./()]/g, '');
+  };
+
+  const mapHeader = (raw: string): string => {
+    const norm = normalizeHeader(raw);
+    return HEADER_MAP[norm] || raw.toLowerCase().replace(/\s+/g, '_');
+  };
+
+  const downloadTemplate = useCallback(() => {
+    const keys = FORM_FIELDS.map(f => f.key);
+    const headers = keys.join(',');
+    const example = keys.map(k => {
+      switch (k) {
+        case 'codigo_unico': return 'MUPI-GDL-001_F';
+        case 'tipo_de_mueble': return 'MUPI';
+        case 'tipo_de_cara': return 'Flujo';
+        case 'tradicional_digital': return 'Tradicional';
+        case 'plaza': return 'GDL';
+        case 'estado': return 'Jalisco';
+        case 'municipio': return 'Guadalajara';
+        case 'ubicacion': return 'Av. Vallarta 1234';
+        case 'latitud': return '20.6597';
+        case 'longitud': return '-103.3496';
+        case 'ancho': return '1.2';
+        case 'alto': return '1.8';
+        case 'estatus': return 'Disponible';
+        default: return '';
+      }
+    }).join(',');
+    const csv = '\ufeff' + headers + '\n' + example;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'plantilla_inventarios.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleBulkCsvUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
+      if (lines.length < 2) return;
+
+      const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      const mappedHeaders = rawHeaders.map(mapHeader);
+
+      const parsed: Record<string, string>[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+        const row: Record<string, string> = {};
+        mappedHeaders.forEach((header, idx) => {
+          row[header] = values[idx] || '';
+        });
+        // Skip completely empty rows
+        if (Object.values(row).every(v => !v)) continue;
+        parsed.push(row);
+      }
+
+      // Client-side validation
+      const errors: { fila: number; campo: string; mensaje: string }[] = [];
+      const codigosSeen = new Set<string>();
+      let duplicatesInCsv = 0;
+
+      parsed.forEach((row, idx) => {
+        const fila = idx + 1;
+
+        // Required fields
+        for (const field of BULK_REQUIRED_FIELDS) {
+          if (!row[field] || row[field].trim() === '') {
+            errors.push({ fila, campo: field, mensaje: 'Campo requerido vacío' });
+          }
+        }
+
+        // Duplicate within CSV
+        const codigo = row.codigo_unico?.trim();
+        if (codigo) {
+          if (codigosSeen.has(codigo)) {
+            errors.push({ fila, campo: 'codigo_unico', mensaje: 'Duplicado dentro del CSV' });
+            duplicatesInCsv++;
+          }
+          codigosSeen.add(codigo);
+        }
+
+        // Enum validation
+        if (row.tipo_de_cara && !['Flujo', 'Contraflujo'].includes(row.tipo_de_cara)) {
+          errors.push({ fila, campo: 'tipo_de_cara', mensaje: 'Debe ser Flujo o Contraflujo' });
+        }
+        if (row.tradicional_digital && !['Tradicional', 'Digital'].includes(row.tradicional_digital)) {
+          errors.push({ fila, campo: 'tradicional_digital', mensaje: 'Debe ser Tradicional o Digital' });
+        }
+
+        // Numeric validation
+        const numFields = ['latitud', 'longitud', 'ancho', 'alto', 'cp', 'total_espacios', 'tarifa_publica', 'tarifa_piso'];
+        for (const nf of numFields) {
+          if (row[nf] && row[nf].trim() !== '' && isNaN(Number(row[nf]))) {
+            errors.push({ fila, campo: nf, mensaje: 'Debe ser un número válido' });
+          }
+        }
+      });
+
+      const errorFilas = new Set(errors.map(e => e.fila));
+      const validCount = parsed.length - errorFilas.size;
+
+      setBulkCsvData(parsed);
+      setBulkValidation({ valid: validCount, errors, duplicatesInCsv });
+      setBulkResult(null);
+    };
+    reader.readAsText(file);
+  }, []);
+
+  const handleBulkSubmit = async () => {
+    // Only send rows without errors
+    const errorFilas = new Set(bulkValidation.errors.map(e => e.fila));
+    const validRows = bulkCsvData.filter((_, idx) => !errorFilas.has(idx + 1));
+    if (validRows.length === 0) return;
+
+    setBulkUploading(true);
+    try {
+      const result = await inventariosService.bulkCreate(validRows);
+      setBulkResult(result);
+      queryClient.invalidateQueries({ queryKey: ['inventarios'] });
+    } catch (err) {
+      setBulkResult({
+        insertados: 0,
+        duplicados: 0,
+        errores: [{ fila: 0, campo: 'general', mensaje: err instanceof Error ? err.message : 'Error al subir inventarios' }],
+        total: validRows.length,
+      });
+    } finally {
+      setBulkUploading(false);
+    }
+  };
+
+  const closeBulkModal = () => {
+    setIsBulkOpen(false);
+    setBulkCsvData([]);
+    setBulkValidation({ valid: 0, errors: [], duplicatesInCsv: 0 });
+    setBulkResult(null);
+    if (bulkInputRef.current) bulkInputRef.current.value = '';
+  };
 
   const handleSave = async (isEdit: boolean) => {
     setSaving(true);
@@ -415,6 +596,15 @@ export function InventariosPage() {
                   Mapa
                 </button>
               </div>
+
+              {/* Bulk upload button */}
+              <button
+                onClick={() => setIsBulkOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-700 text-white transition-all shadow-lg shadow-amber-500/20"
+              >
+                <Upload className="h-4 w-4" />
+                Carga Masiva
+              </button>
 
               {/* New button */}
               <button
@@ -732,6 +922,230 @@ export function InventariosPage() {
                   <AlertCircle className="h-12 w-12 mx-auto mb-3 text-zinc-500 opacity-30" />
                   <p className="text-sm text-zinc-500">Error al cargar el historial</p>
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Upload Modal */}
+      {isBulkOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={closeBulkModal}>
+          <div className="bg-zinc-900 rounded-2xl border border-amber-500/20 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl shadow-amber-500/10" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-5 border-b border-amber-500/20 bg-gradient-to-r from-amber-900/20 via-orange-900/10 to-amber-900/20 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                  <Upload className="h-5 w-5 text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Carga Masiva de Inventarios</h2>
+                  <p className="text-xs text-amber-300/50">Sube un archivo CSV para agregar múltiples inventarios</p>
+                </div>
+              </div>
+              <button onClick={closeBulkModal} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-auto p-5 space-y-4">
+              {/* Step 1: Upload + Template */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <input ref={bulkInputRef} type="file" accept=".csv" onChange={handleBulkCsvUpload} className="hidden" />
+                <button
+                  onClick={() => bulkInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-700 text-white transition-all"
+                >
+                  <FileText className="h-4 w-4" />
+                  {bulkCsvData.length > 0 ? 'Cambiar archivo' : 'Seleccionar CSV'}
+                </button>
+                <button
+                  onClick={downloadTemplate}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition-all"
+                >
+                  <Download className="h-4 w-4" />
+                  Descargar Plantilla
+                </button>
+                <span className="text-xs text-zinc-500">
+                  Requeridos: codigo_unico, tipo_de_mueble, tipo_de_cara, tradicional_digital, plaza, estado, municipio
+                </span>
+              </div>
+
+              {/* Step 2: Preview */}
+              {bulkCsvData.length > 0 && !bulkResult && (
+                <>
+                  {/* Counters */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs">
+                      <Package className="h-3.5 w-3.5" />
+                      {bulkCsvData.length} filas totales
+                    </div>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-xs">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {bulkValidation.valid} válidas
+                    </div>
+                    {bulkValidation.errors.length > 0 && (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-300 border border-red-500/20 text-xs">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        {new Set(bulkValidation.errors.map(e => e.fila)).size} con errores
+                      </div>
+                    )}
+                    {bulkValidation.duplicatesInCsv > 0 && (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 text-xs">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        {bulkValidation.duplicatesInCsv} duplicados en CSV
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Error details */}
+                  {bulkValidation.errors.length > 0 && (
+                    <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-3 max-h-32 overflow-auto">
+                      <p className="text-xs text-red-300 font-medium mb-2">Errores encontrados:</p>
+                      <div className="space-y-1">
+                        {bulkValidation.errors.slice(0, 50).map((err, idx) => (
+                          <p key={idx} className="text-[11px] text-red-300/80">
+                            Fila {err.fila}: <span className="text-red-400 font-mono">{err.campo}</span> — {err.mensaje}
+                          </p>
+                        ))}
+                        {bulkValidation.errors.length > 50 && (
+                          <p className="text-[11px] text-red-400">... y {bulkValidation.errors.length - 50} errores más</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Preview table */}
+                  <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                    <div className="max-h-64 overflow-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-zinc-800/50 sticky top-0">
+                          <tr>
+                            <th className="px-2 py-2 text-left text-zinc-500 font-medium">#</th>
+                            <th className="px-2 py-2 text-left text-zinc-500 font-medium">Código Único</th>
+                            <th className="px-2 py-2 text-left text-zinc-500 font-medium">Tipo Mueble</th>
+                            <th className="px-2 py-2 text-left text-zinc-500 font-medium">Cara</th>
+                            <th className="px-2 py-2 text-left text-zinc-500 font-medium">T/D</th>
+                            <th className="px-2 py-2 text-left text-zinc-500 font-medium">Plaza</th>
+                            <th className="px-2 py-2 text-left text-zinc-500 font-medium">Estado</th>
+                            <th className="px-2 py-2 text-left text-zinc-500 font-medium">Municipio</th>
+                            <th className="px-2 py-2 text-left text-zinc-500 font-medium">Estatus</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bulkCsvData.map((row, idx) => {
+                            const filaNum = idx + 1;
+                            const rowErrors = bulkValidation.errors.filter(e => e.fila === filaNum);
+                            const hasError = rowErrors.length > 0;
+                            const isDupInCsv = rowErrors.some(e => e.mensaje === 'Duplicado dentro del CSV');
+                            return (
+                              <tr
+                                key={idx}
+                                className={`border-t border-zinc-800/50 ${hasError ? (isDupInCsv ? 'bg-amber-500/5' : 'bg-red-500/5') : 'hover:bg-zinc-800/30'}`}
+                                title={hasError ? rowErrors.map(e => `${e.campo}: ${e.mensaje}`).join(', ') : undefined}
+                              >
+                                <td className="px-2 py-1.5 text-zinc-500">{filaNum}</td>
+                                <td className={`px-2 py-1.5 font-mono ${rowErrors.some(e => e.campo === 'codigo_unico') ? 'text-red-400' : 'text-white'}`}>
+                                  {row.codigo_unico || <span className="text-red-400/60 italic">vacío</span>}
+                                </td>
+                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'tipo_de_mueble') ? 'text-red-400' : 'text-zinc-300'}`}>
+                                  {row.tipo_de_mueble || <span className="text-red-400/60 italic">vacío</span>}
+                                </td>
+                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'tipo_de_cara') ? 'text-red-400' : 'text-zinc-300'}`}>
+                                  {row.tipo_de_cara || '-'}
+                                </td>
+                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'tradicional_digital') ? 'text-red-400' : 'text-zinc-300'}`}>
+                                  {row.tradicional_digital || '-'}
+                                </td>
+                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'plaza') ? 'text-red-400' : 'text-zinc-300'}`}>
+                                  {row.plaza || <span className="text-red-400/60 italic">vacío</span>}
+                                </td>
+                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'estado') ? 'text-red-400' : 'text-zinc-300'}`}>
+                                  {row.estado || <span className="text-red-400/60 italic">vacío</span>}
+                                </td>
+                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'municipio') ? 'text-red-400' : 'text-zinc-300'}`}>
+                                  {row.municipio || <span className="text-red-400/60 italic">vacío</span>}
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  {hasError ? (
+                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${isDupInCsv ? 'bg-amber-500/20 text-amber-300' : 'bg-red-500/20 text-red-300'}`}>
+                                      {isDupInCsv ? 'Duplicado' : 'Error'}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300">OK</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Step 3: Result */}
+              {bulkResult && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    {bulkResult.insertados > 0 && (
+                      <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                        <div>
+                          <p className="text-sm font-medium text-emerald-300">{bulkResult.insertados} insertados</p>
+                          <p className="text-[10px] text-emerald-400/60">Agregados a la base de datos</p>
+                        </div>
+                      </div>
+                    )}
+                    {bulkResult.duplicados > 0 && (
+                      <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                        <AlertCircle className="h-5 w-5 text-amber-400" />
+                        <div>
+                          <p className="text-sm font-medium text-amber-300">{bulkResult.duplicados} duplicados</p>
+                          <p className="text-[10px] text-amber-400/60">Ya existían en la BD</p>
+                        </div>
+                      </div>
+                    )}
+                    {bulkResult.errores.length > 0 && (
+                      <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                        <AlertTriangle className="h-5 w-5 text-red-400" />
+                        <div>
+                          <p className="text-sm font-medium text-red-300">{bulkResult.errores.length} errores</p>
+                          <p className="text-[10px] text-red-400/60">No se pudieron insertar</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {bulkResult.errores.length > 0 && (
+                    <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-3 max-h-32 overflow-auto">
+                      {bulkResult.errores.map((err, idx) => (
+                        <p key={idx} className="text-[11px] text-red-300/80">
+                          {err.fila > 0 ? `Fila ${err.fila}: ` : ''}<span className="font-mono text-red-400">{err.campo}</span> — {err.mensaje}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-5 border-t border-amber-500/20 bg-gradient-to-r from-amber-900/10 via-transparent to-orange-900/10 flex justify-end gap-3">
+              <button onClick={closeBulkModal}
+                className="px-4 py-2.5 rounded-xl text-sm text-zinc-400 hover:text-white border border-zinc-700/50 hover:bg-zinc-800 transition-all">
+                {bulkResult ? 'Cerrar' : 'Cancelar'}
+              </button>
+              {!bulkResult && bulkCsvData.length > 0 && bulkValidation.valid > 0 && (
+                <button
+                  onClick={handleBulkSubmit}
+                  disabled={bulkUploading}
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
+                >
+                  {bulkUploading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Subir {bulkValidation.valid} inventarios
+                </button>
               )}
             </div>
           </div>

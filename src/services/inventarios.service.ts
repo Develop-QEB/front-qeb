@@ -1,6 +1,13 @@
 import api from '../lib/api';
 import { Inventario, InventarioMapItem, InventarioStats, PaginatedResponse, ApiResponse } from '../types';
 
+export interface BulkCreateResult {
+  insertados: number;
+  duplicados: number;
+  errores: { fila: number; campo: string; mensaje: string }[];
+  total: number;
+}
+
 export interface InventariosParams {
   page?: number;
   limit?: number;
@@ -222,6 +229,15 @@ export const inventariosService = {
     }>>('/inventarios/espacios/poblar');
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al poblar espacios');
+    }
+    return response.data.data;
+  },
+
+  // Bulk create inventarios from CSV
+  async bulkCreate(inventarios: Record<string, unknown>[]): Promise<BulkCreateResult> {
+    const response = await api.post<ApiResponse<BulkCreateResult>>('/inventarios/bulk', { inventarios });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear inventarios masivamente');
     }
     return response.data.data;
   },
