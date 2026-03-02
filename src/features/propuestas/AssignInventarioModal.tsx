@@ -2193,12 +2193,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         return row;
       });
 
-      // Match with inventory
+      // Match with inventory - try multiple possible column names
       const matched = parsedData.map(row => {
-        const codigoUnico = getValueByColumnName(row, 'codigo_unico');
-        const exists = inventarioDisponible.some(inv => inv.codigo_unico === codigoUnico);
+        const codigoUnico = getValueByColumnName(row, 'codigo_unico')
+          || getValueByColumnName(row, 'codigo')
+          || getValueByColumnName(row, 'código')
+          || getValueByColumnName(row, 'código_único')
+          || getValueByColumnName(row, 'codigo_unico');
+        const code = codigoUnico?.trim() || '';
+        const exists = code !== '' && inventarioDisponible.some(inv => inv.codigo_unico === code);
         return {
-          codigo_unico: codigoUnico || 'N/A',
+          codigo_unico: code || 'N/A',
           disponibilidad: exists ? 'Disponible' as const : 'No Disponible' as const,
         };
       });
@@ -2266,7 +2271,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     // Determine columns based on active filters
     const baseColumns = ['codigo_unico', 'tipo_de_cara', 'plaza', 'nivel_socioeconomico', 'ubicacion'];
-    const headers = ['Código', 'Tipo', 'Plaza', 'NSE', 'Ubicación'];
+    const headers = ['codigo_unico', 'Tipo', 'Plaza', 'NSE', 'Ubicación'];
 
     // Add group column if groupByDistance is active
     if (groupByDistance && groupedInventory) {
