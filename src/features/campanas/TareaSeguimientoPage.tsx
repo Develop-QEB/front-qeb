@@ -6023,7 +6023,7 @@ function TaskDetailModal({
 
                       // Show archivos from evidencia, or just indicaciones keys
                       const displayItems = archivos.length > 0
-                        ? archivos.map(a => ({ key: a.key || a.nombre, label: a.nombre, tipoArchivo: a.tipo }))
+                        ? archivos.map(a => ({ key: (a as any).key || a.nombre, label: a.nombre, tipoArchivo: a.tipo }))
                         : Object.keys(indicaciones).map(k => ({ key: k, label: k, tipoArchivo: 'tradicional' }));
 
                       return (
@@ -8870,7 +8870,7 @@ function CreateTaskModal({
               // Generar nombre legible: si es base64/URL larga, usar nombre del item
               const isDataUrl = item.archivo_arte.startsWith('data:');
               const nombreLegible = isDataUrl
-                ? `Arte - ${item.codigo_unico || item.clave || 'Archivo'}`
+                ? `Arte - ${item.codigo_unico || (item as any).clave || 'Archivo'}`
                 : (item.archivo_arte.split('/').pop() || 'Arte');
               archivos.push({
                 nombre: item.archivo_arte,

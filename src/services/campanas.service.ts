@@ -474,6 +474,7 @@ export interface CampanasParams {
   page?: number;
   limit?: number;
   status?: string;
+  search?: string;
   yearInicio?: number;
   yearFin?: number;
   catorcenaInicio?: number;

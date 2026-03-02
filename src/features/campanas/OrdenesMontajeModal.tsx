@@ -718,8 +718,8 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => {
         const fecha = item.fecha_inicio ? new Date(item.fecha_inicio) : null;
         if (!fecha) return false;
-        const isAfterInicio = !fechaInicio || fecha >= fechaInicio;
-        const isBeforeFin = !fechaFin || fecha <= fechaFin;
+        const isAfterInicio = !fechaInicio || fecha >= new Date(fechaInicio);
+        const isBeforeFin = !fechaFin || fecha <= new Date(fechaFin);
         return isAfterInicio && isBeforeFin;
       });
     }
