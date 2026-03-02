@@ -341,77 +341,43 @@ const getTarifaFromItemCode = (itemCode: string, caras: number = 1): { costo: nu
   return { costo: caras * 650, tarifa_publica: caras * 850 };
 };
 
-// Ciudad -> Estado mapping for auto-selection
-const CIUDAD_ESTADO_MAP: Record<string, string> = {
-  'GUADALAJARA': 'Jalisco',
-  'ZAPOPAN': 'Jalisco',
-  'TLAQUEPAQUE': 'Jalisco',
-  'TONALA': 'Jalisco',
-  'TLAJOMULCO': 'Jalisco',
-  'PUERTO VALLARTA': 'Jalisco',
-  'MONTERREY': 'Nuevo León',
-  'SAN PEDRO': 'Nuevo León',
-  'SAN NICOLAS': 'Nuevo León',
-  'APODACA': 'Nuevo León',
-  'ESCOBEDO': 'Nuevo León',
-  'SANTA CATARINA': 'Nuevo León',
-  'CIUDAD DE MEXICO': 'Ciudad de México',
-  'CDMX': 'Ciudad de México',
-  'ESTADO DE MEXICO': 'Estado de México',
-  'MEXICO': 'Ciudad de México',
-  'DF': 'Ciudad de México',
-  'TIJUANA': 'Baja California',
-  'MEXICALI': 'Baja California',
-  'ENSENADA': 'Baja California',
-  'LEON': 'Guanajuato',
-  'IRAPUATO': 'Guanajuato',
-  'CELAYA': 'Guanajuato',
-  'QUERETARO': 'Querétaro',
-  'PUEBLA': 'Puebla',
-  'MERIDA': 'Yucatán',
-  'CANCUN': 'Quintana Roo',
-  'PLAYA DEL CARMEN': 'Quintana Roo',
-  'CHIHUAHUA': 'Chihuahua',
-  'JUAREZ': 'Chihuahua',
-  'CIUDAD JUAREZ': 'Chihuahua',
-  'HERMOSILLO': 'Sonora',
-  'CULIACAN': 'Sinaloa',
-  'MAZATLAN': 'Sinaloa',
-  'TORREON': 'Coahuila',
-  'SALTILLO': 'Coahuila',
-  'AGUASCALIENTES': 'Aguascalientes',
-  'MORELIA': 'Michoacán',
-  'SAN LUIS POTOSI': 'San Luis Potosí',
-  'TAMPICO': 'Tamaulipas',
-  'REYNOSA': 'Tamaulipas',
-  'VERACRUZ': 'Veracruz',
-  'XALAPA': 'Veracruz',
-  'OAXACA': 'Oaxaca',
-  'TUXTLA': 'Chiapas',
-  'VILLAHERMOSA': 'Tabasco',
-  'CAMPECHE': 'Campeche',
-  'ACAPULCO': 'Guerrero',
-  'CUERNAVACA': 'Morelos',
-  'TOLUCA': 'Estado de México',
-  'PACHUCA': 'Hidalgo',
-  'ZACATECAS': 'Zacatecas',
-  'DURANGO': 'Durango',
-  'TEPIC': 'Nayarit',
-  'COLIMA': 'Colima',
-  'LA PAZ': 'Baja California Sur',
-  'LOS CABOS': 'Baja California Sur',
-};
-
-// Some entries are state-level (no specific ciudad should be set)
-const STATE_LEVEL_ENTRIES = ['CDMX', 'CIUDAD DE MEXICO', 'DF', 'ESTADO DE MEXICO', 'MEXICO'];
-
 // Multi-city auto-fill rules for specific article patterns
+// Order matters: more specific patterns BEFORE generic ones (e.g. PUERTO VALLARTA before GD)
+// All estado/ciudad values MUST match DB inventarios exactly (no accents)
 const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudades: string[] }[] = [
-  { pattern: /\bPUERTO VALLARTA\b|\ PV\b/, estado: 'Jalisco', ciudades: ['Puerto Vallarta'] },
-  { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudades: ['Guadalajara', 'Zapopan', 'Tlaquepaque'] },
-  { pattern: /\bMTY\b|\bMONTERREY\b|\bMY\b/, estado: 'Nuevo León', ciudades: ['Monterrey', 'Guadalupe', 'San Nicolás de los Garza', 'Santa Catarina'] },
-  { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudades: ['Veracruz', 'Alvarado', 'Boca del Río'] },
-  { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b/, estado: 'Ciudad de México', ciudades: ['Ciudad de Mexico', 'Toluca', 'Naucalpan', 'Ecatepec'] },
+  { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudades: ['Puerto Vallarta'] },
+  { pattern: /\bGD\b|\bGUADALAJARA\b|\bGDL\b/, estado: 'Jalisco', ciudades: ['Guadalajara', 'Zapopan', 'San Pedro Tlaquepaque'] },
+  { pattern: /\bMTY\b|\bMONTERREY\b|\bMY\b/, estado: 'Nuevo Leon', ciudades: ['Monterrey', 'Guadalupe', 'San Nicolas de los Garza', 'Santa Catarina'] },
+  { pattern: /\bBOCA DEL RIO\b/, estado: 'Veracruz', ciudades: ['Boca del Rio'] },
+  { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudades: ['Veracruz', 'Alvarado', 'Boca del Rio'] },
+  { pattern: /\bCHOLULA\b/, estado: 'Puebla', ciudades: ['San Andres Cholula', 'San Pedro Cholula'] },
+  { pattern: /\bPUEBLA\b|\bPB\b/, estado: 'Puebla', ciudades: ['Puebla', 'San Andres Cholula', 'San Pedro Cholula'] },
+  { pattern: /\bMERIDA\b|\bMR\b/, estado: 'Yucatan', ciudades: ['Merida'] },
+  { pattern: /\bLEON\b|\bLEN\b/, estado: 'Guanajuato', ciudades: ['Leon de los Aldama'] },
+  { pattern: /\bSALAMANCA\b/, estado: 'Guanajuato', ciudades: ['Salamanca'] },
+  { pattern: /\bCELAYA\b/, estado: 'Guanajuato', ciudades: ['Celaya'] },
+  { pattern: /\bIRAPUATO\b/, estado: 'Guanajuato', ciudades: ['Irapuato'] },
+  { pattern: /\bGUANAJUATO\b|\bGTO\b/, estado: 'Guanajuato', ciudades: [] },
+  { pattern: /\bOAXACA\b|\bOAX\b/, estado: 'Oaxaca', ciudades: ['Oaxaca de Juarez'] },
+  { pattern: /\bAGS\b|\bAGUASCALIENTES\b/, estado: 'Aguascalientes', ciudades: ['Aguascalientes'] },
+  { pattern: /\bCULIACAN\b/, estado: 'Sinaloa', ciudades: ['Culiacan'] },
+  { pattern: /\bMAZATLAN\b|\bMZ\b/, estado: 'Sinaloa', ciudades: ['Mazatlan'] },
+  { pattern: /\bSLP\b|\bSAN LUIS POTOSI\b/, estado: 'San Luis Potosi', ciudades: ['San Luis Potosi'] },
+  { pattern: /\bTIJUANA\b|\bTJ\b/, estado: 'Baja California', ciudades: ['Tijuana'] },
+  { pattern: /\bACAPULCO\b|\bAC\b/, estado: 'Guerrero', ciudades: ['Acapulco de Juarez'] },
+  { pattern: /\bPACHUCA\b|\bPH\b/, estado: 'Hidalgo', ciudades: ['Pachuca de Soto'] },
+  { pattern: /\bTOLUCA\b|\bTL\b/, estado: 'Estado de Mexico', ciudades: ['Toluca de Lerdo', 'Metepec', 'Lerma', 'San Mateo Atenco'] },
+  { pattern: /\bCUERNAVACA\b|\bCV\b/, estado: 'Morelos', ciudades: ['Cuernavaca'] },
+  { pattern: /\bTAMPICO\b|\bTM\b/, estado: 'Tamaulipas', ciudades: ['Tampico'] },
+  { pattern: /\bTORREON\b|\bTR\b/, estado: 'Coahuila', ciudades: ['Torreon'] },
+  { pattern: /\bQUERETARO\b|\bQR\b/, estado: 'Queretaro', ciudades: ['Queretaro'] },
+  { pattern: /\bTUXTLA\b|\bTG\b/, estado: 'Chiapas', ciudades: ['Tuxtla Gutierrez'] },
+  { pattern: /\bTABASCO\b|\bVILLAHERMOSA\b|\bTB\b/, estado: 'Tabasco', ciudades: ['Villahermosa'] },
+  { pattern: /\bMORELIA\b/, estado: 'Michoacan', ciudades: ['Morelia'] },
+  { pattern: /\bCANCUN\b/, estado: 'Quintana Roo', ciudades: ['Benito Juarez'] },
+  { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b|\bMEXICO\b(?!\s*(Y\s*AM|WI-?FI))|\bMX\b/, estado: 'Ciudad de Mexico', ciudades: [] },
+  { pattern: /\bNAUC\b/, estado: 'Estado de Mexico', ciudades: ['Naucalpan de Juarez'] },
+  { pattern: /\bEM\b/, estado: 'Estado de Mexico', ciudades: [] },
 ];
 
 // Extract city from article name and return estado/ciudades
@@ -419,20 +385,10 @@ const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
-  // Check multi-city rules first (order matters: PV before GD)
+  // Check multi-city rules (order matters)
   for (const rule of MULTI_CITY_RULES) {
     if (rule.pattern.test(name)) {
       return { estado: rule.estado, ciudades: rule.ciudades };
-    }
-  }
-
-  // Fallback to single-city CIUDAD_ESTADO_MAP
-  for (const [ciudad, estado] of Object.entries(CIUDAD_ESTADO_MAP)) {
-    if (name.includes(ciudad)) {
-      if (STATE_LEVEL_ENTRIES.includes(ciudad)) {
-        return { estado, ciudades: [] };
-      }
-      return { estado, ciudades: [ciudad.charAt(0) + ciudad.slice(1).toLowerCase()] };
     }
   }
   return null;
@@ -945,11 +901,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     queryClient.invalidateQueries({ queryKey: ['clientes-full-for-solicitud'] });
   };
 
-  // Fetch formatos based on selected ciudades
-  const { data: formatosByCiudades } = useQuery({
-    queryKey: ['formatos-by-ciudades', newCara.ciudades],
-    queryFn: () => solicitudesService.getFormatosByCiudades(newCara.ciudades),
-    enabled: isOpen && newCara.ciudades.length > 0,
+  // Fetch cascade-filtered options (formatos, tipos, NSE) by estado/ciudades
+  const { data: inventarioOptions } = useQuery({
+    queryKey: ['inventario-options', newCara.estado, newCara.ciudades],
+    queryFn: () => solicitudesService.getInventarioOptions(newCara.estado, newCara.ciudades),
+    enabled: isOpen && (!!newCara.estado || newCara.ciudades.length > 0),
+    staleTime: 5 * 60 * 1000,
   });
 
   // Fetch next available ID
@@ -1107,13 +1064,46 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       .filter((c): c is string => !!c);
   }, [inventarioFilters, newCara.estado]);
 
-  // Filter formatos by selected ciudades (from API)
+  // Cascade-filtered formatos/tipos/NSE from inventario-options API
   const filteredFormatos = useMemo(() => {
-    if (newCara.ciudades.length > 0 && formatosByCiudades) {
-      return formatosByCiudades;
-    }
-    return [];
-  }, [formatosByCiudades, newCara.ciudades]);
+    if (inventarioOptions?.formatos) return inventarioOptions.formatos;
+    return inventarioFilters?.formatos || [];
+  }, [inventarioOptions, inventarioFilters]);
+
+  const filteredTipos = useMemo(() => {
+    if (inventarioOptions?.tipos) return inventarioOptions.tipos;
+    return ['Tradicional', 'Digital'];
+  }, [inventarioOptions]);
+
+  const filteredNse = useMemo(() => {
+    if (inventarioOptions?.nse) return inventarioOptions.nse;
+    return inventarioFilters?.nse || [];
+  }, [inventarioOptions, inventarioFilters]);
+
+  // Clear incompatible selections when filtered options change
+  useEffect(() => {
+    if (!inventarioOptions) return;
+    setNewCara(prev => {
+      let changed = false;
+      const updates: Partial<typeof prev> = {};
+      if (prev.formato && !inventarioOptions.formatos.includes(prev.formato)) {
+        updates.formato = '';
+        changed = true;
+      }
+      if (prev.tipo && !inventarioOptions.tipos.includes(prev.tipo)) {
+        updates.tipo = '' as typeof prev.tipo;
+        changed = true;
+      }
+      if (prev.nse.length > 0) {
+        const validNse = prev.nse.filter(n => inventarioOptions.nse.includes(n));
+        if (validNse.length !== prev.nse.length) {
+          updates.nse = validNse;
+          changed = true;
+        }
+      }
+      return changed ? { ...prev, ...updates } : prev;
+    });
+  }, [inventarioOptions]);
 
   // Year options with validation
   const yearInicioOptions = useMemo(() => {
@@ -2380,9 +2370,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           {filteredFormatos.map(f => (
                             <option key={f} value={f}>{f}</option>
                           ))}
-                          {inventarioFilters?.formatos.filter(f => !filteredFormatos.includes(f)).map(f => (
-                            <option key={f} value={f}>{f}</option>
-                          ))}
                         </>
                       )}
                     </select>
@@ -2397,8 +2384,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     >
                       <option value="">Seleccionar</option>
-                      <option value="Tradicional">Tradicional</option>
-                      <option value="Digital">Digital</option>
+                      {filteredTipos.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -2521,7 +2509,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 <div className="mb-4">
                   <label className="text-xs text-zinc-500">Nivel Socioeconómico</label>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {inventarioFilters?.nse.map(n => (
+                    {filteredNse.map(n => (
                       <button
                         key={n}
                         type="button"

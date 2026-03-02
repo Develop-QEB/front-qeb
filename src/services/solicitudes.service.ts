@@ -36,6 +36,12 @@ export interface InventarioFilters {
   nse: string[];
 }
 
+export interface InventarioOptions {
+  formatos: string[];
+  tipos: string[];
+  nse: string[];
+}
+
 export interface SolicitudCaraInput {
   ciudad: string;
   estado: string;
@@ -169,6 +175,17 @@ export const solicitudesService = {
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener formatos');
+    }
+    return response.data.data;
+  },
+
+  async getInventarioOptions(estado?: string, ciudades?: string[]): Promise<InventarioOptions> {
+    const params: Record<string, string> = {};
+    if (estado) params.estado = estado;
+    if (ciudades && ciudades.length > 0) params.ciudades = ciudades.join(',');
+    const response = await api.get<ApiResponse<InventarioOptions>>('/solicitudes/inventario-options', { params });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener opciones de inventario');
     }
     return response.data.data;
   },
