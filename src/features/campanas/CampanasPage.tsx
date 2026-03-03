@@ -2231,7 +2231,7 @@ export function CampanasPage() {
                                               <div key={grupo.key} className="border-l-2 border-zinc-700 pl-2">
                                                 <button
                                                   onClick={() => toggleGrupo(campana.id, apsGroup.aps, grupo.key)}
-                                                  className="w-full flex items-center gap-2 py-1 text-left hover:bg-zinc-800/30 rounded px-1"
+                                                  className="w-full flex items-center gap-2 py-1 text-left hover:bg-zinc-800/30 rounded px-1 flex-wrap"
                                                 >
                                                   {isGrupoExpanded ? <ChevronDown className="h-3 w-3 text-zinc-500" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
                                                   <ClipboardList className="h-3 w-3 text-purple-400" />
@@ -2282,6 +2282,44 @@ export function CampanasPage() {
                                                       {estatusPredominante[0]}
                                                     </span>
                                                   )}
+                                                  {(() => {
+                                                    const plazas = [...new Set(grupo.items.map(i => i.plaza).filter(Boolean))];
+                                                    const formato = (grupo.items[0] as any)?.formato || null;
+                                                    const carasTotales = grupo.items.length;
+                                                    const sumTarifa = grupo.items.reduce((s, i) => s + (Number((i as any).tarifa_publica_sc) || 0), 0);
+                                                    const sumRenta = grupo.items.reduce((s, i) => s + (Number((i as any).renta) || 0), 0);
+                                                    const inversionTotal = sumTarifa;
+                                                    const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
+                                                    return (
+                                                      <>
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Caras totales">
+                                                          <Hash className="h-2.5 w-2.5" /> {carasTotales} caras
+                                                        </span>
+                                                        {plazas.length > 0 && (
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Plaza(s)">
+                                                            <MapPin className="h-2.5 w-2.5" /> {plazas.join(', ')}
+                                                          </span>
+                                                        )}
+                                                        {formato && (
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-500/15 text-violet-300 border border-violet-500/25" title="Formato">
+                                                            {formato}
+                                                          </span>
+                                                        )}
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25" title="Tarifa pública">
+                                                          {sumTarifa > 0 ? <>Tarifa: {'$'}{sumTarifa.toLocaleString()}</> : 'Sin tarifa'}
+                                                        </span>
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-green-500/15 text-green-300 border border-green-500/25" title="Renta">
+                                                          {sumRenta > 0 ? <>Renta: {'$'}{sumRenta.toLocaleString()}</> : 'Sin renta'}
+                                                        </span>
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/25" title="Inversión total (tarifa)">
+                                                          {inversionTotal > 0 ? <>Inversión: {'$'}{inversionTotal.toLocaleString()}</> : 'Sin inversión'}
+                                                        </span>
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 flex items-center gap-1" title="Artes subidos">
+                                                          <Image className="h-2.5 w-2.5" /> {artesSubidos}/{carasTotales}
+                                                        </span>
+                                                      </>
+                                                    );
+                                                  })()}
                                                 </button>
                                                 {isGrupoExpanded && (
                                                   <div className="pl-5 py-1 space-y-0.5">
