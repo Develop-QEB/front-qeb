@@ -214,7 +214,7 @@ interface OrdenesMontajeModalProps {
   canExport?: boolean;
 }
 
-type TabType = 'cat' | 'digital' | 'invian' | 'invian-digital';
+type TabType = 'cat' | 'ocupacion-digital' | 'digital' | 'invian' | 'invian-digital';
 
 // Status options for filter
 const STATUS_OPTIONS = ['Aprobada', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
@@ -437,7 +437,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       catorcenaInicio,
       catorcenaFin,
     }),
-    enabled: isOpen && activeTab === 'cat',
+    enabled: isOpen && (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'ocupacion-digital'),
   });
 
   // Query for INVIAN data
@@ -562,6 +562,64 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     return items;
   }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection]);
 
+  // Filtered Ocupacion Digital data (CAT only digital items)
+  const filteredOcupacionDigitalData = useMemo(() => {
+    if (!catData) return [];
+    let items = [...catData];
+
+    // Only digital items (tipo/formato contains "Digital")
+    items = items.filter(item => {
+      const tipo = (item.tipo || '').toUpperCase();
+      return tipo.includes('DIGITAL');
+    });
+
+    // Filter by date range if set
+    if (fechaInicio || fechaFin) {
+      const startDate = fechaInicio ? new Date(fechaInicio) : null;
+      const endDate = fechaFin ? new Date(fechaFin) : null;
+      if (endDate) endDate.setHours(23, 59, 59, 999);
+      items = items.filter(item => {
+        if (!item.fecha_inicio_periodo) return false;
+        const itemDate = new Date(item.fecha_inicio_periodo);
+        if (startDate && itemDate < startDate) return false;
+        if (endDate && itemDate > endDate) return false;
+        return true;
+      });
+    }
+
+    // Filter by selected catorcenas if any
+    if (selectedCatorcenas.length > 0) {
+      items = items.filter(item => {
+        if (!item.catorcena_numero || !item.catorcena_year) return false;
+        const catorcenaId = `${item.catorcena_numero}-${item.catorcena_year}`;
+        return selectedCatorcenas.includes(catorcenaId);
+      });
+    }
+
+    // Apply advanced filters
+    if (catFilters.length > 0) {
+      items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], catFilters) as unknown as OrdenMontajeCAT[];
+    }
+
+    // Sort
+    if (catSortField) {
+      items.sort((a, b) => {
+        const aVal = a[catSortField as keyof OrdenMontajeCAT];
+        const bVal = b[catSortField as keyof OrdenMontajeCAT];
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return catSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        const strA = String(aVal).toLowerCase();
+        const strB = String(bVal).toLowerCase();
+        return catSortDirection === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+      });
+    }
+
+    return items;
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection]);
+
   // Filter Digital data (CAT without VIA PUBLICA)
   const filteredDigitalData = useMemo(() => {
     if (!catData) return [];
@@ -639,6 +697,20 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [filteredCATData, catGroupings]);
+
+  // Group Ocupacion Digital data
+  const groupedOcupacionDigitalData = useMemo(() => {
+    if (catGroupings.length === 0 || !filteredOcupacionDigitalData.length) return null;
+
+    const groups: Record<string, OrdenMontajeCAT[]> = {};
+    filteredOcupacionDigitalData.forEach(item => {
+      const key = getCATGroupValue(item, catGroupings[0]);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  }, [filteredOcupacionDigitalData, catGroupings]);
 
   // Filtered and sorted INVIAN data
   const filteredINVIANData = useMemo(() => {
@@ -781,6 +853,15 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     };
   }, [filteredCATData]);
 
+  const ocupacionDigitalTotals = useMemo(() => {
+    if (!filteredOcupacionDigitalData || filteredOcupacionDigitalData.length === 0) return { caras: 0, tarifa: 0, monto: 0 };
+    return {
+      caras: filteredOcupacionDigitalData.reduce((sum, i) => sum + (Number(i.caras) || 0), 0),
+      tarifa: filteredOcupacionDigitalData.reduce((sum, i) => sum + (Number(i.tarifa) || 0), 0),
+      monto: filteredOcupacionDigitalData.reduce((sum, i) => sum + (Number(i.monto_total) || 0), 0),
+    };
+  }, [filteredOcupacionDigitalData]);
+
   // Export to XLSX
   const handleExportXLSX = () => {
     if (activeTab === 'cat' && filteredCATData.length > 0) {
@@ -805,7 +886,29 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       const ws = XLSX.utils.json_to_sheet(wsData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Orden Montaje CAT');
-      XLSX.writeFile(wb, `orden_montaje_cat_${new Date().toISOString().split('T')[0]}.xlsx`);
+      XLSX.writeFile(wb, `orden_montaje_ocupacion_vp_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } else if (activeTab === 'ocupacion-digital' && filteredOcupacionDigitalData.length > 0) {
+      const wsData = filteredOcupacionDigitalData.map(item => ({
+        'Plaza': item.plaza || '',
+        'Tipo': item.tipo || '',
+        'Asesor': item.asesor || '',
+        'APS': item.aps_especifico || '',
+        'Fecha Inicio': item.fecha_inicio_periodo ? formatDate(item.fecha_inicio_periodo) : '',
+        'Fecha Fin': item.fecha_fin_periodo ? formatDate(item.fecha_fin_periodo) : '',
+        'Cliente': item.cliente || '',
+        'Marca': item.marca || '',
+        'Unidad de Negocio': item.unidad_negocio || '',
+        'Campaña': item.campania || '',
+        'Artículo': item.numero_articulo || '',
+        'Negociación': item.negociacion || '',
+        'Caras': Number(item.caras) || 0,
+        'Tarifa': Number(item.tarifa) || 0,
+        'Monto Total': Number(item.monto_total) || 0,
+      }));
+      const ws = XLSX.utils.json_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Ocupacion Digital');
+      XLSX.writeFile(wb, `orden_montaje_ocupacion_digital_${new Date().toISOString().split('T')[0]}.xlsx`);
     } else if (activeTab === 'digital' && filteredDigitalData.length > 0) {
       const wsData = filteredDigitalData.map(item => ({
         'Plaza': item.plaza || '',
@@ -935,14 +1038,14 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
   // Filter management callbacks
   const addFilter = useCallback(() => {
-    const fields = activeTab === 'cat' || activeTab === 'digital' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
+    const fields = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
     const newFilter: AdvancedFilterCondition = {
       id: `filter-${Date.now()}`,
       field: fields[0].field,
       operator: '=',
       value: '',
     };
-    if (activeTab === 'cat' || activeTab === 'digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
       setCatFilters(prev => [...prev, newFilter]);
     } else {
       setInvianFilters(prev => [...prev, newFilter]);
@@ -950,7 +1053,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   }, [activeTab]);
 
   const updateFilter = useCallback((id: string, updates: Partial<AdvancedFilterCondition>) => {
-    if (activeTab === 'cat' || activeTab === 'digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
       setCatFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
     } else {
       setInvianFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
@@ -958,7 +1061,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   }, [activeTab]);
 
   const removeFilter = useCallback((id: string) => {
-    if (activeTab === 'cat' || activeTab === 'digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
       setCatFilters(prev => prev.filter(f => f.id !== id));
     } else {
       setInvianFilters(prev => prev.filter(f => f.id !== id));
@@ -966,7 +1069,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   }, [activeTab]);
 
   const clearCurrentFilters = useCallback(() => {
-    if (activeTab === 'cat' || activeTab === 'digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
       setCatFilters([]);
     } else {
       setInvianFilters([]);
@@ -975,7 +1078,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
   // Grouping toggle
   const toggleGrouping = useCallback((field: string) => {
-    if (activeTab === 'cat' || activeTab === 'digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
       setCatGroupings(prev => {
         if (prev.includes(field as CATGroupByField)) {
           return prev.filter(f => f !== field);
@@ -994,7 +1097,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
   // Toggle expanded groups
   const toggleGroup = useCallback((groupName: string) => {
-    if (activeTab === 'cat' || activeTab === 'digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
       setCatExpandedGroups(prev => {
         const next = new Set(prev);
         if (next.has(groupName)) next.delete(groupName);
@@ -1030,22 +1133,22 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   }, []);
 
   // Current tab data
-  const currentFilters = activeTab === 'cat' || activeTab === 'digital' ? catFilters : invianFilters;
-  const currentGroupings = activeTab === 'cat' || activeTab === 'digital' ? catGroupings : invianGroupings;
-  const currentSortField = activeTab === 'cat' || activeTab === 'digital' ? catSortField : invianSortField;
-  const currentSortDirection = activeTab === 'cat' || activeTab === 'digital' ? catSortDirection : invianSortDirection;
-  const currentFilterFields = activeTab === 'cat' || activeTab === 'digital' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
-  const currentGroupOptions = activeTab === 'cat' || activeTab === 'digital' ? CAT_GROUPINGS : INVIAN_GROUPINGS;
-  const currentSortOptions = activeTab === 'cat' || activeTab === 'digital' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
-  const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' ? getCATUniqueValues : activeTab === 'invian-digital' ? getINVIANDigitalUniqueValues : getINVIANUniqueValues;
+  const currentFilters = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? catFilters : invianFilters;
+  const currentGroupings = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? catGroupings : invianGroupings;
+  const currentSortField = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? catSortField : invianSortField;
+  const currentSortDirection = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? catSortDirection : invianSortDirection;
+  const currentFilterFields = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
+  const currentGroupOptions = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_GROUPINGS : INVIAN_GROUPINGS;
+  const currentSortOptions = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
+  const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? getCATUniqueValues : activeTab === 'invian-digital' ? getINVIANDigitalUniqueValues : getINVIANUniqueValues;
 
   const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin;
 
   if (!isOpen) return null;
 
-  const isLoading = activeTab === 'cat' || activeTab === 'digital' ? isLoadingCAT : isLoadingINVIAN;
-  const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : filteredINVIANData.length;
-  const totalCount = activeTab === 'cat' ? (catData?.length || 0) : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : (invianData?.length || 0);
+  const isLoading = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? isLoadingCAT : isLoadingINVIAN;
+  const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : filteredINVIANData.length;
+  const totalCount = activeTab === 'cat' ? (catData?.length || 0) : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : (invianData?.length || 0);
 
   return (
     <div
@@ -1089,7 +1192,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               }`}
             >
               <Building2 className="h-4 w-4" />
-              CAT
+              Ocupacion VP
+            </button>
+            <button
+              onClick={() => setActiveTab('ocupacion-digital')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'ocupacion-digital'
+                  ? 'bg-gradient-to-r from-sky-500 to-indigo-500 text-white shadow-lg shadow-sky-500/25'
+                  : isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              <Monitor className="h-4 w-4" />
+              Ocupacion Digital
             </button>
             <button
               onClick={() => setActiveTab('digital')}
@@ -1100,7 +1214,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               }`}
             >
               <Monitor className="h-4 w-4" />
-              Digital
+              Ocupacion UN+
             </button>
             <button
               onClick={() => setActiveTab('invian')}
@@ -1111,7 +1225,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               }`}
             >
               <FileSpreadsheet className="h-4 w-4" />
-              INVIAN
+              INVIAN VP
             </button>
             <button
               onClick={() => setActiveTab('invian-digital')}
@@ -1279,7 +1393,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           value={currentSortField || ''}
                           onChange={(e) => {
                             const val = e.target.value || null;
-                            if (activeTab === 'cat' || activeTab === 'digital') {
+                            if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
                               setCatSortField(val);
                             } else {
                               setInvianSortField(val);
@@ -1294,7 +1408,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                         </select>
                         <button
                           onClick={() => {
-                            if (activeTab === 'cat' || activeTab === 'digital') {
+                            if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
                               setCatSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
                             } else {
                               setInvianSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -1314,7 +1428,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                         value={currentGroupings[0] || ''}
                         onChange={(e) => {
                           const val = e.target.value;
-                          if (activeTab === 'cat' || activeTab === 'digital') {
+                          if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
                             setCatGroupings(val ? [val as CATGroupByField] : []);
                           } else {
                             setInvianGroupings(val ? [val as INVIANGroupByField] : []);
@@ -1462,6 +1576,97 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                       </td>
                       <td className="px-3 py-3 text-right text-sm font-bold text-emerald-400">
                         ${catTotals.monto.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          ) : activeTab === 'ocupacion-digital' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1400px]">
+                <thead className="sticky top-0 z-10">
+                  <tr className="border-b border-sky-500/20 bg-gradient-to-r from-sky-900/40 via-indigo-900/30 to-sky-900/40 backdrop-blur-sm">
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Plaza</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Tipo</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Asesor</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">APS</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">F. Inicio</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">F. Fin</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Cliente</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Marca</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">U. Negocio</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Campaña</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Artículo</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Negociación</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Caras</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Tarifa</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Monto Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedOcupacionDigitalData ? (
+                    groupedOcupacionDigitalData.map(([groupName, items]) => (
+                      <React.Fragment key={groupName}>
+                        <tr
+                          onClick={() => toggleGroup(groupName)}
+                          className="bg-sky-500/10 border-b border-sky-500/20 cursor-pointer hover:bg-sky-500/15 transition-colors"
+                        >
+                          <td colSpan={15} className="px-4 py-2">
+                            <div className="flex items-center gap-2">
+                              {catExpandedGroups.has(groupName) ? (
+                                <ChevronDown className="h-4 w-4 text-sky-400" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-sky-400" />
+                              )}
+                              <span className="font-semibold text-white text-sm">{groupName}</span>
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-sky-500/20 text-sky-300">
+                                {items.length} registros
+                              </span>
+                              <span className="text-xs text-zinc-400">
+                                Caras: {items.reduce((sum, i) => sum + (Number(i.caras) || 0), 0).toLocaleString()}
+                              </span>
+                              <span className="text-xs text-emerald-400">
+                                Total: ${items.reduce((sum, i) => sum + (Number(i.monto_total) || 0), 0).toLocaleString()}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {catExpandedGroups.has(groupName) && items.map((item, idx) => (
+                          <CATRow key={`${groupName}-${idx}`} item={item} />
+                        ))}
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    filteredOcupacionDigitalData.map((item, idx) => (
+                      <CATRow key={idx} item={item} />
+                    ))
+                  )}
+                  {filteredOcupacionDigitalData.length === 0 && (
+                    <tr>
+                      <td colSpan={15} className="px-4 py-12 text-center">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-sky-500/10 mb-4">
+                          <Monitor className="w-8 h-8 text-sky-400" />
+                        </div>
+                        <p className="text-zinc-500">No se encontraron registros digitales</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                {filteredOcupacionDigitalData.length > 0 && (
+                  <tfoot className="sticky bottom-0 bg-zinc-900/95 backdrop-blur-sm">
+                    <tr className="border-t-2 border-sky-500/40">
+                      <td colSpan={11} className="px-3 py-3 text-right text-sm font-semibold text-sky-300">
+                        Totales:
+                      </td>
+                      <td className="px-3 py-3 text-right text-sm font-bold text-white">
+                        {ocupacionDigitalTotals.caras.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-3 text-right text-sm font-bold text-white">
+                        ${ocupacionDigitalTotals.tarifa.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-3 py-3 text-right text-sm font-bold text-emerald-400">
+                        ${ocupacionDigitalTotals.monto.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
                   </tfoot>
