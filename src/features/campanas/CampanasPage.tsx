@@ -2291,8 +2291,11 @@ export function CampanasPage() {
                                                     const plazas = [...new Set(grupo.items.map(i => i.plaza).filter(Boolean))];
                                                     const formato = (grupo.items[0] as any)?.formato || null;
                                                     const carasTotales = grupo.items.length;
-                                                    const sumTarifa = grupo.items.reduce((s, i) => s + (Number((i as any).tarifa_publica_sc) || 0), 0);
-                                                    const sumRenta = grupo.items.reduce((s, i) => s + (Number((i as any).renta) || 0), 0);
+                                                    const tarifasGrupo = grupo.items
+                                                      .map(i => Number((i as any).tarifa_publica_sc) || 0)
+                                                      .filter(v => v > 0);
+                                                    // Tarifa: valor publico por cara (normalmente constante por grupo).
+                                                    const tarifaPublica = tarifasGrupo.length > 0 ? tarifasGrupo[0] : 0;
                                                     // bonificacion_sc viene repetida por fila en algunos inventarios.
                                                     // Para evitar inflar (ej. 50 filas x 50 = 2500), usar el valor de campaña;
                                                     // si no existe, tomar el mayor valor reportado en el grupo.
@@ -2303,7 +2306,8 @@ export function CampanasPage() {
                                                     }, 0);
                                                     const sumBonif = Math.min(carasTotales, (bonifCampana > 0 ? bonifCampana : bonifGrupoFallback));
                                                     const sumNormales = Math.max(carasTotales - sumBonif, 0);
-                                                    const inversionTotal = sumTarifa;
+                                                    // Inversion: tarifa por cara * caras rentadas (excluye bonificadas).
+                                                    const inversionTotal = tarifaPublica * sumNormales;
                                                     const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
                                                     return (
                                                       <>
@@ -2321,10 +2325,7 @@ export function CampanasPage() {
                                                           </span>
                                                         )}
                                                         <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25" title="Tarifa pública">
-                                                          {sumTarifa > 0 ? <>Tarifa: {'$'}{sumTarifa.toLocaleString()}</> : 'Sin tarifa'}
-                                                        </span>
-                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-green-500/15 text-green-300 border border-green-500/25" title="Renta">
-                                                          {sumRenta > 0 ? <>Renta: {'$'}{sumRenta.toLocaleString()}</> : 'Sin renta'}
+                                                          {tarifaPublica > 0 ? <>Tarifa: {'$'}{tarifaPublica.toLocaleString()}</> : 'Sin tarifa'}
                                                         </span>
                                                         <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/25" title="Inversión total (tarifa)">
                                                           {inversionTotal > 0 ? <>Inversión: {'$'}{inversionTotal.toLocaleString()}</> : 'Sin inversión'}
