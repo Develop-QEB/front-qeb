@@ -11488,7 +11488,13 @@ export function TareaSeguimientoPage() {
           return esCompletada && !esFaltantes;
         });
 
-        if (recepcionCompletada) {
+        // Si existe CUALQUIER recepción pendiente (normal o faltantes),
+        // el flujo sigue en "pendiente recepción" y NO debe marcarse como recibido.
+        const hasRecepcionPendiente = tareasRecepcionRelacionadas.some(recepcion =>
+          recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
+        );
+
+        if (recepcionCompletada && !hasRecepcionPendiente) {
           estadoImpresion = 'recibido';
           tareaRecepcionId = recepcionCompletada.id;
         } else {
@@ -11608,7 +11614,8 @@ export function TareaSeguimientoPage() {
       let estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido' = 'en_impresion';
 
       if (tareasRecepcionRelacionadas.length > 0) {
-        // Si hay ALGUNA recepción completada (no faltantes), el estado es 'recibido'
+        // Si hay ALGUNA recepción completada (no faltantes), el estado puede ser 'recibido'
+        // solo cuando no queda ninguna recepción pendiente.
         const hayRecepcionCompletada = tareasRecepcionRelacionadas.some(recepcion => {
           const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
           // Verificar si es tarea de faltantes
@@ -11622,7 +11629,11 @@ export function TareaSeguimientoPage() {
           return esCompletada && !esFaltantes;
         });
 
-        if (hayRecepcionCompletada) {
+        const hayRecepcionPendiente = tareasRecepcionRelacionadas.some(recepcion =>
+          recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
+        );
+
+        if (hayRecepcionCompletada && !hayRecepcionPendiente) {
           estado = 'recibido';
         } else {
           // Hay recepciones pero ninguna completada (o solo faltantes)
