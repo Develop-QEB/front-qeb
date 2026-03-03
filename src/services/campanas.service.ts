@@ -659,6 +659,14 @@ export const campanasService = {
     return response.data.data;
   },
 
+  async getReservaArchivo(campanaId: number, reservaId: number): Promise<string | null> {
+    const response = await api.get<ApiResponse<{ archivo: string | null }>>(`/campanas/${campanaId}/reserva-archivo/${reservaId}`);
+    if (!response.data.success || !response.data.data) {
+      return null;
+    }
+    return response.data.data.archivo;
+  },
+
   async getDigitalFileSummaries(campanaId: number): Promise<DigitalFileSummary[]> {
     const response = await api.get<ApiResponse<DigitalFileSummary[]>>(`/campanas/${campanaId}/digital-file-summaries`);
     if (!response.data.success || !response.data.data) {

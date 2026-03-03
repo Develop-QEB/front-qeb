@@ -51,6 +51,8 @@ const getFileUrl = (url: string | undefined | null): string | null => {
 // Helper to check if URL is an image
 const isImageUrl = (url: string | null | undefined): boolean => {
   if (!url) return false;
+  // Data URLs for images
+  if (url.startsWith('data:image/')) return true;
   const ext = url.split(/[?#]/)[0].split('.').pop()?.toLowerCase();
   return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext || '');
 };
@@ -400,7 +402,29 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     setGalleryTitle(`Artes - ${item.Campania || 'Campaña'}`);
     try {
       const images = await campanasService.getImagenesDigitales(item.CodigoContrato, item.rsv_id);
-      setGalleryImages(images);
+      if (images.length > 0) {
+        setGalleryImages(images);
+      } else if (item.ArteUrl === 'HAS_ARTE') {
+        // Item tradicional: cargar archivo de la reserva bajo demanda
+        const archivo = await campanasService.getReservaArchivo(item.CodigoContrato, item.rsv_id);
+        if (archivo) {
+          setGalleryImages([{
+            id: 0,
+            idReserva: item.rsv_id,
+            archivo: archivo.startsWith('data:') ? 'arte.jpg' : archivo,
+            archivoData: archivo,
+            comentario: '',
+            estado: '',
+            respuesta: '',
+            spot: 1,
+            tipo: 'image',
+          }]);
+        } else {
+          setGalleryImages([]);
+        }
+      } else {
+        setGalleryImages([]);
+      }
     } catch (err) {
       console.error('Error loading gallery images:', err);
       setGalleryImages([]);
@@ -964,8 +988,8 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Fin o Segmento': item.FinSegmento || '',
         'Arte': item.Arte || '',
         'Código de arte (Opcional)': item.CodigoArte || '',
-        'Nombre Arte': item.ArteUrl?.split('/').pop() || '',
-        'Arte Url (Opcional)': getFileUrl(item.ArteUrl) || '',
+        'Nombre Arte': item.nombres_artes_digitales || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
+        'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
         'Origen del arte (Opcional)': item.OrigenArte || '',
         'Indicaciones': item.indicaciones || '',
         'Unidad': item.Unidad || '',
@@ -992,8 +1016,8 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Fin o Segmento': item.FinSegmento || '',
         'Arte': item.Arte || '',
         'Código de arte (Opcional)': item.CodigoArte || '',
-        'Nombre Arte': item.ArteUrl?.split('/').pop() || '',
-        'Arte Url (Opcional)': getFileUrl(item.ArteUrl) || '',
+        'Nombre Arte': item.nombres_artes_digitales || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
+        'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
         'Origen del arte (Opcional)': item.OrigenArte || '',
         'Indicaciones': item.indicaciones || '',
         'Unidad': item.Unidad || '',
@@ -1939,9 +1963,10 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
   const operacionColor = getOperacionColor(item.Operacion);
   const tipoDistColor = getOperacionColor(item.TipoDistribucion);
 
-  const arteUrl = getFileUrl(item.ArteUrl);
+  const hasTraditionalArte = item.ArteUrl === 'HAS_ARTE';
+  const arteUrl = hasTraditionalArte ? null : getFileUrl(item.ArteUrl);
   // For digital items with multiple artes, show comma-separated filenames from backend
-  const fileName = item.nombres_artes_digitales || item.ArteUrl?.split('/').pop() || null;
+  const fileName = item.nombres_artes_digitales || (hasTraditionalArte ? 'Arte' : item.ArteUrl?.split('/').pop()) || null;
 
   return (
     <tr className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
@@ -1987,29 +2012,42 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
               </button>
             );
           }
+          if (hasTraditionalArte) {
+            return (
+              <button
+                onClick={() => onOpenGallery(item)}
+                className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
+                title="Ver arte"
+              >
+                <Image className="h-3.5 w-3.5" />
+              </button>
+            );
+          }
           if (arteUrl && isImageUrl(item.ArteUrl)) {
             return (
-              <a href={arteUrl} target="_blank" rel="noopener noreferrer" title="Ver imagen">
+              <button
+                onClick={() => onOpenGallery(item)}
+                className="cursor-pointer"
+                title="Ver imagen"
+              >
                 <img
                   src={arteUrl}
                   alt="Arte"
                   className={`w-10 h-[30px] object-cover rounded border ${isDark ? 'border-zinc-700' : 'border-gray-200'} hover:border-purple-400 transition-colors`}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
-              </a>
+              </button>
             );
           }
           if (arteUrl) {
             return (
-              <a
-                href={arteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={() => onOpenGallery(item)}
                 className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
-                title={arteUrl}
+                title="Ver arte"
               >
-                <Link2 className="h-3.5 w-3.5" />
-              </a>
+                <Image className="h-3.5 w-3.5" />
+              </button>
             );
           }
           return <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>-</span>;
