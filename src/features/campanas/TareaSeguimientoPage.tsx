@@ -16373,14 +16373,23 @@ Por favor registra la cantidad de impresiones recibidas.`,
             (selectedTask.titulo?.match(/TASK-\d+/) || [''])[0] ||
             `TASK-${selectedTask.id}`;
 
-          // Guardar info de faltantes en evidencia para que el modal lo lea correctamente
+          // Guardar info de faltantes en evidencia y conservar guía PDF previa si existe
+          let guiaPdfAnterior: string | undefined;
+          try {
+            const evidenciaAnterior = selectedTask.evidencia ? JSON.parse(selectedTask.evidencia) : {};
+            guiaPdfAnterior = evidenciaAnterior?.guia_pdf;
+          } catch {
+            guiaPdfAnterior = undefined;
+          }
+
           const evidenciaFaltantes = JSON.stringify({
             tipo: 'recepcion_faltantes',
             faltantesPorArte: faltantes.map(f => ({
               arte: f.arte,
               cantidad: f.faltantes
             })),
-            totalFaltantes
+            totalFaltantes,
+            ...(guiaPdfAnterior ? { guia_pdf: guiaPdfAnterior } : {})
           });
 
           await createTareaMutation.mutateAsync({
