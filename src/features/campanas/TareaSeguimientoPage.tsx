@@ -3121,7 +3121,7 @@ export function TareaSeguimientoPage() {
   // Main tabs
   const [activeMainTab, setActiveMainTab] = useState<MainTab>('versionario');
   const [activeFormat, setActiveFormat] = useState<FormatTab>('tradicional');
-  const [initialTabDetermined, setInitialTabDetermined] = useState(false);
+  const [initialTabDetermined] = useState(true);
   const [activeTasksTab, setActiveTasksTab] = useState<TasksTab>('tradicionales');
 
   // Inventory state
@@ -3212,26 +3212,41 @@ export function TareaSeguimientoPage() {
 
   // Inventario SIN arte (para tab "Subir Artes")
   // Se carga siempre inicialmente para determinar el tab por defecto
-  const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte, isFetched: isFetchedSinArte } = useQuery({
+  const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte } = useQuery({
     queryKey: ['campana-inventario-sin-arte', campanaId, activeFormat],
     queryFn: () => campanasService.getInventarioSinArte(campanaId, activeFormat === 'tradicional' ? 'Tradicional' : 'Digital'),
     enabled: campanaId > 0 && (activeMainTab === 'versionario' || !initialTabDetermined),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   // Inventario CON arte (para tab "Revisar y Aprobar")
   // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
-  const { data: inventarioArteAPI = [], isLoading: isLoadingInventarioArte, isFetched: isFetchedConArte } = useQuery({
+  const { data: inventarioArteAPI = [], isLoading: isLoadingInventarioArte } = useQuery({
     queryKey: ['campana-inventario-arte', campanaId],
     queryFn: () => campanasService.getInventarioConArte(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'atender' || !initialTabDetermined || isTaskDetailModalOpen),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   // Inventario para TESTIGOS (para tab "Validar Instalación")
   // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
-  const { data: inventarioTestigosAPI = [], isLoading: isLoadingInventarioTestigos, isFetched: isFetchedTestigos } = useQuery({
+  const { data: inventarioTestigosAPI = [], isLoading: isLoadingInventarioTestigos } = useQuery({
     queryKey: ['campana-inventario-testigos', campanaId, activeFormat],
     queryFn: () => campanasService.getInventarioTestigos(campanaId, activeFormat === 'tradicional' ? 'Tradicional' : 'Digital'),
     enabled: campanaId > 0 && (activeMainTab === 'testigo' || !initialTabDetermined),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   // Tareas de la campaña (activas = Activo o Pendiente)
@@ -3256,35 +3271,8 @@ export function TareaSeguimientoPage() {
   });
   const proveedores = proveedoresData?.data || [];
 
-  // ---- Determinar tab inicial basado en contenido ----
-  useEffect(() => {
-    // Solo ejecutar una vez cuando los datos estén disponibles
-    if (initialTabDetermined) return;
-
-    // Esperar a que las queries hayan terminado de hacer fetch (no solo que no estén cargando)
-    const allQueriesFetched = isFetchedSinArte && isFetchedConArte && isFetchedTestigos;
-    if (!allQueriesFetched) return;
-
-    // Determinar el tab con contenido (prioridad: versionario > atender > testigo)
-    if (inventarioSinArteAPI.length > 0) {
-      setActiveMainTab('versionario');
-    } else if (inventarioArteAPI.length > 0) {
-      setActiveMainTab('atender');
-    } else if (inventarioTestigosAPI.length > 0) {
-      setActiveMainTab('testigo');
-    }
-    // Si ninguno tiene contenido, se queda en versionario por defecto
-
-    setInitialTabDetermined(true);
-  }, [
-    initialTabDetermined,
-    isFetchedSinArte,
-    isFetchedConArte,
-    isFetchedTestigos,
-    inventarioSinArteAPI.length,
-    inventarioArteAPI.length,
-    inventarioTestigosAPI.length,
-  ]);
+  // No precargar los 3 tabs al inicio: se consulta solo el tab activo para evitar
+  // cargas pesadas y recargas lentas en campañas con mucho inventario.
 
   // ---- Error State ----
   const [uploadArtError, setUploadArtError] = useState<string | null>(null);
