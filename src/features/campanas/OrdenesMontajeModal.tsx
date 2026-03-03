@@ -21,6 +21,9 @@ const STATIC_URL = API_URL.replace(/\/api$/, '');
 const getFileUrl = (url: string | undefined | null): string | null => {
   if (!url) return null;
 
+  // Si es data URL (base64), usarla directamente
+  if (url.startsWith('data:')) return url;
+
   // Si ya es una URL completa (http/https), usarla tal cual
   if (url.startsWith('http://') || url.startsWith('https://')) {
     // Si es localhost, convertirla a la URL del entorno actual
@@ -354,6 +357,8 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [activeTab, setActiveTab] = useState<TabType>('cat');
   const contentRef = useRef<HTMLDivElement>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 100;
 
   // Period filters (kept for API query)
   const [status, setStatus] = useState('');
@@ -517,6 +522,12 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     if (!catData) return [];
     let items = [...catData];
 
+    // Exclude digital items (they have their own tab)
+    items = items.filter(item => {
+      const td = (item.tradicional_digital || '').toUpperCase();
+      return td !== 'DIGITAL';
+    });
+
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
       const startDate = fechaInicio ? new Date(fechaInicio) : null;
@@ -631,6 +642,12 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       return !unidad.includes('VIA PUBLICA') && !unidad.includes('VÍA PÚBLICA');
     });
 
+    // Exclude digital items (they have their own tab)
+    items = items.filter(item => {
+      const td = (item.tradicional_digital || '').toUpperCase();
+      return td !== 'DIGITAL';
+    });
+
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
       const startDate = fechaInicio ? new Date(fechaInicio) : null;
@@ -716,6 +733,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const filteredINVIANData = useMemo(() => {
     if (!invianData) return [];
     let items = [...invianData];
+
+    // Exclude digital items (they have their own tab)
+    items = items.filter(item => !item.numero_articulo || !ALLOWED_DIGITAL_ITEM_CODES.has(item.numero_articulo));
 
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
@@ -1130,6 +1150,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     setInvianFilters([]);
     setInvianGroupings([]);
     setInvianSortField(null);
+    setCurrentPage(1);
   }, []);
 
   // Current tab data
@@ -1149,6 +1170,16 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const isLoading = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? isLoadingCAT : isLoadingINVIAN;
   const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : filteredINVIANData.length;
   const totalCount = activeTab === 'cat' ? (catData?.length || 0) : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : (invianData?.length || 0);
+
+  const totalPages = Math.max(1, Math.ceil(dataCount / PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  // Paginated slices (only used when no grouping active)
+  const paginatedCATData = filteredCATData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+  const paginatedOcupacionDigitalData = filteredOcupacionDigitalData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+  const paginatedDigitalData = filteredDigitalData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+  const paginatedINVIANData = filteredINVIANData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+  const paginatedINVIANDigitalData = filteredINVIANDigitalData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
 
   return (
     <div
@@ -1184,7 +1215,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
           {/* Tabs */}
           <div className={`flex p-1 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} rounded-xl border`}>
             <button
-              onClick={() => setActiveTab('cat')}
+              onClick={() => { setActiveTab('cat'); setCurrentPage(1); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'cat'
                   ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/25'
@@ -1195,7 +1226,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               Ocupacion VP
             </button>
             <button
-              onClick={() => setActiveTab('ocupacion-digital')}
+              onClick={() => { setActiveTab('ocupacion-digital'); setCurrentPage(1); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'ocupacion-digital'
                   ? 'bg-gradient-to-r from-sky-500 to-indigo-500 text-white shadow-lg shadow-sky-500/25'
@@ -1206,7 +1237,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               Ocupacion Digital
             </button>
             <button
-              onClick={() => setActiveTab('digital')}
+              onClick={() => { setActiveTab('digital'); setCurrentPage(1); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'digital'
                   ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/25'
@@ -1217,7 +1248,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               Ocupacion UN+
             </button>
             <button
-              onClick={() => setActiveTab('invian')}
+              onClick={() => { setActiveTab('invian'); setCurrentPage(1); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'invian'
                   ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/25'
@@ -1228,7 +1259,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               INVIAN VP
             </button>
             <button
-              onClick={() => setActiveTab('invian-digital')}
+              onClick={() => { setActiveTab('invian-digital'); setCurrentPage(1); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'invian-digital'
                   ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white shadow-lg shadow-violet-500/25'
@@ -1547,7 +1578,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                       </React.Fragment>
                     ))
                   ) : (
-                    filteredCATData.map((item, idx) => (
+                    paginatedCATData.map((item, idx) => (
                       <CATRow key={idx} item={item} />
                     ))
                   )}
@@ -1638,7 +1669,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                       </React.Fragment>
                     ))
                   ) : (
-                    filteredOcupacionDigitalData.map((item, idx) => (
+                    paginatedOcupacionDigitalData.map((item, idx) => (
                       <CATRow key={idx} item={item} />
                     ))
                   )}
@@ -1696,7 +1727,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDigitalData.map((item, idx) => (
+                  {paginatedDigitalData.map((item, idx) => (
                     <CATRow key={idx} item={item} />
                   ))}
                   {filteredDigitalData.length === 0 && (
@@ -1736,7 +1767,8 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 </thead>
                 <tbody>
                   {(() => {
-                    const currentData = activeTab === 'invian-digital' ? filteredINVIANDigitalData : filteredINVIANData;
+                    const currentDataFull = activeTab === 'invian-digital' ? filteredINVIANDigitalData : filteredINVIANData;
+                    const currentData = activeTab === 'invian-digital' ? paginatedINVIANDigitalData : paginatedINVIANData;
                     const currentGrouped = activeTab === 'invian-digital' ? groupedINVIANDigitalData : groupedINVIANData;
                     return (
                       <>
@@ -1771,7 +1803,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                             <INVIANRow key={idx} item={item} onOpenGallery={handleOpenGallery} />
                           ))
                         )}
-                        {currentData.length === 0 && (
+                        {currentDataFull.length === 0 && (
                           <tr>
                             <td colSpan={16} className="px-4 py-12 text-center">
                               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
@@ -1789,6 +1821,48 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
             </div>
           )}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className={`flex items-center justify-between px-6 py-3 border-t ${isDark ? 'border-zinc-800/50 bg-zinc-900/80' : 'border-gray-200 bg-gray-50/80'}`}>
+            <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+              Mostrando {((safeCurrentPage - 1) * PAGE_SIZE) + 1}-{Math.min(safeCurrentPage * PAGE_SIZE, dataCount)} de {dataCount}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setCurrentPage(1); contentRef.current?.scrollTo(0, 0); }}
+                disabled={safeCurrentPage <= 1}
+                className={`px-2 py-1 rounded text-xs font-medium transition-all ${safeCurrentPage <= 1 ? 'opacity-30 cursor-not-allowed' : isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              >
+                Primera
+              </button>
+              <button
+                onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); contentRef.current?.scrollTo(0, 0); }}
+                disabled={safeCurrentPage <= 1}
+                className={`p-1 rounded transition-all ${safeCurrentPage <= 1 ? 'opacity-30 cursor-not-allowed' : isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-gray-700'}`}>
+                {safeCurrentPage} / {totalPages}
+              </span>
+              <button
+                onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); contentRef.current?.scrollTo(0, 0); }}
+                disabled={safeCurrentPage >= totalPages}
+                className={`p-1 rounded transition-all ${safeCurrentPage >= totalPages ? 'opacity-30 cursor-not-allowed' : isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => { setCurrentPage(totalPages); contentRef.current?.scrollTo(0, 0); }}
+                disabled={safeCurrentPage >= totalPages}
+                className={`px-2 py-1 rounded text-xs font-medium transition-all ${safeCurrentPage >= totalPages ? 'opacity-30 cursor-not-allowed' : isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              >
+                Última
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Digital Gallery Modal */}
@@ -1866,7 +1940,8 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
   const tipoDistColor = getOperacionColor(item.TipoDistribucion);
 
   const arteUrl = getFileUrl(item.ArteUrl);
-  const fileName = item.ArteUrl?.split('/').pop() || null;
+  // For digital items with multiple artes, show comma-separated filenames from backend
+  const fileName = item.nombres_artes_digitales || item.ArteUrl?.split('/').pop() || null;
 
   return (
     <tr className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
