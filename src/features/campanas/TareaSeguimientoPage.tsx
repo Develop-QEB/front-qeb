@@ -2663,7 +2663,7 @@ function TaskDetailModal({
     faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[],
     observaciones: string,
     guiaPdfUrl?: string,
-    faltantesInventoryIds?: string[]
+    faltantesReservaIds?: string[]
   ) => Promise<void>;
   onUpdateTask: (taskId: string, data: { evidencia?: string; estatus?: string }) => Promise<void>;
   isUpdating: boolean;
@@ -4290,26 +4290,34 @@ function TaskDetailModal({
 
       // Calcular faltantes por arte
       const faltantesPorArte: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[] = [];
-      const faltantesInventoryIds = new Set<string>();
+      const faltantesReservaIds = new Set<string>();
 
-      // Mapa de ids de inventario por arte para poder crear la tarea de faltantes solo con esos ids
-      const inventoryIdsByArte = taskInventory.reduce((acc, item) => {
+      // Mapa de ids de reservas por arte para crear tarea de faltantes con ids_reservas correctos
+      const reservaIdsByArte = taskInventory.reduce((acc, item) => {
         const key = item.archivo_arte || 'sin_arte';
         if (!acc[key]) acc[key] = [];
-        acc[key].push(String(item.id));
+        const rsvIds = String(item.rsv_id || item.id)
+          .split(',')
+          .map(v => v.trim())
+          .filter(Boolean);
+        acc[key].push(...rsvIds);
         return acc;
       }, {} as Record<string, string[]>);
-      const inventoryIdsByArteNorm = taskInventory.reduce((acc, item) => {
+      const reservaIdsByArteNorm = taskInventory.reduce((acc, item) => {
         const keyNorm = normalizeArteKey(item.archivo_arte || 'sin_arte');
         if (!acc[keyNorm]) acc[keyNorm] = [];
-        acc[keyNorm].push(String(item.id));
+        const rsvIds = String(item.rsv_id || item.id)
+          .split(',')
+          .map(v => v.trim())
+          .filter(Boolean);
+        acc[keyNorm].push(...rsvIds);
         return acc;
       }, {} as Record<string, string[]>);
 
-      const getIdsForArte = (arteKey: string): string[] => {
-        const direct = inventoryIdsByArte[arteKey];
+      const getReservaIdsForArte = (arteKey: string): string[] => {
+        const direct = reservaIdsByArte[arteKey];
         if (direct && direct.length > 0) return direct;
-        const norm = inventoryIdsByArteNorm[normalizeArteKey(arteKey)];
+        const norm = reservaIdsByArteNorm[normalizeArteKey(arteKey)];
         if (norm && norm.length > 0) return norm;
         return [];
       };
@@ -4347,8 +4355,8 @@ function TaskDetailModal({
               recibidas,
               faltantes: diferencia
             });
-            const idsArte = getIdsForArte(key);
-            idsArte.slice(0, diferencia).forEach(id => faltantesInventoryIds.add(id));
+            const idsArte = getReservaIdsForArte(key);
+            idsArte.slice(0, diferencia).forEach(id => faltantesReservaIds.add(id));
           }
         });
       } else if (Object.keys(impresionesData).length > 0) {
@@ -4364,8 +4372,8 @@ function TaskDetailModal({
               recibidas,
               faltantes
             });
-            const idsArte = getIdsForArte(arteUrl);
-            idsArte.slice(0, faltantes).forEach(id => faltantesInventoryIds.add(id));
+            const idsArte = getReservaIdsForArte(arteUrl);
+            idsArte.slice(0, faltantes).forEach(id => faltantesReservaIds.add(id));
           }
         });
       } else {
@@ -4393,19 +4401,22 @@ function TaskDetailModal({
               recibidas,
               faltantes
             });
-            const idsArte = getIdsForArte(key);
-            idsArte.slice(0, faltantes).forEach(id => faltantesInventoryIds.add(id));
+            const idsArte = getReservaIdsForArte(key);
+            idsArte.slice(0, faltantes).forEach(id => faltantesReservaIds.add(id));
           }
         });
       }
 
       // Fallback defensivo: si hay faltantes pero no se pudo mapear por arte,
       // limitar a la cantidad faltante total (nunca incluir todos los IDs).
-      if (faltantesPorArte.length > 0 && faltantesInventoryIds.size === 0) {
+      if (faltantesPorArte.length > 0 && faltantesReservaIds.size === 0) {
         const totalFaltantes = faltantesPorArte.reduce((sum, f) => sum + f.faltantes, 0);
-        (task.inventario_ids || [])
+        (task.ids_reservas || '')
+          .split(',')
+          .map(v => v.trim())
+          .filter(Boolean)
           .slice(0, totalFaltantes)
-          .forEach(id => faltantesInventoryIds.add(String(id)));
+          .forEach(id => faltantesReservaIds.add(String(id)));
       }
 
       // Si hay faltantes, crear nueva tarea de recepción
@@ -4414,7 +4425,7 @@ function TaskDetailModal({
           faltantesPorArte,
           observacionesRecepcion,
           guiaPdfUrl || undefined,
-          Array.from(faltantesInventoryIds)
+          Array.from(faltantesReservaIds)
         );
       }
 
@@ -16436,7 +16447,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
           // Refrescar lista de tareas
           queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
         }}
-        onCreateRecepcionFaltante={async (faltantes, observaciones, guiaPdfUrlParam, faltantesInventoryIds) => {
+        onCreateRecepcionFaltante={async (faltantes, observaciones, guiaPdfUrlParam, faltantesReservaIds) => {
           if (!selectedTask) return;
 
           // Construir descripción con detalle de faltantes
@@ -16486,8 +16497,8 @@ Por favor registra la cantidad de impresiones recibidas.`,
             tipo: 'Recepción',
             asignado: selectedTask.asignado || selectedTask.creador || '',
             id_asignado: (selectedTask as any).id_asignado || '',
-            ids_reservas: (faltantesInventoryIds && faltantesInventoryIds.length > 0)
-              ? faltantesInventoryIds.join(',')
+            ids_reservas: (faltantesReservaIds && faltantesReservaIds.length > 0)
+              ? faltantesReservaIds.join(',')
               : (selectedTask.inventario_ids?.join(',') || ''),
             evidencia: evidenciaFaltantes,
             num_impresiones: totalFaltantes,
