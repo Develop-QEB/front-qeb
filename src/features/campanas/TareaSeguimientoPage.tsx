@@ -2659,7 +2659,11 @@ function TaskDetailModal({
   onTaskComplete: (taskId: string, observaciones?: string, archivoTestigo?: string) => Promise<void>;
   onSendToReview: (reservaIds: number[], responsableOriginal: string) => Promise<void>;
   onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string, asignadoId?: string, guiaPdfUrl?: string) => Promise<void>;
-  onCreateRecepcionFaltante: (faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[], observaciones: string) => Promise<void>;
+  onCreateRecepcionFaltante: (
+    faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[],
+    observaciones: string,
+    guiaPdfUrl?: string
+  ) => Promise<void>;
   onUpdateTask: (taskId: string, data: { evidencia?: string; estatus?: string }) => Promise<void>;
   isUpdating: boolean;
   campanaId: number;
@@ -4312,7 +4316,11 @@ function TaskDetailModal({
 
       // Si hay faltantes, crear nueva tarea de recepción
       if (faltantesPorArte.length > 0) {
-        await onCreateRecepcionFaltante(faltantesPorArte, observacionesRecepcion);
+        await onCreateRecepcionFaltante(
+          faltantesPorArte,
+          observacionesRecepcion,
+          guiaPdfUrl || undefined
+        );
       }
 
       // Subir fotos comprobatorias si existen
@@ -16358,7 +16366,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
           // Refrescar lista de tareas
           queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
         }}
-        onCreateRecepcionFaltante={async (faltantes, observaciones) => {
+        onCreateRecepcionFaltante={async (faltantes, observaciones, guiaPdfUrlParam) => {
           if (!selectedTask) return;
 
           // Construir descripción con detalle de faltantes
@@ -16381,6 +16389,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
           } catch {
             guiaPdfAnterior = undefined;
           }
+          const guiaPdfFinal = guiaPdfUrlParam || guiaPdfAnterior;
 
           const evidenciaFaltantes = JSON.stringify({
             tipo: 'recepcion_faltantes',
@@ -16389,7 +16398,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
               cantidad: f.faltantes
             })),
             totalFaltantes,
-            ...(guiaPdfAnterior ? { guia_pdf: guiaPdfAnterior } : {})
+            ...(guiaPdfFinal ? { guia_pdf: guiaPdfFinal } : {})
           });
 
           await createTareaMutation.mutateAsync({
