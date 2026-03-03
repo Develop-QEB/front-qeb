@@ -1037,8 +1037,6 @@ export function CampanasPage() {
       subgroups?: { name: string; campanas: Campana[] }[];
     }> = {};
 
-    const CATORCENAS_POR_ANIO = 26;
-
     filteredData.forEach(item => {
       const isMensual = (item as any).tipo_periodo === 'mensual';
       if (isMensual && item.fecha_inicio) {
@@ -1055,28 +1053,17 @@ export function CampanasPage() {
         }
         groups[key].campanas.push(item);
       } else if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
-        const finNum = item.catorcena_fin_num ?? item.catorcena_inicio_num;
-        const finAnio = item.catorcena_fin_anio ?? item.catorcena_inicio_anio;
-
-        let num = item.catorcena_inicio_num;
-        let anio = item.catorcena_inicio_anio;
-
-        while (anio < finAnio || (anio === finAnio && num <= finNum)) {
-          const key = `${anio}-${String(num).padStart(2, '0')}`;
-          if (!groups[key]) {
-            groups[key] = {
-              catorcena: { num, anio },
-              campanas: []
-            };
-          }
-          groups[key].campanas.push(item);
-
-          num++;
-          if (num > CATORCENAS_POR_ANIO) {
-            num = 1;
-            anio++;
-          }
+        // Esta vista es "por periodo de inicio": cada campaña debe aparecer solo una vez.
+        const num = item.catorcena_inicio_num;
+        const anio = item.catorcena_inicio_anio;
+        const key = `${anio}-${String(num).padStart(2, '0')}`;
+        if (!groups[key]) {
+          groups[key] = {
+            catorcena: { num, anio },
+            campanas: []
+          };
         }
+        groups[key].campanas.push(item);
       }
     });
 
@@ -2275,7 +2262,7 @@ export function CampanasPage() {
                                               <div key={grupo.key} className="border-l-2 border-zinc-700 pl-2">
                                                 <button
                                                   onClick={() => toggleGrupo(campana.id, apsGroup.aps, grupo.key)}
-                                                  className="w-full flex items-center gap-2 py-1 text-left hover:bg-zinc-800/30 rounded px-1"
+                                                  className="w-full flex items-center gap-2 py-1 text-left hover:bg-zinc-800/30 rounded px-1 flex-wrap"
                                                 >
                                                   {isGrupoExpanded ? <ChevronDown className="h-3 w-3 text-zinc-500" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
                                                   <ClipboardList className="h-3 w-3 text-purple-400" />
@@ -2326,55 +2313,60 @@ export function CampanasPage() {
                                                       {estatusPredominante[0]}
                                                     </span>
                                                   )}
+                                                  {(() => {
+                                                    const plazas = [...new Set(grupo.items.map(i => i.plaza).filter(Boolean))];
+                                                    const formato = (grupo.items[0] as any)?.formato || null;
+                                                    const carasTotales = grupo.items.length;
+                                                    const sumTarifa = grupo.items.reduce((s, i) => s + (Number((i as any).tarifa_publica_sc) || 0), 0);
+                                                    const sumRenta = grupo.items.reduce((s, i) => s + (Number((i as any).renta) || 0), 0);
+                                                    const sumBonif = grupo.items.reduce((s, i) => s + (Number((i as any).bonificacion_sc) || 0), 0);
+                                                    const inversionTotal = sumTarifa;
+                                                    const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
+                                                    return (
+                                                      <>
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Caras totales">
+                                                          <Hash className="h-2.5 w-2.5" /> {carasTotales} caras
+                                                        </span>
+                                                        {plazas.length > 0 && (
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Plaza(s)">
+                                                            <MapPin className="h-2.5 w-2.5" /> {plazas.join(', ')}
+                                                          </span>
+                                                        )}
+                                                        {formato && (
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-500/15 text-violet-300 border border-violet-500/25" title="Formato">
+                                                            {formato}
+                                                          </span>
+                                                        )}
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25" title="Tarifa pública">
+                                                          {sumTarifa > 0 ? <>Tarifa: {'$'}{sumTarifa.toLocaleString()}</> : 'Sin tarifa'}
+                                                        </span>
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-green-500/15 text-green-300 border border-green-500/25" title="Renta">
+                                                          {sumRenta > 0 ? <>Renta: {'$'}{sumRenta.toLocaleString()}</> : 'Sin renta'}
+                                                        </span>
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/25" title="Inversión total (tarifa)">
+                                                          {inversionTotal > 0 ? <>Inversión: {'$'}{inversionTotal.toLocaleString()}</> : 'Sin inversión'}
+                                                        </span>
+                                                        {sumBonif > 0 && (
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/25" title="Bonificación">
+                                                            Bonif: {sumBonif}
+                                                          </span>
+                                                        )}
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 flex items-center gap-1" title="Artes subidos">
+                                                          <Image className="h-2.5 w-2.5" /> {artesSubidos}/{carasTotales}
+                                                        </span>
+                                                      </>
+                                                    );
+                                                  })()}
                                                 </button>
                                                 {isGrupoExpanded && (
                                                   <div className="pl-5 py-1 space-y-0.5">
                                                     {/* Resumen del grupo */}
                                                     {(() => {
-                                                      const plazas = [...new Set(grupo.items.map(i => i.plaza).filter(Boolean))];
-                                                      const formato = (grupo.items[0] as any)?.formato || null;
-                                                      const carasTotales = grupo.items.length;
-                                                      const sumTarifa = grupo.items.reduce((s, i) => s + (Number((i as any).tarifa_publica_sc) || 0), 0);
-                                                      const sumRenta = grupo.items.reduce((s, i) => s + (Number((i as any).renta) || 0), 0);
-                                                      const sumBonif = grupo.items.reduce((s, i) => s + (Number((i as any).bonificacion_sc) || 0), 0);
-                                                      const inversionTotal = sumTarifa;
-                                                      // Contar artes subidos
-                                                      const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
                                                       // Indicaciones de programación/instalación del grupo
                                                       const conIndicacionesProg = grupo.items.filter(i => (i as any).indicaciones_programacion).length;
                                                       const conIndicacionesInst = grupo.items.filter(i => (i as any).indicaciones_instalacion).length;
                                                       return (
                                                         <div className="flex flex-wrap items-center gap-2 py-1.5 px-1 mb-1 border-b border-zinc-800/40">
-                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Caras totales">
-                                                            <Hash className="h-2.5 w-2.5" /> {carasTotales} caras
-                                                          </span>
-                                                          {plazas.length > 0 && (
-                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Plaza(s)">
-                                                              <MapPin className="h-2.5 w-2.5" /> {plazas.join(', ')}
-                                                            </span>
-                                                          )}
-                                                          {formato && (
-                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-500/15 text-violet-300 border border-violet-500/25" title="Formato">
-                                                              {formato}
-                                                            </span>
-                                                          )}
-                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25" title="Tarifa pública">
-                                                            {sumTarifa > 0 ? <>Tarifa: {'$'}{sumTarifa.toLocaleString()}</> : 'Sin tarifa'}
-                                                          </span>
-                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-green-500/15 text-green-300 border border-green-500/25" title="Renta">
-                                                            {sumRenta > 0 ? <>Renta: {'$'}{sumRenta.toLocaleString()}</> : 'Sin renta'}
-                                                          </span>
-                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/25" title="Inversión total (tarifa)">
-                                                            {inversionTotal > 0 ? <>Inversión: {'$'}{inversionTotal.toLocaleString()}</> : 'Sin inversión'}
-                                                          </span>
-                                                          {sumBonif > 0 && (
-                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/25" title="Bonificación">
-                                                              Bonif: {sumBonif}
-                                                            </span>
-                                                          )}
-                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 flex items-center gap-1" title="Artes subidos">
-                                                            <Image className="h-2.5 w-2.5" /> {artesSubidos}/{carasTotales}
-                                                          </span>
                                                           {conIndicacionesProg > 0 && (
                                                             <span className="px-1.5 py-0.5 rounded text-[9px] bg-orange-500/15 text-orange-300 border border-orange-500/25 flex items-center gap-1" title="Con indicaciones de programación">
                                                               <FileText className="h-2.5 w-2.5" /> Prog: {conIndicacionesProg}
