@@ -1,4 +1,4 @@
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+﻿import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
@@ -79,11 +79,11 @@ import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
 import * as XLSX from 'xlsx';
 
-// URL base para archivos estáticos
+// URL base para archivos estÃ¡ticos
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 const STATIC_URL = API_URL.replace(/\/api$/, '');
 
-// Helper para normalizar URLs de imágenes
+// Helper para normalizar URLs de imÃ¡genes
 // Siempre extrae el path y usa STATIC_URL para evitar problemas de CORS y URLs hardcodeadas
 const getImageUrl = (url: string | undefined | null): string | null => {
   if (!url) return null;
@@ -110,7 +110,7 @@ const getImageUrl = (url: string | undefined | null): string | null => {
       if (path.includes('/uploads')) {
         return `${STATIC_URL}${path}`;
       }
-      // Si no tiene /uploads, podría ser una URL externa válida
+      // Si no tiene /uploads, podrÃ­a ser una URL externa vÃ¡lida
       return url;
     } catch {
       // Si falla el parseo, intentar extraer el path manualmente
@@ -145,7 +145,7 @@ type FormatTab = 'tradicional' | 'digital';
 type TasksTab = 'tradicionales' | 'completadas' | 'calendario';
 type CalendarView = 'month' | 'week' | 'day' | 'list';
 
-// Opciones de agrupación
+// Opciones de agrupaciÃ³n
 type GroupByField = 'none' | 'catorcena' | 'ciudad' | 'plaza' | 'mueble' | 'tipo_medio' | 'aps' | 'grupo' | 'estado_arte' | 'estado_tarea';
 type SortField = 'codigo_unico' | 'catorcena' | 'ciudad' | 'plaza' | 'mueble' | 'tipo_medio' | 'aps';
 type SortDirection = 'asc' | 'desc';
@@ -170,7 +170,7 @@ const GROUP_BY_OPTIONS: { value: GroupByField; label: string }[] = [
 ];
 
 const SORT_OPTIONS: { value: SortField; label: string }[] = [
-  { value: 'codigo_unico', label: 'Código' },
+  { value: 'codigo_unico', label: 'CÃ³digo' },
   { value: 'catorcena', label: 'Periodo' },
   { value: 'ciudad', label: 'Ciudad' },
   { value: 'plaza', label: 'Plaza' },
@@ -189,18 +189,18 @@ interface InventoryRow {
   aps: number | null;
   grupo_id: string | null; // grupo_completo_id para agrupar
   estatus: string; // Estado de reserva (Vendido, etc.)
-  espacio: string; // Números de espacio
+  espacio: string; // NÃºmeros de espacio
   inicio_periodo: string;
   fin_periodo: string;
   caras_totales: number;
   // Campos de inventario
-  tipo_medio: string; // Flujo, Estático, etc.
+  tipo_medio: string; // Flujo, EstÃ¡tico, etc.
   mueble: string; // Parabus, Mupie, etc. (Formato)
   ciudad: string;
   plaza: string;
   municipio: string;
-  nse: string; // Nivel socioeconómico
-  ubicacion: string; // Dirección completa
+  nse: string; // Nivel socioeconÃ³mico
+  ubicacion: string; // DirecciÃ³n completa
   tradicional_digital: 'Tradicional' | 'Digital';
   ancho?: number | string; // Ancho del inventario
   alto?: number | string; // Alto del inventario
@@ -233,7 +233,7 @@ interface TaskRow {
   ids_reservas?: string; // IDs de reservas como string separado por comas
   inventario_ids: string[];
   campana_id: number;
-  // Campos para tareas de Impresión
+  // Campos para tareas de ImpresiÃ³n
   evidencia?: string; // JSON con datos de impresiones
   nombre_proveedores?: string;
   proveedores_id?: number;
@@ -258,13 +258,13 @@ interface CalendarEvent {
   type: 'tarea' | 'entrega';
 }
 
-// Tipos para el sistema de decisiones de revisión de artes
+// Tipos para el sistema de decisiones de revisiÃ³n de artes
 type DecisionArte = 'aprobar' | 'rechazar' | null;
 
 interface ArteDecision {
   decision: DecisionArte;
   motivoRechazo?: string; // Usado para rechazo (obligatorio)
-  comentarioAprobacion?: string; // Usado para aprobación (opcional)
+  comentarioAprobacion?: string; // Usado para aprobaciÃ³n (opcional)
   imagenRechazoFile?: File; // Archivo local antes de subir (opcional)
   imagenRechazoPreview?: string; // URL.createObjectURL para preview
 }
@@ -301,36 +301,36 @@ const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('stri
 
 // Campos disponibles para filtros en cada tabla
 const FILTER_FIELDS_INVENTARIO: FilterFieldConfig[] = [
-  { field: 'codigo_unico', label: 'Código Único', type: 'string' },
+  { field: 'codigo_unico', label: 'CÃ³digo Ãšnico', type: 'string' },
   { field: 'mueble', label: 'Formato', type: 'string' },
   { field: 'ciudad', label: 'Ciudad', type: 'string' },
   { field: 'plaza', label: 'Plaza', type: 'string' },
   { field: 'municipio', label: 'Municipio', type: 'string' },
-  { field: 'ubicacion', label: 'Ubicación', type: 'string' },
+  { field: 'ubicacion', label: 'UbicaciÃ³n', type: 'string' },
   { field: 'nse', label: 'NSE', type: 'string' },
   { field: 'tipo_de_cara', label: 'Tipo Cara', type: 'string' },
   { field: 'catorcena', label: 'Periodo', type: 'number' },
   { field: 'aps', label: 'APS', type: 'number' },
 ];
 
-// Campos de filtro extendidos para el modal de Programación (incluye nombre de archivo)
+// Campos de filtro extendidos para el modal de ProgramaciÃ³n (incluye nombre de archivo)
 const FILTER_FIELDS_PROGRAMACION_MODAL: FilterFieldConfig[] = [
   ...FILTER_FIELDS_INVENTARIO,
   { field: 'nombre_archivo', label: 'Nombre Archivo', type: 'string' },
 ];
 
-// Campos disponibles para filtros en tareas de producción
+// Campos disponibles para filtros en tareas de producciÃ³n
 const FILTER_FIELDS_TAREAS: FilterFieldConfig[] = [
   { field: 'tipo', label: 'Tipo', type: 'string' },
   { field: 'estatus', label: 'Estatus', type: 'string' },
-  { field: 'titulo', label: 'Título', type: 'string' },
+  { field: 'titulo', label: 'TÃ­tulo', type: 'string' },
   { field: 'identificador', label: 'Identificador', type: 'string' },
   { field: 'creador', label: 'Creador', type: 'string' },
   { field: 'asignado', label: 'Asignado', type: 'string' },
-  { field: 'descripcion', label: 'Descripción', type: 'string' },
+  { field: 'descripcion', label: 'DescripciÃ³n', type: 'string' },
 ];
 
-// Opciones de agrupación para las tablas
+// Opciones de agrupaciÃ³n para las tablas
 const GROUPING_OPTIONS_INVENTARIO: { field: GroupByField; label: string }[] = [
   { field: 'catorcena', label: 'Periodo' },
   { field: 'aps', label: 'APS' },
@@ -347,7 +347,7 @@ const GROUPING_OPTIONS_INVENTARIO: { field: GroupByField; label: string }[] = [
 // HELPER FUNCTIONS
 // ============================================================================
 
-// Función para aplicar filtros a los datos
+// FunciÃ³n para aplicar filtros a los datos
 function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
   if (filters.length === 0) return data;
 
@@ -396,9 +396,9 @@ const estadoArteLabels: Record<string, string> = {
 
 const flujoLabels: Record<string, string> = {
   carga_artes: 'Carga Artes',
-  revision_artes: 'Revisión Artes',
+  revision_artes: 'RevisiÃ³n Artes',
   artes_aprobados: 'Artes Aprobados',
-  en_impresion: 'En Impresión',
+  en_impresion: 'En ImpresiÃ³n',
   artes_recibidos: 'Artes Recibidos',
   instalado: 'Instalado',
 };
@@ -450,11 +450,11 @@ function FlujoBadges({ items, tab }: { items: InventoryRow[]; tab: MainTab }) {
   );
 }
 
-// Iconos de flujo de gestión de artes por grupo
-// Muestra los pasos del flujo con colores según el progreso de los items
-// Oculta Programación si el grupo es Tradicional, Impresiones si es Digital
-// Recibe mapas de estado de impresión, programación e instalación para sincronizar
-// correctamente con los tabs de gestión de artes
+// Iconos de flujo de gestiÃ³n de artes por grupo
+// Muestra los pasos del flujo con colores segÃºn el progreso de los items
+// Oculta ProgramaciÃ³n si el grupo es Tradicional, Impresiones si es Digital
+// Recibe mapas de estado de impresiÃ³n, programaciÃ³n e instalaciÃ³n para sincronizar
+// correctamente con los tabs de gestiÃ³n de artes
 function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }: {
   items: InventoryRow[];
   impresionMap?: Map<string, { estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido'; titulo: string }>;
@@ -474,12 +474,12 @@ function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }:
   const conArte = items.filter(i => i.archivo_arte).length;
   const sinArte = total - conArte;
 
-  // 2. Revisar y Aprobar: verde cuando TODOS están en 'aprobado'
+  // 2. Revisar y Aprobar: verde cuando TODOS estÃ¡n en 'aprobado'
   const aprobados = items.filter(i => i.estado_arte === 'aprobado').length;
   const enRevision = items.filter(i => i.estado_arte === 'en_revision').length;
   const rechazados = items.filter(i => i.estado_arte === 'rechazado').length;
 
-  // 3. Impresiones (tradicional): verde cuando TODOS están en 'recibido'
+  // 3. Impresiones (tradicional): verde cuando TODOS estÃ¡n en 'recibido'
   let impRecibidos = 0;
   let impEnProceso = 0;
   if (impresionMap) {
@@ -491,7 +491,7 @@ function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }:
     });
   }
 
-  // 4. Programación (digital): verde cuando TODOS están en 'programado'
+  // 4. ProgramaciÃ³n (digital): verde cuando TODOS estÃ¡n en 'programado'
   let progProgramados = 0;
   let progEnProceso = 0;
   if (programacionMap) {
@@ -503,7 +503,7 @@ function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }:
     });
   }
 
-  // 5. Validar Instalación: verde cuando TODOS están en 'instalado'
+  // 5. Validar InstalaciÃ³n: verde cuando TODOS estÃ¡n en 'instalado'
   let instInstalados = 0;
   let instEnProceso = 0;
   if (instalacionMap) {
@@ -517,8 +517,8 @@ function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }:
 
   // Determinar color de cada icono:
   // verde = todos los items completaron este paso
-  // amber = algunos items están en este paso (parcial)
-  // zinc = ningún item ha llegado a este paso
+  // amber = algunos items estÃ¡n en este paso (parcial)
+  // zinc = ningÃºn item ha llegado a este paso
   const getColor = (completed: number, inProgress: number) => {
     if (completed === total) return 'text-green-400';
     if (completed > 0 || inProgress > 0) return 'text-amber-400';
@@ -541,7 +541,7 @@ function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }:
   );
 }
 
-// Función para obtener la clave de agrupación basada en el campo
+// FunciÃ³n para obtener la clave de agrupaciÃ³n basada en el campo
 function getGroupKeyForField(item: InventoryRow, field: GroupByField, tipoPeriodo?: string): string {
   switch (field) {
     case 'catorcena':
@@ -591,14 +591,14 @@ const statusColors: Record<string, string> = {
   pendiente: 'bg-amber-500/20 text-amber-400',
   completada: 'bg-green-500/20 text-green-400',
   cancelada: 'bg-red-500/20 text-red-400',
-  // Valores de la BD (con mayúscula)
+  // Valores de la BD (con mayÃºscula)
   'Activo': 'bg-green-500/20 text-green-400',
   'Pendiente': 'bg-amber-500/20 text-amber-400',
   'Atendido': 'bg-blue-500/20 text-blue-400',
   'En Progreso': 'bg-blue-500/20 text-blue-400',
   'Completado': 'bg-green-500/20 text-green-400',
   'Cancelado': 'bg-red-500/20 text-red-400',
-  'Notificación': 'bg-purple-500/20 text-purple-400',
+  'NotificaciÃ³n': 'bg-purple-500/20 text-purple-400',
   'Enviada': 'bg-blue-500/20 text-blue-400',
   'Activada': 'bg-blue-500/20 text-blue-400',
   'Finalizada': 'bg-green-500/20 text-green-400',
@@ -789,7 +789,7 @@ type UploadOption = 'file' | 'existing' | 'link';
 type TaskDetailTab = 'resumen' | 'editar' | 'atender';
 type GroupByArte = 'inventario' | 'ciudad' | 'grupo';
 
-// Tipo para archivos digitales con posición de spot
+// Tipo para archivos digitales con posiciÃ³n de spot
 interface DigitalFile {
   id: string;
   file: File;
@@ -798,7 +798,7 @@ interface DigitalFile {
   type: 'image' | 'video';
 }
 
-// Tipo para imágenes digitales del backend
+// Tipo para imÃ¡genes digitales del backend
 interface ImagenDigitalView {
   id: number;
   archivo: string;
@@ -851,7 +851,7 @@ function DigitalGalleryModal({
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Film className="h-5 w-5 text-cyan-400" />
-            {title || 'Galería Digital'}
+            {title || 'GalerÃ­a Digital'}
             <Badge className="bg-cyan-600/30 text-cyan-300 border-cyan-500/30 text-[10px]">
               {imagenes.length} archivo{imagenes.length !== 1 ? 's' : ''}
             </Badge>
@@ -1003,7 +1003,7 @@ function UploadArtModal({
   const [duplicateWarning, setDuplicateWarning] = useState<{ nombre: string; usos: number; url: string } | null>(null);
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
 
-  // Estado para archivos digitales (múltiples)
+  // Estado para archivos digitales (mÃºltiples)
   const [digitalFiles, setDigitalFiles] = useState<DigitalFile[]>([]);
   const [draggedFile, setDraggedFile] = useState<string | null>(null);
 
@@ -1018,7 +1018,7 @@ function UploadArtModal({
   const [modalGroupBy, setModalGroupBy] = useState<'none' | 'aps' | 'catorcena' | 'grupo'>('none');
   const [modalSortBy, setModalSortBy] = useState<'codigo' | 'aps' | 'catorcena'>('codigo');
 
-  // Preview URL basado en la opción seleccionada
+  // Preview URL basado en la opciÃ³n seleccionada
   const previewUrl = useMemo(() => {
     if (selectedOption === 'existing' && existingArtUrl) {
       return existingArtUrl;
@@ -1027,7 +1027,7 @@ function UploadArtModal({
       return filePreview;
     }
     if (selectedOption === 'link' && link) {
-      // Validar que sea una URL válida de imagen
+      // Validar que sea una URL vÃ¡lida de imagen
       try {
         new URL(link);
         return link;
@@ -1136,7 +1136,7 @@ function UploadArtModal({
     }
   };
 
-  // Manejar cambio de archivos digitales (múltiples)
+  // Manejar cambio de archivos digitales (mÃºltiples)
   const handleDigitalFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -1148,7 +1148,7 @@ function UploadArtModal({
       const isVideo = file.type.startsWith('video/');
       const isImage = file.type.startsWith('image/');
 
-      if (!isVideo && !isImage) return; // Solo aceptar videos e imágenes
+      if (!isVideo && !isImage) return; // Solo aceptar videos e imÃ¡genes
 
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -1172,7 +1172,7 @@ function UploadArtModal({
   const handleRemoveDigitalFile = (id: string) => {
     setDigitalFiles(prev => {
       const filtered = prev.filter(f => f.id !== id);
-      // Reordenar spots después de eliminar
+      // Reordenar spots despuÃ©s de eliminar
       return filtered.map((f, index) => ({ ...f, spot: index + 1 }));
     });
   };
@@ -1197,7 +1197,7 @@ function UploadArtModal({
       const [removed] = newFiles.splice(draggedIndex, 1);
       newFiles.splice(targetIndex, 0, removed);
 
-      // Actualizar spots después de reordenar
+      // Actualizar spots despuÃ©s de reordenar
       return newFiles.map((f, index) => ({ ...f, spot: index + 1 }));
     });
   };
@@ -1315,7 +1315,7 @@ function UploadArtModal({
             {/* Left Column - Upload Options & Preview */}
             <div className="flex flex-col space-y-4">
               {isDigitalInventory ? (
-                /* ===== INTERFAZ DIGITAL - MÚLTIPLES ARCHIVOS ===== */
+                /* ===== INTERFAZ DIGITAL - MÃšLTIPLES ARCHIVOS ===== */
                 <>
                   {/* Header info */}
                   <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
@@ -1323,10 +1323,10 @@ function UploadArtModal({
                       <Film className="h-4 w-4 text-cyan-400 flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="text-xs text-cyan-300 font-medium">
-                          Inventario Digital - Rotación de contenido
+                          Inventario Digital - RotaciÃ³n de contenido
                         </p>
                         <p className="text-[10px] text-cyan-400/70 mt-1">
-                          Puedes subir múltiples imágenes y/o videos que se mostrarán en rotación.
+                          Puedes subir mÃºltiples imÃ¡genes y/o videos que se mostrarÃ¡n en rotaciÃ³n.
                           Arrastra para reordenar la secuencia.
                         </p>
                       </div>
@@ -1357,7 +1357,7 @@ function UploadArtModal({
                   <div className="flex-1 min-h-0 overflow-hidden">
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-medium text-zinc-400">
-                        Archivos para rotación
+                        Archivos para rotaciÃ³n
                       </label>
                       <Badge className="bg-cyan-600/30 text-cyan-300 border-cyan-500/30 text-[10px]">
                         {digitalFiles.length} archivo{digitalFiles.length !== 1 ? 's' : ''}
@@ -1369,7 +1369,7 @@ function UploadArtModal({
                           <div>
                             <Upload className="h-10 w-10 mx-auto mb-2 opacity-30" />
                             <p className="text-xs">
-                              Selecciona archivos para agregarlos a la rotación
+                              Selecciona archivos para agregarlos a la rotaciÃ³n
                             </p>
                           </div>
                         </div>
@@ -1424,7 +1424,7 @@ function UploadArtModal({
                                   ) : (
                                     <Image className="h-3 w-3 text-purple-400" />
                                   )}
-                                  {digitalFile.type === 'video' ? 'Video' : 'Imagen'} •{' '}
+                                  {digitalFile.type === 'video' ? 'Video' : 'Imagen'} â€¢{' '}
                                   {(digitalFile.file.size / 1024 / 1024).toFixed(2)} MB
                                 </p>
                               </div>
@@ -1502,7 +1502,7 @@ function UploadArtModal({
                                   Ya existe un archivo con el nombre "{duplicateWarning.nombre}"
                                 </p>
                                 <p className="text-[10px] text-amber-400/70 mt-1">
-                                  Usado {duplicateWarning.usos} {duplicateWarning.usos === 1 ? 'vez' : 'veces'} en esta campaña
+                                  Usado {duplicateWarning.usos} {duplicateWarning.usos === 1 ? 'vez' : 'veces'} en esta campaÃ±a
                                 </p>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   <button
@@ -1538,7 +1538,7 @@ function UploadArtModal({
                           </div>
                         ) : artesExistentes.length === 0 ? (
                           <div className="p-3 bg-zinc-800/50 rounded-lg text-center">
-                            <p className="text-xs text-zinc-500">No hay artes existentes en esta campaña</p>
+                            <p className="text-xs text-zinc-500">No hay artes existentes en esta campaÃ±a</p>
                           </div>
                         ) : (
                           <select
@@ -1674,8 +1674,8 @@ function UploadArtModal({
                             <thead className="bg-purple-900/10 sticky top-7 z-[5]">
                               <tr className="text-left border-b border-border/50">
                                 <th className="px-2 py-1 font-medium text-purple-300">APS</th>
-                                <th className="px-2 py-1 font-medium text-purple-300">Código</th>
-                                <th className="px-2 py-1 font-medium text-purple-300">Ubicación</th>
+                                <th className="px-2 py-1 font-medium text-purple-300">CÃ³digo</th>
+                                <th className="px-2 py-1 font-medium text-purple-300">UbicaciÃ³n</th>
                                 <th className="px-2 py-1 font-medium text-purple-300">Mueble</th>
                               </tr>
                             </thead>
@@ -1699,8 +1699,8 @@ function UploadArtModal({
                       <thead className="bg-purple-900/20 sticky top-0 z-10">
                         <tr className="text-left border-b border-border">
                           <th className="px-2 py-1.5 font-medium text-purple-300">APS</th>
-                          <th className="px-2 py-1.5 font-medium text-purple-300">Código</th>
-                          <th className="px-2 py-1.5 font-medium text-purple-300">Ubicación</th>
+                          <th className="px-2 py-1.5 font-medium text-purple-300">CÃ³digo</th>
+                          <th className="px-2 py-1.5 font-medium text-purple-300">UbicaciÃ³n</th>
                           <th className="px-2 py-1.5 font-medium text-purple-300">Mueble</th>
                           <th className="px-2 py-1.5 font-medium text-purple-300">Ciudad</th>
                         </tr>
@@ -1757,13 +1757,13 @@ function UploadArtModal({
 
 // Tipos de tarea disponibles
 const TIPOS_TAREA = [
-  { value: 'Instalación', label: 'Instalación', description: 'Instalación física del arte en sitio' },
-  { value: 'Revisión de artes', label: 'Revisión de artes', description: 'Revisión y aprobación de artes' },
-  { value: 'Impresión', label: 'Impresión', description: 'Impresión de materiales publicitarios' },
-  { value: 'Testigo', label: 'Testigo', description: 'Validación de instalación con evidencia fotográfica' },
-  { value: 'Programación', label: 'Programación', description: 'Programación de artes digitales con indicaciones' },
-  { value: 'Orden de Programación', label: 'Orden de Programación', description: 'Orden de programación para tráfico' },
-  { value: 'Orden de Instalación', label: 'Orden de Instalación', description: 'Orden de instalación para tráfico' },
+  { value: 'InstalaciÃ³n', label: 'InstalaciÃ³n', description: 'InstalaciÃ³n fÃ­sica del arte en sitio' },
+  { value: 'RevisiÃ³n de artes', label: 'RevisiÃ³n de artes', description: 'RevisiÃ³n y aprobaciÃ³n de artes' },
+  { value: 'ImpresiÃ³n', label: 'ImpresiÃ³n', description: 'ImpresiÃ³n de materiales publicitarios' },
+  { value: 'Testigo', label: 'Testigo', description: 'ValidaciÃ³n de instalaciÃ³n con evidencia fotogrÃ¡fica' },
+  { value: 'ProgramaciÃ³n', label: 'ProgramaciÃ³n', description: 'ProgramaciÃ³n de artes digitales con indicaciones' },
+  { value: 'Orden de ProgramaciÃ³n', label: 'Orden de ProgramaciÃ³n', description: 'Orden de programaciÃ³n para trÃ¡fico' },
+  { value: 'Orden de InstalaciÃ³n', label: 'Orden de InstalaciÃ³n', description: 'Orden de instalaciÃ³n para trÃ¡fico' },
 ];
 
 // ============================================================================
@@ -1793,9 +1793,9 @@ interface FilterToolbarProps {
   totalCount: number;
   useFixedDropdowns?: boolean; // Para modales - usar position fixed
   filterFields?: FilterFieldConfig[]; // Campos personalizados para filtros
-  groupingOptions?: { field: GroupByField; label: string }[]; // Opciones de agrupación personalizadas
-  hideGrouping?: boolean; // Ocultar botón de agrupación
-  hideSort?: boolean; // Ocultar botón de ordenamiento
+  groupingOptions?: { field: GroupByField; label: string }[]; // Opciones de agrupaciÃ³n personalizadas
+  hideGrouping?: boolean; // Ocultar botÃ³n de agrupaciÃ³n
+  hideSort?: boolean; // Ocultar botÃ³n de ordenamiento
 }
 
 function FilterToolbar({
@@ -1811,28 +1811,28 @@ function FilterToolbar({
   const sortBtnRef = useRef<HTMLButtonElement>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
 
-  // Función para cerrar un dropdown específico al hacer clic fuera
+  // FunciÃ³n para cerrar un dropdown especÃ­fico al hacer clic fuera
   const closeOtherDropdowns = (keep: 'filters' | 'grouping' | 'sort') => {
     if (keep !== 'filters') setShowFilters(false);
     if (keep !== 'grouping') setShowGrouping(false);
     if (keep !== 'sort') setShowSort(false);
   };
 
-  // Calcular posición para dropdowns fixed - siempre debajo del botón
+  // Calcular posiciÃ³n para dropdowns fixed - siempre debajo del botÃ³n
   const getDropdownPosition = (btnRef: React.RefObject<HTMLButtonElement | null>, dropdownWidth: number = 240) => {
     if (!useFixedDropdowns || !btnRef.current) return {};
     const rect = btnRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
 
-    // Calcular left alineando a la derecha del botón
+    // Calcular left alineando a la derecha del botÃ³n
     let left = rect.right - dropdownWidth;
 
-    // Si se sale por la izquierda, alinear a la izquierda del botón
+    // Si se sale por la izquierda, alinear a la izquierda del botÃ³n
     if (left < 8) {
       left = rect.left;
     }
 
-    // Si aún así se sale por la derecha, ajustar
+    // Si aÃºn asÃ­ se sale por la derecha, ajustar
     if (left + dropdownWidth > viewportWidth - 8) {
       left = viewportWidth - dropdownWidth - 8;
     }
@@ -1848,7 +1848,7 @@ function FilterToolbar({
 
   return (
     <div className="flex items-center gap-2">
-      {/* Botón Filtrar */}
+      {/* BotÃ³n Filtrar */}
       <div className="relative">
         <button
           ref={filterBtnRef}
@@ -1867,7 +1867,7 @@ function FilterToolbar({
             style={useFixedDropdowns ? getDropdownPosition(filterBtnRef, 520) : undefined}
           >
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+              <span className="text-sm font-medium text-purple-300">Filtros de bÃºsqueda</span>
               <button onClick={() => setShowFilters(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
             </div>
             <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-purple pr-1">
@@ -1888,10 +1888,10 @@ function FilterToolbar({
                   <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5"><Trash2 className="h-3 w-3" /></button>
                 </div>
               ))}
-              {filters.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-3">Sin filtros. Haz clic en "Añadir".</p>}
+              {filters.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-3">Sin filtros. Haz clic en "AÃ±adir".</p>}
             </div>
             <div className="flex items-center justify-between mt-2 pt-2 border-t border-purple-900/30">
-              <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded"><Plus className="h-3 w-3" /> Añadir</button>
+              <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded"><Plus className="h-3 w-3" /> AÃ±adir</button>
               <button onClick={clearFilters} disabled={filters.length === 0} className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">Limpiar</button>
             </div>
             {filters.length > 0 && <div className="mt-2 pt-2 border-t border-purple-900/30"><span className="text-[10px] text-muted-foreground">{filteredCount} de {totalCount} registros</span></div>}
@@ -1899,7 +1899,7 @@ function FilterToolbar({
         )}
       </div>
 
-      {/* Botón Agrupar */}
+      {/* BotÃ³n Agrupar */}
       {!hideGrouping && (
         <div className="relative">
           <button
@@ -1931,13 +1931,13 @@ function FilterToolbar({
                       {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
                     </div>
                     {label}
-                    {idx >= 0 && <span className={`ml-auto text-[10px] ${colors[idx]}`}>{idx + 1}°</span>}
+                    {idx >= 0 && <span className={`ml-auto text-[10px] ${colors[idx]}`}>{idx + 1}Â°</span>}
                   </button>
                 );
               })}
               <div className="border-t border-purple-900/30 mt-2 pt-2">
                 <button onClick={clearGroupings} disabled={activeGroupings.length === 0} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1 disabled:opacity-30 disabled:cursor-not-allowed">
-                  Quitar agrupación
+                  Quitar agrupaciÃ³n
                 </button>
               </div>
             </div>
@@ -1945,7 +1945,7 @@ function FilterToolbar({
         </div>
       )}
 
-      {/* Botón Ordenar */}
+      {/* BotÃ³n Ordenar */}
       {!hideSort && (
         <div className="relative">
           <button
@@ -1987,7 +1987,7 @@ function FilterToolbar({
   );
 }
 
-// Comments Section Component - Comentarios específicos de revisión de artes por tarea
+// Comments Section Component - Comentarios especÃ­ficos de revisiÃ³n de artes por tarea
 function CommentsSection({ campanaId, tareaId }: { campanaId: number; tareaId: string }) {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -1996,14 +1996,14 @@ function CommentsSection({ campanaId, tareaId }: { campanaId: number; tareaId: s
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState<number | null>(null);
 
-  // Obtener comentarios de revisión de artes para esta tarea específica
+  // Obtener comentarios de revisiÃ³n de artes para esta tarea especÃ­fica
   const { data: comentarios = [] } = useQuery({
     queryKey: ['comentarios-revision-arte', campanaId, tareaId],
     queryFn: () => campanasService.getComentariosRevisionArte(campanaId, tareaId),
     enabled: !!campanaId && !!tareaId,
   });
 
-  // Mutación para agregar comentario
+  // MutaciÃ³n para agregar comentario
   const addCommentMutation = useMutation({
     mutationFn: (contenido: string) => campanasService.addComentarioRevisionArte(campanaId, tareaId, contenido),
     onSuccess: () => {
@@ -2012,7 +2012,7 @@ function CommentsSection({ campanaId, tareaId }: { campanaId: number; tareaId: s
     },
   });
 
-  // Mutación para eliminar comentario
+  // MutaciÃ³n para eliminar comentario
   const deleteCommentMutation = useMutation({
     mutationFn: (comentarioId: number) => campanasService.deleteComentarioRevisionArte(campanaId, comentarioId),
     onSuccess: () => {
@@ -2063,8 +2063,8 @@ function CommentsSection({ campanaId, tareaId }: { campanaId: number; tareaId: s
         {comentarios.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-8 text-zinc-400">
             <MessageSquare className="h-8 w-8 mb-3 opacity-50" />
-            <p className="text-sm">No hay comentarios aún</p>
-            <p className="text-xs text-zinc-500 mt-1">Sé el primero en comentar</p>
+            <p className="text-sm">No hay comentarios aÃºn</p>
+            <p className="text-xs text-zinc-500 mt-1">SÃ© el primero en comentar</p>
           </div>
         ) : (
           comentarios.map((c: { id: number; autor_id: number; autor_nombre?: string; fecha: string; contenido: string }) => (
@@ -2076,7 +2076,7 @@ function CommentsSection({ campanaId, tareaId }: { campanaId: number; tareaId: s
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-medium text-white">{c.autor_nombre || 'Usuario'}</span>
                   <span className="text-[10px] text-zinc-500">{formatDate(c.fecha)}</span>
-                  {/* Botón eliminar - solo para comentarios propios */}
+                  {/* BotÃ³n eliminar - solo para comentarios propios */}
                   {user?.id === c.autor_id && (
                     <button
                       onClick={() => handleDeleteClick(c.id)}
@@ -2124,7 +2124,7 @@ function CommentsSection({ campanaId, tareaId }: { campanaId: number; tareaId: s
         </div>
       </div>
 
-      {/* Modal de confirmación para eliminar */}
+      {/* Modal de confirmaciÃ³n para eliminar */}
       <ConfirmModal
         isOpen={deleteModalOpen}
         onClose={() => {
@@ -2133,7 +2133,7 @@ function CommentsSection({ campanaId, tareaId }: { campanaId: number; tareaId: s
         }}
         onConfirm={handleConfirmDelete}
         title="Eliminar comentario"
-        message="¿Estás seguro de que deseas eliminar este comentario? Esta acción no se puede deshacer."
+        message="Â¿EstÃ¡s seguro de que deseas eliminar este comentario? Esta acciÃ³n no se puede deshacer."
         confirmText="Eliminar"
         cancelText="Cancelar"
         variant="danger"
@@ -2209,7 +2209,7 @@ function TestigoTaskView({
 
   const clearGroupings = useCallback(() => setActiveGroupings([]), []);
 
-  // Valores únicos para filtros
+  // Valores Ãºnicos para filtros
   const uniqueValues = useMemo(() => {
     const values: Record<string, string[]> = {};
     FILTER_FIELDS_INVENTARIO.forEach(field => {
@@ -2265,7 +2265,7 @@ function TestigoTaskView({
   // Obtener archivo existente desde la tarea
   const existingFile = task.archivo_testigo;
 
-  // Manejar selección de archivo
+  // Manejar selecciÃ³n de archivo
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -2275,14 +2275,14 @@ function TestigoTaskView({
         setUploadError('Solo se permiten archivos JPG, PNG o PDF');
         return;
       }
-      // Validar tamaño (10MB max)
+      // Validar tamaÃ±o (10MB max)
       if (file.size > 10 * 1024 * 1024) {
         setUploadError('El archivo no puede superar los 10MB');
         return;
       }
       setUploadError(null);
       setTestigoFile(file);
-      // Preview para imágenes
+      // Preview para imÃ¡genes
       if (file.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onloadend = () => setTestigoFilePreview(reader.result as string);
@@ -2329,7 +2329,7 @@ function TestigoTaskView({
     <div className="space-y-4">
       {/* Info de la tarea */}
       <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-        <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Tarea de Testigo</h4>
+        <h4 className="text-sm font-medium text-purple-300 mb-3">InformaciÃ³n de la Tarea de Testigo</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
           <div>
             <span className="text-zinc-500">Tipo:</span>
@@ -2368,13 +2368,13 @@ function TestigoTaskView({
         </div>
         {task.descripcion && (
           <div className="mt-3 pt-3 border-t border-border">
-            <span className="text-zinc-500 text-sm">Descripción:</span>
+            <span className="text-zinc-500 text-sm">DescripciÃ³n:</span>
             <p className="text-white text-sm mt-1">{task.descripcion}</p>
           </div>
         )}
       </div>
 
-      {/* Lista de inventario asociado con filtros (mismo estilo que Instalación) */}
+      {/* Lista de inventario asociado con filtros (mismo estilo que InstalaciÃ³n) */}
       <div className="bg-zinc-900/50 rounded-lg border border-border">
         {/* Header con filtros */}
         <div className="px-4 py-3 border-b border-border bg-zinc-800/50 rounded-t-lg flex items-center justify-between gap-4 relative z-20">
@@ -2426,7 +2426,7 @@ function TestigoTaskView({
                     <thead className="bg-zinc-800/50">
                       <tr className="text-left">
                         <th className="p-2 font-medium text-purple-300">Arte</th>
-                        <th className="p-2 font-medium text-purple-300">Código</th>
+                        <th className="p-2 font-medium text-purple-300">CÃ³digo</th>
                         <th className="p-2 font-medium text-purple-300">Ciudad</th>
                         <th className="p-2 font-medium text-purple-300">Mueble</th>
                         <th className="p-2 font-medium text-purple-300">Medidas</th>
@@ -2465,7 +2465,7 @@ function TestigoTaskView({
               <thead className="sticky top-0 bg-zinc-800 z-10">
                 <tr className="text-left">
                   <th className="p-3 font-medium text-purple-300">Arte</th>
-                  <th className="p-3 font-medium text-purple-300">Código</th>
+                  <th className="p-3 font-medium text-purple-300">CÃ³digo</th>
                   <th className="p-3 font-medium text-purple-300">Ciudad</th>
                   <th className="p-3 font-medium text-purple-300">Plaza</th>
                   <th className="p-3 font-medium text-purple-300">Mueble</th>
@@ -2501,7 +2501,7 @@ function TestigoTaskView({
         </div>
       </div>
 
-      {/* Vista según estado de la tarea */}
+      {/* Vista segÃºn estado de la tarea */}
       {task.estatus === 'Completado' ? (
         // Vista informativa para tareas completadas
         <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
@@ -2510,7 +2510,7 @@ function TestigoTaskView({
             <h4 className="text-sm font-medium text-green-300">Testigo Validado</h4>
           </div>
           <p className="text-sm text-zinc-400 mb-4">
-            Esta instalación ha sido validada con evidencia fotográfica.
+            Esta instalaciÃ³n ha sido validada con evidencia fotogrÃ¡fica.
           </p>
           {existingFile && (
             <div className="bg-zinc-900/50 rounded-lg p-3 border border-border">
@@ -2543,12 +2543,12 @@ function TestigoTaskView({
       ) : canResolveProduccionTasks ? (
         // Vista de carga de archivo para tareas pendientes
         <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-          <h4 className="text-sm font-medium text-purple-300 mb-3">Subir Evidencia Fotográfica</h4>
+          <h4 className="text-sm font-medium text-purple-300 mb-3">Subir Evidencia FotogrÃ¡fica</h4>
           <p className="text-xs text-zinc-400 mb-4">
-            Sube una imagen (JPG, PNG) o PDF como evidencia de la instalación validada.
+            Sube una imagen (JPG, PNG) o PDF como evidencia de la instalaciÃ³n validada.
           </p>
 
-          {/* Área de carga */}
+          {/* Ãrea de carga */}
           <div className="border-2 border-dashed border-purple-500/30 rounded-lg p-4 text-center hover:border-purple-500/50 transition-colors">
             <input
               type="file"
@@ -2573,7 +2573,7 @@ function TestigoTaskView({
                 <div className="space-y-2">
                   <Upload className="h-10 w-10 text-zinc-500 mx-auto" />
                   <p className="text-sm text-zinc-400">Haz clic para seleccionar un archivo</p>
-                  <p className="text-xs text-zinc-500">JPG, PNG o PDF (máx. 10MB)</p>
+                  <p className="text-xs text-zinc-500">JPG, PNG o PDF (mÃ¡x. 10MB)</p>
                 </div>
               )}
             </label>
@@ -2587,7 +2587,7 @@ function TestigoTaskView({
             </div>
           )}
 
-          {/* Botón Guardar */}
+          {/* BotÃ³n Guardar */}
           <div className="flex justify-end mt-4">
             <button
               onClick={handleSaveTestigo}
@@ -2611,7 +2611,7 @@ function TestigoTaskView({
       ) : (
         // Vista de solo lectura para usuarios sin permiso de resolver tareas
         <div className="bg-zinc-800/50 border border-border rounded-lg p-4 text-center">
-          <p className="text-sm text-zinc-400">Tarea de testigo pendiente - Solo visualización</p>
+          <p className="text-sm text-zinc-400">Tarea de testigo pendiente - Solo visualizaciÃ³n</p>
         </div>
       )}
     </div>
@@ -2683,19 +2683,19 @@ function TaskDetailModal({
   // Determinar si puede resolver la tarea actual basado en su tipo
   const canResolveCurrentTask = useMemo(() => {
     if (!task) return false;
-    // Para tareas de "Revisión de artes", usar canResolveRevisionArtesTasks
-    if (task.tipo === 'Revisión de artes') {
+    // Para tareas de "RevisiÃ³n de artes", usar canResolveRevisionArtesTasks
+    if (task.tipo === 'RevisiÃ³n de artes') {
       return canResolveRevisionArtesTasks;
     }
-    // Para tareas de "Corrección", usar canResolveCorreccionTasks
+    // Para tareas de "CorrecciÃ³n", usar canResolveCorreccionTasks
     if (task.tipo === 'Correccion') {
       return canResolveCorreccionTasks;
     }
-    // Para otras tareas (producción), usar canResolveProduccionTasks
+    // Para otras tareas (producciÃ³n), usar canResolveProduccionTasks
     return canResolveProduccionTasks;
   }, [task, canResolveRevisionArtesTasks, canResolveCorreccionTasks, canResolveProduccionTasks]);
 
-  // Estados para la tabla agrupada del modal de Programación (Ver Tabla tab)
+  // Estados para la tabla agrupada del modal de ProgramaciÃ³n (Ver Tabla tab)
   const [filtersProgramacionModal, setFiltersProgramacionModal] = useState<FilterCondition[]>([]);
   const [showFiltersProgramacionModal, setShowFiltersProgramacionModal] = useState(false);
   const [activeGroupingsProgramacionModal, setActiveGroupingsProgramacionModal] = useState<GroupByField[]>(['catorcena', 'aps', 'grupo']);
@@ -2705,10 +2705,10 @@ function TaskDetailModal({
   const [showSortProgramacionModal, setShowSortProgramacionModal] = useState(false);
   const [expandedNodesProgramacionModal, setExpandedNodesProgramacionModal] = useState<Set<string>>(new Set());
   const [programacionModalSearch, setProgramacionModalSearch] = useState('');
-  // Mapa de nombres de archivos digitales por item ID (para búsqueda)
+  // Mapa de nombres de archivos digitales por item ID (para bÃºsqueda)
   const [digitalFileNamesMap, setDigitalFileNamesMap] = useState<Map<string, string[]>>(new Map());
 
-  // Funciones para filtros/agrupaciones del modal de Programación
+  // Funciones para filtros/agrupaciones del modal de ProgramaciÃ³n
   const addFilterProgramacionModal = useCallback(() => {
     const newFilter: FilterCondition = {
       id: `filter-${Date.now()}`,
@@ -2752,16 +2752,16 @@ function TaskDetailModal({
     });
   }, []);
 
-  // Estado para galería digital dentro del modal
+  // Estado para galerÃ­a digital dentro del modal
   const [isDigitalGalleryOpen, setIsDigitalGalleryOpen] = useState(false);
   const [digitalGalleryImages, setDigitalGalleryImages] = useState<ImagenDigitalView[]>([]);
   const [digitalGalleryTitle, setDigitalGalleryTitle] = useState('');
   const [isLoadingDigitalGallery, setIsLoadingDigitalGallery] = useState(false);
 
-  // Handler para abrir galería digital
+  // Handler para abrir galerÃ­a digital
   const openDigitalGalleryModal = useCallback(async (reservaId: number, codigoUnico: string) => {
     setIsLoadingDigitalGallery(true);
-    setDigitalGalleryTitle(`Galería Digital - ${codigoUnico}`);
+    setDigitalGalleryTitle(`GalerÃ­a Digital - ${codigoUnico}`);
     setIsDigitalGalleryOpen(true);
     try {
       const imagenes = await campanasService.getImagenesDigitales(campanaId, reservaId);
@@ -2805,7 +2805,7 @@ function TaskDetailModal({
     if (!summary) return '-';
     const parts: string[] = [];
     if (summary.imagenes > 0) {
-      parts.push(`${summary.imagenes} ${summary.imagenes === 1 ? 'imagen' : 'imágenes'}`);
+      parts.push(`${summary.imagenes} ${summary.imagenes === 1 ? 'imagen' : 'imÃ¡genes'}`);
     }
     if (summary.videos > 0) {
       parts.push(`${summary.videos} ${summary.videos === 1 ? 'video' : 'videos'}`);
@@ -2817,16 +2817,16 @@ function TaskDetailModal({
   const { data: catorcenasData } = useQuery({
     queryKey: ['catorcenas-detail'],
     queryFn: () => solicitudesService.getCatorcenas(),
-    enabled: isOpen && (task?.tipo === 'Impresión' || task?.tipo === 'Recepción' || task?.tipo === 'Instalación'),
+    enabled: isOpen && (task?.tipo === 'ImpresiÃ³n' || task?.tipo === 'RecepciÃ³n' || task?.tipo === 'InstalaciÃ³n'),
   });
 
-  // Query para usuarios (para asignar tarea de recepción) - TODOS los de área Operaciones
+  // Query para usuarios (para asignar tarea de recepciÃ³n) - TODOS los de Ã¡rea Operaciones
   const { data: usuariosRecepcionData } = useQuery({
     queryKey: ['solicitudes-users', 'all-users-recepcion'],
     queryFn: () => solicitudesService.getUsers(undefined, false), // false = sin filtro de equipo
-    enabled: isOpen && task?.tipo === 'Impresión',
+    enabled: isOpen && task?.tipo === 'ImpresiÃ³n',
   });
-  // Filtrar usuarios del área de Operaciones O cuyo puesto contenga "Operaciones"
+  // Filtrar usuarios del Ã¡rea de Operaciones O cuyo puesto contenga "Operaciones"
   const usuarios = useMemo(() => {
     if (!usuariosRecepcionData) return [];
     return usuariosRecepcionData.filter(u =>
@@ -2835,7 +2835,7 @@ function TaskDetailModal({
     );
   }, [usuariosRecepcionData]);
 
-  // Función para obtener texto de catorcena/periodo desde fecha_fin
+  // FunciÃ³n para obtener texto de catorcena/periodo desde fecha_fin
   const getCatorcenaFromFechaFin = useMemo(() => {
     if (!task?.fecha_fin) return null;
     if (tipoPeriodo === 'mensual') {
@@ -2855,12 +2855,12 @@ function TaskDetailModal({
     return null;
   }, [task?.fecha_fin, catorcenasData?.data, tipoPeriodo]);
 
-  // Estados para el sistema de decisiones de revisión
+  // Estados para el sistema de decisiones de revisiÃ³n
   const [decisiones, setDecisiones] = useState<DecisionesState>({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isFinalizando, setIsFinalizando] = useState(false);
 
-  // Estado para crear tarea de recepción (Impresión)
+  // Estado para crear tarea de recepciÃ³n (ImpresiÃ³n)
   const [isCreatingRecepcion, setIsCreatingRecepcion] = useState(false);
   const [recepcionAsignadoNombre, setRecepcionAsignadoNombre] = useState('');
   const [recepcionAsignadoId, setRecepcionAsignadoId] = useState('');
@@ -2871,14 +2871,14 @@ function TaskDetailModal({
   const [impresionTab, setImpresionTab] = useState<'resumen' | 'tabla'>('resumen');
   const [recepcionTab, setRecepcionTab] = useState<'resumen' | 'tabla'>('resumen');
   const [programacionTab, setProgramacionTab] = useState<'resumen' | 'tabla'>('resumen');
-  // Estado para tracking de artes programados en tarea de Programación
+  // Estado para tracking de artes programados en tarea de ProgramaciÃ³n
   const [programadosState, setProgramadosState] = useState<Record<string, boolean>>({});
   // Estado para archivos digitales cargados desde API (fallback si evidencia no tiene archivos)
   const [loadedArchivosDigitales, setLoadedArchivosDigitales] = useState<{ archivo: string; archivoData?: string; spot: number; tipo: string }[]>([]);
   const [isLoadingArchivosDigitales, setIsLoadingArchivosDigitales] = useState(false);
-  // Estado para envío de Orden de Programación
+  // Estado para envÃ­o de Orden de ProgramaciÃ³n
   const [isSendingOrden, setIsSendingOrden] = useState(false);
-  // Estado para indicaciones editables en Orden de Programación (Pendiente)
+  // Estado para indicaciones editables en Orden de ProgramaciÃ³n (Pendiente)
   const [ordenIndicaciones, setOrdenIndicaciones] = useState<Record<string, string>>({});
 
   // Reset orden indicaciones when task changes
@@ -2887,7 +2887,7 @@ function TaskDetailModal({
     setIsSendingOrden(false);
   }, [task?.id]);
 
-  // Estado para nodos expandidos en las tablas de Impresión y Recepción
+  // Estado para nodos expandidos en las tablas de ImpresiÃ³n y RecepciÃ³n
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const toggleNode = useCallback((nodeKey: string) => {
     setExpandedNodes((prev) => {
@@ -2898,7 +2898,7 @@ function TaskDetailModal({
     });
   }, []);
 
-  // Filtrar usuarios por búsqueda (para asignar recepción)
+  // Filtrar usuarios por bÃºsqueda (para asignar recepciÃ³n)
   const filteredUsuariosRecepcion = useMemo(() => {
     if (!recepcionAsignadoSearch.trim()) return usuarios;
     const search = recepcionAsignadoSearch.toLowerCase();
@@ -2908,7 +2908,7 @@ function TaskDetailModal({
     );
   }, [usuarios, recepcionAsignadoSearch]);
 
-  // Estados para tareas de Recepción
+  // Estados para tareas de RecepciÃ³n
   const [cantidadesRecibidas, setCantidadesRecibidas] = useState<Record<string, number>>({});
   const [observacionesRecepcion, setObservacionesRecepcion] = useState('');
   const [isFinalizandoRecepcion, setIsFinalizandoRecepcion] = useState(false);
@@ -2916,9 +2916,9 @@ function TaskDetailModal({
   const [isUploadingRecepcion, setIsUploadingRecepcion] = useState(false);
   const [impresionPdfFile, setImpresionPdfFile] = useState<File | null>(null);
 
-  // Parsear datos de impresiones desde evidencia (para tareas de Impresión y Recepción)
+  // Parsear datos de impresiones desde evidencia (para tareas de ImpresiÃ³n y RecepciÃ³n)
   const impresionesData = useMemo(() => {
-    if (task?.tipo !== 'Impresión' && task?.tipo !== 'Recepción') return null;
+    if (task?.tipo !== 'ImpresiÃ³n' && task?.tipo !== 'RecepciÃ³n') return null;
     try {
       const evidencia = (task as any).evidencia;
       if (evidencia) {
@@ -2940,6 +2940,49 @@ function TaskDetailModal({
     }
   }, [task?.evidencia]);
 
+  const { data: tareasGuiaFallback } = useQuery({
+    queryKey: ['campana-tareas-guia-fallback', campanaId, task?.id],
+    queryFn: () => campanasService.getTareas(campanaId),
+    enabled: isOpen && task?.tipo === 'RecepciÃ³n' && !guiaPdfUrl,
+    staleTime: 30_000,
+  });
+
+  const guiaPdfUrlResolved = useMemo(() => {
+    if (guiaPdfUrl) return guiaPdfUrl;
+    if (!task || !tareasGuiaFallback?.length) return null;
+
+    const idsActuales = (task.ids_reservas || '')
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean);
+
+    const comparteReservas = (ids?: string | null) => {
+      const arr = (ids || '').split(',').map(v => v.trim()).filter(Boolean);
+      return arr.some(id => idsActuales.includes(id));
+    };
+
+    const recepciones = tareasGuiaFallback
+      .filter(t => t.tipo === 'RecepciÃ³n' && t.id !== Number(task.id))
+      .sort((a, b) => b.id - a.id);
+
+    for (const t of recepciones) {
+      if (!comparteReservas(t.ids_reservas)) continue;
+      try {
+        const ev = t.evidencia ? JSON.parse(t.evidencia) : null;
+        if (ev?.guia_pdf) return ev.guia_pdf as string;
+      } catch {}
+    }
+
+    for (const t of recepciones) {
+      try {
+        const ev = t.evidencia ? JSON.parse(t.evidencia) : null;
+        if (ev?.guia_pdf) return ev.guia_pdf as string;
+      } catch {}
+    }
+
+    return null;
+  }, [guiaPdfUrl, task, tareasGuiaFallback]);
+
 
   // Estados para editar arte
   const [uploadOption, setUploadOption] = useState<UploadOption>('file');
@@ -2948,7 +2991,7 @@ function TaskDetailModal({
   const [existingArtUrl, setExistingArtUrl] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
 
-  // Estados para archivos digitales en Editar tab (múltiples)
+  // Estados para archivos digitales en Editar tab (mÃºltiples)
   const [digitalFilesEditar, setDigitalFilesEditar] = useState<DigitalFile[]>([]);
   const [draggedFileEditar, setDraggedFileEditar] = useState<string | null>(null);
 
@@ -2993,12 +3036,12 @@ function TaskDetailModal({
     });
   }, [task, inventoryData]);
 
-  // Efecto para cargar nombres de archivos digitales cuando se abre el tab "Ver tabla" en Programación
+  // Efecto para cargar nombres de archivos digitales cuando se abre el tab "Ver tabla" en ProgramaciÃ³n
   useEffect(() => {
     const loadDigitalFileNames = async () => {
-      if ((task?.tipo !== 'Programación' && task?.tipo !== 'Orden de Programación') || programacionTab !== 'tabla' || taskInventory.length === 0) return;
+      if ((task?.tipo !== 'ProgramaciÃ³n' && task?.tipo !== 'Orden de ProgramaciÃ³n') || programacionTab !== 'tabla' || taskInventory.length === 0) return;
 
-      // Recopilar todas las reservas únicas
+      // Recopilar todas las reservas Ãºnicas
       const allReservaIds = new Set<number>();
       taskInventory.forEach(item => {
         if (item.rsv_id) {
@@ -3042,10 +3085,10 @@ function TaskDetailModal({
     loadDigitalFileNames();
   }, [task?.tipo, programacionTab, taskInventory, campanaId]);
 
-  // Efecto para cargar archivos digitales para el tab "Resumen" en Programación si no están en evidencia
+  // Efecto para cargar archivos digitales para el tab "Resumen" en ProgramaciÃ³n si no estÃ¡n en evidencia
   useEffect(() => {
     const loadArchivosForResumen = async () => {
-      if (!isOpen || (task?.tipo !== 'Programación' && task?.tipo !== 'Orden de Programación' && task?.tipo !== 'Orden de Instalación' && task?.tipo !== 'Instalación')) {
+      if (!isOpen || (task?.tipo !== 'ProgramaciÃ³n' && task?.tipo !== 'Orden de ProgramaciÃ³n' && task?.tipo !== 'Orden de InstalaciÃ³n' && task?.tipo !== 'InstalaciÃ³n')) {
         setLoadedArchivosDigitales([]);
         return;
       }
@@ -3100,8 +3143,8 @@ function TaskDetailModal({
     loadArchivosForResumen();
   }, [isOpen, task?.tipo, task?.evidencia, task?.ids_reservas, campanaId]);
 
-  // Agrupar taskInventory por Catorcena > APS > Grupo (para tablas de Impresión y Recepción)
-  // Estructura jerárquica de 3 niveles para poder colapsar cada nivel
+  // Agrupar taskInventory por Catorcena > APS > Grupo (para tablas de ImpresiÃ³n y RecepciÃ³n)
+  // Estructura jerÃ¡rquica de 3 niveles para poder colapsar cada nivel
   const groupedTaskInventory = useMemo(() => {
     if (taskInventory.length === 0) return {} as Record<string, Record<string, Record<string, InventoryRow[]>>>;
 
@@ -3128,15 +3171,15 @@ function TaskDetailModal({
     return groups;
   }, [taskInventory]);
 
-  // Datos filtrados para la tabla del modal de Programación
+  // Datos filtrados para la tabla del modal de ProgramaciÃ³n
   const filteredProgramacionModalData = useMemo(() => {
     let result = [...taskInventory];
 
-    // Aplicar búsqueda (incluye nombres de archivos digitales)
+    // Aplicar bÃºsqueda (incluye nombres de archivos digitales)
     if (programacionModalSearch.trim()) {
       const search = programacionModalSearch.toLowerCase();
       result = result.filter(item => {
-        // Búsqueda en campos estándar
+        // BÃºsqueda en campos estÃ¡ndar
         const matchesStandard =
           String(item.id).includes(search) ||
           item.codigo_unico?.toLowerCase().includes(search) ||
@@ -3145,7 +3188,7 @@ function TaskDetailModal({
           item.mueble?.toLowerCase().includes(search) ||
           item.ciudad?.toLowerCase().includes(search);
 
-        // Búsqueda en nombres de archivos digitales
+        // BÃºsqueda en nombres de archivos digitales
         const fileNames = digitalFileNamesMap.get(item.id) || [];
         const matchesFileName = fileNames.some(fileName => fileName.includes(search));
 
@@ -3198,7 +3241,7 @@ function TaskDetailModal({
     return result;
   }, [taskInventory, programacionModalSearch, filtersProgramacionModal, sortFieldProgramacionModal, sortDirectionProgramacionModal, digitalFileNamesMap]);
 
-  // Inventario agrupado para la tabla del modal de Programación (3 niveles dinámicos)
+  // Inventario agrupado para la tabla del modal de ProgramaciÃ³n (3 niveles dinÃ¡micos)
   const programacionModalGroupedInventory = useMemo(() => {
     if (filteredProgramacionModalData.length === 0 || activeGroupingsProgramacionModal.length === 0) {
       return {} as Record<string, Record<string, Record<string, InventoryRow[]>>>;
@@ -3242,7 +3285,7 @@ function TaskDetailModal({
     return groups;
   }, [filteredProgramacionModalData, activeGroupingsProgramacionModal]);
 
-  // Valores únicos para filtros del modal de Programación (incluye nombres de archivos)
+  // Valores Ãºnicos para filtros del modal de ProgramaciÃ³n (incluye nombres de archivos)
   const getUniqueValuesProgramacionModal = useMemo(() => {
     const uniqueVals: Record<string, Set<string>> = {};
     FILTER_FIELDS_INVENTARIO.forEach(f => { uniqueVals[f.field] = new Set(); });
@@ -3269,10 +3312,10 @@ function TaskDetailModal({
     return result;
   }, [taskInventory, digitalFileNamesMap]);
 
-  // Extraer total de impresiones pedidas (para Recepción)
+  // Extraer total de impresiones pedidas (para RecepciÃ³n)
   // Usa num_impresiones directamente, con fallbacks para tareas antiguas
   const impresionesOrdenadas = useMemo(() => {
-    if (task?.tipo !== 'Recepción') return 0;
+    if (task?.tipo !== 'RecepciÃ³n') return 0;
 
     // Usar num_impresiones directamente si existe
     if (task.num_impresiones) return task.num_impresiones;
@@ -3287,11 +3330,11 @@ function TaskDetailModal({
       } catch (e) {}
     }
 
-    // Fallback: Intentar desde la descripción (ambos formatos)
+    // Fallback: Intentar desde la descripciÃ³n (ambos formatos)
     const match = task.descripcion?.match(/(?:Total de )?[Ii]mpresiones solicitadas:\s*(\d+)/);
     if (match) return parseInt(match[1]);
 
-    // Fallback final: usar el número de items en la tarea
+    // Fallback final: usar el nÃºmero de items en la tarea
     return taskInventory.length;
   }, [task, taskInventory]);
 
@@ -3305,7 +3348,7 @@ function TaskDetailModal({
   const isDigitalEditarSelection = useMemo(() => {
     if (selectedArteItems.length === 0) return false;
 
-    // Verificar si todos los items son digitales basándose únicamente en tradicional_digital
+    // Verificar si todos los items son digitales basÃ¡ndose Ãºnicamente en tradicional_digital
     return selectedArteItems.every(item => item.tradicional_digital === 'Digital');
   }, [selectedArteItems]);
 
@@ -3353,7 +3396,7 @@ function TaskDetailModal({
   }, [isDigitalEditarSelection, selectedArteItems, campanaId]);
 
   // Agrupar inventario para tab Atender
-  // Cuando se agrupa por ciudad/grupo, también se sub-agrupa por archivo para separar artes diferentes
+  // Cuando se agrupa por ciudad/grupo, tambiÃ©n se sub-agrupa por archivo para separar artes diferentes
   const groupedInventory = useMemo(() => {
     const groups: Record<string, InventoryRow[]> = {};
     taskInventory.forEach(item => {
@@ -3442,7 +3485,7 @@ function TaskDetailModal({
 
   const clearGroupingsEditar = useCallback(() => setActiveGroupingsEditar([]), []);
 
-  // === Valores únicos para filtros ===
+  // === Valores Ãºnicos para filtros ===
   const uniqueValuesModal = useMemo(() => {
     const values: Record<string, string[]> = {};
     FILTER_FIELDS_INVENTARIO.forEach(field => {
@@ -3633,7 +3676,7 @@ function TaskDetailModal({
     Object.keys(groupedInventory).forEach(key => {
       const decision = decisiones[key];
       if (!decision?.decision) {
-        errors.push(`Falta seleccionar acción para: ${key}`);
+        errors.push(`Falta seleccionar acciÃ³n para: ${key}`);
       } else if (decision.decision === 'rechazar' && !decision.motivoRechazo?.trim()) {
         errors.push(`Falta motivo de rechazo para: ${key}`);
       }
@@ -3675,11 +3718,11 @@ function TaskDetailModal({
         await onApprove(todosIds, comentariosAprobacion || undefined);
       }
 
-      // Rechazar y crear tarea de corrección con todos los rechazados
+      // Rechazar y crear tarea de correcciÃ³n con todos los rechazados
       if (rechazados.length > 0) {
         const todosIds = rechazados.flatMap(r => r.ids);
-        // Solo guardar el motivo de rechazo (sin códigos de inventario para no exceder VARCHAR(255))
-        // Los códigos ya están en el inventario asociado a la tarea
+        // Solo guardar el motivo de rechazo (sin cÃ³digos de inventario para no exceder VARCHAR(255))
+        // Los cÃ³digos ya estÃ¡n en el inventario asociado a la tarea
         const descripcion = rechazados.map(r => r.motivo).join(' | ');
 
         // Subir imagen de rechazo si existe (usar la primera que encuentre)
@@ -3713,7 +3756,7 @@ function TaskDetailModal({
     }
   };
 
-  // Función para enviar artes corregidos a revisión (para tareas de Corrección)
+  // FunciÃ³n para enviar artes corregidos a revisiÃ³n (para tareas de CorrecciÃ³n)
   const handleEnviarARevision = async () => {
     if (!task) return;
     setIsFinalizando(true);
@@ -3725,18 +3768,18 @@ function TaskDetailModal({
       );
 
       if (reservaIds.length === 0) {
-        console.error('No hay reservas para enviar a revisión');
+        console.error('No hay reservas para enviar a revisiÃ³n');
         return;
       }
 
-      // El responsable de la tarea de corrección es quien rechazó,
-      // debemos crear la nueva tarea de revisión asignada a él
+      // El responsable de la tarea de correcciÃ³n es quien rechazÃ³,
+      // debemos crear la nueva tarea de revisiÃ³n asignada a Ã©l
       const responsableRevision = task.responsable || task.creador || '';
 
-      // Enviar a revisión (cambia estado a Pendiente y crea nueva tarea)
+      // Enviar a revisiÃ³n (cambia estado a Pendiente y crea nueva tarea)
       await onSendToReview(reservaIds, responsableRevision);
 
-      // Marcar la tarea de corrección como completada
+      // Marcar la tarea de correcciÃ³n como completada
       if (task.id) {
         await onTaskComplete(task.id);
       }
@@ -3744,7 +3787,7 @@ function TaskDetailModal({
       // Cerrar modal
       onClose();
     } catch (error) {
-      console.error('Error al enviar a revisión:', error);
+      console.error('Error al enviar a revisiÃ³n:', error);
     } finally {
       setIsFinalizando(false);
     }
@@ -3760,12 +3803,12 @@ function TaskDetailModal({
     }
   };
 
-  // Manejar cambio de archivos digitales (múltiples) en Editar tab
+  // Manejar cambio de archivos digitales (mÃºltiples) en Editar tab
   const handleDigitalFilesChangeEditar = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    // Contar archivos existentes que no están marcados para eliminar
+    // Contar archivos existentes que no estÃ¡n marcados para eliminar
     const existingNotDeleted = existingDigitalFilesEditar.filter(f => !filesToDelete.includes(f.id));
     const existingMaxSpot = existingNotDeleted.length > 0 ? Math.max(...existingNotDeleted.map(f => f.spot)) : 0;
     const newMaxSpot = digitalFilesEditar.length > 0 ? Math.max(...digitalFilesEditar.map(f => f.spot)) : 0;
@@ -3775,7 +3818,7 @@ function TaskDetailModal({
       const isVideo = file.type.startsWith('video/');
       const isImage = file.type.startsWith('image/');
 
-      if (!isVideo && !isImage) return; // Solo aceptar videos e imágenes
+      if (!isVideo && !isImage) return; // Solo aceptar videos e imÃ¡genes
 
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -3799,13 +3842,13 @@ function TaskDetailModal({
   const handleRemoveDigitalFileEditar = (id: string) => {
     setDigitalFilesEditar(prev => {
       const filtered = prev.filter(f => f.id !== id);
-      // Reordenar spots después de eliminar
+      // Reordenar spots despuÃ©s de eliminar
       const existingCount = existingDigitalFilesEditar.filter(f => !filesToDelete.includes(f.id)).length;
       return filtered.map((f, index) => ({ ...f, spot: existingCount + index + 1 }));
     });
   };
 
-  // Marcar un archivo existente para eliminación
+  // Marcar un archivo existente para eliminaciÃ³n
   const handleRemoveExistingFileEditar = (id: number) => {
     setFilesToDelete(prev => [...prev, id]);
     // Reordenar los spots de los archivos nuevos
@@ -3813,7 +3856,7 @@ function TaskDetailModal({
     setDigitalFilesEditar(prev => prev.map((f, index) => ({ ...f, spot: remainingExisting + index + 1 })));
   };
 
-  // Restaurar un archivo existente que estaba marcado para eliminación
+  // Restaurar un archivo existente que estaba marcado para eliminaciÃ³n
   const handleRestoreExistingFileEditar = (id: number) => {
     setFilesToDelete(prev => prev.filter(fid => fid !== id));
   };
@@ -3838,7 +3881,7 @@ function TaskDetailModal({
       const [removed] = newFiles.splice(draggedIndex, 1);
       newFiles.splice(targetIndex, 0, removed);
 
-      // Actualizar spots después de reordenar
+      // Actualizar spots despuÃ©s de reordenar
       return newFiles.map((f, index) => ({ ...f, spot: index + 1 }));
     });
   };
@@ -3848,7 +3891,7 @@ function TaskDetailModal({
     setDraggedFileEditar(null);
   };
 
-  // Handler para actualizar artes digitales (múltiples archivos)
+  // Handler para actualizar artes digitales (mÃºltiples archivos)
   const handleUpdateImageDigital = async () => {
     // Verificar que hay cambios (archivos a eliminar o nuevos archivos)
     if (filesToDelete.length === 0 && digitalFilesEditar.length === 0) return;
@@ -3965,9 +4008,9 @@ function TaskDetailModal({
     document.body.removeChild(link);
   };
 
-  // Función para generar PDF del proveedor (tareas de Impresión)
+  // FunciÃ³n para generar PDF del proveedor (tareas de ImpresiÃ³n)
   const generatePDFProveedor = async () => {
-    if (!task || task.tipo !== 'Impresión') return;
+    if (!task || task.tipo !== 'ImpresiÃ³n') return;
 
     try {
       const { jsPDF } = await import('jspdf');
@@ -4008,13 +4051,13 @@ function TaskDetailModal({
       doc.setFillColor(colorMorado[0], colorMorado[1], colorMorado[2]);
       doc.rect(0, 0, pageWidth, 30, 'F');
 
-      // Título IMU
+      // TÃ­tulo IMU
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(24);
       doc.text('IMU', 15, 15);
 
-      // Subtítulo
+      // SubtÃ­tulo
       doc.setFontSize(10);
       doc.text('Impresiones y Mobiliario Urbano', 15, 22);
 
@@ -4027,7 +4070,7 @@ function TaskDetailModal({
       doc.setFontSize(9);
       doc.text(fecha, pageWidth - 50, 15);
 
-      // Mensaje de presentación
+      // Mensaje de presentaciÃ³n
       posY = 40;
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(12);
@@ -4037,12 +4080,12 @@ function TaskDetailModal({
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
-      const mensaje = 'Por este medio le hacemos llegar la solicitud de impresión de los materiales detallados a continuación. Agradecemos de antemano su atención y servicio para cumplir con los tiempos de entrega establecidos.';
+      const mensaje = 'Por este medio le hacemos llegar la solicitud de impresiÃ³n de los materiales detallados a continuaciÃ³n. Agradecemos de antemano su atenciÃ³n y servicio para cumplir con los tiempos de entrega establecidos.';
       const mensajeLines = doc.splitTextToSize(mensaje, pageWidth - 30);
       doc.text(mensajeLines, 15, posY);
       posY += mensajeLines.length * 7;
 
-      // Información del pedido
+      // InformaciÃ³n del pedido
       posY += 10;
       doc.setFillColor(240, 240, 240);
       doc.rect(15, posY, pageWidth - 30, 10, 'F');
@@ -4139,17 +4182,17 @@ function TaskDetailModal({
         posY += rowHeight;
         rowIndex++;
 
-        // Salto de página si es necesario
+        // Salto de pÃ¡gina si es necesario
         if (posY > pageHeight - 40) {
           doc.addPage();
 
-          // Encabezado en nueva página
+          // Encabezado en nueva pÃ¡gina
           doc.setFillColor(colorMorado[0], colorMorado[1], colorMorado[2]);
           doc.rect(0, 0, pageWidth, 15, 'F');
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(255, 255, 255);
           doc.setFontSize(10);
-          doc.text('IMU - Continuación', 15, 10);
+          doc.text('IMU - ContinuaciÃ³n', 15, 10);
 
           posY = 25;
 
@@ -4173,18 +4216,18 @@ function TaskDetailModal({
         }
       }
 
-      // Pie de página
+      // Pie de pÃ¡gina
       posY += 15;
       doc.setFont('helvetica', 'italic');
       doc.setTextColor(colorGris[0], colorGris[1], colorGris[2]);
       doc.setFontSize(9);
-      doc.text('Para cualquier duda o aclaración, favor de contactarnos a contacto@imu.com', pageWidth/2, posY, { align: 'center' });
+      doc.text('Para cualquier duda o aclaraciÃ³n, favor de contactarnos a contacto@imu.com', pageWidth/2, posY, { align: 'center' });
 
       posY += 7;
       doc.setFontSize(8);
-      doc.text(`IMU - Impresiones y Mobiliario Urbano © ${new Date().getFullYear()}`, pageWidth/2, posY, { align: 'center' });
+      doc.text(`IMU - Impresiones y Mobiliario Urbano Â© ${new Date().getFullYear()}`, pageWidth/2, posY, { align: 'center' });
 
-      // Línea decorativa
+      // LÃ­nea decorativa
       posY += 5;
       doc.setDrawColor(colorMorado[0], colorMorado[1], colorMorado[2]);
       doc.setLineWidth(0.5);
@@ -4197,7 +4240,7 @@ function TaskDetailModal({
     }
   };
 
-  // Handler para crear tarea de recepción
+  // Handler para crear tarea de recepciÃ³n
   const handleCrearRecepcion = async () => {
     if (!task || !task.id) return;
 
@@ -4220,13 +4263,13 @@ function TaskDetailModal({
       setImpresionPdfFile(null);
       onClose();
     } catch (error) {
-      console.error('Error al crear tarea de recepción:', error);
+      console.error('Error al crear tarea de recepciÃ³n:', error);
     } finally {
       setIsCreatingRecepcion(false);
     }
   };
 
-  // Handler para finalizar tarea de recepción
+  // Handler para finalizar tarea de recepciÃ³n
   const handleFinalizarRecepcion = async () => {
     if (!task || !task.id) return;
 
@@ -4271,7 +4314,7 @@ function TaskDetailModal({
           }
         });
       } else if (Object.keys(impresionesData).length > 0) {
-        // Para tareas con evidencia de impresiones (recepcion_normal o impresión), usar las URLs directamente
+        // Para tareas con evidencia de impresiones (recepcion_normal o impresiÃ³n), usar las URLs directamente
         Object.entries(impresionesData).forEach(([arteUrl, solicitadas]) => {
           const recibidas = cantidadesRecibidas[arteUrl] || 0;
           const faltantes = solicitadas - recibidas;
@@ -4314,7 +4357,7 @@ function TaskDetailModal({
         });
       }
 
-      // Si hay faltantes, crear nueva tarea de recepción
+      // Si hay faltantes, crear nueva tarea de recepciÃ³n
       if (faltantesPorArte.length > 0) {
         await onCreateRecepcionFaltante(
           faltantesPorArte,
@@ -4347,7 +4390,7 @@ function TaskDetailModal({
       // Cerrar modal
       onClose();
     } catch (error) {
-      console.error('Error al finalizar recepción:', error);
+      console.error('Error al finalizar recepciÃ³n:', error);
     } finally {
       setIsFinalizandoRecepcion(false);
     }
@@ -4362,7 +4405,7 @@ function TaskDetailModal({
       setFilePreview(null);
       setExistingArtUrl('');
       setLinkUrl('');
-      // Reset estados de Recepción
+      // Reset estados de RecepciÃ³n
       setCantidadesRecibidas({});
       setObservacionesRecepcion('');
       setRecepcionFiles([]);
@@ -4372,7 +4415,7 @@ function TaskDetailModal({
 
   if (!isOpen || !task) return null;
 
-  // Para tareas de Corrección, el orden es: Resumen -> Editar -> Atender
+  // Para tareas de CorrecciÃ³n, el orden es: Resumen -> Editar -> Atender
   // Para otras tareas: Resumen -> Atender -> Editar
   const tabs = task.tipo === 'Correccion' ? [
     { key: 'resumen' as const, label: 'Paso 1: Resumen', icon: FileText },
@@ -4407,8 +4450,8 @@ function TaskDetailModal({
             </button>
           </div>
 
-          {/* Tabs - Solo mostrar si NO es tarea de Impresión, Recepción, Instalación ni Testigo */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Orden de Programación' && (
+          {/* Tabs - Solo mostrar si NO es tarea de ImpresiÃ³n, RecepciÃ³n, InstalaciÃ³n ni Testigo */}
+          {task.tipo !== 'ImpresiÃ³n' && task.tipo !== 'RecepciÃ³n' && task.tipo !== 'InstalaciÃ³n' && task.tipo !== 'Testigo' && task.tipo !== 'ProgramaciÃ³n' && task.tipo !== 'Orden de ProgramaciÃ³n' && (
             <div className="flex flex-wrap gap-2 mt-4">
               {tabs
                 .filter(tab => canResolveCurrentTask || tab.key === 'resumen')
@@ -4433,8 +4476,8 @@ function TaskDetailModal({
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-4 sm:p-6">
-          {/* === VISTA ESPECIAL PARA TAREAS DE IMPRESIÓN === */}
-          {task.tipo === 'Impresión' && (
+          {/* === VISTA ESPECIAL PARA TAREAS DE IMPRESIÃ“N === */}
+          {task.tipo === 'ImpresiÃ³n' && (
             <div className="space-y-6">
               {/* Tabs */}
               <div className="flex gap-2 border-b border-border pb-2">
@@ -4463,12 +4506,12 @@ function TaskDetailModal({
               {/* Tab Resumen */}
               {impresionTab === 'resumen' && (
                 <>
-              {/* Info de la tarea de Impresión */}
+              {/* Info de la tarea de ImpresiÃ³n */}
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                <h4 className="text-sm font-medium text-purple-300 mb-3">Información del Pedido de Impresión</h4>
+                <h4 className="text-sm font-medium text-purple-300 mb-3">InformaciÃ³n del Pedido de ImpresiÃ³n</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                   <div>
-                    <span className="text-zinc-500">Título:</span>
+                    <span className="text-zinc-500">TÃ­tulo:</span>
                     <p className="text-white font-medium">{task.titulo || '-'}</p>
                   </div>
                   <div>
@@ -4490,11 +4533,11 @@ function TaskDetailModal({
                     <p className="text-white font-medium">{impresionesData?.catorcena_entrega || getCatorcenaFromFechaFin || '-'}</p>
                   </div>
                   <div className="md:col-span-3">
-                    <span className="text-zinc-500">Descripción:</span>
+                    <span className="text-zinc-500">DescripciÃ³n:</span>
                     <p className="text-white">{task.descripcion || '-'}</p>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Fecha de creación:</span>
+                    <span className="text-zinc-500">Fecha de creaciÃ³n:</span>
                     <p className="text-white font-medium">{task.fecha_inicio || '-'}</p>
                   </div>
                   <div>
@@ -4555,7 +4598,7 @@ function TaskDetailModal({
                                   {nombreArchivo}
                                 </p>
                                 <p className="text-xs text-zinc-400">
-                                  Arte para impresión
+                                  Arte para impresiÃ³n
                                 </p>
                               </div>
 
@@ -4565,7 +4608,7 @@ function TaskDetailModal({
                                 <p className="text-[10px] text-zinc-500">impresiones</p>
                               </div>
 
-                              {/* Botón descargar */}
+                              {/* BotÃ³n descargar */}
                               <button
                                 onClick={() => imageUrl && downloadImage(imageUrl, nombreArchivo)}
                                 className="p-2 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded-lg transition-colors"
@@ -4610,7 +4653,7 @@ function TaskDetailModal({
                           {/* Info */}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-white">
-                              {taskInventory.length} {taskInventory.length === 1 ? 'ubicación' : 'ubicaciones'}
+                              {taskInventory.length} {taskInventory.length === 1 ? 'ubicaciÃ³n' : 'ubicaciones'}
                             </p>
                             <p className="text-xs text-zinc-400 truncate">
                               {primerItem?.mueble || 'Mueble'} - {primerItem?.ciudad || 'Ciudad'}
@@ -4623,7 +4666,7 @@ function TaskDetailModal({
                             <p className="text-[10px] text-zinc-500">impresiones</p>
                           </div>
 
-                          {/* Botón descargar */}
+                          {/* BotÃ³n descargar */}
                           {primerItem?.archivo_arte && (
                             <button
                               onClick={() => downloadImage(getImageUrl(primerItem.archivo_arte)!, `arte.jpg`)}
@@ -4640,10 +4683,10 @@ function TaskDetailModal({
                   }
               </div>
 
-              {/* Asignar tarea de recepción */}
+              {/* Asignar tarea de recepciÃ³n */}
               {task.estatus === 'Activo' && canResolveProduccionTasks && (
                 <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                  <h4 className="text-sm font-medium text-purple-300 mb-3">Crear tarea de recepción</h4>
+                  <h4 className="text-sm font-medium text-purple-300 mb-3">Crear tarea de recepciÃ³n</h4>
                   <div className="relative">
                     <label className="block text-xs font-medium text-zinc-400 mb-1">Asignar a *</label>
                     <input
@@ -4701,7 +4744,7 @@ function TaskDetailModal({
                     )}
                   </div>
                   <div className="mt-4">
-                    <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor en PDF (opcional)</label>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">GuÃ­a del proveedor en PDF (opcional)</label>
                     {impresionPdfFile ? (
                       <div className="flex items-center gap-2 mb-2 p-2 bg-zinc-800 rounded border border-border">
                         <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
@@ -4711,7 +4754,7 @@ function TaskDetailModal({
                           onClick={() => setImpresionPdfFile(null)}
                           className="text-red-400 hover:text-red-300 text-xs"
                         >
-                          ×
+                          Ã—
                         </button>
                       </div>
                     ) : null}
@@ -4738,9 +4781,9 @@ function TaskDetailModal({
                         <div className="space-y-1 py-1">
                           <Upload className="h-6 w-6 text-zinc-500 mx-auto" />
                           <p className="text-xs text-zinc-400">
-                            {impresionPdfFile ? 'Cambiar PDF' : 'Sube la guía del proveedor'}
+                            {impresionPdfFile ? 'Cambiar PDF' : 'Sube la guÃ­a del proveedor'}
                           </p>
-                          <p className="text-[10px] text-zinc-500">PDF (máx. 20MB)</p>
+                          <p className="text-[10px] text-zinc-500">PDF (mÃ¡x. 20MB)</p>
                         </div>
                       </label>
                     </div>
@@ -4835,8 +4878,8 @@ function TaskDetailModal({
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Archivo</th>
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">ID</th>
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Formato</th>
-                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Código Único</th>
-                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Ubicación</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">CÃ³digo Ãšnico</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">UbicaciÃ³n</th>
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Cara</th>
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Formato</th>
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Plaza</th>
@@ -4899,7 +4942,7 @@ function TaskDetailModal({
                 </div>
               )}
 
-              {/* Botones de acción */}
+              {/* Botones de acciÃ³n */}
               <div className="flex flex-wrap items-center gap-3 justify-end">
                 <button
                   onClick={generatePDFProveedor}
@@ -4922,7 +4965,7 @@ function TaskDetailModal({
                     ) : (
                       <>
                         <Plus className="h-4 w-4" />
-                        Crear tarea de recepción
+                        Crear tarea de recepciÃ³n
                       </>
                     )}
                   </button>
@@ -4930,14 +4973,14 @@ function TaskDetailModal({
               </div>
               {task.estatus === 'Activo' && !canResolveProduccionTasks && (
                 <div className="bg-zinc-800/50 border border-border rounded-lg p-4 text-center mt-4">
-                  <p className="text-sm text-zinc-400">Tarea de impresión activa - Solo visualización</p>
+                  <p className="text-sm text-zinc-400">Tarea de impresiÃ³n activa - Solo visualizaciÃ³n</p>
                 </div>
               )}
             </div>
           )}
 
-          {/* === VISTA ESPECIAL PARA TAREAS DE RECEPCIÓN === */}
-          {task.tipo === 'Recepción' && (
+          {/* === VISTA ESPECIAL PARA TAREAS DE RECEPCIÃ“N === */}
+          {task.tipo === 'RecepciÃ³n' && (
             <div className="space-y-6">
               {/* Tabs */}
               <div className="flex gap-2 border-b border-border pb-2">
@@ -5048,8 +5091,8 @@ function TaskDetailModal({
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Archivo</th>
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">ID</th>
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Formato</th>
-                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Código Único</th>
-                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Ubicación</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">CÃ³digo Ãšnico</th>
+                                                        <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">UbicaciÃ³n</th>
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Tipo Cara</th>
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Formato</th>
                                                         <th className="px-3 py-2 font-medium text-purple-300 whitespace-nowrap">Plaza</th>
@@ -5115,12 +5158,12 @@ function TaskDetailModal({
               {/* Tab Resumen */}
               {recepcionTab === 'resumen' && (
                 <>
-              {/* Info de la tarea de Recepción */}
+              {/* Info de la tarea de RecepciÃ³n */}
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                <h4 className="text-sm font-medium text-purple-300 mb-3">Recepción de Impresiones</h4>
+                <h4 className="text-sm font-medium text-purple-300 mb-3">RecepciÃ³n de Impresiones</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                   <div>
-                    <span className="text-zinc-500">Título:</span>
+                    <span className="text-zinc-500">TÃ­tulo:</span>
                     <p className="text-white font-medium">{task.titulo || '-'}</p>
                   </div>
                   <div>
@@ -5140,7 +5183,7 @@ function TaskDetailModal({
                 </div>
               </div>
 
-              {/* Formulario de recepción */}
+              {/* Formulario de recepciÃ³n */}
               {(task.estatus === 'Activo' || task.estatus === 'Pendiente') ? (
                 <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
                   <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
@@ -5152,7 +5195,7 @@ function TaskDetailModal({
                     {/* Lista de artes agrupados con inputs para cantidad recibida */}
                     <div className="max-h-[250px] overflow-y-auto space-y-3">
                       {(() => {
-                        // Verificar si es una tarea de recepción faltantes (tiene evidencia especial)
+                        // Verificar si es una tarea de recepciÃ³n faltantes (tiene evidencia especial)
                         let esFaltantes = false;
                         let faltantesData: { arte: string; cantidad: number }[] = [];
 
@@ -5164,7 +5207,7 @@ function TaskDetailModal({
                               faltantesData = evidenciaObj.faltantesPorArte;
                             }
                           } catch (e) {
-                            // No es JSON válido o no tiene el formato esperado
+                            // No es JSON vÃ¡lido o no tiene el formato esperado
                           }
                         }
 
@@ -5358,7 +5401,7 @@ function TaskDetailModal({
                             {/* Info del grupo */}
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-white">
-                                {cantidad} {cantidad !== 1 ? 'ubicaciones' : 'ubicación'}
+                                {cantidad} {cantidad !== 1 ? 'ubicaciones' : 'ubicaciÃ³n'}
                               </p>
                               <p className="text-xs text-zinc-500 truncate">
                                 {!grupo.archivo ? 'Sin arte asignado' : grupo.archivo.startsWith('data:') ? `Arte (${grupo.items[0]?.codigo_unico || 'imagen'})` : grupo.archivo.split('/').pop()}
@@ -5404,8 +5447,8 @@ function TaskDetailModal({
 
                     {/* Resumen de totales */}
                     {(() => {
-                      // Usar impresionesOrdenadas que ya calcula el número correcto
-                      // (lee de evidencia, descripción, o taskInventory.length)
+                      // Usar impresionesOrdenadas que ya calcula el nÃºmero correcto
+                      // (lee de evidencia, descripciÃ³n, o taskInventory.length)
                       const totalSolicitadas = impresionesOrdenadas;
 
                       // Obtener las keys de artes para sumar cantidades recibidas
@@ -5456,7 +5499,7 @@ function TaskDetailModal({
                         value={observacionesRecepcion}
                         onChange={(e) => setObservacionesRecepcion(e.target.value)}
                         rows={2}
-                        placeholder="Notas sobre la recepción, diferencias, etc."
+                        placeholder="Notas sobre la recepciÃ³n, diferencias, etc."
                         className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
                       />
                     </div>
@@ -5474,7 +5517,7 @@ function TaskDetailModal({
                                 onClick={() => setRecepcionFiles(prev => prev.filter((_, i) => i !== idx))}
                                 className="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
                               >
-                                ×
+                                Ã—
                               </button>
                             </div>
                           ))}
@@ -5508,30 +5551,30 @@ function TaskDetailModal({
                           <div className="space-y-1 py-1">
                             <Upload className="h-6 w-6 text-zinc-500 mx-auto" />
                             <p className="text-xs text-zinc-400">
-                              {recepcionFiles.length > 0 ? 'Agregar más fotos' : 'Sube fotos como comprobante del pedido'}
+                              {recepcionFiles.length > 0 ? 'Agregar mÃ¡s fotos' : 'Sube fotos como comprobante del pedido'}
                             </p>
-                            <p className="text-[10px] text-zinc-500">JPG o PNG (máx. 10MB cada una)</p>
+                            <p className="text-[10px] text-zinc-500">JPG o PNG (mÃ¡x. 10MB cada una)</p>
                           </div>
                         </label>
                       </div>
                     </div>
 
-                    {/* PDF guía del proveedor (solo lectura en Recepción) */}
+                    {/* PDF guÃ­a del proveedor (solo lectura en RecepciÃ³n) */}
                     <div>
-                      <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor (PDF)</label>
-                      {guiaPdfUrl ? (
+                      <label className="block text-xs font-medium text-zinc-400 mb-1">GuÃ­a del proveedor (PDF)</label>
+                      {guiaPdfUrlResolved ? (
                         <a
-                          href={getImageUrl(guiaPdfUrl) || guiaPdfUrl}
+                          href={getImageUrl(guiaPdfUrlResolved) || guiaPdfUrlResolved}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-border rounded-lg text-sm text-zinc-300 transition-colors"
                         >
                           <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
-                          <span>Ver / descargar guía PDF</span>
+                          <span>Ver / descargar guÃ­a PDF</span>
                         </a>
                       ) : (
                         <div className="px-3 py-2 bg-zinc-900/40 border border-border rounded-lg text-xs text-zinc-500">
-                          Esta tarea no tiene guía PDF adjunta.
+                          Esta tarea no tiene guÃ­a PDF adjunta.
                         </div>
                       )}
                     </div>
@@ -5541,8 +5584,8 @@ function TaskDetailModal({
                 <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
                   <div className="text-center mb-3">
                     <CheckCircle2 className="h-8 w-8 text-green-400 mx-auto mb-2" />
-                    <p className="text-green-300 font-medium">Recepción completada</p>
-                    <p className="text-sm text-zinc-400 mt-1">Esta tarea de recepción ya ha sido finalizada.</p>
+                    <p className="text-green-300 font-medium">RecepciÃ³n completada</p>
+                    <p className="text-sm text-zinc-400 mt-1">Esta tarea de recepciÃ³n ya ha sido finalizada.</p>
                   </div>
                   {task.contenido && (
                     <div className="mt-3 pt-3 border-t border-green-500/20">
@@ -5555,7 +5598,7 @@ function TaskDetailModal({
                       <p className="text-xs font-medium text-zinc-400 mb-2">Fotos comprobatorias:</p>
                       <div className="flex flex-wrap gap-2 justify-center">
                         {(() => {
-                          // Soportar JSON array (múltiples) o string simple (una sola)
+                          // Soportar JSON array (mÃºltiples) o string simple (una sola)
                           let urls: string[] = [];
                           try {
                             const parsed = JSON.parse(task.archivo_testigo);
@@ -5579,31 +5622,24 @@ function TaskDetailModal({
                       </div>
                     </div>
                   )}
-                  {(() => {
-                    try {
-                      const ev = task.evidencia ? JSON.parse(task.evidencia) : {};
-                      if (!ev.guia_pdf) return null;
-                      const pdfUrl = getImageUrl(ev.guia_pdf) || ev.guia_pdf;
-                      return (
-                        <div className="mt-3 pt-3 border-t border-green-500/20">
-                          <p className="text-xs font-medium text-zinc-400 mb-2">Guía del proveedor:</p>
-                          <a
-                            href={pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-border rounded-lg text-sm text-zinc-300 transition-colors"
-                          >
-                            <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
-                            <span>Descargar guía PDF</span>
-                          </a>
-                        </div>
-                      );
-                    } catch { return null; }
-                  })()}
+                  {guiaPdfUrlResolved && (
+                    <div className="mt-3 pt-3 border-t border-green-500/20">
+                      <p className="text-xs font-medium text-zinc-400 mb-2">Guía del proveedor:</p>
+                      <a
+                        href={getImageUrl(guiaPdfUrlResolved) || guiaPdfUrlResolved}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-border rounded-lg text-sm text-zinc-300 transition-colors"
+                      >
+                        <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
+                        <span>Descargar guía PDF</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Botones de acción */}
+              {/* Botones de acciÃ³n */}
               {(task.estatus === 'Activo' || task.estatus === 'Pendiente') && canResolveProduccionTasks && (
                 <div className="flex flex-wrap gap-3 justify-end">
                   <button
@@ -5619,7 +5655,7 @@ function TaskDetailModal({
                     ) : (
                       <>
                         <CheckCircle2 className="h-4 w-4" />
-                        Finalizar Recepción
+                        Finalizar RecepciÃ³n
                       </>
                     )}
                   </button>
@@ -5630,18 +5666,18 @@ function TaskDetailModal({
 
               {(task.estatus === 'Activo' || task.estatus === 'Pendiente') && !canResolveProduccionTasks && (
                 <div className="bg-zinc-800/50 border border-border rounded-lg p-4 text-center">
-                  <p className="text-sm text-zinc-400">Tarea de recepción activa - Solo visualización</p>
+                  <p className="text-sm text-zinc-400">Tarea de recepciÃ³n activa - Solo visualizaciÃ³n</p>
                 </div>
               )}
             </div>
           )}
 
-          {/* === VISTA ESPECIAL PARA TAREAS DE INSTALACIÓN === */}
-          {task.tipo === 'Instalación' && (
+          {/* === VISTA ESPECIAL PARA TAREAS DE INSTALACIÃ“N === */}
+          {task.tipo === 'InstalaciÃ³n' && (
             <div className="space-y-4">
-              {/* Info de la tarea - Compacta (mismo estilo que Revisión) */}
+              {/* Info de la tarea - Compacta (mismo estilo que RevisiÃ³n) */}
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Tarea</h4>
+                <h4 className="text-sm font-medium text-purple-300 mb-3">InformaciÃ³n de la Tarea</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                   <div>
                     <span className="text-zinc-500">Tipo:</span>
@@ -5658,7 +5694,7 @@ function TaskDetailModal({
                   <div>
                     <span className="text-zinc-500">Estatus:</span>
                     <p className={`font-medium ${task.estatus === 'Activo' || task.estatus === 'Pendiente' ? 'text-orange-400' : task.estatus === 'Atendido' ? 'text-yellow-400' : 'text-green-400'}`}>
-                      {task.estatus === 'Atendido' ? 'Pendiente de validación' : task.estatus}
+                      {task.estatus === 'Atendido' ? 'Pendiente de validaciÃ³n' : task.estatus}
                     </p>
                   </div>
                   <div>
@@ -5682,7 +5718,7 @@ function TaskDetailModal({
                   <div className="mt-3 pt-3 border-t border-border grid grid-cols-1 md:grid-cols-2 gap-3">
                     {task.descripcion && (
                       <div>
-                        <span className="text-zinc-500 text-sm">Descripción:</span>
+                        <span className="text-zinc-500 text-sm">DescripciÃ³n:</span>
                         <p className="text-white text-sm mt-1">{task.descripcion}</p>
                       </div>
                     )}
@@ -5696,7 +5732,7 @@ function TaskDetailModal({
                 )}
               </div>
 
-              {/* Indicaciones de instalación (read-only, si existen en evidencia) */}
+              {/* Indicaciones de instalaciÃ³n (read-only, si existen en evidencia) */}
               {task.evidencia && (() => {
                 try {
                   const parsed = JSON.parse(task.evidencia);
@@ -5729,7 +5765,7 @@ function TaskDetailModal({
 
                   return (
                     <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                      <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Instalación</h4>
+                      <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de InstalaciÃ³n</h4>
                       <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
                         {displayItems.map((item: any, idx: number) => {
                           const indicacion = indicaciones[item.key] || '';
@@ -5773,7 +5809,7 @@ function TaskDetailModal({
                 }
               })()}
 
-              {/* Lista de artes con filtros (mismo estilo que Revisión) */}
+              {/* Lista de artes con filtros (mismo estilo que RevisiÃ³n) */}
               <div className="bg-zinc-900/50 rounded-lg border border-border">
                 {/* Header con filtros - fuera del overflow para que los dropdowns se vean */}
                 <div className="px-4 py-3 border-b border-border bg-zinc-800/50 rounded-t-lg flex items-center justify-between gap-4 relative z-20">
@@ -5825,7 +5861,7 @@ function TaskDetailModal({
                             <thead className="bg-zinc-800/50">
                               <tr className="text-left">
                                 <th className="p-2 font-medium text-purple-300">Arte</th>
-                                <th className="p-2 font-medium text-purple-300">Código</th>
+                                <th className="p-2 font-medium text-purple-300">CÃ³digo</th>
                                 <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                 <th className="p-2 font-medium text-purple-300">Mueble</th>
                                 <th className="p-2 font-medium text-purple-300">Medidas</th>
@@ -5864,7 +5900,7 @@ function TaskDetailModal({
                       <thead className="sticky top-0 bg-zinc-800 z-10">
                         <tr className="text-left">
                           <th className="p-3 font-medium text-purple-300">Arte</th>
-                          <th className="p-3 font-medium text-purple-300">Código</th>
+                          <th className="p-3 font-medium text-purple-300">CÃ³digo</th>
                           <th className="p-3 font-medium text-purple-300">Ciudad</th>
                           <th className="p-3 font-medium text-purple-300">Plaza</th>
                           <th className="p-3 font-medium text-purple-300">Mueble</th>
@@ -5905,16 +5941,16 @@ function TaskDetailModal({
                 <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
                   <div className="text-center">
                     <CheckCircle2 className="h-8 w-8 text-green-400 mx-auto mb-2" />
-                    <p className="text-green-300 font-medium">Instalación validada</p>
-                    <p className="text-sm text-zinc-400 mt-1">Esta instalación ha sido completada y validada.</p>
+                    <p className="text-green-300 font-medium">InstalaciÃ³n validada</p>
+                    <p className="text-sm text-zinc-400 mt-1">Esta instalaciÃ³n ha sido completada y validada.</p>
                   </div>
                 </div>
               ) : task.estatus === 'Atendido' ? (
                 <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4">
                   <div className="text-center">
                     <Clock className="h-8 w-8 text-yellow-400 mx-auto mb-2" />
-                    <p className="text-yellow-300 font-medium">Pendiente de validación</p>
-                    <p className="text-sm text-zinc-400 mt-1">El instalador ha marcado como instalado. Pendiente de validar en la pestaña "Validar Instalación".</p>
+                    <p className="text-yellow-300 font-medium">Pendiente de validaciÃ³n</p>
+                    <p className="text-sm text-zinc-400 mt-1">El instalador ha marcado como instalado. Pendiente de validar en la pestaÃ±a "Validar InstalaciÃ³n".</p>
                   </div>
                 </div>
               ) : canResolveProduccionTasks ? (
@@ -5944,14 +5980,14 @@ function TaskDetailModal({
                 </div>
               ) : (
                 <div className="bg-zinc-800/50 border border-border rounded-lg p-4 text-center">
-                  <p className="text-sm text-zinc-400">Tarea de instalación activa - Solo visualización</p>
+                  <p className="text-sm text-zinc-400">Tarea de instalaciÃ³n activa - Solo visualizaciÃ³n</p>
                 </div>
               )}
             </div>
           )}
 
-          {/* === VISTA ESPECIAL PARA ORDEN DE INSTALACIÓN === */}
-          {task.tipo === 'Orden de Instalación' && (
+          {/* === VISTA ESPECIAL PARA ORDEN DE INSTALACIÃ“N === */}
+          {task.tipo === 'Orden de InstalaciÃ³n' && (
             <div className="space-y-6">
               {/* Tabs */}
               <div className="flex gap-2 border-b border-border pb-2">
@@ -5982,10 +6018,10 @@ function TaskDetailModal({
                 <>
                   {/* Info de la Orden */}
                   <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                    <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Orden</h4>
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">InformaciÃ³n de la Orden</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
-                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <span className="text-zinc-500 text-xs">TÃ­tulo:</span>
                         <p className="text-white font-medium">{task.titulo || '-'}</p>
                       </div>
                       <div>
@@ -6011,12 +6047,12 @@ function TaskDetailModal({
                         <p className="text-white">{task.creador || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <span className="text-zinc-500 text-xs">Fecha creaciÃ³n:</span>
                         <p className="text-white">{task.fecha_inicio || '-'}</p>
                       </div>
                       {task.descripcion && (
                         <div className="col-span-2">
-                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <span className="text-zinc-500 text-xs">DescripciÃ³n:</span>
                           <p className="text-white">{task.descripcion}</p>
                         </div>
                       )}
@@ -6027,19 +6063,19 @@ function TaskDetailModal({
                   {task.estatus === 'Activada' && (
                     <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 flex items-center gap-2">
                       <Clock className="h-4 w-4 text-blue-400" />
-                      <span className="text-sm text-blue-300 font-medium">Activada - Esperando instalación por Operaciones</span>
+                      <span className="text-sm text-blue-300 font-medium">Activada - Esperando instalaciÃ³n por Operaciones</span>
                     </div>
                   )}
                   {task.estatus === 'Finalizada' && (
                     <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-400" />
-                      <span className="text-sm text-green-300 font-medium">Finalizada - Instalación completada por Operaciones</span>
+                      <span className="text-sm text-green-300 font-medium">Finalizada - InstalaciÃ³n completada por Operaciones</span>
                     </div>
                   )}
 
                   {/* Indicaciones por Archivo */}
                   <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                    <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Instalación por Archivo</h4>
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de InstalaciÃ³n por Archivo</h4>
                     {(() => {
                       let indicaciones: Record<string, string> = {};
                       let archivosFromEvidencia: { nombre: string; tipo: string; archivoData?: string; spot?: number }[] = [];
@@ -6144,7 +6180,7 @@ function TaskDetailModal({
                     })()}
                   </div>
 
-                  {/* Botón Activar (solo cuando estatus=Pendiente) */}
+                  {/* BotÃ³n Activar (solo cuando estatus=Pendiente) */}
                   {task.estatus === 'Pendiente' && (
                     <div className="mt-4 flex justify-end gap-3">
                       {/* Save indicaciones button */}
@@ -6194,7 +6230,7 @@ function TaskDetailModal({
                             onClose();
                           } catch (e) {
                             console.error('Error activando orden:', e);
-                            alert(e instanceof Error ? e.message : 'Error al activar orden de instalación');
+                            alert(e instanceof Error ? e.message : 'Error al activar orden de instalaciÃ³n');
                           } finally {
                             setIsSendingOrden(false);
                           }
@@ -6229,7 +6265,7 @@ function TaskDetailModal({
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                         <input
                           type="text"
-                          placeholder="Buscar por ID, código, nombre archivo..."
+                          placeholder="Buscar por ID, cÃ³digo, nombre archivo..."
                           value={programacionModalSearch}
                           onChange={(e) => setProgramacionModalSearch(e.target.value)}
                           className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
@@ -6245,7 +6281,7 @@ function TaskDetailModal({
                       </div>
                       <button
                         onClick={() => {
-                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'Periodo', 'Estado Arte'];
+                          const headers = ['ID', 'CÃ³digo', 'Tipo', 'UbicaciÃ³n', 'Plaza', 'Mueble', 'Ciudad', 'Periodo', 'Estado Arte'];
                           const rows = filteredProgramacionModalData.map(item => [
                             item.id,
                             item.codigo_unico,
@@ -6279,9 +6315,9 @@ function TaskDetailModal({
                       <thead className="bg-zinc-800/80 sticky top-0 z-10">
                         <tr>
                           <th className="text-left px-3 py-2 text-zinc-400 font-medium">ID</th>
-                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Código</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">CÃ³digo</th>
                           <th className="text-left px-3 py-2 text-zinc-400 font-medium">Tipo</th>
-                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Ubicación</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">UbicaciÃ³n</th>
                           <th className="text-left px-3 py-2 text-zinc-400 font-medium">Plaza</th>
                           <th className="text-left px-3 py-2 text-zinc-400 font-medium">Mueble</th>
                           <th className="text-left px-3 py-2 text-zinc-400 font-medium">Ciudad</th>
@@ -6315,8 +6351,8 @@ function TaskDetailModal({
             </div>
           )}
 
-          {/* === VISTA ESPECIAL PARA ORDEN DE PROGRAMACIÓN === */}
-          {task.tipo === 'Orden de Programación' && (
+          {/* === VISTA ESPECIAL PARA ORDEN DE PROGRAMACIÃ“N === */}
+          {task.tipo === 'Orden de ProgramaciÃ³n' && (
             <div className="space-y-6">
               {/* Tabs */}
               <div className="flex gap-2 border-b border-border pb-2">
@@ -6347,10 +6383,10 @@ function TaskDetailModal({
                 <>
                   {/* Info de la Tarea */}
                   <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                    <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Orden</h4>
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">InformaciÃ³n de la Orden</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
-                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <span className="text-zinc-500 text-xs">TÃ­tulo:</span>
                         <p className="text-white font-medium">{task.titulo || '-'}</p>
                       </div>
                       <div>
@@ -6376,12 +6412,12 @@ function TaskDetailModal({
                         <p className="text-white">{task.creador || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <span className="text-zinc-500 text-xs">Fecha creaciÃ³n:</span>
                         <p className="text-white">{task.fecha_inicio || '-'}</p>
                       </div>
                       {task.descripcion && (
                         <div className="col-span-2">
-                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <span className="text-zinc-500 text-xs">DescripciÃ³n:</span>
                           <p className="text-white">{task.descripcion}</p>
                         </div>
                       )}
@@ -6392,19 +6428,19 @@ function TaskDetailModal({
                   {task.estatus === 'Enviada' && (
                     <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 flex items-center gap-2">
                       <Clock className="h-4 w-4 text-blue-400" />
-                      <span className="text-sm text-blue-300 font-medium">Enviada - Esperando programación por Operaciones</span>
+                      <span className="text-sm text-blue-300 font-medium">Enviada - Esperando programaciÃ³n por Operaciones</span>
                     </div>
                   )}
                   {task.estatus === 'Finalizada' && (
                     <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-400" />
-                      <span className="text-sm text-green-300 font-medium">Finalizada - Programación completada por Operaciones</span>
+                      <span className="text-sm text-green-300 font-medium">Finalizada - ProgramaciÃ³n completada por Operaciones</span>
                     </div>
                   )}
 
                   {/* Indicaciones por Arte */}
                   <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                    <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Programación por Arte</h4>
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de ProgramaciÃ³n por Arte</h4>
                     {(() => {
                       let indicaciones: Record<string, string> = {};
                       let archivosFromEvidencia: { archivo: string; archivoData?: string; spot: number; tipo: string }[] = [];
@@ -6537,7 +6573,7 @@ function TaskDetailModal({
                     })()}
                   </div>
 
-                  {/* Botón Enviar a Operaciones (solo cuando estatus=Pendiente) */}
+                  {/* BotÃ³n Enviar a Operaciones (solo cuando estatus=Pendiente) */}
                   {task.estatus === 'Pendiente' && (
                     <div className="mt-4 flex justify-end gap-3">
                       {/* Save indicaciones button */}
@@ -6587,7 +6623,7 @@ function TaskDetailModal({
                             onClose();
                           } catch (e) {
                             console.error('Error enviando orden:', e);
-                            alert(e instanceof Error ? e.message : 'Error al enviar orden de programación');
+                            alert(e instanceof Error ? e.message : 'Error al enviar orden de programaciÃ³n');
                           } finally {
                             setIsSendingOrden(false);
                           }
@@ -6612,7 +6648,7 @@ function TaskDetailModal({
                 </>
               )}
 
-              {/* Tab Ver Tabla - Reuse same table as Programación */}
+              {/* Tab Ver Tabla - Reuse same table as ProgramaciÃ³n */}
               {programacionTab === 'tabla' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -6622,7 +6658,7 @@ function TaskDetailModal({
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                         <input
                           type="text"
-                          placeholder="Buscar por ID, código, nombre archivo..."
+                          placeholder="Buscar por ID, cÃ³digo, nombre archivo..."
                           value={programacionModalSearch}
                           onChange={(e) => setProgramacionModalSearch(e.target.value)}
                           className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
@@ -6638,7 +6674,7 @@ function TaskDetailModal({
                       </div>
                       <button
                         onClick={() => {
-                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Periodo', 'Estado Arte'];
+                          const headers = ['ID', 'CÃ³digo', 'Tipo', 'UbicaciÃ³n', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Periodo', 'Estado Arte'];
                           const rows = filteredProgramacionModalData.map(item => [
                             item.id,
                             item.codigo_unico,
@@ -6674,9 +6710,9 @@ function TaskDetailModal({
                       <thead className="sticky top-0 bg-zinc-900 z-10">
                         <tr className="border-b border-border">
                           <th className="text-left p-2 text-zinc-400 font-medium">ID</th>
-                          <th className="text-left p-2 text-zinc-400 font-medium">Código</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">CÃ³digo</th>
                           <th className="text-left p-2 text-zinc-400 font-medium">Tipo</th>
-                          <th className="text-left p-2 text-zinc-400 font-medium">Ubicación</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">UbicaciÃ³n</th>
                           <th className="text-left p-2 text-zinc-400 font-medium">Plaza</th>
                           <th className="text-left p-2 text-zinc-400 font-medium">Mueble</th>
                           <th className="text-left p-2 text-zinc-400 font-medium">Ciudad</th>
@@ -6716,8 +6752,8 @@ function TaskDetailModal({
             </div>
           )}
 
-          {/* === VISTA ESPECIAL PARA TAREAS DE PROGRAMACIÓN === */}
-          {task.tipo === 'Programación' && (
+          {/* === VISTA ESPECIAL PARA TAREAS DE PROGRAMACIÃ“N === */}
+          {task.tipo === 'ProgramaciÃ³n' && (
             <div className="space-y-6">
               {/* Tabs */}
               <div className="flex gap-2 border-b border-border pb-2">
@@ -6748,10 +6784,10 @@ function TaskDetailModal({
                 <>
                   {/* Info de la Tarea */}
                   <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                    <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Tarea</h4>
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">InformaciÃ³n de la Tarea</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
-                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <span className="text-zinc-500 text-xs">TÃ­tulo:</span>
                         <p className="text-white font-medium">{task.titulo || '-'}</p>
                       </div>
                       <div>
@@ -6773,12 +6809,12 @@ function TaskDetailModal({
                         <p className="text-white">{task.creador || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <span className="text-zinc-500 text-xs">Fecha creaciÃ³n:</span>
                         <p className="text-white">{task.fecha_inicio || '-'}</p>
                       </div>
                       {task.descripcion && (
                         <div className="col-span-2">
-                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <span className="text-zinc-500 text-xs">DescripciÃ³n:</span>
                           <p className="text-white">{task.descripcion}</p>
                         </div>
                       )}
@@ -6787,7 +6823,7 @@ function TaskDetailModal({
 
                   {/* Indicaciones por Arte */}
                   <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                    <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Programación por Arte</h4>
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de ProgramaciÃ³n por Arte</h4>
                     {(() => {
                       let indicaciones: Record<string, string> = {};
                       let archivosFromEvidencia: { archivo: string; archivoData?: string; spot: number; tipo: string }[] = [];
@@ -6858,7 +6894,7 @@ function TaskDetailModal({
                               const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
                               const isVideo = archivo.tipo === 'video';
                               const indicacion = indicaciones[archivo.archivo] || '';
-                              // Usar archivoData (base64) si está disponible, si no fallback a archivo
+                              // Usar archivoData (base64) si estÃ¡ disponible, si no fallback a archivo
                               const fileUrl = getImageUrl(archivo.archivoData || archivo.archivo);
                               const isProgramado = currentProgramados[archivo.archivo] === true;
 
@@ -6966,7 +7002,7 @@ function TaskDetailModal({
                             </div>
                           </div>
 
-                          {/* Botón para marcar como completada - Solo habilitado si todos están programados */}
+                          {/* BotÃ³n para marcar como completada - Solo habilitado si todos estÃ¡n programados */}
                           {(task.estatus === 'Activo' || task.estatus === 'Pendiente') && canResolveProduccionTasks && (
                             <div className="mt-4 flex justify-end">
                               <button
@@ -7003,7 +7039,7 @@ function TaskDetailModal({
               {/* Tab Ver Tabla - Con agrupaciones y filtros */}
               {programacionTab === 'tabla' && (
                 <div className="space-y-4">
-                  {/* Toolbar de búsqueda y filtros */}
+                  {/* Toolbar de bÃºsqueda y filtros */}
                   <div className="flex items-center justify-between gap-4 flex-wrap">
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-zinc-400">{filteredProgramacionModalData.length} de {taskInventory.length} items</span>
@@ -7011,7 +7047,7 @@ function TaskDetailModal({
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                         <input
                           type="text"
-                          placeholder="Buscar por ID, código, nombre archivo..."
+                          placeholder="Buscar por ID, cÃ³digo, nombre archivo..."
                           value={programacionModalSearch}
                           onChange={(e) => setProgramacionModalSearch(e.target.value)}
                           className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
@@ -7025,10 +7061,10 @@ function TaskDetailModal({
                           </button>
                         )}
                       </div>
-                      {/* Botón exportar CSV */}
+                      {/* BotÃ³n exportar CSV */}
                       <button
                         onClick={() => {
-                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Periodo', 'Estado Arte'];
+                          const headers = ['ID', 'CÃ³digo', 'Tipo', 'UbicaciÃ³n', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Periodo', 'Estado Arte'];
                           const rows = filteredProgramacionModalData.map(item => [
                             item.id,
                             item.codigo_unico,
@@ -7098,7 +7134,7 @@ function TaskDetailModal({
                           <p className="text-sm">Sin inventario asociado</p>
                         </div>
                       ) : activeGroupingsProgramacionModal.length > 0 ? (
-                        /* Vista agrupada jerárquica de 3 niveles */
+                        /* Vista agrupada jerÃ¡rquica de 3 niveles */
                         <div className="divide-y divide-border">
                           {Object.entries(programacionModalGroupedInventory).map(([level1Key, level2Groups]) => {
                             const level1NodeKey = `prog-modal-${level1Key}`;
@@ -7181,9 +7217,9 @@ function TaskDetailModal({
                                                             <tr className="border-b border-border text-left">
                                                               <th className="p-2 font-medium text-purple-300">ID</th>
                                                               <th className="p-2 font-medium text-purple-300">Archivo</th>
-                                                              <th className="p-2 font-medium text-purple-300">Código</th>
+                                                              <th className="p-2 font-medium text-purple-300">CÃ³digo</th>
                                                               <th className="p-2 font-medium text-purple-300">Tipo</th>
-                                                              <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                                              <th className="p-2 font-medium text-purple-300">UbicaciÃ³n</th>
                                                               <th className="p-2 font-medium text-purple-300">Plaza</th>
                                                               <th className="p-2 font-medium text-purple-300">Mueble</th>
                                                               <th className="p-2 font-medium text-purple-300">Ciudad</th>
@@ -7257,9 +7293,9 @@ function TaskDetailModal({
                             <tr>
                               <th className="p-2 text-left text-xs font-medium text-zinc-400">ID</th>
                               <th className="p-2 text-left text-xs font-medium text-zinc-400">Archivo</th>
-                              <th className="p-2 text-left text-xs font-medium text-zinc-400">Código</th>
+                              <th className="p-2 text-left text-xs font-medium text-zinc-400">CÃ³digo</th>
                               <th className="p-2 text-left text-xs font-medium text-zinc-400">Tipo</th>
-                              <th className="p-2 text-left text-xs font-medium text-zinc-400">Ubicación</th>
+                              <th className="p-2 text-left text-xs font-medium text-zinc-400">UbicaciÃ³n</th>
                               <th className="p-2 text-left text-xs font-medium text-zinc-400">Plaza</th>
                               <th className="p-2 text-left text-xs font-medium text-zinc-400">Mueble</th>
                               <th className="p-2 text-left text-xs font-medium text-zinc-400">Ciudad</th>
@@ -7332,12 +7368,12 @@ function TaskDetailModal({
             />
           )}
 
-          {/* Tab Resumen - Solo para tareas que NO son Impresión, Recepción, Instalación, Testigo, Programación ni Orden de Programación */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Orden de Programación' && activeTab === 'resumen' && (
+          {/* Tab Resumen - Solo para tareas que NO son ImpresiÃ³n, RecepciÃ³n, InstalaciÃ³n, Testigo, ProgramaciÃ³n ni Orden de ProgramaciÃ³n */}
+          {task.tipo !== 'ImpresiÃ³n' && task.tipo !== 'RecepciÃ³n' && task.tipo !== 'InstalaciÃ³n' && task.tipo !== 'Testigo' && task.tipo !== 'ProgramaciÃ³n' && task.tipo !== 'Orden de ProgramaciÃ³n' && activeTab === 'resumen' && (
             <div className="space-y-4">
               {/* Info de la tarea - Compacta */}
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Tarea</h4>
+                <h4 className="text-sm font-medium text-purple-300 mb-3">InformaciÃ³n de la Tarea</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                   <div>
                     <span className="text-zinc-500">Tipo:</span>
@@ -7372,7 +7408,7 @@ function TaskDetailModal({
                     <p className="text-white font-medium">{task.responsable || task.creador || '-'}</p>
                   </div>
                 </div>
-                {/* Sección especial para tareas de Corrección (rechazo) */}
+                {/* SecciÃ³n especial para tareas de CorrecciÃ³n (rechazo) */}
                 {task.tipo === 'Correccion' && task.descripcion && (
                   <div className="mt-3 pt-3 border-t border-border">
                     <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
@@ -7386,7 +7422,7 @@ function TaskDetailModal({
                         // Limpiar prefijos/sufijos del formato viejo y extraer solo el motivo real
                         let motivoRechazo = desc
                           .replace(/^Artes rechazados con el siguiente motivo:\s*/i, '')
-                          .replace(/Por favor corrige los artes y vuelve a enviar a revisión\.?\s*/gi, '')
+                          .replace(/Por favor corrige los artes y vuelve a enviar a revisiÃ³n\.?\s*/gi, '')
                           .replace(/\*\*[^*]+:\*\*\s*/g, '')
                           .replace(/---/g, '')
                           .trim();
@@ -7417,11 +7453,11 @@ function TaskDetailModal({
                                     );
                                   }
                                 }
-                              } catch { /* evidencia no es JSON válido, ignorar */ }
+                              } catch { /* evidencia no es JSON vÃ¡lido, ignorar */ }
                               return null;
                             })()}
                             <p className="text-amber-400/80 text-xs mt-2">
-                              ⚠️ Por favor corrige los artes y vuelve a enviar a revisión.
+                              âš ï¸ Por favor corrige los artes y vuelve a enviar a revisiÃ³n.
                             </p>
                           </div>
                         );
@@ -7429,12 +7465,12 @@ function TaskDetailModal({
                     </div>
                   </div>
                 )}
-                {/* Descripción normal para otros tipos de tarea */}
+                {/* DescripciÃ³n normal para otros tipos de tarea */}
                 {task.tipo !== 'Correccion' && (task.descripcion || task.contenido) && (
                   <div className="mt-3 pt-3 border-t border-border grid grid-cols-1 md:grid-cols-2 gap-3">
                     {task.descripcion && (
                       <div>
-                        <span className="text-zinc-500 text-sm">Descripción:</span>
+                        <span className="text-zinc-500 text-sm">DescripciÃ³n:</span>
                         <p className="text-white text-sm mt-1">{task.descripcion}</p>
                       </div>
                     )}
@@ -7446,7 +7482,7 @@ function TaskDetailModal({
                     )}
                   </div>
                 )}
-                {/* Contenido para tareas de Corrección */}
+                {/* Contenido para tareas de CorrecciÃ³n */}
                 {task.tipo === 'Correccion' && task.contenido && (
                   <div className="mt-3 pt-3 border-t border-border">
                     <span className="text-zinc-500 text-sm">Contenido:</span>
@@ -7507,7 +7543,7 @@ function TaskDetailModal({
                             <thead className="bg-zinc-800/50">
                               <tr className="text-left">
                                 <th className="p-2 font-medium text-purple-300">Arte</th>
-                                <th className="p-2 font-medium text-purple-300">Código</th>
+                                <th className="p-2 font-medium text-purple-300">CÃ³digo</th>
                                 <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                 <th className="p-2 font-medium text-purple-300">Mueble</th>
                                 <th className="p-2 font-medium text-purple-300">Medidas</th>
@@ -7546,7 +7582,7 @@ function TaskDetailModal({
                       <thead className="sticky top-0 bg-zinc-800 z-10">
                         <tr className="text-left">
                           <th className="p-3 font-medium text-purple-300">Arte</th>
-                          <th className="p-3 font-medium text-purple-300">Código</th>
+                          <th className="p-3 font-medium text-purple-300">CÃ³digo</th>
                           <th className="p-3 font-medium text-purple-300">Ciudad</th>
                           <th className="p-3 font-medium text-purple-300">Plaza</th>
                           <th className="p-3 font-medium text-purple-300">Mueble</th>
@@ -7612,8 +7648,8 @@ function TaskDetailModal({
             </div>
           )}
 
-          {/* Tab Editar - Solo para tareas que NO son Impresión y con permisos */}
-          {task?.tipo !== 'Impresión' && activeTab === 'editar' && canResolveCurrentTask && (
+          {/* Tab Editar - Solo para tareas que NO son ImpresiÃ³n y con permisos */}
+          {task?.tipo !== 'ImpresiÃ³n' && activeTab === 'editar' && canResolveCurrentTask && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Columna Izquierda - Lista de artes con checkbox */}
               <div className="bg-zinc-900/50 rounded-lg border border-border">
@@ -7690,7 +7726,7 @@ function TaskDetailModal({
                                   />
                                 </th>
                                 <th className="p-2 font-medium text-purple-300">Arte</th>
-                                <th className="p-2 font-medium text-purple-300">Código</th>
+                                <th className="p-2 font-medium text-purple-300">CÃ³digo</th>
                                 <th className="p-2 font-medium text-purple-300">Mueble</th>
                                 <th className="p-2 font-medium text-purple-300">Medidas</th>
                               </tr>
@@ -7764,7 +7800,7 @@ function TaskDetailModal({
                             />
                           </th>
                           <th className="p-3 font-medium text-purple-300">Arte</th>
-                          <th className="p-3 font-medium text-purple-300">Código</th>
+                          <th className="p-3 font-medium text-purple-300">CÃ³digo</th>
                           <th className="p-3 font-medium text-purple-300">Ciudad</th>
                           <th className="p-3 font-medium text-purple-300">Mueble</th>
                           <th className="p-3 font-medium text-purple-300">Medidas</th>
@@ -7829,7 +7865,7 @@ function TaskDetailModal({
               {/* Columna Derecha - Opciones de edicion */}
               <div className="space-y-4">
                 {isDigitalEditarSelection ? (
-                  /* ===== INTERFAZ DIGITAL - MÚLTIPLES ARCHIVOS ===== */
+                  /* ===== INTERFAZ DIGITAL - MÃšLTIPLES ARCHIVOS ===== */
                   <>
                     {/* Header info */}
                     <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
@@ -7837,10 +7873,10 @@ function TaskDetailModal({
                         <Film className="h-4 w-4 text-cyan-400 flex-shrink-0 mt-0.5" />
                         <div>
                           <p className="text-xs text-cyan-300 font-medium">
-                            Inventario Digital - Rotación de contenido
+                            Inventario Digital - RotaciÃ³n de contenido
                           </p>
                           <p className="text-[10px] text-cyan-400/70 mt-1">
-                            Puedes subir múltiples imágenes y/o videos que se mostrarán en rotación.
+                            Puedes subir mÃºltiples imÃ¡genes y/o videos que se mostrarÃ¡n en rotaciÃ³n.
                             Arrastra para reordenar la secuencia.
                           </p>
                         </div>
@@ -7902,7 +7938,7 @@ function TaskDetailModal({
                     <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="text-xs font-medium text-zinc-400">
-                          Archivos para rotación
+                          Archivos para rotaciÃ³n
                         </label>
                         <div className="flex items-center gap-2">
                           {filesToDelete.length > 0 && (
@@ -7933,7 +7969,7 @@ function TaskDetailModal({
                             <div>
                               <Upload className="h-10 w-10 mx-auto mb-2 opacity-30" />
                               <p className="text-xs">
-                                No hay archivos. Selecciona archivos para agregarlos a la rotación.
+                                No hay archivos. Selecciona archivos para agregarlos a la rotaciÃ³n.
                               </p>
                             </div>
                           </div>
@@ -7942,7 +7978,7 @@ function TaskDetailModal({
                             {/* Archivos existentes del servidor */}
                             {existingDigitalFilesEditar.map((existingFile) => {
                               const isMarkedForDeletion = filesToDelete.includes(existingFile.id);
-                              // Usar archivoData (base64) si está disponible
+                              // Usar archivoData (base64) si estÃ¡ disponible
                               const imageUrl = getImageUrl(existingFile.archivoData || existingFile.archivo);
                               return (
                                 <div
@@ -7989,7 +8025,7 @@ function TaskDetailModal({
                                       ) : (
                                         <Image className="h-2.5 w-2.5 text-purple-400" />
                                       )}
-                                      {existingFile.tipo === 'video' ? 'Video' : 'Imagen'} • Guardado en servidor
+                                      {existingFile.tipo === 'video' ? 'Video' : 'Imagen'} â€¢ Guardado en servidor
                                     </p>
                                   </div>
 
@@ -8076,7 +8112,7 @@ function TaskDetailModal({
                                     ) : (
                                       <Image className="h-2.5 w-2.5 text-purple-400" />
                                     )}
-                                    {digitalFile.type === 'video' ? 'Video' : 'Imagen'} •{' '}
+                                    {digitalFile.type === 'video' ? 'Video' : 'Imagen'} â€¢{' '}
                                     {(digitalFile.file.size / 1024 / 1024).toFixed(2)} MB
                                     <span className="text-green-400 ml-1">(Nuevo)</span>
                                   </p>
@@ -8223,23 +8259,23 @@ function TaskDetailModal({
 
           {/* Tab Atender */}
           {activeTab === 'atender' && task?.tipo === 'Correccion' && canResolveCurrentTask && (
-            // Vista especial para tareas de Corrección - Solo enviar a revisión
+            // Vista especial para tareas de CorrecciÃ³n - Solo enviar a revisiÃ³n
             <div className="space-y-4">
               <div className="bg-amber-900/20 border border-amber-500/30 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <RefreshCw className="h-5 w-5 text-amber-400" />
-                  <h4 className="text-sm font-medium text-amber-300">Enviar artes corregidos a revisión</h4>
+                  <h4 className="text-sm font-medium text-amber-300">Enviar artes corregidos a revisiÃ³n</h4>
                 </div>
                 <p className="text-sm text-zinc-400">
-                  Una vez que hayas corregido los artes en el paso anterior, haz clic en el botón para enviarlos de vuelta a revisión.
-                  Se creará una nueva tarea de revisión asignada a <span className="text-white font-medium">{task.responsable || task.creador || 'el revisor'}</span>.
+                  Una vez que hayas corregido los artes en el paso anterior, haz clic en el botÃ³n para enviarlos de vuelta a revisiÃ³n.
+                  Se crearÃ¡ una nueva tarea de revisiÃ³n asignada a <span className="text-white font-medium">{task.responsable || task.creador || 'el revisor'}</span>.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Columna Principal - Lista de artes */}
                 <div className="lg:col-span-2 space-y-4">
-                  {/* Lista de artes que se enviarán */}
+                  {/* Lista de artes que se enviarÃ¡n */}
                   <div className="bg-zinc-900/50 rounded-lg border border-border">
                     <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
                       <h4 className="text-sm font-medium text-purple-300">
@@ -8284,7 +8320,7 @@ function TaskDetailModal({
                     </div>
                   </div>
 
-                  {/* Botón de enviar a revisión */}
+                  {/* BotÃ³n de enviar a revisiÃ³n */}
                   <div className="flex justify-end">
                     <button
                       onClick={handleEnviarARevision}
@@ -8299,7 +8335,7 @@ function TaskDetailModal({
                       ) : (
                         <>
                           <Send className="h-4 w-4" />
-                          Enviar a Revisión
+                          Enviar a RevisiÃ³n
                         </>
                       )}
                     </button>
@@ -8322,10 +8358,10 @@ function TaskDetailModal({
             </div>
           )}
 
-          {/* Tab Atender - Vista normal para revisión de artes (no Corrección ni Impresión) */}
-          {activeTab === 'atender' && task?.tipo !== 'Correccion' && task?.tipo !== 'Impresión' && canResolveCurrentTask && (
+          {/* Tab Atender - Vista normal para revisiÃ³n de artes (no CorrecciÃ³n ni ImpresiÃ³n) */}
+          {activeTab === 'atender' && task?.tipo !== 'Correccion' && task?.tipo !== 'ImpresiÃ³n' && canResolveCurrentTask && (
             <div className="space-y-4">
-              {/* Toolbar de agrupación */}
+              {/* Toolbar de agrupaciÃ³n */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap gap-2">
                   {(['inventario', 'ciudad', 'grupo'] as const).map((g) => (
@@ -8365,7 +8401,7 @@ function TaskDetailModal({
                                 <span className="text-xs text-zinc-500 ml-2">({items.length} items)</span>
                               )}
                             </div>
-                            {/* Select de decisión a nivel de grupo */}
+                            {/* Select de decisiÃ³n a nivel de grupo */}
                             <select
                               value={decisiones[groupKey]?.decision || ''}
                               onChange={(e) => handleDecisionChange(groupKey, e.target.value)}
@@ -8377,16 +8413,16 @@ function TaskDetailModal({
                                   : 'border-red-500/50 text-red-400'
                               }`}
                             >
-                              <option value="">-- Seleccionar acción --</option>
-                              <option value="aprobar">✓ Aprobar</option>
-                              <option value="rechazar">✗ Rechazar</option>
+                              <option value="">-- Seleccionar acciÃ³n --</option>
+                              <option value="aprobar">âœ“ Aprobar</option>
+                              <option value="rechazar">âœ— Rechazar</option>
                             </select>
                           </div>
-                          {/* Textarea para comentario de aprobación (opcional) */}
+                          {/* Textarea para comentario de aprobaciÃ³n (opcional) */}
                           {decisiones[groupKey]?.decision === 'aprobar' && (
                             <div className="mt-2">
                               <textarea
-                                placeholder="Comentario de aprobación (opcional)"
+                                placeholder="Comentario de aprobaciÃ³n (opcional)"
                                 value={decisiones[groupKey]?.comentarioAprobacion || ''}
                                 onChange={(e) => handleComentarioAprobacionChange(groupKey, e.target.value)}
                                 className="w-full px-3 py-2 text-sm rounded-lg bg-zinc-800 border border-zinc-700 resize-none"
@@ -8458,7 +8494,7 @@ function TaskDetailModal({
                                     {/* Preview */}
                                     <div className="flex-shrink-0">
                                       {isDigital && digitalSummary ? (
-                                        // Para digitales: mostrar botón con contador que abre galería
+                                        // Para digitales: mostrar botÃ³n con contador que abre galerÃ­a
                                         <button
                                           onClick={() => {
                                             const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
@@ -8467,7 +8503,7 @@ function TaskDetailModal({
                                             }
                                           }}
                                           className="w-20 h-16 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
-                                          title="Ver galería digital"
+                                          title="Ver galerÃ­a digital"
                                         >
                                           <Film className="h-5 w-5 text-cyan-400 mb-1" />
                                           <span className="text-cyan-400 font-bold text-sm">{digitalSummary.total}</span>
@@ -8531,7 +8567,7 @@ function TaskDetailModal({
                                 {/* Preview de la imagen representativa */}
                                 <div className="flex-shrink-0 relative">
                                   {isDigital && digitalSummary ? (
-                                    // Para digitales: mostrar botón con contador que abre galería
+                                    // Para digitales: mostrar botÃ³n con contador que abre galerÃ­a
                                     <button
                                       onClick={() => {
                                         const rsvIds = representativeItem.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
@@ -8540,7 +8576,7 @@ function TaskDetailModal({
                                         }
                                       }}
                                       className="w-32 h-24 rounded-lg bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
-                                      title="Ver galería digital"
+                                      title="Ver galerÃ­a digital"
                                     >
                                       <Film className="h-8 w-8 text-cyan-400 mb-1" />
                                       <span className="text-cyan-400 font-bold text-lg">{digitalSummary.total}</span>
@@ -8591,7 +8627,7 @@ function TaskDetailModal({
                                       </span>
                                     )}
                                   </div>
-                                  {/* Botón de descarga - solo para tradicionales */}
+                                  {/* BotÃ³n de descarga - solo para tradicionales */}
                                   {!isDigital && representativeItem?.archivo_arte && (
                                     <button
                                       onClick={() => downloadImage(getImageUrl(representativeItem.archivo_arte)!, `${groupKey}.jpg`)}
@@ -8613,7 +8649,7 @@ function TaskDetailModal({
                     ))}
                   </div>
 
-                  {/* Footer con validación y botón Finalizar */}
+                  {/* Footer con validaciÃ³n y botÃ³n Finalizar */}
                   <div className="border border-border rounded-lg bg-zinc-900/50 p-4">
                     {validationErrors.length > 0 && (
                       <div className="mb-4 p-3 bg-red-900/30 border border-red-500/50 rounded-lg">
@@ -8621,7 +8657,7 @@ function TaskDetailModal({
                         <ul className="text-xs text-red-300 list-disc list-inside space-y-0.5">
                           {validationErrors.slice(0, 5).map((err, i) => <li key={i}>{err}</li>)}
                           {validationErrors.length > 5 && (
-                            <li>...y {validationErrors.length - 5} más</li>
+                            <li>...y {validationErrors.length - 5} mÃ¡s</li>
                           )}
                         </ul>
                       </div>
@@ -8647,7 +8683,7 @@ function TaskDetailModal({
                         ) : (
                           <>
                             <CheckCircle2 className="h-4 w-4" />
-                            Finalizar Revisión
+                            Finalizar RevisiÃ³n
                           </>
                         )}
                       </button>
@@ -8721,21 +8757,21 @@ function CreateTaskModal({
   // Obtener usuario actual
   const { user } = useAuthStore();
 
-  // Query para usuarios (asignados) - básico para otros tipos de tarea
+  // Query para usuarios (asignados) - bÃ¡sico para otros tipos de tarea
   const { data: usuariosData, isLoading: isLoadingUsuarios } = useQuery({
     queryKey: ['campanas-usuarios'],
     queryFn: () => campanasService.getUsuarios(),
   });
   const usuarios = usuariosData || [];
 
-  // Query para usuarios con área (filtrado por equipo) - para Revisión de artes
+  // Query para usuarios con Ã¡rea (filtrado por equipo) - para RevisiÃ³n de artes
   const { data: usuariosConArea } = useQuery({
     queryKey: ['solicitudes-users', 'team-filtered-revision-artes'],
     queryFn: () => solicitudesService.getUsers(undefined, true),
     enabled: isOpen,
   });
 
-  // Query para TODOS los usuarios (sin filtro de equipo) - para Impresión (área Compras)
+  // Query para TODOS los usuarios (sin filtro de equipo) - para ImpresiÃ³n (Ã¡rea Compras)
   const { data: todosUsuarios } = useQuery({
     queryKey: ['solicitudes-users', 'all-users-impresion'],
     queryFn: () => solicitudesService.getUsers(undefined, false),
@@ -8756,10 +8792,10 @@ function CreateTaskModal({
     }
   }, [isOpen, initialTipo]);
 
-  // Pre-llenar asignados con usuarios de Mercadotecnia (de mi equipo) para Revisión de artes
+  // Pre-llenar asignados con usuarios de Mercadotecnia (de mi equipo) para RevisiÃ³n de artes
   useEffect(() => {
-    if (isOpen && tipo === 'Revisión de artes' && usuariosConArea) {
-      // Filtrar usuarios del área de Mercadotecnia
+    if (isOpen && tipo === 'RevisiÃ³n de artes' && usuariosConArea) {
+      // Filtrar usuarios del Ã¡rea de Mercadotecnia
       const mercadotecniaUsers = usuariosConArea.filter(u =>
         u.area?.toLowerCase() === 'mercadotecnia'
       );
@@ -8768,10 +8804,10 @@ function CreateTaskModal({
     }
   }, [isOpen, tipo, usuariosConArea]);
 
-  // Pre-llenar asignados con TODOS los usuarios de Compras para Impresión
+  // Pre-llenar asignados con TODOS los usuarios de Compras para ImpresiÃ³n
   useEffect(() => {
-    if (isOpen && tipo === 'Impresión' && todosUsuarios) {
-      // Filtrar usuarios del área de Compras
+    if (isOpen && tipo === 'ImpresiÃ³n' && todosUsuarios) {
+      // Filtrar usuarios del Ã¡rea de Compras
       const comprasUsers = todosUsuarios.filter(u =>
         u.area?.toLowerCase() === 'compras'
       );
@@ -8783,12 +8819,12 @@ function CreateTaskModal({
   const [proveedorId, setProveedorId] = useState<number | null>(null);
   const [fechaFin, setFechaFin] = useState('');
   const [estatus, setEstatus] = useState<string>('Pendiente');
-  // Campos específicos para Instalación
+  // Campos especÃ­ficos para InstalaciÃ³n
   const [fechaInstalacion, setFechaInstalacion] = useState('');
   const [horaInstalacion, setHoraInstalacion] = useState('');
   const [contactoSitio, setContactoSitio] = useState('');
   const [telefonoContacto, setTelefonoContacto] = useState('');
-  // Campos específicos para Revisión de artes
+  // Campos especÃ­ficos para RevisiÃ³n de artes
   const [identificador, setIdentificador] = useState('');
   const [fechaEntrega, setFechaEntrega] = useState(() => {
     const d = new Date();
@@ -8799,23 +8835,23 @@ function CreateTaskModal({
   const [asignadoNombre, setAsignadoNombre] = useState(''); // Nombre del usuario seleccionado
   const [asignadoSearch, setAsignadoSearch] = useState('');
   const [showAsignadoDropdown, setShowAsignadoDropdown] = useState(false);
-  // Para Revisión de artes - múltiples asignados
+  // Para RevisiÃ³n de artes - mÃºltiples asignados
   const [selectedAsignadosRevision, setSelectedAsignadosRevision] = useState<{ id: number; nombre: string }[]>([]);
   const [asignadoSearchRevision, setAsignadoSearchRevision] = useState('');
   const [showAsignadoDropdownRevision, setShowAsignadoDropdownRevision] = useState(false);
-  // Para Impresión - múltiples asignados (área Compras)
+  // Para ImpresiÃ³n - mÃºltiples asignados (Ã¡rea Compras)
   const [selectedAsignadosImpresion, setSelectedAsignadosImpresion] = useState<{ id: number; nombre: string }[]>([]);
   const [asignadoSearchImpresion, setAsignadoSearchImpresion] = useState('');
   const [showAsignadoDropdownImpresion, setShowAsignadoDropdownImpresion] = useState(false);
-  // Para Instalación - múltiples asignados (área Operaciones)
+  // Para InstalaciÃ³n - mÃºltiples asignados (Ã¡rea Operaciones)
   const [selectedAsignadosInstalacion, setSelectedAsignadosInstalacion] = useState<{ id: number; nombre: string }[]>([]);
   const [asignadoSearchInstalacion, setAsignadoSearchInstalacion] = useState('');
   const [showAsignadoDropdownInstalacion, setShowAsignadoDropdownInstalacion] = useState(false);
-  // Para Testigo - múltiples asignados (área Operaciones)
+  // Para Testigo - mÃºltiples asignados (Ã¡rea Operaciones)
   const [selectedAsignadosTestigo, setSelectedAsignadosTestigo] = useState<{ id: number; nombre: string }[]>([]);
   const [asignadoSearchTestigo, setAsignadoSearchTestigo] = useState('');
   const [showAsignadoDropdownTestigo, setShowAsignadoDropdownTestigo] = useState(false);
-  // Para Programación - múltiples asignados (área Operaciones)
+  // Para ProgramaciÃ³n - mÃºltiples asignados (Ã¡rea Operaciones)
   const [selectedAsignadosProgramacion, setSelectedAsignadosProgramacion] = useState<{ id: number; nombre: string }[]>([]);
   const [asignadoSearchProgramacion, setAsignadoSearchProgramacion] = useState('');
   const [showAsignadoDropdownProgramacion, setShowAsignadoDropdownProgramacion] = useState(false);
@@ -8823,10 +8859,10 @@ function CreateTaskModal({
     const now = new Date();
     return now.toISOString().slice(0, 16);
   });
-  // Campos específicos para Impresión - impresiones por cada arte (agrupado por archivo)
+  // Campos especÃ­ficos para ImpresiÃ³n - impresiones por cada arte (agrupado por archivo)
   const [impresiones, setImpresiones] = useState<Record<string, number>>({});
 
-  // Campos específicos para Programación - indicaciones por cada archivo digital
+  // Campos especÃ­ficos para ProgramaciÃ³n - indicaciones por cada archivo digital
   const [programacionIndicaciones, setProgramacionIndicaciones] = useState<Record<string, string>>({});
   const [archivosDigitalesProgramacion, setArchivosDigitalesProgramacion] = useState<{
     id: number;
@@ -8837,7 +8873,7 @@ function CreateTaskModal({
   }[]>([]);
   const [isLoadingArchivosDigitales, setIsLoadingArchivosDigitales] = useState(false);
 
-  // Campos específicos para Instalación/Orden de Instalación - indicaciones por cada archivo
+  // Campos especÃ­ficos para InstalaciÃ³n/Orden de InstalaciÃ³n - indicaciones por cada archivo
   const [instalacionIndicaciones, setInstalacionIndicaciones] = useState<Record<string, string>>({});
   const [archivosInstalacion, setArchivosInstalacion] = useState<{
     nombre: string;
@@ -8851,7 +8887,7 @@ function CreateTaskModal({
 
   // Inicializar impresiones cuando cambia el inventario seleccionado (cantidad de ubicaciones por defecto)
   useEffect(() => {
-    if (isOpen && selectedInventory.length > 0 && tipo === 'Impresión') {
+    if (isOpen && selectedInventory.length > 0 && tipo === 'ImpresiÃ³n') {
       // Agrupar por archivo_arte
       const grupos: Record<string, number> = {};
       selectedInventory.forEach(item => {
@@ -8867,9 +8903,9 @@ function CreateTaskModal({
     }
   }, [isOpen, selectedInventory, tipo]);
 
-  // Cargar archivos digitales cuando se selecciona tipo Programación
+  // Cargar archivos digitales cuando se selecciona tipo ProgramaciÃ³n
   useEffect(() => {
-    if (isOpen && selectedInventory.length > 0 && (tipo === 'Programación' || tipo === 'Orden de Programación')) {
+    if (isOpen && selectedInventory.length > 0 && (tipo === 'ProgramaciÃ³n' || tipo === 'Orden de ProgramaciÃ³n')) {
       const loadDigitalFiles = async () => {
         setIsLoadingArchivosDigitales(true);
         try {
@@ -8899,9 +8935,9 @@ function CreateTaskModal({
     }
   }, [isOpen, selectedInventory, tipo, campanaId]);
 
-  // Cargar archivos para Instalación / Orden de Instalación (tradicionales + digitales)
+  // Cargar archivos para InstalaciÃ³n / Orden de InstalaciÃ³n (tradicionales + digitales)
   useEffect(() => {
-    if (isOpen && selectedInventory.length > 0 && (tipo === 'Instalación' || tipo === 'Orden de Instalación')) {
+    if (isOpen && selectedInventory.length > 0 && (tipo === 'InstalaciÃ³n' || tipo === 'Orden de InstalaciÃ³n')) {
       const loadInstalacionFiles = async () => {
         setIsLoadingArchivosInstalacion(true);
         try {
@@ -8949,7 +8985,7 @@ function CreateTaskModal({
 
           setArchivosInstalacion(archivos);
         } catch (error) {
-          console.error('Error al cargar archivos de instalación:', error);
+          console.error('Error al cargar archivos de instalaciÃ³n:', error);
           setArchivosInstalacion([]);
         } finally {
           setIsLoadingArchivosInstalacion(false);
@@ -8961,7 +8997,7 @@ function CreateTaskModal({
 
   const selectedProveedor = proveedores.find(p => p.id === proveedorId);
 
-  // Filtrar usuarios por búsqueda
+  // Filtrar usuarios por bÃºsqueda
   const filteredUsuarios = useMemo(() => {
     if (!asignadoSearch.trim()) return usuarios;
     const search = asignadoSearch.toLowerCase();
@@ -8971,11 +9007,11 @@ function CreateTaskModal({
     );
   }, [usuarios, asignadoSearch]);
 
-  // Filtrar usuarios de Mercadotecnia para Revisión de artes (excluyendo ya seleccionados)
+  // Filtrar usuarios de Mercadotecnia para RevisiÃ³n de artes (excluyendo ya seleccionados)
   const filteredUsuariosRevision = useMemo(() => {
     if (!usuariosConArea) return [];
     const selectedIds = new Set(selectedAsignadosRevision.map(u => u.id));
-    // Solo mostrar usuarios del área Mercadotecnia que no estén ya seleccionados
+    // Solo mostrar usuarios del Ã¡rea Mercadotecnia que no estÃ©n ya seleccionados
     const mercadotecniaUsers = usuariosConArea.filter(u =>
       u.area?.toLowerCase() === 'mercadotecnia' && !selectedIds.has(u.id)
     );
@@ -8987,11 +9023,11 @@ function CreateTaskModal({
     );
   }, [usuariosConArea, asignadoSearchRevision, selectedAsignadosRevision]);
 
-  // Filtrar usuarios de Compras para Impresión (excluyendo ya seleccionados)
+  // Filtrar usuarios de Compras para ImpresiÃ³n (excluyendo ya seleccionados)
   const filteredUsuariosImpresion = useMemo(() => {
     if (!todosUsuarios) return [];
     const selectedIds = new Set(selectedAsignadosImpresion.map(u => u.id));
-    // Solo mostrar usuarios del área Compras que no estén ya seleccionados
+    // Solo mostrar usuarios del Ã¡rea Compras que no estÃ©n ya seleccionados
     const comprasUsers = todosUsuarios.filter(u =>
       u.area?.toLowerCase() === 'compras' && !selectedIds.has(u.id)
     );
@@ -9003,11 +9039,11 @@ function CreateTaskModal({
     );
   }, [todosUsuarios, asignadoSearchImpresion, selectedAsignadosImpresion]);
 
-  // Filtrar usuarios de Operaciones para Instalación (excluir ya seleccionados)
+  // Filtrar usuarios de Operaciones para InstalaciÃ³n (excluir ya seleccionados)
   const filteredUsuariosInstalacion = useMemo(() => {
     if (!todosUsuarios) return [];
     const selectedIds = new Set(selectedAsignadosInstalacion.map(u => u.id));
-    // Mostrar usuarios del área Operaciones O cuyo puesto contenga "Operaciones"
+    // Mostrar usuarios del Ã¡rea Operaciones O cuyo puesto contenga "Operaciones"
     const operacionesUsers = todosUsuarios.filter(u =>
       (u.area?.toLowerCase() === 'operaciones' ||
        u.puesto?.toLowerCase().includes('operaciones')) &&
@@ -9025,7 +9061,7 @@ function CreateTaskModal({
   const filteredUsuariosTestigo = useMemo(() => {
     if (!todosUsuarios) return [];
     const selectedIds = new Set(selectedAsignadosTestigo.map(u => u.id));
-    // Mostrar usuarios del área Operaciones O cuyo puesto contenga "Operaciones"
+    // Mostrar usuarios del Ã¡rea Operaciones O cuyo puesto contenga "Operaciones"
     const operacionesUsers = todosUsuarios.filter(u =>
       (u.area?.toLowerCase() === 'operaciones' ||
        u.puesto?.toLowerCase().includes('operaciones')) &&
@@ -9039,11 +9075,11 @@ function CreateTaskModal({
     );
   }, [todosUsuarios, asignadoSearchTestigo, selectedAsignadosTestigo]);
 
-  // Filtrar usuarios de Operaciones para Programación (excluir ya seleccionados)
+  // Filtrar usuarios de Operaciones para ProgramaciÃ³n (excluir ya seleccionados)
   const filteredUsuariosProgramacion = useMemo(() => {
     if (!todosUsuarios) return [];
     const selectedIds = new Set(selectedAsignadosProgramacion.map(u => u.id));
-    // Mostrar usuarios del área Operaciones O cuyo puesto contenga "Operaciones"
+    // Mostrar usuarios del Ã¡rea Operaciones O cuyo puesto contenga "Operaciones"
     const operacionesUsers = todosUsuarios.filter(u =>
       (u.area?.toLowerCase() === 'operaciones' ||
        u.puesto?.toLowerCase().includes('operaciones')) &&
@@ -9067,24 +9103,24 @@ function CreateTaskModal({
       inventario_ids: selectedIds,
       campana_id: campanaId,
       creador: user ? `${user.id}, ${user.nombre}` : 'Usuario no identificado',
-      identificador: tipo === 'Revisión de artes' ? identificador : `TASK-${Date.now()}`,
+      identificador: tipo === 'RevisiÃ³n de artes' ? identificador : `TASK-${Date.now()}`,
     };
 
-    // Campos adicionales para Revisión de artes
-    if (tipo === 'Revisión de artes') {
+    // Campos adicionales para RevisiÃ³n de artes
+    if (tipo === 'RevisiÃ³n de artes') {
       (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).contenido = identificador; // El identificador es el contenido
       (payload as any).listado_inventario = selectedIds.join(','); // Lista de IDs de inventario
-      // Asignados múltiples para Revisión de artes
+      // Asignados mÃºltiples para RevisiÃ³n de artes
       if (selectedAsignadosRevision.length > 0) {
         // Guardar IDs separados por coma
         (payload as any).id_asignado = selectedAsignadosRevision.map(u => u.id).join(', ');
         // Guardar nombres separados por coma
         payload.asignado = selectedAsignadosRevision.map(u => u.nombre).join(', ');
       }
-    } else if (tipo === 'Instalación') {
-      // Campos adicionales para Instalación
+    } else if (tipo === 'InstalaciÃ³n') {
+      // Campos adicionales para InstalaciÃ³n
       (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
@@ -9094,7 +9130,7 @@ function CreateTaskModal({
         const indicacionesCompactas: Record<string, string> = {};
         const archivosCompactos = archivosInstalacion.map((a, i) => {
           const shortKey = `arte_${i}`;
-          // Mapear la indicación del nombre original al key corto
+          // Mapear la indicaciÃ³n del nombre original al key corto
           if (instalacionIndicaciones[a.nombre]) {
             indicacionesCompactas[shortKey] = instalacionIndicaciones[a.nombre];
           }
@@ -9109,15 +9145,15 @@ function CreateTaskModal({
           archivos: archivosCompactos,
         });
       }
-      // Asignados múltiples para Instalación (área Operaciones)
+      // Asignados mÃºltiples para InstalaciÃ³n (Ã¡rea Operaciones)
       if (selectedAsignadosInstalacion.length > 0) {
         // Guardar IDs separados por coma
         (payload as any).id_asignado = selectedAsignadosInstalacion.map(u => u.id).join(', ');
         // Guardar nombres separados por coma
         payload.asignado = selectedAsignadosInstalacion.map(u => u.nombre).join(', ');
       }
-    } else if (tipo === 'Orden de Instalación') {
-      // Campos adicionales para Orden de Instalación (misma estructura que Instalación)
+    } else if (tipo === 'Orden de InstalaciÃ³n') {
+      // Campos adicionales para Orden de InstalaciÃ³n (misma estructura que InstalaciÃ³n)
       (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
@@ -9138,18 +9174,18 @@ function CreateTaskModal({
         indicaciones: indicacionesCompactasOI,
         archivos: archivosCompactosOI,
       });
-      // Asignados múltiples para Orden de Instalación (área Operaciones)
+      // Asignados mÃºltiples para Orden de InstalaciÃ³n (Ã¡rea Operaciones)
       if (selectedAsignadosInstalacion.length > 0) {
         (payload as any).id_asignado = selectedAsignadosInstalacion.map(u => u.id).join(', ');
         payload.asignado = selectedAsignadosInstalacion.map(u => u.nombre).join(', ');
       }
-    } else if (tipo === 'Impresión') {
-      // Campos adicionales para Impresión
+    } else if (tipo === 'ImpresiÃ³n') {
+      // Campos adicionales para ImpresiÃ³n
       (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).contenido = identificador;
       (payload as any).listado_inventario = selectedIds.join(',');
-      payload.impresiones = impresiones; // Número de impresiones por inventario
+      payload.impresiones = impresiones; // NÃºmero de impresiones por inventario
       // Calcular y enviar el total de impresiones
       (payload as any).num_impresiones = Object.values(impresiones).reduce((sum, val) => sum + (val || 0), 0);
       // Proveedor
@@ -9157,7 +9193,7 @@ function CreateTaskModal({
         payload.proveedores_id = proveedorId;
         payload.nombre_proveedores = selectedProveedor.nombre;
       }
-      // Asignados múltiples para Impresión (área Compras)
+      // Asignados mÃºltiples para ImpresiÃ³n (Ã¡rea Compras)
       if (selectedAsignadosImpresion.length > 0) {
         // Guardar IDs separados por coma
         (payload as any).id_asignado = selectedAsignadosImpresion.map(u => u.id).join(', ');
@@ -9169,20 +9205,20 @@ function CreateTaskModal({
       (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
-      // Asignados múltiples para Testigo (área Operaciones)
+      // Asignados mÃºltiples para Testigo (Ã¡rea Operaciones)
       if (selectedAsignadosTestigo.length > 0) {
         // Guardar IDs separados por coma
         (payload as any).id_asignado = selectedAsignadosTestigo.map(u => u.id).join(', ');
         // Guardar nombres separados por coma
         payload.asignado = selectedAsignadosTestigo.map(u => u.nombre).join(', ');
       }
-    } else if (tipo === 'Programación') {
-      // Campos adicionales para Programación
+    } else if (tipo === 'ProgramaciÃ³n') {
+      // Campos adicionales para ProgramaciÃ³n
       (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
-      // Guardar indicaciones de programación como JSON en evidencia
-      // NOTA: NO incluir archivoData aquí porque puede ser muy grande (base64) y truncar el JSON
+      // Guardar indicaciones de programaciÃ³n como JSON en evidencia
+      // NOTA: NO incluir archivoData aquÃ­ porque puede ser muy grande (base64) y truncar el JSON
       // Los archivos se cargan desde la API usando el nombre del archivo cuando se necesitan
       (payload as any).evidencia = JSON.stringify({
         indicaciones: programacionIndicaciones,
@@ -9192,15 +9228,15 @@ function CreateTaskModal({
           tipo: a.tipo,
         })),
       });
-      // Asignados múltiples para Programación (área Operaciones)
+      // Asignados mÃºltiples para ProgramaciÃ³n (Ã¡rea Operaciones)
       if (selectedAsignadosProgramacion.length > 0) {
         // Guardar IDs separados por coma
         (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(', ');
         // Guardar nombres separados por coma
         payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
       }
-    } else if (tipo === 'Orden de Programación') {
-      // Campos adicionales para Orden de Programación (misma estructura que Programación)
+    } else if (tipo === 'Orden de ProgramaciÃ³n') {
+      // Campos adicionales para Orden de ProgramaciÃ³n (misma estructura que ProgramaciÃ³n)
       (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
@@ -9212,7 +9248,7 @@ function CreateTaskModal({
           tipo: a.tipo,
         })),
       });
-      // Asignados múltiples para Orden de Programación (área Operaciones)
+      // Asignados mÃºltiples para Orden de ProgramaciÃ³n (Ã¡rea Operaciones)
       if (selectedAsignadosProgramacion.length > 0) {
         (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(', ');
         payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
@@ -9235,12 +9271,12 @@ function CreateTaskModal({
     setProveedorId(null);
     setFechaFin('');
     setEstatus('Pendiente');
-    // Reset campos de Instalación
+    // Reset campos de InstalaciÃ³n
     setFechaInstalacion('');
     setHoraInstalacion('');
     setContactoSitio('');
     setTelefonoContacto('');
-    // Reset campos de Revisión
+    // Reset campos de RevisiÃ³n
     setIdentificador('');
     setFechaEntrega(() => {
       const d = new Date();
@@ -9251,32 +9287,32 @@ function CreateTaskModal({
     setAsignadoNombre('');
     setAsignadoSearch('');
     setShowAsignadoDropdown(false);
-    // Reset campos de Revisión de artes (múltiples asignados)
+    // Reset campos de RevisiÃ³n de artes (mÃºltiples asignados)
     setSelectedAsignadosRevision([]);
     setAsignadoSearchRevision('');
     setShowAsignadoDropdownRevision(false);
     setFechaCreacion(new Date().toISOString().slice(0, 16));
-    // Reset campos de Impresión
+    // Reset campos de ImpresiÃ³n
     setImpresiones({});
-    // Reset campos de Impresión (múltiples asignados)
+    // Reset campos de ImpresiÃ³n (mÃºltiples asignados)
     setSelectedAsignadosImpresion([]);
     setAsignadoSearchImpresion('');
     setShowAsignadoDropdownImpresion(false);
-    // Reset campos de Instalación (múltiples asignados área Operaciones)
+    // Reset campos de InstalaciÃ³n (mÃºltiples asignados Ã¡rea Operaciones)
     setSelectedAsignadosInstalacion([]);
     setAsignadoSearchInstalacion('');
     setShowAsignadoDropdownInstalacion(false);
-    // Reset campos de Testigo (múltiples asignados área Operaciones)
+    // Reset campos de Testigo (mÃºltiples asignados Ã¡rea Operaciones)
     setSelectedAsignadosTestigo([]);
     setAsignadoSearchTestigo('');
     setShowAsignadoDropdownTestigo(false);
-    // Reset campos de Programación
+    // Reset campos de ProgramaciÃ³n
     setProgramacionIndicaciones({});
     setArchivosDigitalesProgramacion([]);
-    // Reset campos de Instalación indicaciones
+    // Reset campos de InstalaciÃ³n indicaciones
     setInstalacionIndicaciones({});
     setArchivosInstalacion([]);
-    // Reset campos de Programación (múltiples asignados área Operaciones)
+    // Reset campos de ProgramaciÃ³n (mÃºltiples asignados Ã¡rea Operaciones)
     setSelectedAsignadosProgramacion([]);
     setAsignadoSearchProgramacion('');
     setShowAsignadoDropdownProgramacion(false);
@@ -9348,50 +9384,50 @@ function CreateTaskModal({
           )}
         </div>
 
-        {/* Formulario condicional según tipo */}
+        {/* Formulario condicional segÃºn tipo */}
         {tipo && (
           <div className="space-y-4 border-t border-border pt-4">
-            {/* Campos comunes - Título para tipos que no tienen formulario propio */}
-            {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Instalación' && tipo !== 'Orden de Instalación' && tipo !== 'Testigo' && tipo !== 'Programación' && (
+            {/* Campos comunes - TÃ­tulo para tipos que no tienen formulario propio */}
+            {tipo !== 'RevisiÃ³n de artes' && tipo !== 'ImpresiÃ³n' && tipo !== 'InstalaciÃ³n' && tipo !== 'Orden de InstalaciÃ³n' && tipo !== 'Testigo' && tipo !== 'ProgramaciÃ³n' && (
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">TÃ­tulo *</label>
                 <input
                   type="text"
                   value={titulo}
                   onChange={(e) => setTitulo(e.target.value)}
                   disabled={isSubmitting}
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                  placeholder="Ej: Instalación en Reforma"
+                  placeholder="Ej: InstalaciÃ³n en Reforma"
                 />
               </div>
             )}
 
-            {/* === FORMULARIO INSTALACIÓN === */}
-            {(tipo === 'Instalación' || tipo === 'Orden de Instalación') && (
+            {/* === FORMULARIO INSTALACIÃ“N === */}
+            {(tipo === 'InstalaciÃ³n' || tipo === 'Orden de InstalaciÃ³n') && (
               <>
-                {/* Título */}
+                {/* TÃ­tulo */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">TÃ­tulo *</label>
                   <input
                     type="text"
                     value={titulo}
                     onChange={(e) => setTitulo(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                    placeholder="Título de la instalación"
+                    placeholder="TÃ­tulo de la instalaciÃ³n"
                   />
                 </div>
 
-                {/* Descripción */}
+                {/* DescripciÃ³n */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">DescripciÃ³n</label>
                   <textarea
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
                     rows={2}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
-                    placeholder="Descripción de la instalación..."
+                    placeholder="DescripciÃ³n de la instalaciÃ³n..."
                   />
                 </div>
 
@@ -9407,7 +9443,7 @@ function CreateTaskModal({
                   />
                 </div>
 
-                {/* Asignados (área Operaciones) - Multi-select */}
+                {/* Asignados (Ã¡rea Operaciones) - Multi-select */}
                 <div className="relative">
                   <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados (Operaciones) *</label>
                   {/* Chips de usuarios seleccionados */}
@@ -9470,9 +9506,9 @@ function CreateTaskModal({
                   </div>
                 </div>
 
-                {/* Fecha creación (solo lectura) */}
+                {/* Fecha creaciÃ³n (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha creación *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha creaciÃ³n *</label>
                   <input
                     type="text"
                     value={new Date().toLocaleString('es-MX', {
@@ -9497,7 +9533,7 @@ function CreateTaskModal({
                     className="w-full px-3 py-2 text-sm bg-zinc-800/50 border border-border rounded-lg text-zinc-400 cursor-not-allowed"
                   />
                 </div>
-                {/* Indicaciones por archivo (Instalación y Orden de Instalación) */}
+                {/* Indicaciones por archivo (InstalaciÃ³n y Orden de InstalaciÃ³n) */}
                 <div className="border-t border-border pt-4">
                   <h4 className="text-sm font-medium text-zinc-300 mb-3">Indicaciones por archivo</h4>
                   {isLoadingArchivosInstalacion ? (
@@ -9548,32 +9584,32 @@ function CreateTaskModal({
               </>
             )}
 
-            {/* === FORMULARIO REVISIÓN DE ARTES === */}
-            {tipo === 'Revisión de artes' && (
+            {/* === FORMULARIO REVISIÃ“N DE ARTES === */}
+            {tipo === 'RevisiÃ³n de artes' && (
               <>
-                {/* Título */}
+                {/* TÃ­tulo */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">TÃ­tulo</label>
                   <input
                     type="text"
                     value={titulo}
                     onChange={(e) => setTitulo(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                    placeholder="Título"
+                    placeholder="TÃ­tulo"
                   />
                 </div>
 
-                {/* Descripción */}
+                {/* DescripciÃ³n */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">DescripciÃ³n *</label>
                   <input
                     type="text"
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                    placeholder="Descripción"
+                    placeholder="DescripciÃ³n"
                   />
                 </div>
 
@@ -9589,7 +9625,7 @@ function CreateTaskModal({
                   />
                 </div>
 
-                {/* Asignados (múltiples) */}
+                {/* Asignados (mÃºltiples) */}
                 <div className="relative">
                   <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados *</label>
 
@@ -9661,9 +9697,9 @@ function CreateTaskModal({
                   </p>
                 </div>
 
-                {/* Fecha creación (solo lectura) */}
+                {/* Fecha creaciÃ³n (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha creación *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha creaciÃ³n *</label>
                   <input
                     type="text"
                     value={new Date().toLocaleString('es-MX', {
@@ -9691,32 +9727,32 @@ function CreateTaskModal({
               </>
             )}
 
-            {/* === FORMULARIO PROGRAMACIÓN / ORDEN DE PROGRAMACIÓN === */}
-            {(tipo === 'Programación' || tipo === 'Orden de Programación') && (
+            {/* === FORMULARIO PROGRAMACIÃ“N / ORDEN DE PROGRAMACIÃ“N === */}
+            {(tipo === 'ProgramaciÃ³n' || tipo === 'Orden de ProgramaciÃ³n') && (
               <>
-                {/* Título */}
+                {/* TÃ­tulo */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">TÃ­tulo *</label>
                   <input
                     type="text"
                     value={titulo}
                     onChange={(e) => setTitulo(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                    placeholder="Título de la programación"
+                    placeholder="TÃ­tulo de la programaciÃ³n"
                   />
                 </div>
 
-                {/* Descripción */}
+                {/* DescripciÃ³n */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">DescripciÃ³n *</label>
                   <textarea
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
                     rows={2}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
-                    placeholder="Descripción general de la programación..."
+                    placeholder="DescripciÃ³n general de la programaciÃ³n..."
                   />
                 </div>
 
@@ -9762,7 +9798,7 @@ function CreateTaskModal({
                           ))}
                         </div>
                       )}
-                      {/* Input de búsqueda */}
+                      {/* Input de bÃºsqueda */}
                       <div className="relative">
                         <input
                           type="text"
@@ -9800,9 +9836,9 @@ function CreateTaskModal({
                   )}
                 </div>
 
-                {/* Fecha de creación (solo lectura) */}
+                {/* Fecha de creaciÃ³n (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de creación</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de creaciÃ³n</label>
                   <input
                     type="datetime-local"
                     value={fechaCreacion}
@@ -9841,7 +9877,7 @@ function CreateTaskModal({
                       {archivosDigitalesProgramacion.map((archivo) => {
                         const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
                         const isVideo = archivo.tipo === 'video';
-                        // Usar archivoData (base64) si está disponible
+                        // Usar archivoData (base64) si estÃ¡ disponible
                         const fileUrl = getImageUrl(archivo.archivoData || archivo.archivo);
                         return (
                           <div key={archivo.id} className="p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
@@ -9890,7 +9926,7 @@ function CreateTaskModal({
                                 ...prev,
                                 [archivo.archivo]: e.target.value
                               }))}
-                              placeholder="Indicaciones de programación para este archivo..."
+                              placeholder="Indicaciones de programaciÃ³n para este archivo..."
                               disabled={isSubmitting}
                               className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
                               rows={2}
@@ -9904,8 +9940,8 @@ function CreateTaskModal({
               </>
             )}
 
-            {/* === FORMULARIO IMPRESIÓN === */}
-            {tipo === 'Impresión' && (
+            {/* === FORMULARIO IMPRESIÃ“N === */}
+            {tipo === 'ImpresiÃ³n' && (
               <>
                 {/* Lista de artes agrupados por archivo */}
                 <div>
@@ -9958,11 +9994,11 @@ function CreateTaskModal({
                               {/* Info */}
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs text-zinc-300">
-                                  {grupo.items.length} {grupo.items.length === 1 ? 'ubicación' : 'ubicaciones'}
+                                  {grupo.items.length} {grupo.items.length === 1 ? 'ubicaciÃ³n' : 'ubicaciones'}
                                 </p>
                                 <p className="text-[10px] text-zinc-500 truncate">
                                   {grupo.items.map(i => i.codigo_unico).slice(0, 3).join(', ')}
-                                  {grupo.items.length > 3 && ` +${grupo.items.length - 3} más`}
+                                  {grupo.items.length > 3 && ` +${grupo.items.length - 3} mÃ¡s`}
                                 </p>
                               </div>
                               {/* Campo de impresiones */}
@@ -9983,7 +10019,7 @@ function CreateTaskModal({
                                 />
                                 <span className="text-[10px] text-zinc-500 w-8">uds</span>
                               </div>
-                              {/* Botón descargar */}
+                              {/* BotÃ³n descargar */}
                               {grupo.archivo && (
                                 <a
                                   href={getImageUrl(grupo.archivo) || '#'}
@@ -10004,9 +10040,9 @@ function CreateTaskModal({
                   })()}
                 </div>
 
-                {/* Proveedor de impresión */}
+                {/* Proveedor de impresiÃ³n */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Proveedor de impresión *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Proveedor de impresiÃ³n *</label>
                   {isLoadingProveedores ? (
                     <div className="flex items-center gap-2 py-2 text-zinc-400">
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -10029,29 +10065,29 @@ function CreateTaskModal({
                   )}
                 </div>
 
-                {/* Título */}
+                {/* TÃ­tulo */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">TÃ­tulo *</label>
                   <input
                     type="text"
                     value={titulo}
                     onChange={(e) => setTitulo(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                    placeholder="Título de la tarea"
+                    placeholder="TÃ­tulo de la tarea"
                   />
                 </div>
 
-                {/* Descripción */}
+                {/* DescripciÃ³n */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">DescripciÃ³n *</label>
                   <textarea
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
                     rows={2}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
-                    placeholder="Descripción de la tarea de impresión"
+                    placeholder="DescripciÃ³n de la tarea de impresiÃ³n"
                   />
                 </div>
 
@@ -10067,7 +10103,7 @@ function CreateTaskModal({
                   />
                 </div>
 
-                {/* Asignados (múltiples - área Compras) */}
+                {/* Asignados (mÃºltiples - Ã¡rea Compras) */}
                 <div className="relative">
                   <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados (Compras) *</label>
 
@@ -10139,9 +10175,9 @@ function CreateTaskModal({
                   </p>
                 </div>
 
-                {/* Fecha creación (solo lectura) */}
+                {/* Fecha creaciÃ³n (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha creación</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha creaciÃ³n</label>
                   <input
                     type="text"
                     value={new Date().toLocaleString('es-MX', {
@@ -10172,29 +10208,29 @@ function CreateTaskModal({
             {/* === FORMULARIO TESTIGO === */}
             {tipo === 'Testigo' && (
               <>
-                {/* Título */}
+                {/* TÃ­tulo */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">TÃ­tulo *</label>
                   <input
                     type="text"
                     value={titulo}
                     onChange={(e) => setTitulo(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                    placeholder="Título de la tarea de testigo"
+                    placeholder="TÃ­tulo de la tarea de testigo"
                   />
                 </div>
 
-                {/* Descripción */}
+                {/* DescripciÃ³n */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">DescripciÃ³n</label>
                   <textarea
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
                     rows={2}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
-                    placeholder="Descripción de la tarea..."
+                    placeholder="DescripciÃ³n de la tarea..."
                   />
                 </div>
 
@@ -10210,7 +10246,7 @@ function CreateTaskModal({
                   />
                 </div>
 
-                {/* Asignados (área Operaciones) - Multi-select */}
+                {/* Asignados (Ã¡rea Operaciones) - Multi-select */}
                 <div className="relative">
                   <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados (Operaciones) *</label>
                   {/* Chips de usuarios seleccionados */}
@@ -10315,11 +10351,11 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !fechaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : tipo === 'Orden de Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0) : !titulo.trim()) || isSubmitting}
+            disabled={!tipo || (tipo === 'RevisiÃ³n de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !fechaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'ProgramaciÃ³n' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : tipo === 'Orden de ProgramaciÃ³n' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0) : !titulo.trim()) || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {(isSubmitting || ((tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isSubmitting ? 'Generando...' : (tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales ? 'Cargando archivos...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : tipo === 'Testigo' ? 'Crear Testigo' : tipo === 'Orden de Programación' ? 'Crear Orden de Programación' : 'Crear tarea'}
+            {(isSubmitting || ((tipo === 'ProgramaciÃ³n' || tipo === 'Orden de ProgramaciÃ³n') && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Generando...' : (tipo === 'ProgramaciÃ³n' || tipo === 'Orden de ProgramaciÃ³n') && isLoadingArchivosDigitales ? 'Cargando archivos...' : tipo === 'RevisiÃ³n de artes' ? 'Generar RevisiÃ³n de artes' : tipo === 'Testigo' ? 'Crear Testigo' : tipo === 'Orden de ProgramaciÃ³n' ? 'Crear Orden de ProgramaciÃ³n' : 'Crear tarea'}
           </button>
         </div>
       </div>
@@ -10614,8 +10650,8 @@ const TAB_DESCRIPTIONS: Record<MainTab, { title: string; description: string; ic
     icon: Eye,
   },
   programacion: {
-    title: 'Programación',
-    description: 'Gestiona las tareas de programación de artes digitales con indicaciones',
+    title: 'ProgramaciÃ³n',
+    description: 'Gestiona las tareas de programaciÃ³n de artes digitales con indicaciones',
     icon: Monitor,
   },
   impresiones: {
@@ -10641,7 +10677,7 @@ export function TareaSeguimientoPage() {
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
 
-  // WebSocket para sincronización en tiempo real
+  // WebSocket para sincronizaciÃ³n en tiempo real
   useSocketCampana(campanaId);
 
   // Socket para actualizar usuarios en tiempo real
@@ -10700,7 +10736,7 @@ export function TareaSeguimientoPage() {
   const [activeEstadoArteTab, setActiveEstadoArteTab] = useState<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado'>('sin_revisar');
   const [hasAutoSelectedEstadoArteTab, setHasAutoSelectedEstadoArteTab] = useState(false);
 
-  // --- Programación (digital) ---
+  // --- ProgramaciÃ³n (digital) ---
   const [filtersProgramacion, setFiltersProgramacion] = useState<FilterCondition[]>([]);
   const [showFiltersProgramacion, setShowFiltersProgramacion] = useState(false);
   const [activeGroupingsProgramacion, setActiveGroupingsProgramacion] = useState<GroupByField[]>(['catorcena', 'aps', 'grupo']);
@@ -10714,7 +10750,7 @@ export function TareaSeguimientoPage() {
   // --- Impresiones ---
   const [activeEstadoImpresionTab, setActiveEstadoImpresionTab] = useState<'en_impresion' | 'pendiente_recepcion' | 'recibido'>('en_impresion');
 
-  // --- Validar Instalación (testigo) ---
+  // --- Validar InstalaciÃ³n (testigo) ---
   const [filtersTestigo, setFiltersTestigo] = useState<FilterCondition[]>([]);
   const [showFiltersTestigo, setShowFiltersTestigo] = useState(false);
   const [activeGroupingsTestigo, setActiveGroupingsTestigo] = useState<GroupByField[]>(['catorcena', 'aps', 'grupo']);
@@ -10764,7 +10800,7 @@ export function TareaSeguimientoPage() {
   const [isTestigoFileModalOpen, setIsTestigoFileModalOpen] = useState(false);
   const [selectedTestigoFile, setSelectedTestigoFile] = useState<string | null>(null);
 
-  // Modal confirmación limpiar arte
+  // Modal confirmaciÃ³n limpiar arte
   const [isConfirmClearModalOpen, setIsConfirmClearModalOpen] = useState(false);
   const [tareasAfectadas, setTareasAfectadas] = useState<Array<{ id: number; titulo: string | null; tipo: string | null; estatus: string | null; responsable: string | null }>>([]);
   const [isCheckingTareas, setIsCheckingTareas] = useState(false);
@@ -10804,24 +10840,24 @@ export function TareaSeguimientoPage() {
     enabled: campanaId > 0 && (activeMainTab === 'versionario' || !initialTabDetermined),
   });
 
-  // Inventario CON arte (para tab "Revisar y Aprobar", "Programación" e "Impresiones")
-  // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
+  // Inventario CON arte (para tab "Revisar y Aprobar", "ProgramaciÃ³n" e "Impresiones")
+  // Se carga si es el tab activo o si aÃºn no se ha determinado el tab inicial
   const { data: inventarioArteAPI = [], isLoading: isLoadingInventarioArte, isFetched: isFetchedConArte } = useQuery({
     queryKey: ['campana-inventario-arte', campanaId],
     queryFn: () => campanasService.getInventarioConArte(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'atender' || activeMainTab === 'programacion' || activeMainTab === 'impresiones' || !initialTabDetermined || isTaskDetailModalOpen),
   });
 
-  // Inventario para TESTIGOS (para tab "Validar Instalación")
-  // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
+  // Inventario para TESTIGOS (para tab "Validar InstalaciÃ³n")
+  // Se carga si es el tab activo o si aÃºn no se ha determinado el tab inicial
   const { data: inventarioTestigosAPI = [], isLoading: isLoadingInventarioTestigos, isFetched: isFetchedTestigos } = useQuery({
     queryKey: ['campana-inventario-testigos', campanaId],
     queryFn: () => campanasService.getInventarioTestigos(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'testigo' || !initialTabDetermined),
   });
 
-  // Tareas de la campaña (todas para poder filtrar en activas/completadas)
-  // Sincronización en tiempo real via WebSockets (sin polling)
+  // Tareas de la campaÃ±a (todas para poder filtrar en activas/completadas)
+  // SincronizaciÃ³n en tiempo real via WebSockets (sin polling)
   const { data: tareasAPI = [], isLoading: isLoadingTareas } = useQuery({
     queryKey: ['campana-tareas', campanaId],
     queryFn: () => campanasService.getTareas(campanaId, {}),
@@ -10829,7 +10865,7 @@ export function TareaSeguimientoPage() {
     staleTime: 30000, // Considerar frescos por 30s para evitar refetch innecesario
   });
 
-  // Artes existentes de la campaña
+  // Artes existentes de la campaÃ±a
   const { data: artesExistentes = [], isLoading: isLoadingArtes } = useQuery({
     queryKey: ['campana-artes-existentes', campanaId],
     queryFn: () => campanasService.getArtesExistentes(campanaId),
@@ -10851,7 +10887,7 @@ export function TareaSeguimientoPage() {
     enabled: campanaId > 0,
   });
 
-  // Crear mapa para búsqueda rápida por reserva ID
+  // Crear mapa para bÃºsqueda rÃ¡pida por reserva ID
   const digitalSummaryMap = useMemo(() => {
     const map = new Map<number, DigitalFileSummary>();
     digitalFileSummaries.forEach(summary => {
@@ -10862,10 +10898,10 @@ export function TareaSeguimientoPage() {
 
   // ---- Determinar tab inicial basado en contenido y permisos ----
   useEffect(() => {
-    // Solo ejecutar una vez cuando los datos estén disponibles
+    // Solo ejecutar una vez cuando los datos estÃ©n disponibles
     if (initialTabDetermined) return;
 
-    // Esperar a que las queries hayan terminado de hacer fetch (no solo que no estén cargando)
+    // Esperar a que las queries hayan terminado de hacer fetch (no solo que no estÃ©n cargando)
     const allQueriesFetched = isFetchedSinArte && isFetchedConArte && isFetchedTestigos;
     if (!allQueriesFetched) return;
 
@@ -10878,7 +10914,7 @@ export function TareaSeguimientoPage() {
     } else if (inventarioTestigosAPI.length > 0 && permissions.canSeeTabValidacionInstalacion) {
       setActiveMainTab('testigo');
     } else {
-      // Fallback: seleccionar el primer tab disponible según permisos
+      // Fallback: seleccionar el primer tab disponible segÃºn permisos
       if (permissions.canSeeTabSubirArtes) setActiveMainTab('versionario');
       else if (permissions.canSeeTabRevisarAprobar) setActiveMainTab('atender');
       else if (permissions.canSeeTabProgramacion) setActiveMainTab('programacion');
@@ -10904,7 +10940,7 @@ export function TareaSeguimientoPage() {
 
   // ---- Determinar tab de estado_arte inicial basado en contenido ----
   useEffect(() => {
-    // Solo auto-seleccionar una vez cuando los datos estén disponibles
+    // Solo auto-seleccionar una vez cuando los datos estÃ©n disponibles
     if (hasAutoSelectedEstadoArteTab) return;
     if (!isFetchedConArte || inventarioArteAPI.length === 0) return;
 
@@ -10920,8 +10956,8 @@ export function TareaSeguimientoPage() {
       const arteAprobadoLower = (item.arte_aprobado || '').toLowerCase();
       if (arteAprobadoLower === 'aprobado') counts.aprobado++;
       else if (arteAprobadoLower === 'rechazado') counts.rechazado++;
-      else if (arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisión') counts.en_revision++;
-      // 'Pendiente' o vacío = sin_revisar
+      else if (arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisiÃ³n') counts.en_revision++;
+      // 'Pendiente' o vacÃ­o = sin_revisar
       else counts.sin_revisar++;
     });
 
@@ -11001,10 +11037,10 @@ export function TareaSeguimientoPage() {
       evidencia?: string;
       num_impresiones?: number;
     }) => campanasService.createTarea(campanaId, data),
-    // El manejo de éxito/error ahora está en handleCreateTask con mutateAsync
+    // El manejo de Ã©xito/error ahora estÃ¡ en handleCreateTask con mutateAsync
   });
 
-  // Mutación para actualizar tarea (marcar como completada)
+  // MutaciÃ³n para actualizar tarea (marcar como completada)
   const updateTareaMutation = useMutation({
     mutationFn: ({ tareaId, data }: { tareaId: number; data: Partial<TareaCampana> }) =>
       campanasService.updateTarea(campanaId, tareaId, data),
@@ -11014,7 +11050,7 @@ export function TareaSeguimientoPage() {
     },
   });
 
-  // Mutación para eliminar tarea
+  // MutaciÃ³n para eliminar tarea
   const deleteTareaMutation = useMutation({
     mutationFn: (tareaId: number) => campanasService.deleteTarea(campanaId, tareaId),
     onSuccess: () => {
@@ -11099,7 +11135,7 @@ export function TareaSeguimientoPage() {
     setActiveGroupingsAtender([]);
   }, []);
 
-  // --- Funciones para Programación (programacion) ---
+  // --- Funciones para ProgramaciÃ³n (programacion) ---
   const addFilterProgramacion = useCallback(() => {
     const newFilter: FilterCondition = {
       id: `filter-${Date.now()}`,
@@ -11134,7 +11170,7 @@ export function TareaSeguimientoPage() {
     setActiveGroupingsProgramacion([]);
   }, []);
 
-  // --- Funciones para Validar Instalación (testigo) ---
+  // --- Funciones para Validar InstalaciÃ³n (testigo) ---
   const addFilterTestigo = useCallback(() => {
     const newFilter: FilterCondition = {
       id: `filter-${Date.now()}`,
@@ -11169,7 +11205,7 @@ export function TareaSeguimientoPage() {
     setActiveGroupingsTestigo([]);
   }, []);
 
-  // --- Funciones para Tareas de Producción ---
+  // --- Funciones para Tareas de ProducciÃ³n ---
   const addFilterTareas = useCallback(() => {
     const newFilter: FilterCondition = {
       id: `filter-${Date.now()}`,
@@ -11208,13 +11244,13 @@ export function TareaSeguimientoPage() {
     let estadoArte: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = defaultArteStatus;
     const arteAprobadoLower = (item.arte_aprobado || '').toLowerCase();
 
-    // Verificar si este item está en alguna tarea activa
+    // Verificar si este item estÃ¡ en alguna tarea activa
     const itemRsvIds = (item.rsv_id || item.rsv_ids || item.rsvId || '').split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
     const tieneTaskActiva = tareasActivas.some(tareaRsvId => itemRsvIds.includes(tareaRsvId));
 
     if (arteAprobadoLower === 'aprobado') estadoArte = 'aprobado';
     else if (arteAprobadoLower === 'rechazado') estadoArte = 'rechazado';
-    else if (arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisión') estadoArte = 'en_revision';
+    else if (arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisiÃ³n') estadoArte = 'en_revision';
     // Si tiene tarea activa asignada, es "en_revision"
     else if (tieneTaskActiva) estadoArte = 'en_revision';
     // 'Pendiente' o sin estado = sin_revisar (esperando que se cree una tarea)
@@ -11272,7 +11308,7 @@ export function TareaSeguimientoPage() {
   }, [tareasAPI]);
 
   // Transform inventario SIN arte para tab "Subir Artes"
-  // Incluye de-duplicación por ID de inventario para evitar claves duplicadas en React
+  // Incluye de-duplicaciÃ³n por ID de inventario para evitar claves duplicadas en React
   const inventorySinArteData = useMemo((): InventoryRow[] => {
     const rows = inventarioSinArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar'));
     const seen = new Set<string>();
@@ -11284,8 +11320,8 @@ export function TareaSeguimientoPage() {
   }, [inventarioSinArteAPI, transformInventarioToRow]);
 
   // Transform inventario con arte para tab "Atender arte"
-  // Incluye de-duplicación por ID de inventario para evitar claves duplicadas en React
-  // Los items también pueden aparecer en tab Impresiones si tienen tarea de Impresión
+  // Incluye de-duplicaciÃ³n por ID de inventario para evitar claves duplicadas en React
+  // Los items tambiÃ©n pueden aparecer en tab Impresiones si tienen tarea de ImpresiÃ³n
   const inventoryArteData = useMemo((): InventoryRow[] => {
     const rows = inventarioArteAPI.map((item) => transformInventarioToRow(item, 'sin_revisar', tareasActivasRsvIds));
     const seen = new Set<string>();
@@ -11296,8 +11332,8 @@ export function TareaSeguimientoPage() {
     });
   }, [inventarioArteAPI, transformInventarioToRow, tareasActivasRsvIds]);
 
-  // Transform inventario para items en tareas de Programación (tab "Programación")
-  // Muestra items digitales que están en tareas de tipo Programación
+  // Transform inventario para items en tareas de ProgramaciÃ³n (tab "ProgramaciÃ³n")
+  // Muestra items digitales que estÃ¡n en tareas de tipo ProgramaciÃ³n
   type EstadoProgramacion = 'en_programacion' | 'programado';
 
   const inventoryProgramacionData = useMemo((): (InventoryRow & {
@@ -11307,12 +11343,12 @@ export function TareaSeguimientoPage() {
     estado_programacion?: EstadoProgramacion;
     indicaciones?: string;
   })[] => {
-    // Filtrar tareas de tipo Programación y Orden de Programación
-    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación' || t.tipo === 'Orden de Programación');
+    // Filtrar tareas de tipo ProgramaciÃ³n y Orden de ProgramaciÃ³n
+    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'ProgramaciÃ³n' || t.tipo === 'Orden de ProgramaciÃ³n');
 
     if (tareasProgramacion.length === 0) return [];
 
-    // Crear mapa de rsv_id a info de tarea de Programación
+    // Crear mapa de rsv_id a info de tarea de ProgramaciÃ³n
     const rsvTareaProgramacionMap = new Map<string, {
       tareaId: number;
       estatus: string;
@@ -11334,7 +11370,7 @@ export function TareaSeguimientoPage() {
       });
     });
 
-    // Filtrar items de inventario que son digitales y están en tareas de Programación
+    // Filtrar items de inventario que son digitales y estÃ¡n en tareas de ProgramaciÃ³n
     const resultRows: (InventoryRow & {
       tarea_id?: number;
       tarea_estatus?: string;
@@ -11352,8 +11388,8 @@ export function TareaSeguimientoPage() {
       for (const rsvId of rsvIds) {
         const tareaInfo = rsvTareaProgramacionMap.get(rsvId);
         if (tareaInfo) {
-          // Determinar estado de programación:
-          // - 'programado' si la tarea está Completada
+          // Determinar estado de programaciÃ³n:
+          // - 'programado' si la tarea estÃ¡ Completada
           // - 'en_programacion' para cualquier otro estado (Activo, Pendiente, En Progreso)
           const estadoProgramacion: EstadoProgramacion = tareaInfo.estatus === 'Completado'
             ? 'programado'
@@ -11394,8 +11430,8 @@ export function TareaSeguimientoPage() {
     });
   }, [inventoryArteData, tareasAPI]);
 
-  // Transform inventario para testigos (tab "Validar Instalación")
-  // Incluye de-duplicación por ID de inventario para evitar claves duplicadas en React
+  // Transform inventario para testigos (tab "Validar InstalaciÃ³n")
+  // Incluye de-duplicaciÃ³n por ID de inventario para evitar claves duplicadas en React
   // NOTA: Usamos grupo_id de inventoryArteData para mantener consistencia con "Revisar y aprobar"
   const inventoryTestigosData = useMemo((): (InventoryRow & {
     tarea_instalacion_id?: number;
@@ -11417,7 +11453,7 @@ export function TareaSeguimientoPage() {
       if (grupoFromArte) {
         row.grupo_id = grupoFromArte;
       }
-      // Preservar campos de la tarea de instalación del backend
+      // Preservar campos de la tarea de instalaciÃ³n del backend
       return {
         ...row,
         tarea_instalacion_id: (item as any).tarea_instalacion_id,
@@ -11433,8 +11469,8 @@ export function TareaSeguimientoPage() {
     });
   }, [inventarioTestigosAPI, transformInventarioToRow, inventoryArteData]);
 
-  // Transform inventario para items en tareas de Impresión (tab "Impresiones")
-  // Agrupa items por tarea de impresión con info de estado del flujo
+  // Transform inventario para items en tareas de ImpresiÃ³n (tab "Impresiones")
+  // Agrupa items por tarea de impresiÃ³n con info de estado del flujo
   type EstadoImpresion = 'en_impresion' | 'pendiente_recepcion' | 'recibido';
 
   const inventoryImpresionesData = useMemo((): (InventoryRow & {
@@ -11445,13 +11481,13 @@ export function TareaSeguimientoPage() {
     estado_impresion?: EstadoImpresion;
     tarea_recepcion_id?: number;
   })[] => {
-    // Filtrar tareas de tipo Impresión y Recepción
-    const tareasImpresion = tareasAPI.filter(t => t.tipo === 'Impresión');
-    const tareasRecepcion = tareasAPI.filter(t => t.tipo === 'Recepción');
+    // Filtrar tareas de tipo ImpresiÃ³n y RecepciÃ³n
+    const tareasImpresion = tareasAPI.filter(t => t.tipo === 'ImpresiÃ³n');
+    const tareasRecepcion = tareasAPI.filter(t => t.tipo === 'RecepciÃ³n');
 
     if (tareasImpresion.length === 0) return [];
 
-    // Crear mapas de conversión entre inventory_id y rsv_id
+    // Crear mapas de conversiÃ³n entre inventory_id y rsv_id
     const inventoryIdToRsvId = new Map<string, string>();
     const rsvIdToInventoryId = new Map<string, string>();
     inventarioArteAPI.forEach(item => {
@@ -11463,7 +11499,7 @@ export function TareaSeguimientoPage() {
       }
     });
 
-    // Función para normalizar IDs a un Set de inventory_ids
+    // FunciÃ³n para normalizar IDs a un Set de inventory_ids
     const normalizeToInventoryIds = (listado: string): Set<string> => {
       const ids = listado.replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean);
       const normalizedIds = new Set<string>();
@@ -11480,7 +11516,7 @@ export function TareaSeguimientoPage() {
       return normalizedIds;
     };
 
-    // Crear mapa de tarea de impresión -> tareas de recepción relacionadas (puede haber varias: normal + faltantes)
+    // Crear mapa de tarea de impresiÃ³n -> tareas de recepciÃ³n relacionadas (puede haber varias: normal + faltantes)
     const impresionToRecepcionesMap = new Map<number, typeof tareasRecepcion>();
     tareasRecepcion.forEach(recepcion => {
       const listadoRecepcion = recepcion.listado_inventario || recepcion.ids_reservas || '';
@@ -11490,7 +11526,7 @@ export function TareaSeguimientoPage() {
         const listadoImpresion = impresion.listado_inventario || impresion.ids_reservas || '';
         const impresionIds = normalizeToInventoryIds(listadoImpresion);
 
-        // Comparar sets: deben tener al menos un elemento en común
+        // Comparar sets: deben tener al menos un elemento en comÃºn
         const hasCommon = [...impresionIds].some(id => recepcionIds.has(id));
         if (hasCommon && recepcionIds.size > 0 && impresionIds.size > 0) {
           const existing = impresionToRecepcionesMap.get(impresion.id) || [];
@@ -11515,13 +11551,13 @@ export function TareaSeguimientoPage() {
       // Reemplazar asteriscos con comas y luego dividir (ids_reservas puede usar * como separador)
       const ids = listado.replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean);
 
-      // Determinar estado del flujo de impresión
+      // Determinar estado del flujo de impresiÃ³n
       const tareasRecepcionRelacionadas = impresionToRecepcionesMap.get(tarea.id) || [];
       let estadoImpresion: EstadoImpresion = 'en_impresion';
       let tareaRecepcionId: number | undefined;
 
       if (tareasRecepcionRelacionadas.length > 0) {
-        // Buscar si hay alguna recepción completada (no faltantes)
+        // Buscar si hay alguna recepciÃ³n completada (no faltantes)
         const recepcionCompletada = tareasRecepcionRelacionadas.find(recepcion => {
           const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
           // Verificar si es tarea de faltantes
@@ -11535,8 +11571,8 @@ export function TareaSeguimientoPage() {
           return esCompletada && !esFaltantes;
         });
 
-        // Si existe CUALQUIER recepción pendiente (normal o faltantes),
-        // el flujo sigue en "pendiente recepción" y NO debe marcarse como recibido.
+        // Si existe CUALQUIER recepciÃ³n pendiente (normal o faltantes),
+        // el flujo sigue en "pendiente recepciÃ³n" y NO debe marcarse como recibido.
         const hasRecepcionPendiente = tareasRecepcionRelacionadas.some(recepcion =>
           recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
         );
@@ -11545,15 +11581,15 @@ export function TareaSeguimientoPage() {
           estadoImpresion = 'recibido';
           tareaRecepcionId = recepcionCompletada.id;
         } else {
-          // Hay recepciones pendientes: debe mantenerse en pendiente de recepción
+          // Hay recepciones pendientes: debe mantenerse en pendiente de recepciÃ³n
           estadoImpresion = 'pendiente_recepcion';
 
-          // Priorizar SIEMPRE una recepción pendiente para mostrar estatus correcto en tabla.
+          // Priorizar SIEMPRE una recepciÃ³n pendiente para mostrar estatus correcto en tabla.
           const recepcionPendiente = tareasRecepcionRelacionadas.find(recepcion =>
             recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
           );
 
-          // Fallback: si no encuentra (caso raro), usar una recepción normal.
+          // Fallback: si no encuentra (caso raro), usar una recepciÃ³n normal.
           const recepcionNormal = tareasRecepcionRelacionadas.find(recepcion => {
             let esFaltantes = false;
             if (recepcion.evidencia) {
@@ -11569,15 +11605,15 @@ export function TareaSeguimientoPage() {
         }
       }
 
-      // Si hay tarea de recepción pendiente, mostrar su estatus en vez del de impresión
+      // Si hay tarea de recepciÃ³n pendiente, mostrar su estatus en vez del de impresiÃ³n
       let estatusMostrado = tarea.estatus || 'Pendiente';
-      let tituloMostrado = tarea.titulo || `Impresión #${tarea.id}`;
+      let tituloMostrado = tarea.titulo || `ImpresiÃ³n #${tarea.id}`;
       if (estadoImpresion === 'pendiente_recepcion') {
         if (tareaRecepcionId) {
           const tareaRecepcion = tareasRecepcionRelacionadas.find(r => r.id === tareaRecepcionId);
           if (tareaRecepcion) {
             estatusMostrado = tareaRecepcion.estatus || 'Pendiente';
-            tituloMostrado = tareaRecepcion.titulo || `Recepción #${tareaRecepcionId}`;
+            tituloMostrado = tareaRecepcion.titulo || `RecepciÃ³n #${tareaRecepcionId}`;
           } else {
             estatusMostrado = 'Pendiente';
           }
@@ -11598,7 +11634,7 @@ export function TareaSeguimientoPage() {
       });
     });
 
-    // Filtrar items del inventario que están en tareas de impresión
+    // Filtrar items del inventario que estÃ¡n en tareas de impresiÃ³n
     const rows: (InventoryRow & {
       tarea_id?: number;
       tarea_estatus?: string;
@@ -11636,16 +11672,16 @@ export function TareaSeguimientoPage() {
     });
   }, [tareasAPI, inventarioArteAPI, transformInventarioToRow]);
 
-  // Mapa de rsv_id -> estado de impresión (para mostrar en tab Aprobado)
+  // Mapa de rsv_id -> estado de impresiÃ³n (para mostrar en tab Aprobado)
   const impresionStatusMap = useMemo(() => {
     const map = new Map<string, { estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido'; titulo: string }>();
 
-    const tareasImpresion = tareasAPI.filter(t => t.tipo === 'Impresión');
-    const tareasRecepcion = tareasAPI.filter(t => t.tipo === 'Recepción');
+    const tareasImpresion = tareasAPI.filter(t => t.tipo === 'ImpresiÃ³n');
+    const tareasRecepcion = tareasAPI.filter(t => t.tipo === 'RecepciÃ³n');
 
     if (tareasImpresion.length === 0) return map;
 
-    // Crear mapa de tarea impresión -> tareas de recepción (puede haber varias: normal + faltantes)
+    // Crear mapa de tarea impresiÃ³n -> tareas de recepciÃ³n (puede haber varias: normal + faltantes)
     const impresionToRecepciones = new Map<number, typeof tareasRecepcion>();
     tareasRecepcion.forEach(recepcion => {
       const recepcionIds = new Set((recepcion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
@@ -11660,7 +11696,7 @@ export function TareaSeguimientoPage() {
       });
     });
 
-    // Procesar cada tarea de impresión
+    // Procesar cada tarea de impresiÃ³n
     tareasImpresion.forEach(tarea => {
       const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
       const tareasRecepcionRelacionadas = impresionToRecepciones.get(tarea.id) || [];
@@ -11668,8 +11704,8 @@ export function TareaSeguimientoPage() {
       let estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido' = 'en_impresion';
 
       if (tareasRecepcionRelacionadas.length > 0) {
-        // Si hay ALGUNA recepción completada (no faltantes), el estado puede ser 'recibido'
-        // solo cuando no queda ninguna recepción pendiente.
+        // Si hay ALGUNA recepciÃ³n completada (no faltantes), el estado puede ser 'recibido'
+        // solo cuando no queda ninguna recepciÃ³n pendiente.
         const hayRecepcionCompletada = tareasRecepcionRelacionadas.some(recepcion => {
           const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
           // Verificar si es tarea de faltantes
@@ -11696,18 +11732,18 @@ export function TareaSeguimientoPage() {
       }
 
       ids.forEach(id => {
-        map.set(id, { estado, titulo: tarea.titulo || `Impresión #${tarea.id}` });
+        map.set(id, { estado, titulo: tarea.titulo || `ImpresiÃ³n #${tarea.id}` });
       });
     });
 
     return map;
   }, [tareasAPI]);
 
-  // Mapa de rsv_id -> estado de instalación (para mostrar en tab Aprobado)
+  // Mapa de rsv_id -> estado de instalaciÃ³n (para mostrar en tab Aprobado)
   const instalacionStatusMap = useMemo(() => {
     const map = new Map<string, { estado: 'en_proceso' | 'validar_instalacion' | 'instalado'; titulo: string; tareaId: number }>();
 
-    const tareasInstalacion = tareasAPI.filter(t => t.tipo === 'Instalación');
+    const tareasInstalacion = tareasAPI.filter(t => t.tipo === 'InstalaciÃ³n');
 
     if (tareasInstalacion.length === 0) return map;
 
@@ -11716,7 +11752,7 @@ export function TareaSeguimientoPage() {
 
       // Determinar estado basado en el estatus de la tarea
       // Pendiente/Activo = en_proceso
-      // Atendido = validar_instalacion (marcó como instalado, pendiente de validación)
+      // Atendido = validar_instalacion (marcÃ³ como instalado, pendiente de validaciÃ³n)
       // Completado = instalado (validado)
       let estado: 'en_proceso' | 'validar_instalacion' | 'instalado' = 'en_proceso';
       if (tarea.estatus === 'Atendido') {
@@ -11726,17 +11762,17 @@ export function TareaSeguimientoPage() {
       }
 
       ids.forEach(id => {
-        map.set(id, { estado, titulo: tarea.titulo || `Instalación #${tarea.id}`, tareaId: tarea.id });
+        map.set(id, { estado, titulo: tarea.titulo || `InstalaciÃ³n #${tarea.id}`, tareaId: tarea.id });
       });
     });
 
     return map;
   }, [tareasAPI]);
 
-  // Mapa de rsv_id -> estado de programación (para FlowStepIcons)
+  // Mapa de rsv_id -> estado de programaciÃ³n (para FlowStepIcons)
   const programacionStatusMap = useMemo(() => {
     const map = new Map<string, { estado: 'en_programacion' | 'programado' }>();
-    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación' || t.tipo === 'Orden de Programación');
+    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'ProgramaciÃ³n' || t.tipo === 'Orden de ProgramaciÃ³n');
     tareasProgramacion.forEach(tarea => {
       const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
       const estado: 'en_programacion' | 'programado' = tarea.estatus === 'Completado' ? 'programado' : 'en_programacion';
@@ -11757,7 +11793,7 @@ export function TareaSeguimientoPage() {
     } else if (activeMainTab === 'impresiones') {
       data = inventoryImpresionesData;
     } else if (activeMainTab === 'programacion') {
-      // Programación solo tiene items digitales
+      // ProgramaciÃ³n solo tiene items digitales
       data = inventoryProgramacionData;
     } else {
       data = inventoryTestigosData;
@@ -11810,7 +11846,7 @@ export function TareaSeguimientoPage() {
   const filteredAtenderData = useMemo(() => {
     let data = applyFilters(inventoryArteData, filtersAtender);
 
-    // Filtrar por estado_arte según el tab activo (solo si no hay búsqueda)
+    // Filtrar por estado_arte segÃºn el tab activo (solo si no hay bÃºsqueda)
     if (!inventorySearch) {
       data = data.filter(item => item.estado_arte === activeEstadoArteTab);
     }
@@ -11833,9 +11869,9 @@ export function TareaSeguimientoPage() {
     return data;
   }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoArteTab, inventorySearch]);
 
-  // Datos filtrados y ordenados para Programación (programacion)
+  // Datos filtrados y ordenados para ProgramaciÃ³n (programacion)
   const filteredProgramacionData = useMemo(() => {
-    // Filtrar por estado según el sub-tab activo
+    // Filtrar por estado segÃºn el sub-tab activo
     let data = inventoryProgramacionData.filter(item => {
       return item.estado_programacion === activeEstadoProgramacionTab;
     });
@@ -11862,16 +11898,16 @@ export function TareaSeguimientoPage() {
     return data;
   }, [inventoryProgramacionData, filtersProgramacion, sortFieldProgramacion, sortDirectionProgramacion, activeEstadoProgramacionTab]);
 
-  // Datos filtrados y ordenados para Validar Instalación (testigo)
-  // Filtra según el sub-tab activo de estado de instalación
+  // Datos filtrados y ordenados para Validar InstalaciÃ³n (testigo)
+  // Filtra segÃºn el sub-tab activo de estado de instalaciÃ³n
   const filteredTestigoData = useMemo(() => {
-    // Filtrar según el tab activo de estado de instalación
+    // Filtrar segÃºn el tab activo de estado de instalaciÃ³n
     let data = inventoryTestigosData.filter(item => {
-      // Usar el estado de la tarea de instalación del backend
+      // Usar el estado de la tarea de instalaciÃ³n del backend
       const tareaEstatus = item.tarea_instalacion_estatus;
 
       if (activeEstadoInstalacionTab === 'por_instalar') {
-        // Tareas pendientes o activas (aún no instaladas)
+        // Tareas pendientes o activas (aÃºn no instaladas)
         return tareaEstatus === 'Pendiente' || tareaEstatus === 'Activo' || tareaEstatus === 'En proceso';
       } else if (activeEstadoInstalacionTab === 'instaladas') {
         // Tareas atendidas o completadas (ya instaladas)
@@ -11921,7 +11957,7 @@ export function TareaSeguimientoPage() {
 
     if (tareasTestigo.length === 0) return [];
 
-    // Crear mapa de rsv_id a inventory item para búsqueda rápida
+    // Crear mapa de rsv_id a inventory item para bÃºsqueda rÃ¡pida
     const rsvIdToInventory = new Map<string, (typeof inventoryTestigosData)[number]>();
     inventoryTestigosData.forEach(item => {
       const rsvIds = item.rsv_id.split(',').map(id => id.trim());
@@ -11945,7 +11981,7 @@ export function TareaSeguimientoPage() {
       return {
         asignado: tarea.asignado || 'Sin asignar',
         tareaId: tarea.id,
-        tareaTitulo: tarea.titulo || 'Sin título',
+        tareaTitulo: tarea.titulo || 'Sin tÃ­tulo',
         tareaEstatus: tarea.estatus || 'Pendiente',
         tareaFechaFin: tarea.fecha_fin?.split('T')[0] || '',
         items,
@@ -11955,7 +11991,7 @@ export function TareaSeguimientoPage() {
     return grouped;
   }, [tareasAPI, inventoryTestigosData]);
 
-  // Conteo de items únicos en tareas Testigo (para el badge del sub-tab)
+  // Conteo de items Ãºnicos en tareas Testigo (para el badge del sub-tab)
   const testigoItemsCount = useMemo(() => {
     const uniqueIds = new Set<string>();
     testigoGroupedByAsignado.forEach(group => {
@@ -11967,7 +12003,7 @@ export function TareaSeguimientoPage() {
   // Datos filtrados para Impresiones (por estado y formato)
   const filteredImpresionesData = useMemo(() => {
     let data = inventoryImpresionesData;
-    // Filtrar por estado de impresión
+    // Filtrar por estado de impresiÃ³n
     data = data.filter(item => item.estado_impresion === activeEstadoImpresionTab);
     // Filtrar por formato
     data = data.filter(item =>
@@ -11978,8 +12014,8 @@ export function TareaSeguimientoPage() {
     return data;
   }, [inventoryImpresionesData, activeFormat, activeEstadoImpresionTab]);
 
-  // Determinar si la campaña tiene items tradicionales y/o digitales
-  // Combinar inventario sin arte + con arte para tener la visión completa
+  // Determinar si la campaÃ±a tiene items tradicionales y/o digitales
+  // Combinar inventario sin arte + con arte para tener la visiÃ³n completa
   const campaignHasTradicional = useMemo(() => {
     return inventorySinArteData.some(i => i.tradicional_digital === 'Tradicional') ||
            inventoryArteData.some(i => i.tradicional_digital === 'Tradicional');
@@ -11992,7 +12028,7 @@ export function TareaSeguimientoPage() {
 
   // Tab de Impresiones: solo visible si hay inventarios tradicionales
   const shouldShowImpresionesTab = campaignHasTradicional;
-  // Tab de Programación: solo visible si hay inventarios digitales
+  // Tab de ProgramaciÃ³n: solo visible si hay inventarios digitales
   const shouldShowProgramacionTab = campaignHasDigital;
 
   // Auto-switch si el tab activo fue ocultado por tipo de inventario
@@ -12002,7 +12038,7 @@ export function TareaSeguimientoPage() {
       (activeMainTab === 'impresiones' && !shouldShowImpresionesTab);
 
     if (needsSwitch) {
-      // Redirigir al primer tab disponible según permisos
+      // Redirigir al primer tab disponible segÃºn permisos
       if (permissions.canSeeTabSubirArtes) setActiveMainTab('versionario');
       else if (permissions.canSeeTabRevisarAprobar) setActiveMainTab('atender');
       else if (permissions.canSeeTabProgramacion && shouldShowProgramacionTab) setActiveMainTab('programacion');
@@ -12011,7 +12047,7 @@ export function TareaSeguimientoPage() {
     }
   }, [activeMainTab, shouldShowProgramacionTab, shouldShowImpresionesTab, permissions]);
 
-  // Obtener valores únicos para los selectores de filtros
+  // Obtener valores Ãºnicos para los selectores de filtros
   const getUniqueValuesVersionario = useMemo(() => {
     const values: Record<string, string[]> = {};
     FILTER_FIELDS_INVENTARIO.forEach(field => {
@@ -12048,16 +12084,16 @@ export function TareaSeguimientoPage() {
     return values;
   }, [inventoryTestigosData]);
 
-  // Transform tareas from API to TaskRow format (excluye "Seguimiento Campaña" que pertenece a otra pantalla)
+  // Transform tareas from API to TaskRow format (excluye "Seguimiento CampaÃ±a" que pertenece a otra pantalla)
   const tasks = useMemo((): TaskRow[] => {
     return tareasAPI
       .filter((t) => {
         if (t.estatus === 'Atendido' || t.estatus === 'Completado' || t.estatus === 'Finalizada' || t.estatus === 'Activada') return false;
-        // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación', 'Orden de Instalación'];
+        // Solo mostrar tipos que pertenecen al flujo de gestiÃ³n de artes
+        const TIPOS_GESTION_ARTES = ['RevisiÃ³n de artes', 'Correccion', 'ImpresiÃ³n', 'RecepciÃ³n', 'InstalaciÃ³n', 'Testigo', 'ProgramaciÃ³n', 'Orden de ProgramaciÃ³n', 'Orden de InstalaciÃ³n'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
-      .sort((a, b) => b.id - a.id) // Más recientes primero
+      .sort((a, b) => b.id - a.id) // MÃ¡s recientes primero
       .map((t) => ({
         id: t.id.toString(),
         tipo: t.tipo || 'Tarea',
@@ -12083,11 +12119,11 @@ export function TareaSeguimientoPage() {
     return tareasAPI
       .filter((t) => {
         if (t.estatus !== 'Atendido' && t.estatus !== 'Completado' && t.estatus !== 'Finalizada' && t.estatus !== 'Activada') return false;
-        // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación', 'Orden de Instalación'];
+        // Solo mostrar tipos que pertenecen al flujo de gestiÃ³n de artes
+        const TIPOS_GESTION_ARTES = ['RevisiÃ³n de artes', 'Correccion', 'ImpresiÃ³n', 'RecepciÃ³n', 'InstalaciÃ³n', 'Testigo', 'ProgramaciÃ³n', 'Orden de ProgramaciÃ³n', 'Orden de InstalaciÃ³n'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
-      .sort((a, b) => b.id - a.id) // Más recientes primero
+      .sort((a, b) => b.id - a.id) // MÃ¡s recientes primero
       .map((t) => ({
         id: t.id.toString(),
         tipo: t.tipo || 'Tarea',
@@ -12124,7 +12160,7 @@ export function TareaSeguimientoPage() {
     }
   }, [urlTaskId, tasks, completedTasks, isLoadingTareas]);
 
-  // Obtener valores únicos para filtros de tareas
+  // Obtener valores Ãºnicos para filtros de tareas
   const getUniqueValuesTareas = useMemo(() => {
     const allTasks = [...tasks, ...completedTasks];
     const values: Record<string, string[]> = {};
@@ -12170,7 +12206,7 @@ export function TareaSeguimientoPage() {
   const filteredInventory = useMemo(() => {
     let data: InventoryRow[];
 
-    // Seleccionar fuente de datos filtrados según tab activo
+    // Seleccionar fuente de datos filtrados segÃºn tab activo
     if (activeMainTab === 'versionario') {
       // Tab "Subir Artes": usar datos ya filtrados
       data = filteredVersionarioData;
@@ -12178,14 +12214,14 @@ export function TareaSeguimientoPage() {
       // Tab "Revisar y Aprobar": usar datos ya filtrados
       data = filteredAtenderData;
     } else if (activeMainTab === 'programacion') {
-      // Tab "Programación": usar datos ya filtrados
+      // Tab "ProgramaciÃ³n": usar datos ya filtrados
       data = filteredProgramacionData;
     } else {
-      // Tab "Validar Instalación": usar datos ya filtrados
+      // Tab "Validar InstalaciÃ³n": usar datos ya filtrados
       data = filteredTestigoData;
     }
 
-    // Filter by format for all tabs except Programación (which is Digital only)
+    // Filter by format for all tabs except ProgramaciÃ³n (which is Digital only)
     if (activeMainTab !== 'programacion') {
       const formatFilter = activeFormat === 'tradicional' ? 'Tradicional' : 'Digital';
       data = data.filter((item) => item.tradicional_digital === formatFilter);
@@ -12254,7 +12290,7 @@ export function TareaSeguimientoPage() {
   const filteredTasks = useMemo(() => {
     // Primero aplicar filtros avanzados
     let data = applyFilters(tasks, filtersTareas);
-    // Luego búsqueda por texto
+    // Luego bÃºsqueda por texto
     if (tasksSearch) {
       const search = tasksSearch.toLowerCase();
       data = data.filter(
@@ -12275,7 +12311,7 @@ export function TareaSeguimientoPage() {
   const filteredCompletedTasks = useMemo(() => {
     // Primero aplicar filtros avanzados
     let data = applyFilters(completedTasks, filtersTareas);
-    // Luego búsqueda por texto
+    // Luego bÃºsqueda por texto
     if (tasksSearch) {
       const search = tasksSearch.toLowerCase();
       data = data.filter(
@@ -12288,7 +12324,7 @@ export function TareaSeguimientoPage() {
     return data;
   }, [completedTasks, tasksSearch, filtersTareas]);
 
-  // Función para descargar tareas como Excel con dos hojas
+  // FunciÃ³n para descargar tareas como Excel con dos hojas
   const downloadTareasExcel = useCallback(() => {
     const formatDate = (dateStr: string | null | undefined) => {
       if (!dateStr) return '-';
@@ -12303,12 +12339,12 @@ export function TareaSeguimientoPage() {
       'Tipo': task.tipo || '-',
       'Estatus': task.estatus || '-',
       'Identificador': task.identificador || '-',
-      'Título': task.titulo || '-',
+      'TÃ­tulo': task.titulo || '-',
       'Fecha Inicio': formatDate(task.fecha_inicio),
       'Fecha Fin': formatDate(task.fecha_fin),
       'Creador': task.creador || '-',
       'Asignado': task.asignado || '-',
-      'Descripción': task.descripcion || '-',
+      'DescripciÃ³n': task.descripcion || '-',
     });
 
     // Crear workbook
@@ -12329,8 +12365,8 @@ export function TareaSeguimientoPage() {
     XLSX.writeFile(wb, filename);
   }, [filteredTasks, filteredCompletedTasks]);
 
-  // Agrupación simple para tab "Validar Instalación" basada en activeGroupingsTestigo
-  // Solo usa el primer campo de agrupación para mantener compatibilidad con el renderizado existente
+  // AgrupaciÃ³n simple para tab "Validar InstalaciÃ³n" basada en activeGroupingsTestigo
+  // Solo usa el primer campo de agrupaciÃ³n para mantener compatibilidad con el renderizado existente
   const simpleGroupedInventory = useMemo(() => {
     if (activeGroupingsTestigo.length === 0) return {} as Record<string, InventoryRow[]>;
 
@@ -12347,19 +12383,19 @@ export function TareaSeguimientoPage() {
     return groups;
   }, [filteredTestigoData, activeGroupingsTestigo]);
 
-  // Agrupación para tab "Subir Artes" basada en activeGroupingsVersionario
-  // Estructura: Nivel1 -> Nivel2 -> Nivel3 -> Items (máximo 3 niveles de agrupación + items)
+  // AgrupaciÃ³n para tab "Subir Artes" basada en activeGroupingsVersionario
+  // Estructura: Nivel1 -> Nivel2 -> Nivel3 -> Items (mÃ¡ximo 3 niveles de agrupaciÃ³n + items)
   const versionarioGroupedInventory = useMemo(() => {
     const numLevels = Math.min(activeGroupingsVersionario.length, 3);
 
-    // Si no hay agrupaciones, devolver estructura vacía
+    // Si no hay agrupaciones, devolver estructura vacÃ­a
     if (numLevels === 0) {
       return {} as Record<string, Record<string, Record<string, InventoryRow[]>>>;
     }
 
     const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
 
-    // Ordenar items por ID descendente (más recientes primero) antes de agrupar
+    // Ordenar items por ID descendente (mÃ¡s recientes primero) antes de agrupar
     const sortedInventory = [...filteredInventory].sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
     sortedInventory.forEach((item) => {
@@ -12389,19 +12425,19 @@ export function TareaSeguimientoPage() {
     return sortedGroups;
   }, [filteredInventory, activeGroupingsVersionario]);
 
-  // Agrupación para tab "Atender Arte" basada en activeGroupingsAtender
-  // Estructura: Nivel1 -> Nivel2 -> Nivel3 -> Items (máximo 3 niveles de agrupación + items)
+  // AgrupaciÃ³n para tab "Atender Arte" basada en activeGroupingsAtender
+  // Estructura: Nivel1 -> Nivel2 -> Nivel3 -> Items (mÃ¡ximo 3 niveles de agrupaciÃ³n + items)
   const atenderGroupedInventory = useMemo(() => {
     const numLevels = Math.min(activeGroupingsAtender.length, 3);
 
-    // Si no hay agrupaciones, devolver estructura vacía
+    // Si no hay agrupaciones, devolver estructura vacÃ­a
     if (numLevels === 0) {
       return {} as Record<string, Record<string, Record<string, InventoryRow[]>>>;
     }
 
     const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
 
-    // Ordenar items por ID descendente (más recientes primero) antes de agrupar
+    // Ordenar items por ID descendente (mÃ¡s recientes primero) antes de agrupar
     const sortedInventory = [...filteredInventory].sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
     sortedInventory.forEach((item) => {
@@ -12431,18 +12467,18 @@ export function TareaSeguimientoPage() {
     return sortedGroups;
   }, [filteredInventory, activeGroupingsAtender]);
 
-  // Agrupación para tab "Programación" basada en activeGroupingsProgramacion
+  // AgrupaciÃ³n para tab "ProgramaciÃ³n" basada en activeGroupingsProgramacion
   const programacionGroupedInventory = useMemo(() => {
     const numLevels = Math.min(activeGroupingsProgramacion.length, 3);
 
-    // Si no hay agrupaciones, devolver estructura vacía
+    // Si no hay agrupaciones, devolver estructura vacÃ­a
     if (numLevels === 0) {
       return {} as Record<string, Record<string, Record<string, InventoryRow[]>>>;
     }
 
     const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
 
-    // Ordenar items por ID descendente (más recientes primero) antes de agrupar
+    // Ordenar items por ID descendente (mÃ¡s recientes primero) antes de agrupar
     const sortedInventory = [...filteredProgramacionData].sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
     sortedInventory.forEach((item) => {
@@ -12472,11 +12508,11 @@ export function TareaSeguimientoPage() {
     return sortedGroups;
   }, [filteredProgramacionData, activeGroupingsProgramacion]);
 
-  // Agrupación para tab "Validar Instalación" basada en activeGroupingsTestigo
+  // AgrupaciÃ³n para tab "Validar InstalaciÃ³n" basada en activeGroupingsTestigo
   const testigoGroupedInventory = useMemo(() => {
     const numLevels = Math.min(activeGroupingsTestigo.length, 3);
 
-    // Si no hay agrupaciones, devolver estructura vacía
+    // Si no hay agrupaciones, devolver estructura vacÃ­a
     if (numLevels === 0) {
       return {} as Record<string, Record<string, Record<string, InventoryRow[]>>>;
     }
@@ -12519,7 +12555,7 @@ export function TareaSeguimientoPage() {
     if (activeMainTab === 'impresiones') {
       return filteredImpresionesData.filter((item) => selectedInventoryIds.has(item.id));
     }
-    // Para el tab de programación, usar filteredProgramacionData
+    // Para el tab de programaciÃ³n, usar filteredProgramacionData
     if (activeMainTab === 'programacion') {
       return filteredProgramacionData.filter((item) => selectedInventoryIds.has(item.id));
     }
@@ -12554,7 +12590,7 @@ export function TareaSeguimientoPage() {
 
   // Compute summary stats
   const summaryStats = useMemo((): SummaryStats => {
-    // Seleccionar fuente de datos según tab activo
+    // Seleccionar fuente de datos segÃºn tab activo
     let allItems: InventoryRow[];
     if (activeMainTab === 'versionario') {
       allItems = inventorySinArteData;
@@ -12611,19 +12647,19 @@ export function TareaSeguimientoPage() {
       return { initialTipo: 'Testigo', availableTipos: ['Testigo'] };
     }
 
-    // Si estamos en la tab de programación con subtab "programado", solo mostrar tipo Testigo
+    // Si estamos en la tab de programaciÃ³n con subtab "programado", solo mostrar tipo Testigo
     if (activeMainTab === 'programacion' && activeEstadoProgramacionTab === 'programado') {
       return { initialTipo: 'Testigo', availableTipos: ['Testigo'] };
     }
 
     if (selectedInventoryItems.length === 0) {
-      return { initialTipo: '', availableTipos: ['Instalación', 'Revisión de artes', 'Impresión'] };
+      return { initialTipo: '', availableTipos: ['InstalaciÃ³n', 'RevisiÃ³n de artes', 'ImpresiÃ³n'] };
     }
 
-    // Verificar si algún item tiene IMU habilitado (checkbox marcado en solicitud)
+    // Verificar si algÃºn item tiene IMU habilitado (checkbox marcado en solicitud)
     const hasIMU = selectedInventoryItems.some(item => item.imu === 1 || item.imu === '1');
 
-    // Verificar si algún item ya pasó por impresión (estado recibido)
+    // Verificar si algÃºn item ya pasÃ³ por impresiÃ³n (estado recibido)
     const hasInImpresionFlow = selectedInventoryItems.some((item) => {
       const rsvIds = item.rsv_id.split(',').map(id => id.trim()).filter(Boolean);
       return rsvIds.some((id) => impresionStatusMap.has(id));
@@ -12661,68 +12697,68 @@ export function TareaSeguimientoPage() {
     // Verificar si todos los items seleccionados son digitales
     const allDigital = selectedInventoryItems.every(item => item.tradicional_digital === 'Digital');
 
-    // Determinar tipos disponibles según el estado de los inventarios
+    // Determinar tipos disponibles segÃºn el estado de los inventarios
     let availableTipos: string[] = [];
     let initialTipo = '';
 
     if (allAprobado) {
       if (allDigital) {
-        // Para digitales aprobados: Tráfico crea Orden de Programación, Operaciones crea Programación
+        // Para digitales aprobados: TrÃ¡fico crea Orden de ProgramaciÃ³n, Operaciones crea ProgramaciÃ³n
         if (permissions.canCreateOrdenProgramacion) {
-          availableTipos = ['Orden de Programación'];
-          initialTipo = 'Orden de Programación';
+          availableTipos = ['Orden de ProgramaciÃ³n'];
+          initialTipo = 'Orden de ProgramaciÃ³n';
         } else {
-          availableTipos = ['Programación'];
-          initialTipo = 'Programación';
+          availableTipos = ['ProgramaciÃ³n'];
+          initialTipo = 'ProgramaciÃ³n';
         }
       } else if (hasIMU && !hasInImpresionFlow) {
-        // Tradicionales con IMU: mostrar Impresión e Instalación
+        // Tradicionales con IMU: mostrar ImpresiÃ³n e InstalaciÃ³n
         if (permissions.canCreateOrdenInstalacion) {
-          availableTipos = ['Impresión', 'Orden de Instalación', 'Instalación'];
-          initialTipo = 'Impresión';
+          availableTipos = ['ImpresiÃ³n', 'Orden de InstalaciÃ³n', 'InstalaciÃ³n'];
+          initialTipo = 'ImpresiÃ³n';
         } else {
-          availableTipos = ['Impresión', 'Instalación'];
-          initialTipo = 'Impresión';
+          availableTipos = ['ImpresiÃ³n', 'InstalaciÃ³n'];
+          initialTipo = 'ImpresiÃ³n';
         }
       } else {
-        // Tradicionales sin IMU: Instalación (y Orden de Instalación para Tráfico)
+        // Tradicionales sin IMU: InstalaciÃ³n (y Orden de InstalaciÃ³n para TrÃ¡fico)
         if (permissions.canCreateOrdenInstalacion) {
-          availableTipos = ['Orden de Instalación', 'Instalación'];
-          initialTipo = 'Orden de Instalación';
+          availableTipos = ['Orden de InstalaciÃ³n', 'InstalaciÃ³n'];
+          initialTipo = 'Orden de InstalaciÃ³n';
         } else {
-          availableTipos = ['Instalación'];
-          initialTipo = 'Instalación';
+          availableTipos = ['InstalaciÃ³n'];
+          initialTipo = 'InstalaciÃ³n';
         }
       }
     } else if (allPendiente) {
-      // Todos pendientes de revisión: solo mostrar Revisión de artes
-      availableTipos = ['Revisión de artes'];
-      initialTipo = 'Revisión de artes';
+      // Todos pendientes de revisiÃ³n: solo mostrar RevisiÃ³n de artes
+      availableTipos = ['RevisiÃ³n de artes'];
+      initialTipo = 'RevisiÃ³n de artes';
     } else {
-      // Mezcla: mostrar tipos según IMU y tipo de inventario (pero excluir Impresión si ya fue recibido)
+      // Mezcla: mostrar tipos segÃºn IMU y tipo de inventario (pero excluir ImpresiÃ³n si ya fue recibido)
       if (allDigital) {
         if (permissions.canCreateOrdenProgramacion) {
-          availableTipos = ['Orden de Programación', 'Revisión de artes'];
-          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Orden de Programación' : 'Revisión de artes';
+          availableTipos = ['Orden de ProgramaciÃ³n', 'RevisiÃ³n de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Orden de ProgramaciÃ³n' : 'RevisiÃ³n de artes';
         } else {
-          availableTipos = ['Programación', 'Revisión de artes'];
-          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Programación' : 'Revisión de artes';
+          availableTipos = ['ProgramaciÃ³n', 'RevisiÃ³n de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'ProgramaciÃ³n' : 'RevisiÃ³n de artes';
         }
       } else if (hasIMU && !hasInImpresionFlow) {
         if (permissions.canCreateOrdenInstalacion) {
-          availableTipos = ['Orden de Instalación', 'Instalación', 'Revisión de artes', 'Impresión'];
-          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Impresión' : 'Revisión de artes';
+          availableTipos = ['Orden de InstalaciÃ³n', 'InstalaciÃ³n', 'RevisiÃ³n de artes', 'ImpresiÃ³n'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'ImpresiÃ³n' : 'RevisiÃ³n de artes';
         } else {
-          availableTipos = ['Instalación', 'Revisión de artes', 'Impresión'];
-          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Impresión' : 'Revisión de artes';
+          availableTipos = ['InstalaciÃ³n', 'RevisiÃ³n de artes', 'ImpresiÃ³n'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'ImpresiÃ³n' : 'RevisiÃ³n de artes';
         }
       } else {
         if (permissions.canCreateOrdenInstalacion) {
-          availableTipos = ['Orden de Instalación', 'Instalación', 'Revisión de artes'];
-          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Orden de Instalación' : 'Revisión de artes';
+          availableTipos = ['Orden de InstalaciÃ³n', 'InstalaciÃ³n', 'RevisiÃ³n de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Orden de InstalaciÃ³n' : 'RevisiÃ³n de artes';
         } else {
-          availableTipos = ['Instalación', 'Revisión de artes'];
-          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Instalación' : 'Revisión de artes';
+          availableTipos = ['InstalaciÃ³n', 'RevisiÃ³n de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'InstalaciÃ³n' : 'RevisiÃ³n de artes';
         }
       }
     }
@@ -12730,7 +12766,7 @@ export function TareaSeguimientoPage() {
     return { initialTipo, availableTipos };
   }, [selectedInventoryItems, activeMainTab, activeEstadoProgramacionTab, permissions.canCreateOrdenProgramacion, permissions.canCreateOrdenInstalacion, impresionStatusMap]);
 
-  // Verificar si alguno de los items seleccionados tiene relación con instalación
+  // Verificar si alguno de los items seleccionados tiene relaciÃ³n con instalaciÃ³n
   const hasSelectedItemsWithInstalacion = useMemo(() => {
     if (selectedInventoryItems.length === 0) return false;
 
@@ -12750,7 +12786,7 @@ export function TareaSeguimientoPage() {
     setAvailableTaskTipos(availableTipos);
 
     // Si el tipo inicial es Impresion, bloquear elementos ya ligados al flujo de impresion
-    if (initialTipo === 'Impresión') {
+    if (initialTipo === 'ImpresiÃ³n') {
       const conflicts = getSelectedImpresionFlowConflicts();
       if (conflicts.length > 0) {
         setImpresionFlowConflicts(conflicts);
@@ -12772,12 +12808,12 @@ export function TareaSeguimientoPage() {
         setExistingTasksForCreate(result.tareas);
         setIsTaskWarningModalOpen(true);
       } else {
-        // No hay tareas existentes, abrir modal de creación directamente
+        // No hay tareas existentes, abrir modal de creaciÃ³n directamente
         setIsCreateModalOpen(true);
       }
     } catch (error) {
       console.error('Error al verificar tareas:', error);
-      // Si hay error, abrir el modal de creación de todas formas
+      // Si hay error, abrir el modal de creaciÃ³n de todas formas
       setIsCreateModalOpen(true);
     } finally {
       setIsCheckingExistingTasks(false);
@@ -12785,7 +12821,7 @@ export function TareaSeguimientoPage() {
   }, [selectedInventoryIds, selectedInventoryItems, campanaId, calculateTaskTiposConfig, getSelectedImpresionFlowConflicts]);
 
   const handleCreateTask = useCallback(async (task: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<string, number> }) => {
-    if (task.tipo === 'Impresión') {
+    if (task.tipo === 'ImpresiÃ³n') {
       const conflicts = getSelectedImpresionFlowConflicts();
       if (conflicts.length > 0) {
         setImpresionFlowConflicts(conflicts);
@@ -12808,19 +12844,19 @@ export function TareaSeguimientoPage() {
         ids_reservas: reservaIds.join(','),
         proveedores_id: task.proveedores_id,
         nombre_proveedores: task.nombre_proveedores,
-        // Campos para Revisión de artes e Impresión
+        // Campos para RevisiÃ³n de artes e ImpresiÃ³n
         asignado: (task as any).asignado,
         id_asignado: (task as any).id_asignado,
         contenido: (task as any).contenido,
         catorcena_entrega: (task as any).catorcena_entrega,
         listado_inventario: (task as any).listado_inventario,
-        // Campos para Impresión
+        // Campos para ImpresiÃ³n
         impresiones: task.impresiones,
         num_impresiones: (task as any).num_impresiones,
-        // Campos para Programación (indicaciones guardadas como JSON)
+        // Campos para ProgramaciÃ³n (indicaciones guardadas como JSON)
         evidencia: (task as any).evidencia,
       });
-      // Éxito - cerrar modal y actualizar
+      // Ã‰xito - cerrar modal y actualizar
       setIsCreateModalOpen(false);
       setSelectedInventoryIds(new Set());
       setCreateTaskError(null);
@@ -12890,7 +12926,7 @@ export function TareaSeguimientoPage() {
     }
   }, [selectedInventoryItems, assignArteMutation, campanaId]);
 
-  // Handler para subir archivos digitales (múltiples)
+  // Handler para subir archivos digitales (mÃºltiples)
   const handleUploadDigitalArt = useCallback(async (data: { files: { file: File; spot: number }[]; inventoryIds: string[] }) => {
     // Get reserva IDs from selected inventory items
     const reservaIds = selectedInventoryItems.flatMap(item =>
@@ -12947,10 +12983,10 @@ export function TareaSeguimientoPage() {
     }
   }, [selectedInventoryItems, campanaId, queryClient]);
 
-  // Handler para abrir la galería de imágenes digitales
+  // Handler para abrir la galerÃ­a de imÃ¡genes digitales
   const openDigitalGallery = useCallback(async (reservaIds: number | number[], codigoUnico: string) => {
     setIsLoadingDigitalGallery(true);
-    setDigitalGalleryTitle(`Galería Digital - ${codigoUnico}`);
+    setDigitalGalleryTitle(`GalerÃ­a Digital - ${codigoUnico}`);
     setIsDigitalGalleryOpen(true);
 
     try {
@@ -12966,7 +13002,7 @@ export function TareaSeguimientoPage() {
         estado: img.estado,
       })));
     } catch (error) {
-      console.error('Error al cargar imágenes digitales:', error);
+      console.error('Error al cargar imÃ¡genes digitales:', error);
       setDigitalGalleryImages([]);
     } finally {
       setIsLoadingDigitalGallery(false);
@@ -13046,7 +13082,7 @@ export function TareaSeguimientoPage() {
       if (!digitalSummary) return '-';
       const parts: string[] = [];
       if (digitalSummary.imagenes > 0) {
-        parts.push(`${digitalSummary.imagenes} ${digitalSummary.imagenes === 1 ? 'imagen' : 'imágenes'}`);
+        parts.push(`${digitalSummary.imagenes} ${digitalSummary.imagenes === 1 ? 'imagen' : 'imÃ¡genes'}`);
       }
       if (digitalSummary.videos > 0) {
         parts.push(`${digitalSummary.videos} ${digitalSummary.videos === 1 ? 'video' : 'videos'}`);
@@ -13081,7 +13117,7 @@ export function TareaSeguimientoPage() {
       <td className="p-2 text-xs text-zinc-300">{item.arte_aprobado || 'Sin revisar'}</td>
       <td className="p-2">
         {isDigital && digitalSummary ? (
-          // Para digitales: mostrar contador de archivos con icono clickeable para abrir galería
+          // Para digitales: mostrar contador de archivos con icono clickeable para abrir galerÃ­a
           <button
             onClick={() => {
               const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
@@ -13090,7 +13126,7 @@ export function TareaSeguimientoPage() {
               }
             }}
             className="flex items-center justify-center w-10 h-10 bg-blue-500/20 rounded hover:bg-blue-500/30 transition-colors"
-            title="Ver galería digital"
+            title="Ver galerÃ­a digital"
           >
             <span className="text-blue-400 font-bold text-lg">{digitalSummary.total}</span>
           </button>
@@ -13134,8 +13170,8 @@ export function TareaSeguimientoPage() {
           const instalacionInfo = rsvIds.map(id => instalacionStatusMap.get(id)).find(info => info);
           if (!instalacionInfo) return <span className="text-zinc-500 text-xs">-</span>;
           const estadoLabels: Record<string, { label: string; color: string }> = {
-            'en_proceso': { label: 'En proceso de instalación', color: 'bg-orange-500/20 text-orange-400' },
-            'validar_instalacion': { label: 'Validar instalación', color: 'bg-yellow-500/20 text-yellow-400' },
+            'en_proceso': { label: 'En proceso de instalaciÃ³n', color: 'bg-orange-500/20 text-orange-400' },
+            'validar_instalacion': { label: 'Validar instalaciÃ³n', color: 'bg-yellow-500/20 text-yellow-400' },
             'instalado': { label: 'Instalado', color: 'bg-green-500/20 text-green-400' },
           };
           const { label, color } = estadoLabels[instalacionInfo.estado] || { label: '-', color: '' };
@@ -13185,7 +13221,7 @@ export function TareaSeguimientoPage() {
     </tr>
   );
 
-  // Render row for Programación tab (muestra estado de programación y tarea asociada)
+  // Render row for ProgramaciÃ³n tab (muestra estado de programaciÃ³n y tarea asociada)
   const renderProgramacionRow = (item: InventoryRow & { tarea_id?: number; tarea_titulo?: string; estado_programacion?: string }) => {
     // Para items digitales, obtener el resumen de archivos
     let digitalSummary: { total: number; imagenes: number; videos: number } | null = null;
@@ -13207,9 +13243,9 @@ export function TareaSeguimientoPage() {
       }
     }
 
-    // Estado de programación con colores
+    // Estado de programaciÃ³n con colores
     const estadoConfig: Record<string, { label: string; color: string }> = {
-      'en_programacion': { label: 'En Programación', color: 'bg-blue-500/20 text-blue-400' },
+      'en_programacion': { label: 'En ProgramaciÃ³n', color: 'bg-blue-500/20 text-blue-400' },
       'programado': { label: 'Programado', color: 'bg-green-500/20 text-green-400' },
     };
     const estado = estadoConfig[item.estado_programacion || 'en_programacion'] || estadoConfig.en_programacion;
@@ -13248,7 +13284,7 @@ export function TareaSeguimientoPage() {
                 }
               }}
               className="flex items-center justify-center w-10 h-10 bg-blue-500/20 rounded hover:bg-blue-500/30 transition-colors"
-              title="Ver galería digital"
+              title="Ver galerÃ­a digital"
             >
               <span className="text-blue-400 font-bold text-lg">{digitalSummary.total}</span>
             </button>
@@ -13273,7 +13309,7 @@ export function TareaSeguimientoPage() {
     );
   };
 
-  // Render row for Testigo tab (estilo idéntico a Revisar y aprobar)
+  // Render row for Testigo tab (estilo idÃ©ntico a Revisar y aprobar)
   const renderTestigoRowStyled = (item: InventoryRow) => (
     <tr
       key={item.id}
@@ -13334,8 +13370,8 @@ export function TareaSeguimientoPage() {
           const instalacionInfo = rsvIds.map(id => instalacionStatusMap.get(id)).find(info => info);
           if (!instalacionInfo) return <span className="text-zinc-500 text-xs">-</span>;
           const estadoLabels: Record<string, { label: string; color: string }> = {
-            'en_proceso': { label: 'En proceso de instalación', color: 'bg-orange-500/20 text-orange-400' },
-            'validar_instalacion': { label: 'Validar instalación', color: 'bg-yellow-500/20 text-yellow-400' },
+            'en_proceso': { label: 'En proceso de instalaciÃ³n', color: 'bg-orange-500/20 text-orange-400' },
+            'validar_instalacion': { label: 'Validar instalaciÃ³n', color: 'bg-yellow-500/20 text-yellow-400' },
             'instalado': { label: 'Instalado', color: 'bg-green-500/20 text-green-400' },
           };
           const { label, color } = estadoLabels[instalacionInfo.estado] || { label: '-', color: '' };
@@ -13363,7 +13399,7 @@ export function TareaSeguimientoPage() {
         <Header title="Gestion de Artes" />
         <div className="p-4 md:p-6 flex flex-col items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-purple-400 mb-3" />
-          <p className="text-sm text-muted-foreground">Cargando campaña...</p>
+          <p className="text-sm text-muted-foreground">Cargando campaÃ±a...</p>
         </div>
       </div>
     );
@@ -13383,7 +13419,7 @@ export function TareaSeguimientoPage() {
           </button>
           <div className="flex flex-col items-center justify-center py-12">
             <AlertCircle className="h-12 w-12 text-red-400 mb-3" />
-            <p className="text-red-300">Error al cargar la campaña</p>
+            <p className="text-red-300">Error al cargar la campaÃ±a</p>
           </div>
         </div>
       </div>
@@ -13403,7 +13439,7 @@ export function TareaSeguimientoPage() {
               className="flex items-center gap-1.5 text-purple-400 hover:text-purple-300 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span className="text-sm">Volver a campaña</span>
+              <span className="text-sm">Volver a campaÃ±a</span>
             </button>
             <span className="text-muted-foreground">|</span>
             <span className="text-sm font-medium">{campana.nombre}</span>
@@ -13479,7 +13515,7 @@ export function TareaSeguimientoPage() {
               {([
                 { key: 'versionario', label: 'Subir Artes', icon: Upload },
                 { key: 'atender', label: 'Revisar y Aprobar', icon: Eye },
-                { key: 'programacion', label: 'Programación', icon: Monitor },
+                { key: 'programacion', label: 'ProgramaciÃ³n', icon: Monitor },
                 { key: 'impresiones', label: 'Impresiones', icon: Printer },
                 { key: 'testigo', label: 'Validar Instalacion', icon: Camera },
               ] as { key: MainTab; label: string; icon: typeof Upload }[])
@@ -13510,7 +13546,7 @@ export function TareaSeguimientoPage() {
             </div>
           </div>
 
-          {/* Sub-tabs: Formato - Solo mostrar si hay elementos y no estamos en Programación (que es solo digital) */}
+          {/* Sub-tabs: Formato - Solo mostrar si hay elementos y no estamos en ProgramaciÃ³n (que es solo digital) */}
           {activeMainTab !== 'programacion' && (formatCounts.tradicional > 0 || formatCounts.digital > 0) && (
             <div className="px-4 py-2 border-b border-border bg-purple-900/5">
               <div className="flex items-center justify-between">
@@ -13628,7 +13664,7 @@ export function TareaSeguimientoPage() {
                   const filteredByFormat = inventoryArteData.filter(i => i.tradicional_digital === formatFilter);
                   return [
                     { key: 'sin_revisar' as const, label: 'Sin Revisar', count: filteredByFormat.filter(i => i.estado_arte === 'sin_revisar').length },
-                    { key: 'en_revision' as const, label: 'En Revisión', count: filteredByFormat.filter(i => i.estado_arte === 'en_revision').length },
+                    { key: 'en_revision' as const, label: 'En RevisiÃ³n', count: filteredByFormat.filter(i => i.estado_arte === 'en_revision').length },
                     { key: 'aprobado' as const, label: 'Aprobado', count: filteredByFormat.filter(i => i.estado_arte === 'aprobado').length },
                     { key: 'rechazado' as const, label: 'Rechazado', count: filteredByFormat.filter(i => i.estado_arte === 'rechazado').length },
                   ];
@@ -13667,7 +13703,7 @@ export function TareaSeguimientoPage() {
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                   <input
                     type="text"
-                    placeholder="Buscar por ID, código, plaza..."
+                    placeholder="Buscar por ID, cÃ³digo, plaza..."
                     value={inventorySearch}
                     onChange={(e) => setInventorySearch(e.target.value)}
                     className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
@@ -13770,7 +13806,7 @@ export function TareaSeguimientoPage() {
                         ? 'bg-red-600 hover:bg-red-700 text-white'
                         : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                     }`}
-                    title={hasSelectedItemsWithInstalacion ? 'No se puede limpiar arte de items con instalación activa' : undefined}
+                    title={hasSelectedItemsWithInstalacion ? 'No se puede limpiar arte de items con instalaciÃ³n activa' : undefined}
                   >
                     {isCheckingTareas || assignArteMutation.isPending ? (
                       <>
@@ -13807,12 +13843,12 @@ export function TareaSeguimientoPage() {
             </div>
           )}
 
-          {/* Estado Programación Tabs (Programación tab) */}
+          {/* Estado ProgramaciÃ³n Tabs (ProgramaciÃ³n tab) */}
           {activeMainTab === 'programacion' && (
             <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
               <div className="flex items-center gap-1">
                 {[
-                  { key: 'en_programacion' as const, label: 'En Programación', count: inventoryProgramacionData.filter(i => i.estado_programacion === 'en_programacion').length },
+                  { key: 'en_programacion' as const, label: 'En ProgramaciÃ³n', count: inventoryProgramacionData.filter(i => i.estado_programacion === 'en_programacion').length },
                   { key: 'programado' as const, label: 'Programado', count: inventoryProgramacionData.filter(i => i.estado_programacion === 'programado').length },
                 ].map(tab => (
                   <button
@@ -13838,7 +13874,7 @@ export function TareaSeguimientoPage() {
             </div>
           )}
 
-          {/* Filter Toolbar (Programación tab) */}
+          {/* Filter Toolbar (ProgramaciÃ³n tab) */}
           {activeMainTab === 'programacion' && (
             <div className="px-4 py-2 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -13849,7 +13885,7 @@ export function TareaSeguimientoPage() {
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                   <input
                     type="text"
-                    placeholder="Buscar por ID, código, plaza..."
+                    placeholder="Buscar por ID, cÃ³digo, plaza..."
                     value={inventorySearch}
                     onChange={(e) => setInventorySearch(e.target.value)}
                     className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
@@ -13890,7 +13926,7 @@ export function TareaSeguimientoPage() {
             </div>
           )}
 
-          {/* Action Buttons (Programación tab) */}
+          {/* Action Buttons (ProgramaciÃ³n tab) */}
           {activeMainTab === 'programacion' && (
             <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-purple-900/10 to-transparent flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -13906,7 +13942,7 @@ export function TareaSeguimientoPage() {
                       onClick={() => setSelectedInventoryIds(new Set())}
                       className="text-xs text-zinc-400 hover:text-zinc-300"
                     >
-                      Limpiar selección
+                      Limpiar selecciÃ³n
                     </button>
                   </>
                 ) : (
@@ -13915,7 +13951,7 @@ export function TareaSeguimientoPage() {
                     <span className="text-xs">
                       {activeEstadoProgramacionTab === 'programado'
                         ? 'Selecciona items programados para crear tareas de Testigo'
-                        : 'Items digitales en tareas de programación'}
+                        : 'Items digitales en tareas de programaciÃ³n'}
                     </span>
                   </div>
                 )}
@@ -13991,7 +14027,7 @@ export function TareaSeguimientoPage() {
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                   <input
                     type="text"
-                    placeholder="Buscar por ID, código, plaza..."
+                    placeholder="Buscar por ID, cÃ³digo, plaza..."
                     value={inventorySearch}
                     onChange={(e) => setInventorySearch(e.target.value)}
                     className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
@@ -14073,7 +14109,7 @@ export function TareaSeguimientoPage() {
               <div className="flex items-center gap-2">
                 <Printer className="h-4 w-4 text-purple-400" />
                 <span className="text-xs text-purple-300 font-medium">
-                  {tareasAPI.filter(t => t.tipo === 'Impresión' && t.estatus !== 'Atendido').length} tarea(s) activa(s)
+                  {tareasAPI.filter(t => t.tipo === 'ImpresiÃ³n' && t.estatus !== 'Atendido').length} tarea(s) activa(s)
                 </span>
               </div>
             </div>
@@ -14203,14 +14239,14 @@ export function TareaSeguimientoPage() {
                   activeMainTab === 'versionario'
                     ? inventoryArteData.length > 0
                       ? 'Ve a "Revisar y Aprobar" para continuar con el proceso de los artes que subiste'
-                      : 'Asigna APS a los inventarios en "Detalle de Campaña" para que aparezcan aqui'
+                      : 'Asigna APS a los inventarios en "Detalle de CampaÃ±a" para que aparezcan aqui'
                     : activeMainTab === 'atender'
                     ? (formatCounts.tradicional === 0 && formatCounts.digital === 0)
                       ? inventorySinArteData.length > 0
                         ? 'Regresa a "Subir Artes" para asignar imagenes a los inventarios y luego vuelve aqui para revisarlos'
                         : inventoryTestigosData.length > 0
                           ? 'Todos los artes fueron aprobados, ve a "Validar Instalacion" para continuar'
-                          : 'No hay artes pendientes de revision en esta campaña'
+                          : 'No hay artes pendientes de revision en esta campaÃ±a'
                       : 'No hay artes de tipo ' + activeFormat + ' para revisar'
                     : activeMainTab === 'impresiones'
                     ? 'Crea una tarea de Impresion desde "Revisar y Aprobar" para ver items aqui'
@@ -14291,7 +14327,7 @@ export function TareaSeguimientoPage() {
                                   if (tarea) {
                                     const taskRow: TaskRow = {
                                       id: tarea.id.toString(),
-                                      tipo: tarea.tipo || 'Impresión',
+                                      tipo: tarea.tipo || 'ImpresiÃ³n',
                                       estatus: tarea.estatus || 'Pendiente',
                                       identificador: `TASK-${tarea.id.toString().padStart(3, '0')}`,
                                       fecha_inicio: tarea.fecha_inicio?.split('T')[0] || '',
@@ -14387,16 +14423,16 @@ export function TareaSeguimientoPage() {
                 })()}
               </div>
             ) : activeMainTab === 'impresiones' ? (
-              // Vista de items en proceso de impresión (no recibido)
+              // Vista de items en proceso de impresiÃ³n (no recibido)
               <div className="divide-y divide-border">
                 {(() => {
-                  // Agrupar por tarea de impresión
+                  // Agrupar por tarea de impresiÃ³n
                   const tareasAgrupadas = filteredImpresionesData.reduce((acc, item) => {
                     const tareaId = (item as any).tarea_id || 0;
                     if (!acc[tareaId]) {
                       acc[tareaId] = {
                         tarea_id: tareaId,
-                        tarea_titulo: (item as any).tarea_titulo || `Impresión #${tareaId}`,
+                        tarea_titulo: (item as any).tarea_titulo || `ImpresiÃ³n #${tareaId}`,
                         tarea_estatus: (item as any).tarea_estatus || 'Pendiente',
                         proveedor: (item as any).proveedor || '-',
                         items: [],
@@ -14447,7 +14483,7 @@ export function TareaSeguimientoPage() {
                                 if (tarea) {
                                   const taskRow: TaskRow = {
                                     id: tarea.id.toString(),
-                                    tipo: tarea.tipo || 'Impresión',
+                                    tipo: tarea.tipo || 'ImpresiÃ³n',
                                     estatus: tarea.estatus || 'Pendiente',
                                     identificador: `TASK-${tarea.id.toString().padStart(3, '0')}`,
                                     fecha_inicio: tarea.fecha_inicio?.split('T')[0] || '',
@@ -14518,7 +14554,7 @@ export function TareaSeguimientoPage() {
                 })()}
               </div>
             ) : activeMainTab === 'atender' && activeGroupingsAtender.length > 0 ? (
-              // Vista jerárquica de 3 niveles para Revisar y Aprobar (con agrupaciones)
+              // Vista jerÃ¡rquica de 3 niveles para Revisar y Aprobar (con agrupaciones)
               <div className="divide-y divide-border">
                 {Object.entries(atenderGroupedInventory).map(([level1Key, level2Groups]) => {
                   const level1Expanded = expandedNodes.has(`atender-${level1Key}`);
@@ -14717,13 +14753,13 @@ export function TareaSeguimientoPage() {
                                                     <th className="p-2 font-medium text-purple-300">ID</th>
                                                     <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                                                     <th className="p-2 font-medium text-purple-300">Archivo</th>
-                                                    <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                                    <th className="p-2 font-medium text-purple-300">UbicaciÃ³n</th>
                                                     <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
                                                     <th className="p-2 font-medium text-purple-300">Formato</th>
                                                     <th className="p-2 font-medium text-purple-300">Plaza</th>
                                                     <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                                     <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
-                                                    <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
+                                                    <th className="p-2 font-medium text-purple-300">Estado InstalaciÃ³n</th>
                                                   </tr>
                                                 </thead>
                                                 <tbody>
@@ -14747,7 +14783,7 @@ export function TareaSeguimientoPage() {
                 })}
               </div>
             ) : activeMainTab === 'versionario' ? (
-              // Vista jerárquica de 3 niveles para Subir Artes
+              // Vista jerÃ¡rquica de 3 niveles para Subir Artes
               <div className="divide-y divide-border">
                 {Object.entries(versionarioGroupedInventory).map(([level1Key, level2Groups]) => {
                   const level1Expanded = expandedNodes.has(level1Key);
@@ -14918,8 +14954,8 @@ export function TareaSeguimientoPage() {
                                                     <th className="p-1.5 w-6"></th>
                                                     <th className="p-1.5 font-medium text-purple-300 text-[10px]">ID</th>
                                                     <th className="p-1.5 font-medium text-purple-300 text-[10px]">Tipo Formato</th>
-                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">Código Único</th>
-                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">Ubicación</th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">CÃ³digo Ãšnico</th>
+                                                    <th className="p-1.5 font-medium text-purple-300 text-[10px]">UbicaciÃ³n</th>
                                                     <th className="p-1.5 font-medium text-purple-300 text-[10px]">Tipo Cara</th>
                                                     <th className="p-1.5 font-medium text-purple-300 text-[10px]">Formato</th>
                                                     <th className="p-1.5 font-medium text-purple-300 text-[10px]">Plaza</th>
@@ -14981,20 +15017,20 @@ export function TareaSeguimientoPage() {
                       <th className="p-2 font-medium text-purple-300">ID</th>
                       <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                       <th className="p-2 font-medium text-purple-300">Archivo</th>
-                      <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                      <th className="p-2 font-medium text-purple-300">UbicaciÃ³n</th>
                       <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
                       <th className="p-2 font-medium text-purple-300">Formato</th>
                       <th className="p-2 font-medium text-purple-300">Plaza</th>
                       <th className="p-2 font-medium text-purple-300">Ciudad</th>
                       <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
-                      <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
+                      <th className="p-2 font-medium text-purple-300">Estado InstalaciÃ³n</th>
                     </tr>
                   </thead>
                   <tbody>{filteredInventory.map((item) => renderAtenderRow(item, true, true))}</tbody>
                 </table>
               </div>
             ) : activeMainTab === 'programacion' && activeGroupingsProgramacion.length > 0 ? (
-              // Vista jerárquica de 3 niveles para Programación (con agrupaciones)
+              // Vista jerÃ¡rquica de 3 niveles para ProgramaciÃ³n (con agrupaciones)
               <div className="divide-y divide-border">
                 {Object.entries(programacionGroupedInventory).map(([level1Key, level2Groups]) => {
                   const level1Expanded = expandedNodes.has(`programacion-${level1Key}`);
@@ -15184,7 +15220,7 @@ export function TareaSeguimientoPage() {
                                                     )}
                                                     <th className="p-2 font-medium text-purple-300">ID</th>
                                                     <th className="p-2 font-medium text-purple-300">Arte</th>
-                                                    <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                                    <th className="p-2 font-medium text-purple-300">UbicaciÃ³n</th>
                                                     <th className="p-2 font-medium text-purple-300">Plaza</th>
                                                     <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                                     <th className="p-2 font-medium text-purple-300">Tarea</th>
@@ -15212,7 +15248,7 @@ export function TareaSeguimientoPage() {
                 })}
               </div>
             ) : activeMainTab === 'programacion' && activeGroupingsProgramacion.length === 0 ? (
-              // Tabla plana de Programación (sin agrupaciones)
+              // Tabla plana de ProgramaciÃ³n (sin agrupaciones)
               <div className="bg-card/50">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-purple-900/20 z-10">
@@ -15245,7 +15281,7 @@ export function TareaSeguimientoPage() {
                       )}
                       <th className="p-2 font-medium text-purple-300">ID</th>
                       <th className="p-2 font-medium text-purple-300">Arte</th>
-                      <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                      <th className="p-2 font-medium text-purple-300">UbicaciÃ³n</th>
                       <th className="p-2 font-medium text-purple-300">Plaza</th>
                       <th className="p-2 font-medium text-purple-300">Ciudad</th>
                       <th className="p-2 font-medium text-purple-300">Tarea</th>
@@ -15304,7 +15340,7 @@ export function TareaSeguimientoPage() {
                               ? 'bg-green-500/20 text-green-400'
                               : 'bg-blue-500/20 text-blue-400'
                           }`}>
-                            {item.estado_programacion === 'programado' ? 'Programado' : 'En Programación'}
+                            {item.estado_programacion === 'programado' ? 'Programado' : 'En ProgramaciÃ³n'}
                           </span>
                         </td>
                       </tr>
@@ -15373,7 +15409,7 @@ export function TareaSeguimientoPage() {
                             <table className="w-full text-xs">
                               <thead>
                                 <tr className="border-b border-border text-left">
-                                  <th className="p-2 pl-6 font-medium text-purple-300">Código</th>
+                                  <th className="p-2 pl-6 font-medium text-purple-300">CÃ³digo</th>
                                   <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
                                   <th className="p-2 font-medium text-purple-300">Periodo</th>
                                   <th className="p-2 font-medium text-purple-300">APS</th>
@@ -15412,7 +15448,7 @@ export function TareaSeguimientoPage() {
                 )}
               </div>
             ) : activeMainTab === 'testigo' && activeGroupingsTestigo.length > 0 ? (
-              // Vista jerárquica de 3 niveles para Validar Instalación (con agrupaciones)
+              // Vista jerÃ¡rquica de 3 niveles para Validar InstalaciÃ³n (con agrupaciones)
               <div className="divide-y divide-border">
                 {Object.entries(testigoGroupedInventory).map(([level1Key, level2Groups]) => {
                   const level1Expanded = expandedNodes.has(`testigo-${level1Key}`);
@@ -15602,13 +15638,13 @@ export function TareaSeguimientoPage() {
                                                     <th className="p-2 font-medium text-purple-300">ID</th>
                                                     <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                                                     <th className="p-2 font-medium text-purple-300">Archivo</th>
-                                                    <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                                    <th className="p-2 font-medium text-purple-300">UbicaciÃ³n</th>
                                                     <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
                                                     <th className="p-2 font-medium text-purple-300">Formato</th>
                                                     <th className="p-2 font-medium text-purple-300">Plaza</th>
                                                     <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                                     <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
-                                                    <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
+                                                    <th className="p-2 font-medium text-purple-300">Estado InstalaciÃ³n</th>
                                                   </tr>
                                                 </thead>
                                                 <tbody>
@@ -15632,7 +15668,7 @@ export function TareaSeguimientoPage() {
                 })}
               </div>
             ) : activeMainTab === 'testigo' && activeGroupingsTestigo.length === 0 ? (
-              // Tabla plana de Validar Instalación (sin agrupaciones)
+              // Tabla plana de Validar InstalaciÃ³n (sin agrupaciones)
               <div className="bg-card/50">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-purple-900/20 z-10">
@@ -15664,13 +15700,13 @@ export function TareaSeguimientoPage() {
                       <th className="p-2 font-medium text-purple-300">ID</th>
                       <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                       <th className="p-2 font-medium text-purple-300">Archivo</th>
-                      <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                      <th className="p-2 font-medium text-purple-300">UbicaciÃ³n</th>
                       <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
                       <th className="p-2 font-medium text-purple-300">Formato</th>
                       <th className="p-2 font-medium text-purple-300">Plaza</th>
                       <th className="p-2 font-medium text-purple-300">Ciudad</th>
                       <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
-                      <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
+                      <th className="p-2 font-medium text-purple-300">Estado InstalaciÃ³n</th>
                     </tr>
                   </thead>
                   <tbody>{filteredTestigoData.map((item) => renderAtenderRow(item, true, true))}</tbody>
@@ -15691,8 +15727,8 @@ export function TareaSeguimientoPage() {
                 <ClipboardList className="h-4 w-4 text-blue-400" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">Tareas de Gestión de Artes</h3>
-                <p className="text-xs text-zinc-400">Tareas del flujo de gestión de artes: revisión, impresión, instalación y programación</p>
+                <h3 className="text-sm font-semibold text-white">Tareas de GestiÃ³n de Artes</h3>
+                <p className="text-xs text-zinc-400">Tareas del flujo de gestiÃ³n de artes: revisiÃ³n, impresiÃ³n, instalaciÃ³n y programaciÃ³n</p>
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
@@ -15744,7 +15780,7 @@ export function TareaSeguimientoPage() {
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                       <input
                         type="text"
-                        placeholder="Buscar por título, ID, asignado..."
+                        placeholder="Buscar por tÃ­tulo, ID, asignado..."
                         value={tasksSearch}
                         onChange={(e) => setTasksSearch(e.target.value)}
                         className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
@@ -15840,13 +15876,13 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300 max-w-[150px] truncate">{task.descripcion}</td>
                             <td className="p-2 text-zinc-300">{task.titulo}</td>
                             <td className="p-2">
-                              {/* Solo mostrar botón Abrir si: canOpenTasks=true Y (no tiene restricción O es tarea del tipo permitido) Y no está bloqueado por cannotOpenCorreccionTasks */}
+                              {/* Solo mostrar botÃ³n Abrir si: canOpenTasks=true Y (no tiene restricciÃ³n O es tarea del tipo permitido) Y no estÃ¡ bloqueado por cannotOpenCorreccionTasks */}
                               {permissions.canOpenTasks && !(permissions.cannotOpenCorreccionTasks && task.tipo === 'Correccion') && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks && !permissions.canOnlyOpenCorreccionTasks && !permissions.canOnlyOpenOrdenProgramacionTasks && !permissions.canOnlyOpenOrdenInstalacionTasks) ||
-                                (permissions.canOnlyOpenImpresionTasks && task.tipo === 'Impresión') ||
-                                (permissions.canOnlyOpenRecepcionTasks && (task.tipo === 'Recepción' || task.tipo === 'Instalación' || task.tipo === 'Testigo' || task.tipo === 'Programación')) ||
-                                (permissions.canOnlyOpenCorreccionTasks && (task.tipo === 'Correccion' || task.tipo === 'Instalación')) ||
-                                (permissions.canOnlyOpenOrdenProgramacionTasks && (task.tipo === 'Orden de Programación' || task.tipo === 'Orden de Instalación')) ||
-                                (permissions.canOnlyOpenOrdenInstalacionTasks && task.tipo === 'Orden de Instalación')) ? (
+                                (permissions.canOnlyOpenImpresionTasks && task.tipo === 'ImpresiÃ³n') ||
+                                (permissions.canOnlyOpenRecepcionTasks && (task.tipo === 'RecepciÃ³n' || task.tipo === 'InstalaciÃ³n' || task.tipo === 'Testigo' || task.tipo === 'ProgramaciÃ³n')) ||
+                                (permissions.canOnlyOpenCorreccionTasks && (task.tipo === 'Correccion' || task.tipo === 'InstalaciÃ³n')) ||
+                                (permissions.canOnlyOpenOrdenProgramacionTasks && (task.tipo === 'Orden de ProgramaciÃ³n' || task.tipo === 'Orden de InstalaciÃ³n')) ||
+                                (permissions.canOnlyOpenOrdenInstalacionTasks && task.tipo === 'Orden de InstalaciÃ³n')) ? (
                                 <button
                                   onClick={() => {
                                     setSelectedTask(task);
@@ -15928,7 +15964,7 @@ export function TareaSeguimientoPage() {
                                 >
                                   Abrir
                                 </button>
-                                {(task.tipo === 'Testigo' || task.tipo === 'Recepción') && task.archivo_testigo && (
+                                {(task.tipo === 'Testigo' || task.tipo === 'RecepciÃ³n') && task.archivo_testigo && (
                                   <button
                                     onClick={() => {
                                       setSelectedTestigoFile(task.archivo_testigo ?? null);
@@ -16010,8 +16046,8 @@ export function TareaSeguimientoPage() {
               {tareasAfectadas.map((tarea) => (
                 <div key={tarea.id} className="flex items-center justify-between py-2 border-b border-zinc-700 last:border-0">
                   <div>
-                    <p className="text-sm font-medium text-white">{tarea.titulo || 'Sin título'}</p>
-                    <p className="text-xs text-zinc-400">{tarea.tipo} • {tarea.estatus}</p>
+                    <p className="text-sm font-medium text-white">{tarea.titulo || 'Sin tÃ­tulo'}</p>
+                    <p className="text-xs text-zinc-400">{tarea.tipo} â€¢ {tarea.estatus}</p>
                   </div>
                   <span className="text-xs text-zinc-500">#{tarea.id}</span>
                 </div>
@@ -16019,7 +16055,7 @@ export function TareaSeguimientoPage() {
             </div>
 
             <p className="text-sm text-amber-400 mb-4">
-              Al limpiar el arte, estos inventarios se eliminarán de las tareas. Si una tarea queda sin inventarios, será eliminada.
+              Al limpiar el arte, estos inventarios se eliminarÃ¡n de las tareas. Si una tarea queda sin inventarios, serÃ¡ eliminada.
             </p>
 
             <div className="flex justify-end gap-3">
@@ -16042,7 +16078,7 @@ export function TareaSeguimientoPage() {
                 disabled={assignArteMutation.isPending}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50"
               >
-                {assignArteMutation.isPending ? 'Limpiando...' : 'Sí, limpiar arte'}
+                {assignArteMutation.isPending ? 'Limpiando...' : 'SÃ­, limpiar arte'}
               </button>
             </div>
           </div>
@@ -16127,14 +16163,14 @@ export function TareaSeguimientoPage() {
               {existingTasksForCreate.map((tarea) => (
                 <div key={tarea.id} className="flex items-center justify-between py-2 border-b border-zinc-700 last:border-0">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{tarea.titulo || 'Sin título'}</p>
+                    <p className="text-sm font-medium text-white truncate">{tarea.titulo || 'Sin tÃ­tulo'}</p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-purple-400">{tarea.tipo}</span>
-                      <span className="text-xs text-zinc-500">•</span>
+                      <span className="text-xs text-zinc-500">â€¢</span>
                       <span className="text-xs text-zinc-400">{tarea.estatus}</span>
                       {tarea.responsable && (
                         <>
-                          <span className="text-xs text-zinc-500">•</span>
+                          <span className="text-xs text-zinc-500">â€¢</span>
                           <span className="text-xs text-zinc-400">{tarea.responsable}</span>
                         </>
                       )}
@@ -16146,7 +16182,7 @@ export function TareaSeguimientoPage() {
             </div>
 
             <p className="text-sm text-amber-400 mb-4">
-              ¿Deseas continuar y crear una nueva tarea con estos inventarios?
+              Â¿Deseas continuar y crear una nueva tarea con estos inventarios?
             </p>
 
             <div className="flex justify-end gap-3">
@@ -16221,10 +16257,10 @@ export function TareaSeguimientoPage() {
         onReject={async (reservaIds, comentario, imagenRechazoUrl) => {
           // Primero actualizar el estado a Rechazado
           await updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Rechazado', comentario });
-          // Después de rechazar exitosamente, crear tarea de corrección para el creador original
+          // DespuÃ©s de rechazar exitosamente, crear tarea de correcciÃ³n para el creador original
           if (selectedTask && selectedTask.creador) {
             const tareaData: Parameters<typeof createTareaMutation.mutateAsync>[0] = {
-              titulo: `Corrección de artes - Rechazo`,
+              titulo: `CorrecciÃ³n de artes - Rechazo`,
               descripcion: (comentario || 'Sin motivo especificado').substring(0, 255),
               tipo: 'Correccion',
               asignado: selectedTask.creador,
@@ -16237,18 +16273,18 @@ export function TareaSeguimientoPage() {
           }
         }}
         onCorrect={(reservaIds, instrucciones) => {
-          // Establecer estado a Pendiente (no Rechazado) y crear tarea de corrección
+          // Establecer estado a Pendiente (no Rechazado) y crear tarea de correcciÃ³n
           updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Pendiente', comentario: instrucciones })
             .then(() => {
-              // Crear tarea de corrección para el creador original
+              // Crear tarea de correcciÃ³n para el creador original
               if (selectedTask && selectedTask.creador) {
                 createTareaMutation.mutate({
-                  titulo: `Corrección de artes - Ajustes necesarios`,
+                  titulo: `CorrecciÃ³n de artes - Ajustes necesarios`,
                   descripcion: `Se requieren ajustes en los artes:
 
 ${instrucciones || 'Sin instrucciones especificadas'}
 
-Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
+Por favor realiza los ajustes indicados y vuelve a enviar a revisiÃ³n.`,
                   tipo: 'Correccion',
                   asignado: selectedTask.creador,
                   ids_reservas: reservaIds.join(','),
@@ -16260,7 +16296,7 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
           assignArteMutation.mutate({ reservaIds, archivo });
         }}
         onUpdateArteDigital={async (reservaIds, files, deleteArchivos) => {
-          // 1. Primero eliminar los archivos marcados para eliminación (usando modo por archivos + reservaIds)
+          // 1. Primero eliminar los archivos marcados para eliminaciÃ³n (usando modo por archivos + reservaIds)
           if (deleteArchivos && deleteArchivos.length > 0) {
             // Usar el nuevo modo que elimina por archivo path en todas las reservas seleccionadas
             await campanasService.deleteImagenesDigitales(campanaId, undefined, deleteArchivos, reservaIds);
@@ -16307,13 +16343,13 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
           });
         }}
         onSendToReview={async (reservaIds, responsableOriginal) => {
-          // Cambiar estado de artes a Pendiente (para que vuelvan a revisión)
-          await updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Pendiente', comentario: 'Arte corregido y enviado a revisión' });
-          // Crear nueva tarea de Revisión de artes asignada al revisor original
+          // Cambiar estado de artes a Pendiente (para que vuelvan a revisiÃ³n)
+          await updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Pendiente', comentario: 'Arte corregido y enviado a revisiÃ³n' });
+          // Crear nueva tarea de RevisiÃ³n de artes asignada al revisor original
           await createTareaMutation.mutateAsync({
-            titulo: `Revisión de artes - Corrección enviada`,
-            descripcion: `Los artes han sido corregidos y están listos para revisión.`,
-            tipo: 'Revisión de artes',
+            titulo: `RevisiÃ³n de artes - CorrecciÃ³n enviada`,
+            descripcion: `Los artes han sido corregidos y estÃ¡n listos para revisiÃ³n.`,
+            tipo: 'RevisiÃ³n de artes',
             asignado: responsableOriginal,
             ids_reservas: reservaIds.join(','),
           });
@@ -16321,25 +16357,25 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
         onCreateRecepcion={async (tareaImpresionId, asignadoNombre, asignadoId, guiaPdfUrl) => {
           if (!selectedTask) return;
 
-          // 1. Marcar la tarea de Impresión como "Atendido"
+          // 1. Marcar la tarea de ImpresiÃ³n como "Atendido"
           await updateTareaMutation.mutateAsync({
             tareaId: parseInt(tareaImpresionId),
             data: { estatus: 'Atendido' }
           });
 
-          // 2. Crear nueva tarea de Recepción con el num_impresiones y evidencia de la tarea original
+          // 2. Crear nueva tarea de RecepciÃ³n con el num_impresiones y evidencia de la tarea original
           const numImpresiones = selectedTask.num_impresiones || selectedTask.inventario_ids?.length || 0;
 
-          // Crear evidencia para la recepción con el desglose por arte de la tarea de impresión
+          // Crear evidencia para la recepciÃ³n con el desglose por arte de la tarea de impresiÃ³n
           let evidenciaRecepcion = selectedTask.evidencia;
           try {
             const evidenciaObj = evidenciaRecepcion ? JSON.parse(evidenciaRecepcion) : {};
-            // Agregar tipo para identificar que es recepción normal (no faltantes)
+            // Agregar tipo para identificar que es recepciÃ³n normal (no faltantes)
             evidenciaObj.tipo = 'recepcion_normal';
             if (guiaPdfUrl) evidenciaObj.guia_pdf = guiaPdfUrl;
             evidenciaRecepcion = JSON.stringify(evidenciaObj);
           } catch (e) {
-            // Si no es JSON válido, crear objeto nuevo
+            // Si no es JSON vÃ¡lido, crear objeto nuevo
             evidenciaRecepcion = JSON.stringify({
               tipo: 'recepcion_normal',
               ...(guiaPdfUrl ? { guia_pdf: guiaPdfUrl } : {})
@@ -16350,12 +16386,12 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
           const asignadoFinal = asignadoNombre || selectedTask.asignado || selectedTask.creador || '';
 
           await createTareaMutation.mutateAsync({
-            titulo: `Recepción - ${selectedTask.titulo || selectedTask.identificador}`,
-            descripcion: `Tarea de recepción de impresiones.
+            titulo: `RecepciÃ³n - ${selectedTask.titulo || selectedTask.identificador}`,
+            descripcion: `Tarea de recepciÃ³n de impresiones.
 Total de impresiones solicitadas: ${numImpresiones}
 
 Por favor registra la cantidad de impresiones recibidas.`,
-            tipo: 'Recepción',
+            tipo: 'RecepciÃ³n',
             asignado: asignadoFinal,
             id_asignado: asignadoId || '',
             ids_reservas: selectedTask.inventario_ids?.join(',') || '',
@@ -16369,19 +16405,19 @@ Por favor registra la cantidad de impresiones recibidas.`,
         onCreateRecepcionFaltante={async (faltantes, observaciones, guiaPdfUrlParam) => {
           if (!selectedTask) return;
 
-          // Construir descripción con detalle de faltantes
+          // Construir descripciÃ³n con detalle de faltantes
           const detallesFaltantes = faltantes.map(f =>
             `- ${f.arte.split('/').pop() || 'Sin arte'}: Faltantes ${f.faltantes}`
           ).join('\n');
 
           const totalFaltantes = faltantes.reduce((sum, f) => sum + f.faltantes, 0);
 
-          // Extraer identificador base (evitar concatenación de títulos)
+          // Extraer identificador base (evitar concatenaciÃ³n de tÃ­tulos)
           const identificadorBase = selectedTask.identificador ||
             (selectedTask.titulo?.match(/TASK-\d+/) || [''])[0] ||
             `TASK-${selectedTask.id}`;
 
-          // Guardar info de faltantes en evidencia y conservar guía PDF previa si existe
+          // Guardar info de faltantes en evidencia y conservar guÃ­a PDF previa si existe
           let guiaPdfAnterior: string | undefined;
           try {
             const evidenciaAnterior = selectedTask.evidencia ? JSON.parse(selectedTask.evidencia) : {};
@@ -16402,18 +16438,18 @@ Por favor registra la cantidad de impresiones recibidas.`,
           });
 
           await createTareaMutation.mutateAsync({
-            titulo: `Recepción Faltantes - ${identificadorBase}`,
-            descripcion: `Tarea de recepción de impresiones faltantes.
+            titulo: `RecepciÃ³n Faltantes - ${identificadorBase}`,
+            descripcion: `Tarea de recepciÃ³n de impresiones faltantes.
 
 Impresiones solicitadas: ${totalFaltantes}
 
 Detalle por arte:
 ${detallesFaltantes}
 
-${observaciones ? `Observaciones de recepción anterior:\n${observaciones}` : ''}
+${observaciones ? `Observaciones de recepciÃ³n anterior:\n${observaciones}` : ''}
 
 Por favor registra la cantidad de impresiones recibidas.`,
-            tipo: 'Recepción',
+            tipo: 'RecepciÃ³n',
             asignado: selectedTask.asignado || selectedTask.creador || '',
             id_asignado: (selectedTask as any).id_asignado || '',
             ids_reservas: selectedTask.inventario_ids?.join(',') || '',
@@ -16429,7 +16465,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
             tareaId: parseInt(taskId),
             data
           });
-          // Si se está marcando como completada, cerrar el modal
+          // Si se estÃ¡ marcando como completada, cerrar el modal
           if (data.estatus === 'Completado') {
             setIsTaskDetailModalOpen(false);
             setSelectedTask(null);
@@ -16446,7 +16482,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
 
       {/* Modal para ver archivo testigo */}
       {isTestigoFileModalOpen && selectedTestigoFile && (() => {
-        // Soportar JSON array (múltiples) o string simple (una sola)
+        // Soportar JSON array (mÃºltiples) o string simple (una sola)
         let fileUrls: string[] = [];
         try {
           const parsed = JSON.parse(selectedTestigoFile);
