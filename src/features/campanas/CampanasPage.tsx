@@ -1887,7 +1887,10 @@ export function CampanasPage() {
           <button
             onClick={() => {
               setActiveView('tabla');
-            }}
+              // Limpiar agrupaciones del versionario al volver a tabla
+              setActiveGroupings([]);
+              setExpandedGroups(new Set());
+            }
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeView === 'tabla'
                 ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
