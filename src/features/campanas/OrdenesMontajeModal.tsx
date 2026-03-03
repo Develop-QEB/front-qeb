@@ -567,10 +567,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     if (!catData) return [];
     let items = [...catData];
 
-    // Only digital items (tipo/formato contains "Digital")
+    // Only digital items (tradicional_digital = 'Digital')
     items = items.filter(item => {
-      const tipo = (item.tipo || '').toUpperCase();
-      return tipo.includes('DIGITAL');
+      const td = (item.tradicional_digital || '').toUpperCase();
+      return td === 'DIGITAL';
     });
 
     // Filter by date range if set

@@ -293,6 +293,7 @@ export interface OrdenMontajeCAT {
   tipo_fila: string | null;
   catorcena_numero: number | null;
   catorcena_year: number | null;
+  tradicional_digital: string | null;
 }
 
 export interface OrdenMontajeINVIAN {
