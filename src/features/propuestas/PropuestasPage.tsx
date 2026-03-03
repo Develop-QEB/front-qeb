@@ -16,6 +16,7 @@ import { formatCurrency, formatDate } from '../../lib/utils';
 import { AssignInventarioModal } from './AssignInventarioModal';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 
@@ -26,20 +27,20 @@ function getMonthShort(dateStr: string): string {
 }
 
 // Status badge colors
-const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Abierto': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
-  'Ajuste Cto-Cliente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
-  'Pase a ventas': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  'Atendido': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
+  'Abierto': { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
+  'Ajuste Cto-Cliente': { bg: isDark ? 'bg-orange-500/20' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: 'border-orange-500/30' },
+  'Pase a ventas': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
+  'Atendido': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
   // Legacy (datos históricos)
-  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Por aprobar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Activa': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
-  'Aprobada': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
-  'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
-};
+  'Pendiente': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+  'Por aprobar': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+  'Activa': { bg: isDark ? 'bg-green-500/20' : 'bg-green-50', text: isDark ? 'text-green-300' : 'text-green-700', border: 'border-green-500/30' },
+  'Aprobada': { bg: isDark ? 'bg-green-500/20' : 'bg-green-50', text: isDark ? 'text-green-300' : 'text-green-700', border: 'border-green-500/30' },
+  'Rechazada': { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
+});
 
-const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
+const getDefaultStatusColor = (isDark: boolean) => ({ bg: isDark ? 'bg-violet-500/20' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30' });
 
 const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas'];
 
@@ -56,14 +57,14 @@ const CHART_COLORS = [
 ];
 
 // Custom Tooltip for Chart
-const CustomChartTooltip = ({ active, payload }: any) => {
+const CustomChartTooltip = ({ active, payload, isDark }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-zinc-900/90 border border-zinc-700/50 p-3 rounded-xl shadow-xl backdrop-blur-xl">
-        <p className="text-white font-medium mb-1">{payload[0].name}</p>
+      <div className={`${isDark ? 'bg-zinc-900/90 border-zinc-700/50' : 'bg-white border-gray-200'} border p-3 rounded-xl shadow-xl backdrop-blur-xl`}>
+        <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium mb-1`}>{payload[0].name}</p>
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: payload[0].payload.fill }} />
-          <span className="text-zinc-300 text-sm">
+          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>
             {payload[0].value} propuestas ({payload[0].payload.percent}%)
           </span>
         </div>
@@ -79,13 +80,15 @@ function FilterChip({
   options,
   value,
   onChange,
-  onClear
+  onClear,
+  isDark
 }: {
   label: string;
   options: string[];
   value: string;
   onChange: (value: string) => void;
   onClear: () => void;
+  isDark: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -108,12 +111,14 @@ function FilterChip({
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${value
           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+          : isDark
+            ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+            : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
           }`}
       >
         <span>{value || label}</span>
         {value ? (
-          <X className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); onClear(); }} />
+          <X className={`h-3 w-3 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`} onClick={(e) => { e.stopPropagation(); onClear(); }} />
         ) : (
           <ChevronDown className="h-3 w-3" />
         )}
@@ -122,21 +127,21 @@ function FilterChip({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-2 border-b border-zinc-800">
+          <div className={`absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900' : 'border-gray-200 bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <input
                 type="text"
                 placeholder={`Buscar ${label.toLowerCase()}...`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50"
+                className={`w-full px-3 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50`}
                 autoFocus
                 onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div className="max-h-52 overflow-auto">
               {filteredOptions.length === 0 ? (
-                <div className="px-3 py-3 text-xs text-zinc-500 text-center">
+                <div className={`px-3 py-3 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-center`}>
                   {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
                 </div>
               ) : (
@@ -146,7 +151,9 @@ function FilterChip({
                     onClick={() => { onChange(option); handleClose(); }}
                     className={`w-full px-3 py-2 text-left text-xs transition-colors ${value === option
                       ? 'bg-purple-500/20 text-purple-300'
-                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                      : isDark
+                        ? 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
                       }`}
                   >
                     {option}
@@ -154,7 +161,7 @@ function FilterChip({
                 ))
               )}
             </div>
-            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
+            <div className={`px-3 py-1.5 border-t ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'} text-[10px]`}>
               {filteredOptions.length} de {options.length} opciones
             </div>
           </div>
@@ -250,7 +257,8 @@ function PeriodFilterPopover({
   catorcenaInicio,
   catorcenaFin,
   onApply,
-  onClear
+  onClear,
+  isDark
 }: {
   catorcenasData: { years: number[]; data: Catorcena[] } | undefined;
   yearInicio: number | undefined;
@@ -259,6 +267,7 @@ function PeriodFilterPopover({
   catorcenaFin: number | undefined;
   onApply: (yearInicio: number, yearFin: number, catorcenaInicio?: number, catorcenaFin?: number) => void;
   onClear: () => void;
+  isDark: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [tempYearInicio, setTempYearInicio] = useState<number | undefined>(yearInicio);
@@ -337,13 +346,15 @@ function PeriodFilterPopover({
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${isActive
           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+          : isDark
+            ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+            : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
           }`}
       >
         <Calendar className="h-3 w-3" />
         <span>{getDisplayText()}</span>
         {isActive ? (
-          <X className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); handleClear(); }} />
+          <X className={`h-3 w-3 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`} onClick={(e) => { e.stopPropagation(); handleClear(); }} />
         ) : (
           <ChevronDown className="h-3 w-3" />
         )}
@@ -352,19 +363,19 @@ function PeriodFilterPopover({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-3 border-b border-zinc-800">
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <div className={`absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900' : 'border-gray-200 bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`p-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                 <Calendar className="h-4 w-4 text-purple-400" />
                 Filtro de Periodo
               </h3>
-              <p className="text-[10px] text-zinc-500 mt-1">Todos los campos son obligatorios</p>
+              <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-1`}>Todos los campos son obligatorios</p>
             </div>
 
             <div className="p-3 space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Año Inicio *</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Año Inicio *</label>
                   <select
                     value={tempYearInicio || ''}
                     onChange={(e) => {
@@ -376,7 +387,7 @@ function PeriodFilterPopover({
                         setTempCatorcenaFin(undefined);
                       }
                     }}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   >
                     <option value="">Seleccionar</option>
                     {yearInicioOptions.map(y => (
@@ -385,7 +396,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Cat. Inicio *</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Cat. Inicio *</label>
                   <select
                     value={tempCatorcenaInicio || ''}
                     onChange={(e) => {
@@ -396,7 +407,7 @@ function PeriodFilterPopover({
                       }
                     }}
                     disabled={!tempYearInicio}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50`}
                   >
                     <option value="">Seleccionar</option>
                     {catorcenasInicioOptions.map(c => (
@@ -408,7 +419,7 @@ function PeriodFilterPopover({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Año Fin *</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Año Fin *</label>
                   <select
                     value={tempYearFin || ''}
                     onChange={(e) => {
@@ -420,7 +431,7 @@ function PeriodFilterPopover({
                         setTempCatorcenaInicio(undefined);
                       }
                     }}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   >
                     <option value="">Seleccionar</option>
                     {yearFinOptions.map(y => (
@@ -429,7 +440,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Cat. Fin *</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Cat. Fin *</label>
                   <select
                     value={tempCatorcenaFin || ''}
                     onChange={(e) => {
@@ -440,7 +451,7 @@ function PeriodFilterPopover({
                       }
                     }}
                     disabled={!tempYearFin}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50`}
                   >
                     <option value="">Seleccionar</option>
                     {catorcenasFinOptions.map(c => (
@@ -451,17 +462,17 @@ function PeriodFilterPopover({
               </div>
             </div>
 
-            <div className="p-3 border-t border-zinc-800 flex items-center justify-between gap-2">
+            <div className={`p-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex items-center justify-between gap-2`}>
               <button
                 onClick={handleClear}
-                className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+                className={`px-3 py-1.5 text-xs ${isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'} transition-colors`}
               >
                 Limpiar
               </button>
               <button
                 onClick={handleApply}
                 disabled={!canApply}
-                className="px-4 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-colors"
+                className={`px-4 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg font-medium transition-colors`}
               >
                 Aplicar Filtro
               </button>
@@ -478,12 +489,14 @@ function GroupHeader({
   groupName,
   count,
   expanded,
-  onToggle
+  onToggle,
+  isDark
 }: {
   groupName: string;
   count: number;
   expanded: boolean;
   onToggle: () => void;
+  isDark: boolean;
 }) {
   return (
     <tr
@@ -497,7 +510,7 @@ function GroupHeader({
           ) : (
             <ChevronRight className="h-4 w-4 text-purple-400" />
           )}
-          <span className="font-semibold text-white">{groupName || 'Sin asignar'}</span>
+          <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupName || 'Sin asignar'}</span>
           <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">
             {count} propuestas
           </span>
@@ -517,6 +530,7 @@ interface StatusModalProps {
 }
 
 function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatuses }: StatusModalProps) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   // Filtrar opciones de estatus según permisos
   const availableStatuses = allowedStatuses ? STATUS_OPTIONS.filter(s => allowedStatuses.includes(s)) : STATUS_OPTIONS;
   const queryClient = useQueryClient();
@@ -591,27 +605,29 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
 
   if (!isOpen || !propuesta) return null;
 
+  const STATUS_COLORS = getStatusColors(isDark);
+  const DEFAULT_STATUS_COLOR = getDefaultStatusColor(isDark);
   const statusColor = STATUS_COLORS[propuesta.status] || DEFAULT_STATUS_COLOR;
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+      <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-3">
             <MessageSquare className="h-5 w-5 text-purple-400" />
-            <h2 className="text-lg font-semibold text-white">Estado y Comentarios</h2>
+            <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Estado y Comentarios</h2>
             <span className={`px-2 py-1 rounded-full text-xs ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
               {propuesta.status}
             </span>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-            <X className="h-5 w-5 text-zinc-400" />
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
           </button>
         </div>
 
         {/* Status Selector */}
-        <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-800/30">
+        <div className={`px-6 py-4 border-b ${isDark ? 'border-zinc-800 bg-zinc-800/30' : 'border-gray-200 bg-gray-50'}`}>
           {/* Alerta de autorizaciones pendientes */}
           {tienePendientes && (
             <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
@@ -627,12 +643,12 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
               </div>
             </div>
           )}
-          <label className="block text-sm text-zinc-400 mb-2">Cambiar estado a:</label>
+          <label className={`block text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2`}>Cambiar estado a:</label>
           <div className="flex items-center gap-3">
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              className={`flex-1 px-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
             >
               {/* Mostrar estado actual si no está en las opciones permitidas */}
               {propuesta.status && !availableStatuses.includes(propuesta.status) && (
@@ -676,8 +692,8 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
                 <UserAvatar nombre={comment.autor_nombre} foto_perfil={comment.autor_foto} size="lg" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-white text-sm">{comment.autor_nombre}</span>
-                    <span className="text-xs text-zinc-500">
+                    <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{comment.autor_nombre}</span>
+                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                       {new Date(comment.creado_en).toLocaleDateString('es-ES', {
                         day: 'numeric',
                         month: 'short',
@@ -686,14 +702,14 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
                       })}
                     </span>
                   </div>
-                  <div className="bg-zinc-800/50 rounded-xl px-4 py-3 text-sm text-zinc-300">
+                  <div className={`${isDark ? 'bg-zinc-800/50 text-zinc-300' : 'bg-gray-50 text-gray-700'} rounded-xl px-4 py-3 text-sm`}>
                     {comment.comentario}
                   </div>
                 </div>
               </div>
             ))
           ) : (
-            <div className="text-center text-zinc-500 py-8">
+            <div className={`text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} py-8`}>
               No hay comentarios aún
             </div>
           )}
@@ -701,14 +717,14 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
         </div>
 
         {/* New Comment Input */}
-        <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-800/30">
+        <div className={`px-6 py-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-800/30' : 'border-gray-200 bg-gray-50'}`}>
           <div className="flex items-end gap-3">
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               placeholder="Escribe un comentario..."
               rows={2}
-              className="flex-1 px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+              className={`flex-1 px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400'} border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none`}
             />
             <button
               onClick={handleAddComment}
@@ -745,6 +761,7 @@ const ALLOWED_PUESTOS_APROBAR = [
 ];
 
 function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalProps) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const [precio, setPrecio] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<{ id: number; nombre: string }[]>([]);
@@ -856,27 +873,27 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col">
+      <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-gradient-to-r from-emerald-600/20 to-green-600/10">
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} bg-gradient-to-r from-emerald-600/20 to-green-600/10`}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
               <CheckCircle className="h-5 w-5 text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Aprobar Propuesta</h2>
-              <p className="text-xs text-zinc-400">#{propuesta.id}</p>
+              <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Aprobar Propuesta</h2>
+              <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>#{propuesta.id}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-            <X className="h-5 w-5 text-zinc-400" />
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Asignados */}
           <div>
-            <label className="block text-sm text-zinc-400 mb-2">
+            <label className={`block text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2`}>
               <Users className="h-4 w-4 inline mr-1" />
               Asignados ({selectedUsers.length})
             </label>
@@ -891,7 +908,7 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
                   >
                     {u.nombre}
                     <X
-                      className="h-3 w-3 cursor-pointer hover:text-white"
+                      className={`h-3 w-3 cursor-pointer ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}
                       onClick={() => setSelectedUsers(prev => prev.filter(x => x.id !== u.id))}
                     />
                   </span>
@@ -905,22 +922,22 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
               placeholder="Buscar usuarios..."
-              className="w-full px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              className={`w-full px-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
             />
 
             {/* Users list */}
-            <div className="max-h-48 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-800/50">
+            <div className={`max-h-48 overflow-y-auto rounded-xl border ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-gray-200 bg-gray-50'}`}>
               {filteredUsers.map((user: UserOption) => {
                 const isSelected = selectedUsers.some(u => u.id === user.id);
                 return (
                   <button
                     key={user.id}
                     onClick={() => toggleUser(user)}
-                    className={`w-full flex items-center justify-between px-3 py-2 text-left hover:bg-zinc-700/50 transition-colors ${isSelected ? 'bg-emerald-500/10' : ''}`}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-left ${isDark ? 'hover:bg-zinc-700/50' : 'hover:bg-gray-200'} transition-colors ${isSelected ? 'bg-emerald-500/10' : ''}`}
                   >
                     <div>
-                      <p className="text-sm text-white">{user.nombre}</p>
-                      <p className="text-xs text-zinc-500">{user.area} - {user.puesto}</p>
+                      <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{user.nombre}</p>
+                      <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{user.area} - {user.puesto}</p>
                     </div>
                     {isSelected && <CheckCircle className="h-4 w-4 text-emerald-400" />}
                   </button>
@@ -942,10 +959,10 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-zinc-800 flex justify-end gap-3">
+        <div className={`px-6 py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex justify-end gap-3`}>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 border border-zinc-700"
+            className={`px-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200'} text-sm border`}
           >
             Cancelar
           </button>
@@ -974,6 +991,7 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
 
 
 export function PropuestasPage() {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1227,6 +1245,8 @@ export function PropuestasPage() {
   };
 
   const renderPropuestaRow = (item: Propuesta & any, index: number) => {
+    const STATUS_COLORS = getStatusColors(isDark);
+    const DEFAULT_STATUS_COLOR = getDefaultStatusColor(isDark);
     const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
     // Bloquear todas las acciones cuando el status es "Activa" o "Aprobada" (para todos los usuarios)
     const isActiva = item.status === 'Activa';
@@ -1237,16 +1257,16 @@ export function PropuestasPage() {
     const isLocked = isActiva || isLockedByAbierto || isAprobada;
 
     return (
-      <tr key={`prop-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+      <tr key={`prop-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
         <td className="px-4 py-3">
           <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">#{item.id}</span>
         </td>
         <td className="px-4 py-3">
-          <span className="text-zinc-400 text-sm">{formatDate(item.fecha)}</span>
+          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{formatDate(item.fecha)}</span>
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-white text-sm font-medium">{item.marca_nombre || item.articulo || '-'}</span>
+            <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-medium`}>{item.marca_nombre || item.articulo || '-'}</span>
             {item.sap_database && (
               <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
                 item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
@@ -1258,17 +1278,17 @@ export function PropuestasPage() {
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-1.5 align-middle">
-            <div className="w-5 h-5 rounded-full bg-zinc-700 flex items-center justify-center text-[10px] text-zinc-300">
+            <div className={`w-5 h-5 rounded-full ${isDark ? 'bg-zinc-700 text-zinc-300' : 'bg-gray-200 text-gray-700'} flex items-center justify-center text-[10px]`}>
               <User className="h-3 w-3" />
             </div>
-            <span className="text-zinc-300 text-sm">{item.creador_nombre || item.usuario_nombre || '-'}</span>
+            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{item.creador_nombre || item.usuario_nombre || '-'}</span>
           </div>
         </td>
         <td className="px-4 py-3">
-          <span className="text-white text-sm truncate max-w-[250px] block" title={item.campana_nombre || item.nombre_campania || '-'}>{item.campana_nombre || item.nombre_campania || '-'}</span>
+          <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm truncate max-w-[250px] block`} title={item.campana_nombre || item.nombre_campania || '-'}>{item.campana_nombre || item.nombre_campania || '-'}</span>
         </td>
         <td className="px-4 py-3">
-          <span className="text-zinc-300 text-xs">{item.asignado || 'Sin asignar'}</span>
+          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{item.asignado || 'Sin asignar'}</span>
         </td>
         <td className="px-4 py-3">
           <span className="font-medium text-amber-400">{formatCurrency(item.inversion)}</span>
@@ -1285,7 +1305,7 @@ export function PropuestasPage() {
               Cat {item.catorcena_inicio} / {item.anio_inicio}
             </span>
           ) : (
-            <span className="text-zinc-500 text-xs">-</span>
+            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
           )}
         </td>
         <td className="px-4 py-3">
@@ -1300,7 +1320,7 @@ export function PropuestasPage() {
               Cat {item.catorcena_fin} / {item.anio_fin}
             </span>
           ) : (
-            <span className="text-zinc-500 text-xs">-</span>
+            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
           )}
         </td>
         <td className="px-4 py-3">
@@ -1374,23 +1394,23 @@ export function PropuestasPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
           {/* Main KPI: Total */}
-          <div className="col-span-1 md:col-span-2 lg:col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+          <div className={`col-span-1 md:col-span-2 lg:col-span-1 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
             <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none group-hover:bg-purple-500/20 transition-all duration-500" />
             <div>
-              <p className="text-zinc-400 text-sm font-medium mb-1">Total Propuestas</p>
-              <h3 className="text-4xl font-bold text-white tracking-tight">
+              <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Total Propuestas</p>
+              <h3 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
                 {stats?.total.toLocaleString() ?? '0'}
               </h3>
             </div>
             <div className="mt-4 flex items-center gap-2">
-              <span className="text-xs px-2 py-1 rounded-full bg-zinc-800/80 text-zinc-300 border border-zinc-700/50">
+              <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-zinc-800/80 text-zinc-300 border-zinc-700/50' : 'bg-gray-100 text-gray-700 border-gray-200'} border`}>
                 Todas las catorcenas
               </span>
             </div>
           </div>
 
           {/* Chart Card */}
-          <div className="col-span-1 md:col-span-2 lg:col-span-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-4 flex items-center relative overflow-hidden">
+          <div className={`col-span-1 md:col-span-2 lg:col-span-2 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-4 flex items-center relative overflow-hidden`}>
 
             {chartData ? (
               <div className="w-full h-[140px] flex items-center">
@@ -1411,7 +1431,7 @@ export function PropuestasPage() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <RechartsTooltip content={<CustomChartTooltip />} />
+                      <RechartsTooltip content={<CustomChartTooltip isDark={isDark} />} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -1419,28 +1439,28 @@ export function PropuestasPage() {
                 {/* Legend / List */}
                 <div className="flex-1 flex flex-wrap gap-2 content-center pl-4 h-full overflow-y-auto custom-scrollbar">
                   {chartData.map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-zinc-800/30 border border-zinc-800/50 min-w-[120px]">
+                    <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border min-w-[120px]`}>
                       <div className="w-2 h-8 rounded-full" style={{ backgroundColor: item.color }} />
                       <div>
-                        <div className="text-sm font-bold text-white">{item.value}</div>
-                        <div className="text-[10px] text-zinc-400 uppercase tracking-wide truncate max-w-[80px]" title={item.label}>{item.label}</div>
+                        <div className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.value}</div>
+                        <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wide truncate max-w-[80px]`} title={item.label}>{item.label}</div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
-              <div className="w-full h-[140px] flex items-center justify-center text-zinc-500 text-sm">
+              <div className={`w-full h-[140px] flex items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                 Cargando datos...
               </div>
             )}
           </div>
 
           {/* KPI: Por Aprobar Priority */}
-          <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+          <div className={`col-span-1 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl -mr-5 -mb-5 pointer-events-none group-hover:bg-amber-500/20 transition-all duration-500" />
             <div>
-              <p className="text-zinc-400 text-sm font-medium mb-1">Sin Aprobar</p>
+              <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Sin Aprobar</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-bold text-amber-400">
                   {((stats?.total || 0) - (stats?.byStatus['Pase a ventas'] || 0)).toLocaleString()}
@@ -1450,7 +1470,7 @@ export function PropuestasPage() {
             </div>
 
             {/* Progress bar visual */}
-            <div className="mt-4 w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+            <div className={`mt-4 w-full h-1.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} rounded-full overflow-hidden`}>
               <div
                 className="h-full bg-gradient-to-r from-amber-500 to-orange-500"
                 style={{ width: `${Math.min(100, (((stats?.total || 0) - (stats?.byStatus['Pase a ventas'] || 0)) / (stats?.total || 1)) * 100)}%` }}
@@ -1461,7 +1481,7 @@ export function PropuestasPage() {
         </div>
 
         {/* Control Bar */}
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4 relative z-30">
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-gray-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
@@ -1471,7 +1491,7 @@ export function PropuestasPage() {
                 <input
                   type="search"
                   placeholder="Buscar artículo, descripción, asignado..."
-                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40"
+                  className={`w-full pl-11 pr-4 py-3 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40`}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -1482,7 +1502,9 @@ export function PropuestasPage() {
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
                   ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                  : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
+                  : isDark
+                    ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
+                    : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'
                   }`}
               >
                 <SlidersHorizontal className="h-4 w-4" />
@@ -1495,7 +1517,7 @@ export function PropuestasPage() {
               {/* Export CSV */}
               <button
                 onClick={handleExportCSV}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200 transition-all"
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all`}
               >
                 <Download className="h-4 w-4" />
                 Exportar CSV
@@ -1504,7 +1526,7 @@ export function PropuestasPage() {
 
             {/* Filters Row (Expandable) */}
             {showFilters && (
-              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-zinc-800/50 relative z-50">
+              <div className={`flex flex-wrap items-center gap-2 pt-3 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} relative z-50`}>
                 {/* Advanced Filter Button with Dropdown */}
                 <div className="relative">
                   <button
@@ -1525,12 +1547,12 @@ export function PropuestasPage() {
                     )}
                   </button>
                   {showAdvancedFilters && (
-                    <div className="absolute left-0 top-full mt-1 z-[100] w-[520px] bg-zinc-900 border border-purple-500/30 rounded-xl shadow-2xl p-4">
+                    <div className={`absolute left-0 top-full mt-1 z-[100] w-[520px] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-gray-200'} border rounded-xl shadow-2xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-sm font-medium text-purple-300">Filtros avanzados</span>
                         <button
                           onClick={() => setShowAdvancedFilters(false)}
-                          className="text-zinc-500 hover:text-white"
+                          className={`${isDark ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -1545,7 +1567,7 @@ export function PropuestasPage() {
                             <select
                               value={filter.field}
                               onChange={(e) => updateAdvancedFilter(filter.id, { field: e.target.value })}
-                              className="w-[120px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                              className={`w-[120px] text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                             >
                               {PROPUESTA_FILTER_FIELDS.map((f) => (
                                 <option key={f.field} value={f.field}>{f.label}</option>
@@ -1554,7 +1576,7 @@ export function PropuestasPage() {
                             <select
                               value={filter.operator}
                               onChange={(e) => updateAdvancedFilter(filter.id, { operator: e.target.value as FilterOperator })}
-                              className="w-[100px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                              className={`w-[100px] text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                             >
                               {FILTER_OPERATORS.filter(op => {
                                 const fieldConfig = PROPUESTA_FILTER_FIELDS.find(f => f.field === filter.field);
@@ -1566,7 +1588,7 @@ export function PropuestasPage() {
                             <select
                               value={filter.value}
                               onChange={(e) => updateAdvancedFilter(filter.id, { value: e.target.value })}
-                              className="flex-1 text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                              className={`flex-1 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                             >
                               <option value="">Seleccionar...</option>
                               {getUniqueFieldValues[filter.field]?.map((val) => (
@@ -1582,12 +1604,12 @@ export function PropuestasPage() {
                           </div>
                         ))}
                         {advancedFilters.length === 0 && (
-                          <p className="text-xs text-zinc-500 text-center py-4">
+                          <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-center py-4`}>
                             Sin filtros avanzados. Haz clic en "Añadir" para crear uno.
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
+                      <div className={`flex items-center justify-between mt-3 pt-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                         <button
                           onClick={addAdvancedFilter}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
@@ -1604,8 +1626,8 @@ export function PropuestasPage() {
                         </button>
                       </div>
                       {advancedFilters.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-zinc-800">
-                          <span className="text-[10px] text-zinc-500">
+                        <div className={`mt-2 pt-2 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                             {filteredData.length} de {data?.data?.length || 0} registros
                           </span>
                         </div>
@@ -1614,31 +1636,33 @@ export function PropuestasPage() {
                   )}
                 </div>
 
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
                 {/* Status Filter */}
-                <span className="text-xs text-zinc-500 mr-1">Status:</span>
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Status:</span>
                 <FilterChip
                   label="Status"
                   options={allStatuses}
                   value={status}
                   onChange={(val) => { setStatus(val); setPage(1); }}
                   onClear={() => { setStatus(''); setPage(1); }}
+                  isDark={isDark}
                 />
 
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
                 {/* Tipo Periodo Filter */}
-                <span className="text-xs text-zinc-500 mr-1">Periodo:</span>
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Periodo:</span>
                 <FilterChip
                   label="Tipo Periodo"
                   options={['catorcena', 'mensual']}
                   value={tipoPeriodo}
                   onChange={(val) => { setTipoPeriodo(val); setPage(1); }}
                   onClear={() => { setTipoPeriodo(''); setPage(1); }}
+                  isDark={isDark}
                 />
 
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
                 {/* Current Catorcena Indicator */}
                 {currentCatorcena && (
@@ -1647,7 +1671,7 @@ export function PropuestasPage() {
                       <Clock className="h-3 w-3" />
                       <span>Actual: Cat. {currentCatorcena.numero_catorcena} / {currentCatorcena.a_o}</span>
                     </div>
-                    <div className="h-4 w-px bg-zinc-700 mx-1" />
+                    <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
                   </>
                 )}
 
@@ -1675,7 +1699,7 @@ export function PropuestasPage() {
                 />
 
                 {/* Divider */}
-                <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
 
                 {/* Sort Options */}
                 <span className="text-xs text-zinc-500 mr-1">
@@ -1688,6 +1712,7 @@ export function PropuestasPage() {
                   value={sortBy}
                   onChange={(val) => { setSortBy(val); setPage(1); }}
                   onClear={() => { setSortBy('fecha'); setPage(1); }}
+                  isDark={isDark}
                 />
                 <button
                   onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
@@ -1697,7 +1722,7 @@ export function PropuestasPage() {
                 </button>
 
                 {/* Divider */}
-                <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
 
                 {/* Group By */}
                 <FilterChip
@@ -1711,7 +1736,7 @@ export function PropuestasPage() {
                 {/* Clear All */}
                 {hasActiveFilters && (
                   <>
-                    <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+                    <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
                     <button
                       onClick={clearAllFilters}
                       className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"

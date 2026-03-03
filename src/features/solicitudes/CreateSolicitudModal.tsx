@@ -13,6 +13,7 @@ import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import type { SapDatabase } from '../../store/environmentStore';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import { useFormPersist } from '../../hooks/useFormPersist';
 
 // Tarifa publica lookup map based on ItemCode (full SAP codes with tarifa_publica values)
@@ -476,6 +477,7 @@ function SearchableSelect({
   renderSelected?: (item: any) => React.ReactNode;
   loading?: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -502,14 +504,14 @@ function SearchableSelect({
         onClick={() => setOpen(!open)}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${value
           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600'
+          : isDark ? 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
           }`}
       >
         <span className="truncate text-left flex-1">
           {value && renderSelected ? renderSelected(value) : (displayValue || label)}
         </span>
         {value ? (
-          <X className="h-4 w-4 hover:text-white flex-shrink-0" onClick={(e) => { e.stopPropagation(); onClear(); }} />
+          <X className={`h-4 w-4 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} flex-shrink-0`} onClick={(e) => { e.stopPropagation(); onClear(); }} />
         ) : (
           <ChevronDown className="h-4 w-4 flex-shrink-0" />
         )}
@@ -518,16 +520,16 @@ function SearchableSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-2 border-b border-zinc-800">
+          <div className={`absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                 <input
                   type="text"
                   placeholder={`Buscar ${label.toLowerCase()}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  className={`w-full pl-9 pr-3 py-2 text-sm ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   autoFocus
                   onClick={(e) => e.stopPropagation()}
                 />
@@ -535,9 +537,9 @@ function SearchableSelect({
             </div>
             <div className="max-h-72 overflow-auto">
               {loading ? (
-                <div className="px-3 py-4 text-center text-zinc-500 text-sm">Cargando...</div>
+                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</div>
               ) : filteredOptions.length === 0 ? (
-                <div className="px-3 py-4 text-center text-zinc-500 text-sm">
+                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                   {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
                 </div>
               ) : (
@@ -546,9 +548,9 @@ function SearchableSelect({
                     key={`${option[valueKey]}-${idx}`}
                     type="button"
                     onClick={() => { onChange(option); handleClose(); }}
-                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b border-zinc-800/50 last:border-0 ${value && value[valueKey] === option[valueKey]
+                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} last:border-0 ${value && value[valueKey] === option[valueKey]
                       ? 'bg-purple-500/20 text-purple-300'
-                      : 'text-zinc-300 hover:bg-zinc-800'
+                      : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'
                       }`}
                   >
                     {renderOption ? renderOption(option) : (
@@ -558,7 +560,7 @@ function SearchableSelect({
                 ))
               )}
             </div>
-            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
+            <div className={`px-3 py-1.5 border-t ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'} text-[10px]`}>
               Mostrando {filteredOptions.length} de {options.length} opciones
             </div>
           </div>
@@ -586,6 +588,7 @@ function MultiSelectTags({
   valueKey: string;
   searchKey: string;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -616,7 +619,7 @@ function MultiSelectTags({
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 rounded-lg text-xs hover:border-zinc-600 transition-all"
+          className={`flex items-center gap-1.5 px-3 py-1.5 ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300'} border rounded-lg text-xs transition-all`}
         >
           <Plus className="h-3 w-3" />
           Agregar {label}
@@ -625,15 +628,15 @@ function MultiSelectTags({
         {open && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => { setOpen(false); setSearchTerm(''); }} />
-            <div className="absolute top-full left-0 mt-1 z-50 w-72 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
+            <div className={`absolute top-full left-0 mt-1 z-50 w-72 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
               {/* Search at top */}
-              <div className="p-2 border-b border-zinc-800">
+              <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 <input
                   type="text"
                   placeholder={`Buscar...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  className={`w-full px-3 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   autoFocus
                 />
               </div>
@@ -646,17 +649,17 @@ function MultiSelectTags({
                       key={option[valueKey]}
                       type="button"
                       onClick={() => toggle(option)}
-                      className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${isSelected ? 'bg-purple-500/20 text-purple-300' : 'text-zinc-400 hover:bg-zinc-800'
+                      className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${isSelected ? 'bg-purple-500/20 text-purple-300' : isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-500 hover:bg-gray-100'
                         }`}
                     >
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-purple-500 border-purple-500' : 'border-zinc-600'
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-purple-500 border-purple-500' : isDark ? 'border-zinc-600' : 'border-gray-300'
                         }`}>
                         {isSelected && <Check className="h-3 w-3 text-white" />}
                       </div>
                       <div className="flex-1">
                         <span>{option[displayKey]}</span>
                         {option.area && (
-                          <span className="ml-2 text-[10px] text-zinc-500">({option.area})</span>
+                          <span className={`ml-2 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({option.area})</span>
                         )}
                       </div>
                     </button>
@@ -678,7 +681,7 @@ function MultiSelectTags({
             >
               {item[displayKey]}
               {item.area && <span className="text-[10px] text-purple-400/70">({item.area})</span>}
-              <button type="button" onClick={() => remove(item)} className="hover:text-white">
+              <button type="button" onClick={() => remove(item)} className={isDark ? 'hover:text-white' : 'hover:text-gray-900'}>
                 <X className="h-3 w-3" />
               </button>
             </span>
@@ -691,6 +694,7 @@ function MultiSelectTags({
 
 export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props) {
   const queryClient = useQueryClient();
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const isEditMode = !!editSolicitudId;
 
   // Socket para actualizar usuarios en tiempo real cuando cambian miembros de equipos
@@ -1756,17 +1760,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-      <div className="relative w-full max-w-5xl max-h-[95vh] h-[95vh] bg-zinc-900 rounded-2xl border border-zinc-700 shadow-2xl overflow-hidden flex flex-col">
+      <div className={`relative w-full max-w-5xl max-h-[95vh] h-[95vh] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} rounded-2xl border shadow-2xl overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold text-white">
+            <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
               {isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud'}
             </h2>
             {/* Articulos status */}
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-800 rounded-lg text-[10px]">
-                <span className="text-zinc-500">Art:</span>
+              <div className={`flex items-center gap-1.5 px-2 py-1 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} rounded-lg text-[10px]`}>
+                <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Art:</span>
                 <span className={articulosData && articulosData.length > 0 ? 'text-emerald-400' : 'text-red-400'}>
                   {articulosData?.length || 0}
                 </span>
@@ -1775,20 +1779,20 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 type="button"
                 onClick={handleRefreshSap}
                 disabled={articulosFetching}
-                className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
+                className={`p-1.5 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors disabled:opacity-50`}
                 title="Refrescar artículos SAP"
               >
-                <RefreshCw className={`h-4 w-4 text-zinc-400 ${articulosFetching ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${articulosFetching ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-            <X className="h-5 w-5 text-zinc-400" />
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
           </button>
         </div>
 
         {/* Progress steps */}
-        <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/50">
+        <div className={`px-6 py-3 border-b ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
           <div className="flex items-center gap-2">
             {[
               { num: 1, label: 'Cliente', icon: Building2 },
@@ -1803,13 +1807,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
                     : step > s.num
                       ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50'
+                      : isDark ? 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50' : 'bg-gray-50 text-gray-400 border border-gray-200'
                     }`}
                 >
                   <s.icon className="h-4 w-4" />
                   {s.label}
                 </button>
-                {i < 3 && <div className="flex-1 h-px bg-zinc-700" />}
+                {i < 3 && <div className={`flex-1 h-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'}`} />}
               </React.Fragment>
             ))}
           </div>
@@ -1836,7 +1840,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <div className="space-y-6">
               {/* CUIC Select - Shows Marca first, then CUIC + Producto */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
                   <Building2 className="h-4 w-4 text-purple-400" />
                   CUIC / Cliente
                 </label>
@@ -1853,13 +1857,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           : db === 'CIMU' ? 'bg-blue-600 text-white border-blue-500'
                           : db === 'TEST' ? 'bg-amber-600 text-white border-amber-500'
                           : 'bg-emerald-600 text-white border-emerald-500'
-                          : 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'
+                          : isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100 hover:text-gray-700'
                       }`}
                     >
                       {db === 'ALL' ? 'Todos' : db}
                     </button>
                   ))}
-                  <span className="text-[10px] text-zinc-500 ml-2">
+                  <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} ml-2`}>
                     {cuicData?.length || 0} clientes
                   </span>
                 </div>
@@ -1876,17 +1880,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   renderOption={(item) => (
                     <div className="flex items-center gap-2">
                       <div className="flex-1">
-                        <div className="font-medium text-white">{item.T2_U_Marca || 'Sin marca'}</div>
-                        <div className="text-xs text-zinc-500">
+                        <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.T2_U_Marca || 'Sin marca'}</div>
+                        <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           {item.CUIC} | {item.T2_U_Producto || 'Sin producto'}
                         </div>
                       </div>
                       {item.sap_database && (
                         <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${
-                          item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                          item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                          item.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
-                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                          item.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
+                          item.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
+                          item.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
                         }`}>{item.sap_database}</span>
                       )}
                     </div>
@@ -1895,14 +1899,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <div className="text-left flex items-center gap-2">
                       <div className="flex-1">
                         <div className="font-medium">{item.T2_U_Marca || 'Sin marca'}</div>
-                        <div className="text-[10px] text-zinc-500">{item.CUIC} | {item.T2_U_Producto || ''}</div>
+                        <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.CUIC} | {item.T2_U_Producto || ''}</div>
                       </div>
                       {item.sap_database && (
                         <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${
-                          item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                          item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                          item.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
-                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                          item.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
+                          item.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
+                          item.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
                         }`}>{item.sap_database}</span>
                       )}
                     </div>
@@ -1912,9 +1916,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
               {/* Selected client info - Complete */}
               {selectedCuic && (
-                <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                <div className={`p-4 ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
                   {/* Header con CUIC destacado */}
-                  <div className="flex items-start justify-between mb-3 pb-3 border-b border-zinc-700/50">
+                  <div className={`flex items-start justify-between mb-3 pb-3 border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
                     <div className="flex items-center gap-3">
                       <div>
                         <span className="text-[10px] text-purple-400 uppercase tracking-wider">CUIC</span>
@@ -1922,15 +1926,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       </div>
                       {selectedCuic.sap_database && (
                         <span className={`text-[10px] font-semibold px-2 py-1 rounded-lg border ${
-                          selectedCuic.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                          selectedCuic.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                          selectedCuic.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
-                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                          selectedCuic.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
+                          selectedCuic.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
+                          selectedCuic.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
                         }`}>{selectedCuic.sap_database}</span>
                       )}
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Categoría</span>
+                      <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider`}>Categoría</span>
                       <div className="text-sm font-medium text-amber-400">{selectedCuic.T2_U_Categoria || '-'}</div>
                     </div>
                   </div>
@@ -1938,32 +1942,32 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   {/* Grid de información 2 columnas */}
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Marca:</span>
-                      <span className="text-white font-medium">{selectedCuic.T2_U_Marca || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Marca:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{selectedCuic.T2_U_Marca || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Producto:</span>
-                      <span className="text-white">{selectedCuic.T2_U_Producto || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Producto:</span>
+                      <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T2_U_Producto || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Cliente:</span>
-                      <span className="text-white">{selectedCuic.T0_U_Cliente || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Cliente:</span>
+                      <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T0_U_Cliente || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Razón Social:</span>
-                      <span className="text-white truncate max-w-[180px]" title={selectedCuic.T0_U_RazonSocial || '-'}>{selectedCuic.T0_U_RazonSocial || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Razón Social:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} truncate max-w-[180px]`} title={selectedCuic.T0_U_RazonSocial || '-'}>{selectedCuic.T0_U_RazonSocial || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Asesor:</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Asesor:</span>
                       <span className="text-emerald-400 font-medium">{selectedCuic.ASESOR_U_Asesor || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Agencia:</span>
-                      <span className="text-white">{selectedCuic.T0_U_Agencia || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Agencia:</span>
+                      <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T0_U_Agencia || '-'}</span>
                     </div>
                     <div className="flex justify-between col-span-2">
-                      <span className="text-zinc-500">Unidad de Negocio:</span>
-                      <span className="text-white">{selectedCuic.T1_U_UnidadNegocio || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Unidad de Negocio:</span>
+                      <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T1_U_UnidadNegocio || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -1972,7 +1976,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               {/* Asignados with tags - search at bottom */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                  <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
                     <Users className="h-4 w-4 text-purple-400" />
                     Asignados
                   </label>
@@ -2005,25 +2009,25 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <div className="space-y-6">
               {/* Campaign name */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Nombre de Campaña</label>
+                <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Nombre de Campaña</label>
                 <input
                   type="text"
                   value={nombreCampania}
                   onChange={(e) => setNombreCampania(e.target.value)}
                   placeholder="Nombre de la campaña..."
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  className={`w-full px-4 py-3 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                 />
               </div>
 
               {/* Date range */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                  <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
                     <Calendar className="h-4 w-4 text-purple-400" />
                     Rango de Fechas
                   </label>
                   {/* Toggle Catorcena / Mensual */}
-                  <div className="flex items-center bg-zinc-800 rounded-lg border border-zinc-700 p-0.5">
+                  <div className={`flex items-center ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-100 border-gray-200'} rounded-lg border p-0.5`}>
                     <button
                       type="button"
                       onClick={() => {
@@ -2038,7 +2042,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           setNewCara(prev => ({ ...prev, formato: '' }));
                         }
                       }}
-                      className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'catorcena' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : 'text-zinc-400 hover:text-zinc-300'}`}
+                      className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'catorcena' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                       Catorcena
                     </button>
@@ -2056,7 +2060,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           setNewCara(prev => ({ ...prev, formato: '' }));
                         }
                       }}
-                      className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'mensual' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : 'text-zinc-400 hover:text-zinc-300'}`}
+                      className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'mensual' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                       Mensual
                     </button>

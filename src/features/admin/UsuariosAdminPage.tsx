@@ -7,11 +7,12 @@ import { equiposService, Equipo, CreateEquipoInput, MiembroEquipo } from '../../
 import { ticketsService, Ticket as TicketType, CreateTicketInput } from '../../services/tickets.service';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useSocketEquipos } from '../../hooks/useSocket';
+import { useThemeStore } from '../../store/themeStore';
 
 type TabType = 'usuarios' | 'equipos' | 'tickets';
 
-const inputClasses =
-  'w-full px-4 py-3 rounded-xl bg-zinc-800/80 border border-purple-500/20 text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all hover:border-purple-500/40';
+const getInputClasses = (isDark: boolean) =>
+  `w-full px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-800/80' : 'bg-gray-100'} border border-purple-500/20 ${isDark ? 'text-white' : 'text-gray-900'} ${isDark ? 'placeholder:text-zinc-500' : 'placeholder:text-gray-400'} focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all hover:border-purple-500/40`;
 const labelClasses = 'block text-sm font-medium text-purple-300 mb-2';
 
 const AREAS_DISPONIBLES = [
@@ -100,6 +101,8 @@ function CreateModal({
   loading: boolean;
   error: string | null;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const inputClasses = getInputClasses(isDark);
   const [form, setForm] = useState<CreateUsuarioInput>({
     nombre: '',
     correo_electronico: '',
@@ -127,14 +130,14 @@ function CreateModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-lg bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40 sticky top-0 z-10">
+      <div className={`relative z-50 w-full max-w-lg ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto`}>
+        <div className={`flex items-center justify-between p-6 border-b border-purple-500/20 ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'} sticky top-0 z-10`}>
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-purple-500/20">
               <Plus className="h-6 w-6 text-purple-300" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Nuevo Usuario</h2>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Nuevo Usuario</h2>
               <p className="text-sm text-purple-300/70">Completa todos los campos</p>
             </div>
           </div>
@@ -249,7 +252,7 @@ function CreateModal({
 
           {/* Error message */}
           {error && (
-            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
+            <div className={`p-4 rounded-xl bg-red-500/10 border border-red-500/30 ${isDark ? 'text-red-300' : 'text-red-700'} text-sm`}>
               {error}
             </div>
           )}
@@ -258,7 +261,7 @@ function CreateModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-purple-300 bg-zinc-800 border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all"
+              className={`px-5 py-2.5 rounded-xl text-sm font-medium text-purple-300 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all`}
             >
               Cancelar
             </button>
@@ -289,6 +292,8 @@ function EditModal({
   onSubmit: (data: UpdateUsuarioInput) => void;
   loading: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const inputClasses = getInputClasses(isDark);
   const [form, setForm] = useState<UpdateUsuarioInput>({
     nombre: usuario.nombre,
     correo_electronico: usuario.email,
@@ -324,12 +329,12 @@ function EditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-md bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between p-6 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40">
+      <div className={`relative z-50 w-full max-w-md ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
+        <div className={`flex items-center justify-between p-6 border-b border-purple-500/20 ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'}`}>
           <div className="flex items-center gap-4">
             <UserAvatar nombre={usuario.nombre} foto_perfil={usuario.foto_perfil} size="lg" />
             <div>
-              <h2 className="text-xl font-bold text-white">Editar Usuario</h2>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Editar Usuario</h2>
               <p className="text-sm text-purple-300/70">{usuario.email}</p>
             </div>
           </div>
@@ -419,7 +424,7 @@ function EditModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-purple-300 bg-zinc-800 border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all"
+              className={`px-5 py-2.5 rounded-xl text-sm font-medium text-purple-300 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all`}
             >
               Cancelar
             </button>
@@ -454,19 +459,20 @@ function DeleteConfirmModal({
   title?: string;
   message?: string;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-md bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-red-500/30 rounded-2xl shadow-2xl shadow-red-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className={`relative z-50 w-full max-w-md ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border border-red-500/30 rounded-2xl shadow-2xl shadow-red-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
         <div className="p-6 text-center">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/20 mb-4">
             <Trash2 className="h-8 w-8 text-red-400" />
           </div>
-          <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
-          <p className="text-zinc-400 mb-6">
+          <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>{title}</h3>
+          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>
             {message || (
               <>
-                ¿Estás seguro de eliminar <span className="text-white font-semibold">{count} usuario(s)</span>? Esta acción
+                ¿Estás seguro de eliminar <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-semibold`}>{count} usuario(s)</span>? Esta acción
                 no se puede deshacer.
               </>
             )}
@@ -475,7 +481,7 @@ function DeleteConfirmModal({
             <button
               onClick={onClose}
               disabled={loading}
-              className="px-6 py-3 rounded-xl text-sm font-medium text-purple-300 bg-zinc-800 border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all disabled:opacity-50"
+              className={`px-6 py-3 rounded-xl text-sm font-medium text-purple-300 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all disabled:opacity-50`}
             >
               Cancelar
             </button>
@@ -506,6 +512,8 @@ function EquipoModal({
   onSubmit: (data: CreateEquipoInput) => void;
   loading: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const inputClasses = getInputClasses(isDark);
   const [form, setForm] = useState<CreateEquipoInput>({
     nombre: equipo?.nombre || '',
     descripcion: equipo?.descripcion || '',
@@ -531,14 +539,14 @@ function EquipoModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-md bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between p-6 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40">
+      <div className={`relative z-50 w-full max-w-md ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
+        <div className={`flex items-center justify-between p-6 border-b border-purple-500/20 ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'}`}>
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl" style={{ backgroundColor: `${form.color}30` }}>
               <Network className="h-6 w-6" style={{ color: form.color }} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">{equipo ? 'Editar Equipo' : 'Nuevo Equipo'}</h2>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{equipo ? 'Editar Equipo' : 'Nuevo Equipo'}</h2>
               <p className="text-sm text-purple-300/70">Define el nombre y color del equipo</p>
             </div>
           </div>
@@ -580,7 +588,7 @@ function EquipoModal({
                   type="button"
                   onClick={() => setForm({ ...form, color })}
                   className={`w-10 h-10 rounded-xl transition-all ${
-                    form.color === color ? 'ring-2 ring-white ring-offset-2 ring-offset-zinc-900 scale-110' : 'hover:scale-105'
+                    form.color === color ? `ring-2 ring-white ring-offset-2 ${isDark ? 'ring-offset-zinc-900' : 'ring-offset-white'} scale-110` : 'hover:scale-105'
                   }`}
                   style={{ backgroundColor: color }}
                 />
@@ -592,7 +600,7 @@ function EquipoModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-purple-300 bg-zinc-800 border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all"
+              className={`px-5 py-2.5 rounded-xl text-sm font-medium text-purple-300 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all`}
             >
               Cancelar
             </button>
@@ -623,6 +631,7 @@ function AddMembersModal({
   onSubmit: (usuarioIds: number[]) => void;
   loading: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState('');
 
@@ -662,14 +671,14 @@ function AddMembersModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-lg bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40">
+      <div className={`relative z-50 w-full max-w-lg ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col`}>
+        <div className={`flex items-center justify-between p-6 border-b border-purple-500/20 ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'}`}>
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl" style={{ backgroundColor: `${equipo.color}30` }}>
               <UserPlus className="h-6 w-6" style={{ color: equipo.color || '#8B5CF6' }} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Agregar Miembros</h2>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Agregar Miembros</h2>
               <p className="text-sm text-purple-300/70">a {equipo.nombre}</p>
             </div>
           </div>
@@ -684,7 +693,7 @@ function AddMembersModal({
             <input
               type="search"
               placeholder="Buscar usuarios..."
-              className="w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+              className={`w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900/80 text-white' : 'bg-gray-50 text-gray-900'} text-sm ${isDark ? 'placeholder:text-zinc-500' : 'placeholder:text-gray-400'} focus:outline-none focus:ring-2 focus:ring-purple-500/30`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />

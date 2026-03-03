@@ -12,6 +12,7 @@ import { notificacionesService, ResumenAutorizacion } from '../../services/notif
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { UserAvatar } from '../../components/ui/user-avatar';
+import { useThemeStore } from '../../store/themeStore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -41,16 +42,16 @@ const loadImageAsBase64 = (url: string): Promise<string> => {
 };
 
 // Status badge colors
-const STATUS_COLORS: Record<string, { bg: string; text: string; border: string; gradient: string }> = {
-  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30', gradient: 'from-amber-600 to-orange-600' },
-  'Aprobada': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30', gradient: 'from-emerald-600 to-green-600' },
-  'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30', gradient: 'from-red-600 to-rose-600' },
-  'Atendida': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30', gradient: 'from-cyan-600 to-blue-600' },
-  'Desactivada': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30', gradient: 'from-zinc-600 to-gray-600' },
-  'Ajustar': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30', gradient: 'from-orange-600 to-amber-600' },
-};
+const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string; gradient: string }> => ({
+  'Pendiente': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30', gradient: 'from-amber-600 to-orange-600' },
+  'Aprobada': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30', gradient: 'from-emerald-600 to-green-600' },
+  'Rechazada': { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30', gradient: 'from-red-600 to-rose-600' },
+  'Atendida': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30', gradient: 'from-cyan-600 to-blue-600' },
+  'Desactivada': { bg: isDark ? 'bg-zinc-500/20' : 'bg-gray-50', text: isDark ? 'text-zinc-300' : 'text-gray-700', border: isDark ? 'border-zinc-500/30' : 'border-gray-300', gradient: 'from-zinc-600 to-gray-600' },
+  'Ajustar': { bg: isDark ? 'bg-orange-500/20' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: 'border-orange-500/30', gradient: 'from-orange-600 to-amber-600' },
+});
 
-const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30', gradient: 'from-violet-600 to-purple-600' };
+const getDefaultStatusColor = (isDark: boolean) => ({ bg: isDark ? 'bg-violet-500/20' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30', gradient: 'from-violet-600 to-purple-600' });
 
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -197,6 +198,7 @@ interface ViewSolicitudModalProps {
 }
 
 export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAtender, onStatus, canEdit = true, canAtender = false }: ViewSolicitudModalProps) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // WebSocket para actualizaciones en tiempo real
@@ -595,7 +597,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 isolate">
-      <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative z-50">
+      <div className={`${isDark ? 'bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border-zinc-800/50' : 'bg-white border-gray-200'} border rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative z-50`}>
         {/* Header - Estilo violeta consistente */}
         <div className="relative px-6 py-5 border-b border-violet-500/20 bg-gradient-to-r from-violet-600/20 via-purple-600/15 to-fuchsia-600/10">
           <div className="flex items-center justify-between">
@@ -605,13 +607,13 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-white">Solicitud</h2>
+                  <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Solicitud</h2>
                   {data && (
                     <span className="text-violet-300 font-semibold">#{data.solicitud.id}</span>
                   )}
                 </div>
                 {data?.cotizacion?.nombre_campania && (
-                  <p className="text-zinc-400 text-sm">{data.cotizacion.nombre_campania}</p>
+                  <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{data.cotizacion.nombre_campania}</p>
                 )}
               </div>
             </div>
@@ -620,7 +622,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                 <button
                   onClick={() => { onClose(); onEdit(); }}
                   disabled={!canEdit}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 text-zinc-300 text-xs font-medium hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-zinc-700"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200'} text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all border`}
                   title={canEdit ? 'Editar solicitud' : 'No editable en este estatus'}
                 >
                   <Edit2 className="h-3.5 w-3.5" />
@@ -656,8 +658,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                 <Download className="h-4 w-4" />
                 PDF
               </button>
-              <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-xl transition-colors">
-                <X className="h-5 w-5 text-zinc-400" />
+              <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-xl transition-colors`}>
+                <X className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
               </button>
             </div>
           </div>
@@ -669,7 +671,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
             <div className="flex items-center justify-center h-64">
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
-                <span className="text-zinc-500 text-sm">Cargando...</span>
+                <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</span>
               </div>
             </div>
           ) : data ? (
@@ -678,20 +680,20 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
               <div className="bg-gradient-to-r from-violet-600/10 via-purple-600/10 to-fuchsia-600/10 rounded-2xl p-5 border border-violet-500/20">
                 <div className="grid grid-cols-4 gap-6">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-white">{totalCaras}</p>
-                    <p className="text-xs text-zinc-400 mt-1">Total Caras</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalCaras}</p>
+                    <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Total Caras</p>
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-violet-400">{totalRenta}</p>
-                    <p className="text-xs text-zinc-400 mt-1">En Renta</p>
+                    <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>En Renta</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-white">{totalBonificacion}</p>
-                    <p className="text-xs text-zinc-400 mt-1">Bonificación</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalBonificacion}</p>
+                    <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Bonificación</p>
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-amber-400">{formatCurrency(inversion)}</p>
-                    <p className="text-xs text-zinc-400 mt-1">Inversión</p>
+                    <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Inversión</p>
                   </div>
                 </div>
               </div>
@@ -699,71 +701,71 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
               {/* Two Column Layout */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {/* Campaña Info */}
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
                     Campaña
                   </h3>
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Nombre</span>
-                      <span className="text-white text-sm font-medium">{data.cotizacion?.nombre_campania || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Nombre</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-medium`}>{data.cotizacion?.nombre_campania || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Período</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Período</span>
                       <span className="text-violet-300 text-sm font-medium">
                         {data.cotizacion ? getCatorcenaRange(data.cotizacion.fecha_inicio, data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">{tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Fecha Inicio'}</span>
-                      <span className="text-white text-sm">{data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>{tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Fecha Inicio'}</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">{tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Fecha Fin'}</span>
-                      <span className="text-white text-sm">{data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>{tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Fecha Fin'}</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}</span>
                     </div>
                     {data.solicitud.descripcion && (
-                      <div className="pt-2 border-t border-zinc-700/50">
-                        <span className="text-zinc-500 text-sm block mb-1">Descripción Trafico</span>
-                        <span className="text-zinc-300 text-sm">{data.solicitud.descripcion}</span>
+                      <div className={`pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
+                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm block mb-1`}>Descripción Trafico</span>
+                        <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{data.solicitud.descripcion}</span>
                       </div>
                     )}
                     {data.solicitud.notas && (
-                      <div className="pt-2 border-t border-zinc-700/50">
-                        <span className="text-zinc-500 text-sm block mb-1">Notas Dirección</span>
-                        <span className="text-zinc-300 text-sm">{data.solicitud.notas}</span>
+                      <div className={`pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
+                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm block mb-1`}>Notas Dirección</span>
+                        <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{data.solicitud.notas}</span>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Cliente Info */}
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
                     Cliente
                   </h3>
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">CUIC</span>
-                      <span className="text-white text-sm font-mono">{data.solicitud.cuic || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>CUIC</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{data.solicitud.cuic || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Razón Social</span>
-                      <span className="text-white text-sm font-medium truncate ml-4">{data.solicitud.razon_social || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Razón Social</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-medium truncate ml-4`}>{data.solicitud.razon_social || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Marca</span>
-                      <span className="text-white text-sm">{data.solicitud.marca_nombre || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Marca</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.solicitud.marca_nombre || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Categoría</span>
-                      <span className="text-white text-sm">{data.solicitud.categoria_nombre || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Categoría</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.solicitud.categoria_nombre || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Agencia</span>
-                      <span className="text-white text-sm">{data.solicitud.agencia || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Agencia</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.solicitud.agencia || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -771,23 +773,23 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
               {/* More Info Row */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
                     <User className="h-4 w-4" />
                     Asesor
                   </h3>
-                  <p className="text-white font-medium">{data.solicitud.asesor || '-'}</p>
-                  <p className="text-zinc-500 text-xs mt-1">Asesor comercial</p>
+                  <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{data.solicitud.asesor || '-'}</p>
+                  <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs mt-1`}>Asesor comercial</p>
                 </div>
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
                     <Package className="h-4 w-4" />
                     Producto
                   </h3>
-                  <p className="text-white font-medium">{data.solicitud.producto_nombre || '-'}</p>
-                  <p className="text-zinc-500 text-xs mt-1">Producto/Servicio</p>
+                  <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{data.solicitud.producto_nombre || '-'}</p>
+                  <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs mt-1`}>Producto/Servicio</p>
                 </div>
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
                     <User className="h-4 w-4" />
                     Asignados
@@ -797,12 +799,12 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                       {data.solicitud.asignado.split(',').map((nombre, idx) => (
                         <li key={idx} className="flex items-center gap-2">
                           <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />
-                          <span className="text-white text-sm">{nombre.trim()}</span>
+                          <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{nombre.trim()}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-zinc-500 text-sm">Sin asignar</p>
+                    <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Sin asignar</p>
                   )}
                 </div>
               </div>
@@ -833,22 +835,22 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                             <span className="px-3 py-1 rounded-lg bg-violet-500/30 text-violet-200 text-xs font-medium border border-violet-400/30">
                               {catorcenaGroup.catorcena}
                             </span>
-                            <span className="text-zinc-500 text-xs">
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>
                               ({catorcenaGroup.articulos.length} artículo{catorcenaGroup.articulos.length > 1 ? 's' : ''})
                             </span>
                           </div>
                           <div className="flex items-center gap-4">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-zinc-400 text-xs">Renta:</span>
-                              <span className="text-white text-sm font-semibold">{catorcenaGroup.totalCaras}</span>
+                              <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>Renta:</span>
+                              <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-semibold`}>{catorcenaGroup.totalCaras}</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <span className="text-zinc-400 text-xs">Bonif:</span>
-                              <span className="text-white text-sm font-semibold">{catorcenaGroup.totalBonificacion}</span>
+                              <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>Bonif:</span>
+                              <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-semibold`}>{catorcenaGroup.totalBonificacion}</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <span className="text-zinc-400 text-xs">Total:</span>
-                              <span className="text-white text-sm font-bold">{catorcenaGroup.totalCaras + catorcenaGroup.totalBonificacion}</span>
+                              <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>Total:</span>
+                              <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-bold`}>{catorcenaGroup.totalCaras + catorcenaGroup.totalBonificacion}</span>
                             </div>
                             <div className="flex items-center gap-1.5 pl-2 border-l border-violet-500/30">
                               <span className="text-emerald-400 text-xs">Inversión:</span>
@@ -877,20 +879,20 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                       <span className="px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-200 text-xs font-medium border border-purple-400/20">
                                         {articuloGroup.articulo}
                                       </span>
-                                      <span className="text-zinc-500 text-xs">
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>
                                         ({articuloGroup.caras.length} cara{articuloGroup.caras.length > 1 ? 's' : ''})
                                       </span>
                                     </div>
                                     <div className="flex items-center gap-3 text-xs">
-                                      <span className="text-zinc-400">R: <span className="text-white font-medium">{articuloGroup.totalCaras}</span></span>
-                                      <span className="text-zinc-400">B: <span className="text-white font-medium">{articuloGroup.totalBonificacion}</span></span>
+                                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>R: <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{articuloGroup.totalCaras}</span></span>
+                                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>B: <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{articuloGroup.totalBonificacion}</span></span>
                                       <span className="text-emerald-400">{formatCurrency(articuloGroup.totalInversion)}</span>
                                     </div>
                                   </button>
 
                                   {expandedGroups.has(articuloKey) && (
                                     <div className="px-4 pb-3">
-                                      <div className="overflow-x-auto rounded-xl border border-violet-500/20 bg-zinc-900/50">
+                                      <div className={`overflow-x-auto rounded-xl border border-violet-500/20 ${isDark ? 'bg-zinc-900/50' : 'bg-white'}`}>
                                         <table className="w-full text-sm">
                                           <thead>
                                             <tr className="bg-violet-600/20">
@@ -943,13 +945,13 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
                                               return (
                                                 <tr key={idx} className="hover:bg-violet-600/10 transition-colors">
-                                                  <td className="px-3 py-2 text-zinc-200">{cara.ciudad || '-'}</td>
-                                                  <td className="px-3 py-2 text-zinc-300">{cara.estados || '-'}</td>
-                                                  <td className="px-3 py-2 text-zinc-300">{cara.formato || '-'}</td>
-                                                  <td className="px-3 py-2 text-zinc-300">{cara.tipo || '-'}</td>
-                                                  <td className="px-3 py-2 text-center text-white font-medium">{Number(cara.caras) || 0}</td>
-                                                  <td className="px-3 py-2 text-center text-white font-medium">{Number(cara.bonificacion) || 0}</td>
-                                                  <td className="px-3 py-2 text-center text-white font-bold">{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{cara.ciudad || '-'}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.estados || '-'}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.formato || '-'}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.tipo || '-'}</td>
+                                                  <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(cara.caras) || 0}</td>
+                                                  <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(cara.bonificacion) || 0}</td>
+                                                  <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-bold`}>{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
                                                   <td className="px-3 py-2 text-right text-amber-300 font-medium">{formatCurrency(cara.tarifa_publica || 0)}</td>
                                                   <td className="px-3 py-2 text-right text-emerald-300 font-medium">{formatCurrency(inversion)}</td>
                                                   <td className="px-3 py-2 text-center">
@@ -982,8 +984,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
               {/* Archivo Adjunto - Con preview */}
               {data.solicitud.archivo && (
-                <div className="bg-zinc-800/30 rounded-2xl border border-zinc-800/50 overflow-hidden">
-                  <div className="px-5 py-3 border-b border-zinc-800/50 flex items-center justify-between">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl border overflow-hidden`}>
+                  <div className={`px-5 py-3 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} flex items-center justify-between`}>
                     <h3 className="text-sm font-semibold text-violet-400 flex items-center gap-2">
                       <FileText className="h-4 w-4" />
                       Archivo Adjunto
@@ -999,7 +1001,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                   </div>
                   <div className="p-4">
                     {data.solicitud.tipo_archivo?.startsWith('image/') ? (
-                      <div className="relative rounded-xl overflow-hidden bg-zinc-900/50 border border-zinc-700/50">
+                      <div className={`relative rounded-xl overflow-hidden ${isDark ? 'bg-zinc-900/50 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} border`}>
                         <img
                           src={data.solicitud.archivo}
                           alt="Archivo adjunto"
@@ -1007,13 +1009,13 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                         />
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 p-4 bg-zinc-900/50 rounded-xl border border-zinc-700/50">
+                      <div className={`flex items-center gap-3 p-4 ${isDark ? 'bg-zinc-900/50 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} rounded-xl border`}>
                         <div className="w-12 h-12 rounded-xl bg-violet-500/20 flex items-center justify-center">
                           <FileText className="h-6 w-6 text-violet-400" />
                         </div>
                         <div>
-                          <p className="text-sm text-white font-medium">Documento</p>
-                          <p className="text-xs text-zinc-500">{data.solicitud.tipo_archivo || 'Archivo adjunto'}</p>
+                          <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>Documento</p>
+                          <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{data.solicitud.tipo_archivo || 'Archivo adjunto'}</p>
                         </div>
                       </div>
                     )}
@@ -1023,7 +1025,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
               {/* Historial - Compacto */}
               {data.historial && data.historial.length > 0 && (
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
                     <Clock className="h-4 w-4" />
                     Historial
@@ -1032,9 +1034,9 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     {data.historial.slice(0, 5).map((h, idx) => (
                       <div key={idx} className="flex items-center gap-3 text-sm">
                         <div className="w-2 h-2 rounded-full bg-violet-500" />
-                        <span className="text-zinc-400">{formatDate(h.fecha_hora)}</span>
+                        <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{formatDate(h.fecha_hora)}</span>
                         <span className="px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 text-xs">{h.accion}</span>
-                        <span className="text-zinc-500 truncate flex-1">{h.detalles}</span>
+                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} truncate flex-1`}>{h.detalles}</span>
                       </div>
                     ))}
                   </div>
@@ -1042,8 +1044,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
-              <XCircle className="h-12 w-12 mb-3 text-zinc-600" />
+            <div className={`flex flex-col items-center justify-center h-64 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+              <XCircle className={`h-12 w-12 mb-3 ${isDark ? 'text-zinc-600' : 'text-gray-300'}`} />
               <p>No se pudo cargar la información</p>
             </div>
           )}
@@ -1055,6 +1057,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
 // Helper components
 function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: string; color: string }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const colors: Record<string, { bg: string; text: string; icon: string }> = {
     violet: { bg: 'bg-violet-500/10', text: 'text-violet-400', icon: 'text-violet-400' },
     cyan: { bg: 'bg-cyan-500/10', text: 'text-cyan-400', icon: 'text-cyan-400' },
@@ -1064,10 +1067,10 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any; label: strin
   const c = colors[color] || colors.violet;
 
   return (
-    <div className={`${c.bg} rounded-2xl p-4 border border-zinc-800`}>
+    <div className={`${c.bg} rounded-2xl p-4 border ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
       <div className="flex items-center gap-2 mb-2">
         <Icon className={`h-4 w-4 ${c.icon}`} />
-        <span className="text-zinc-400 text-xs">{label}</span>
+        <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>{label}</span>
       </div>
       <p className={`text-lg font-bold ${c.text}`}>{value}</p>
     </div>
@@ -1075,10 +1078,11 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any; label: strin
 }
 
 function InfoRow({ label, value, mono = false, highlight = false }: { label: string; value?: string | null; mono?: boolean; highlight?: boolean }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   return (
     <div>
-      <span className="text-zinc-500 text-xs block mb-0.5">{label}</span>
-      <span className={`text-sm ${mono ? 'font-mono' : ''} ${highlight ? 'text-violet-400 font-medium' : 'text-white'}`}>
+      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs block mb-0.5`}>{label}</span>
+      <span className={`text-sm ${mono ? 'font-mono' : ''} ${highlight ? 'text-violet-400 font-medium' : isDark ? 'text-white' : 'text-gray-900'}`}>
         {value || '-'}
       </span>
     </div>
@@ -1095,6 +1099,7 @@ interface StatusModalProps {
 }
 
 export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, statusReadOnly = false }: StatusModalProps) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
@@ -1185,17 +1190,18 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
 
   if (!isOpen || !solicitud) return null;
 
-  const statusColor = STATUS_COLORS[solicitud.status] || DEFAULT_STATUS_COLOR;
+  const STATUS_COLORS = getStatusColors(isDark);
+  const statusColor = STATUS_COLORS[solicitud.status] || getDefaultStatusColor(isDark);
   const statusOptions = ['Pendiente', 'Aprobada', 'Rechazada', 'Desactivada', 'Ajustar'];
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+      <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-3">
             <MessageSquare className="h-5 w-5 text-purple-400" />
-            <h2 className="text-lg font-semibold text-white">Estado y Comentarios</h2>
+            <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Estado y Comentarios</h2>
             <span className={`px-2 py-1 rounded-full text-xs ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
               {solicitud.status}
             </span>

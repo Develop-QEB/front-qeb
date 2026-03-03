@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { X, BookOpen } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useThemeStore } from '../../store/themeStore';
 
 type Tutorial =
   | { id: string; type: 'demo'; category: string; title: string; demoUrl: string; width: number; height: number; previewImage: string; paddingBottom: string }
@@ -50,6 +51,7 @@ interface Props {
 }
 
 export function AyudaModal({ isOpen, onClose, tutorialId, onSelect }: Props) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const scriptLoaded = useRef(false);
   const selected = tutorials.find((t) => t.id === tutorialId) ?? tutorials[0];
 
@@ -83,18 +85,18 @@ export function AyudaModal({ isOpen, onClose, tutorialId, onSelect }: Props) {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 flex w-full max-w-6xl rounded-2xl overflow-hidden bg-[#1a1025] border border-purple-900/40 shadow-2xl" style={{ height: '85vh' }}>
+      <div className={`relative z-10 flex w-full max-w-6xl rounded-2xl overflow-hidden ${isDark ? 'bg-[#1a1025] border-purple-900/40' : 'bg-white border-gray-200'} border shadow-2xl`} style={{ height: '85vh' }}>
 
         {/* Sidebar izquierdo */}
-        <div className="w-60 flex-shrink-0 border-r border-purple-900/30 flex flex-col">
-          <div className="px-4 py-4 border-b border-purple-900/30 flex items-center gap-2">
+        <div className={`w-60 flex-shrink-0 border-r ${isDark ? 'border-purple-900/30' : 'border-gray-200'} flex flex-col`}>
+          <div className={`px-4 py-4 border-b ${isDark ? 'border-purple-900/30' : 'border-gray-200'} flex items-center gap-2`}>
             <BookOpen className="h-4 w-4 text-purple-400" />
-            <span className="text-sm font-semibold text-white">Tutoriales</span>
+            <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Tutoriales</span>
           </div>
           <nav className="flex-1 overflow-y-auto p-2 space-y-3">
             {categories.map((cat) => (
               <div key={cat}>
-                <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-purple-500/60">
+                <p className={`px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest ${isDark ? 'text-purple-500/60' : 'text-purple-400'}`}>
                   {cat}
                 </p>
                 {tutorials.filter((t) => t.category === cat).map((t) => (
@@ -104,8 +106,8 @@ export function AyudaModal({ isOpen, onClose, tutorialId, onSelect }: Props) {
                     className={cn(
                       'w-full text-left px-3 py-2.5 rounded-xl text-xs font-light transition-all duration-200',
                       tutorialId === t.id
-                        ? 'bg-gradient-to-r from-pink-600/20 to-purple-600/20 text-white border border-pink-500/30'
-                        : 'text-purple-300/70 hover:bg-purple-900/30 hover:text-white'
+                        ? isDark ? 'bg-gradient-to-r from-pink-600/20 to-purple-600/20 text-white border border-pink-500/30' : 'bg-purple-50 text-purple-700 border border-purple-200'
+                        : isDark ? 'text-purple-300/70 hover:bg-purple-900/30 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                     )}
                   >
                     {t.title}
@@ -118,9 +120,9 @@ export function AyudaModal({ isOpen, onClose, tutorialId, onSelect }: Props) {
 
         {/* Panel derecho */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-purple-900/30">
-            <h3 className="text-sm font-medium text-white truncate pr-4">{selected.title}</h3>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-purple-900/30 text-purple-400 hover:text-white transition-colors">
+          <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? 'border-purple-900/30' : 'border-gray-200'}`}>
+            <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate pr-4`}>{selected.title}</h3>
+            <button onClick={onClose} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-purple-900/30 text-purple-400 hover:text-white' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-900'} transition-colors`}>
               <X className="h-5 w-5" />
             </button>
           </div>

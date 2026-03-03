@@ -10,6 +10,7 @@ import { campanasService, OrdenMontajeCAT, OrdenMontajeINVIAN, ImagenDigital } f
 import { ALLOWED_DIGITAL_ITEM_CODES } from '../../config/allowedDigitalArticles';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
+import { useThemeStore } from '../../store/themeStore';
 import * as XLSX from 'xlsx';
 
 // URL base para archivos estáticos
@@ -65,6 +66,7 @@ function OMDigitalGalleryModal({
   isLoading: boolean;
   title?: string;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const handlePrev = () => {
@@ -90,8 +92,8 @@ function OMDigitalGalleryModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
-      <div className="relative bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-zinc-700 flex-shrink-0">
+      <div className={`relative ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col`}>
+        <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-zinc-700' : 'border-gray-200'} flex-shrink-0`}>
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Film className="h-5 w-5 text-cyan-400" />
             {title || 'Galería Digital'}
@@ -99,7 +101,7 @@ function OMDigitalGalleryModal({
               {imagenes.length} archivo{imagenes.length !== 1 ? 's' : ''}
             </span>
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-zinc-800 rounded-lg transition-colors">
+          <button onClick={onClose} className={`p-1 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}>
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -110,7 +112,7 @@ function OMDigitalGalleryModal({
               <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
             </div>
           ) : imagenes.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-zinc-500">
+            <div className={`flex-1 flex items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
               <div className="text-center">
                 <Film className="h-12 w-12 mx-auto mb-2 opacity-30" />
                 <p>No hay archivos digitales</p>
@@ -172,7 +174,7 @@ function OMDigitalGalleryModal({
                       }`}
                     >
                       {img.tipo === 'video' ? (
-                        <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                        <div className={`w-full h-full ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} flex items-center justify-center`}>
                           <Play className="h-6 w-6 text-cyan-400" />
                         </div>
                       ) : (
@@ -193,10 +195,10 @@ function OMDigitalGalleryModal({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 p-4 border-t border-zinc-700 flex-shrink-0">
+        <div className={`flex items-center justify-end gap-2 p-4 border-t ${isDark ? 'border-zinc-700' : 'border-gray-200'} flex-shrink-0`}>
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors"
+            className={`px-4 py-2 text-sm font-medium ${isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'} transition-colors`}
           >
             Cerrar
           </button>
@@ -349,6 +351,7 @@ function formatDate(dateStr: string | null): string {
 }
 
 export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: OrdenesMontajeModalProps) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [activeTab, setActiveTab] = useState<TabType>('cat');
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -1053,36 +1056,36 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative w-[95vw] max-w-7xl h-[90vh] bg-zinc-900 rounded-2xl border border-purple-500/30 shadow-2xl flex flex-col overflow-hidden">
+      <div className={`relative w-[95vw] max-w-7xl h-[90vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/30 shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800/80 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30' : 'border-gray-200 bg-gradient-to-r from-purple-50 via-fuchsia-50 to-purple-50'}`}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
               <ClipboardList className="h-5 w-5 text-purple-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Órdenes de Montaje</h2>
-              <p className="text-xs text-zinc-400">Gestión y exportación de órdenes</p>
+              <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Órdenes de Montaje</h2>
+              <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Gestión y exportación de órdenes</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            className={`p-2 rounded-lg ${isDark ? 'bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-800' : 'bg-gray-100 text-gray-500 hover:text-gray-900 hover:bg-gray-200'} transition-colors`}
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Tabs and Controls */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-800/50 bg-zinc-900/80">
+        <div className={`flex items-center justify-between px-6 py-3 border-b ${isDark ? 'border-zinc-800/50 bg-zinc-900/80' : 'border-gray-200 bg-gray-50/80'}`}>
           {/* Tabs */}
-          <div className="flex p-1 bg-zinc-800/80 rounded-xl border border-zinc-700/50">
+          <div className={`flex p-1 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} rounded-xl border`}>
             <button
               onClick={() => setActiveTab('cat')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'cat'
                   ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/25'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  : isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-900'
               }`}
             >
               <Building2 className="h-4 w-4" />
@@ -1093,7 +1096,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'digital'
                   ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/25'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  : isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-900'
               }`}
             >
               <Monitor className="h-4 w-4" />
@@ -1104,7 +1107,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'invian'
                   ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/25'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  : isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-900'
               }`}
             >
               <FileSpreadsheet className="h-4 w-4" />
@@ -1115,7 +1118,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'invian-digital'
                   ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white shadow-lg shadow-violet-500/25'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  : isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-900'
               }`}
             >
               <Monitor className="h-4 w-4" />
@@ -1132,7 +1135,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   hasActiveFilters
                     ? 'bg-purple-600 text-white'
-                    : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700'
+                    : isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'
                 }`}
               >
                 <Filter className="h-4 w-4" />
@@ -1597,59 +1600,61 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
 // Row components
 function CATRow({ item }: { item: OrdenMontajeCAT }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const getNegociacionColor = (neg: string | null) => {
     switch (neg) {
-      case 'BONIFICACION': return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-      case 'CORTESIA': return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
-      case 'INTERCAMBIO': return 'bg-purple-500/20 text-purple-300 border-purple-500/30';
-      default: return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+      case 'BONIFICACION': return isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'CORTESIA': return isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200';
+      case 'INTERCAMBIO': return isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200';
+      default: return isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200';
     }
   };
   const negociacionColor = getNegociacionColor(item.negociacion);
 
   return (
-    <tr className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
-      <td className="px-3 py-2 text-xs text-zinc-300">{item.plaza || '-'}</td>
-      <td className="px-3 py-2 text-xs text-zinc-300">{item.tipo || '-'}</td>
+    <tr className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.plaza || '-'}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.tipo || '-'}</td>
       <td className="px-3 py-2">
         {item.asesor ? (
           <div className="flex items-center gap-2">
             <div className={`w-6 h-6 rounded-full ${getAvatarColor(item.asesor)} flex items-center justify-center text-[10px] font-bold text-white`}>
               {getInitials(item.asesor)}
             </div>
-            <span className="text-xs text-zinc-300 truncate max-w-[100px]" title={item.asesor}>{item.asesor}</span>
+            <span className={`text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} truncate max-w-[100px]`} title={item.asesor}>{item.asesor}</span>
           </div>
         ) : (
-          <span className="text-xs text-zinc-500">-</span>
+          <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
         )}
       </td>
       <td className="px-3 py-2 text-xs text-purple-300 font-mono">{item.aps_especifico || '-'}</td>
-      <td className="px-3 py-2 text-xs text-zinc-400">{formatDate(item.fecha_inicio_periodo)}</td>
-      <td className="px-3 py-2 text-xs text-zinc-400">{formatDate(item.fecha_fin_periodo)}</td>
-      <td className="px-3 py-2 text-xs text-zinc-300 max-w-[120px] truncate" title={item.cliente || ''}>{item.cliente || '-'}</td>
-      <td className="px-3 py-2 text-xs text-zinc-300">{item.marca || '-'}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_inicio_periodo)}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_fin_periodo)}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[120px] truncate`} title={item.cliente || ''}>{item.cliente || '-'}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.marca || '-'}</td>
       <td className="px-3 py-2 text-xs text-orange-300">{item.unidad_negocio || '-'}</td>
-      <td className="px-3 py-2 text-xs text-white font-medium max-w-[150px] truncate" title={item.campania || ''}>{item.campania || '-'}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-white' : 'text-gray-900'} font-medium max-w-[150px] truncate`} title={item.campania || ''}>{item.campania || '-'}</td>
       <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.numero_articulo || '-'}</td>
       <td className="px-3 py-2">
         <span className={`px-2 py-0.5 rounded-full text-[10px] border ${negociacionColor}`}>
           {item.negociacion}
         </span>
       </td>
-      <td className="px-3 py-2 text-xs text-right text-white font-medium">{Number(item.caras) || 0}</td>
-      <td className="px-3 py-2 text-xs text-right text-zinc-300">${(Number(item.tarifa) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+      <td className={`px-3 py-2 text-xs text-right ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(item.caras) || 0}</td>
+      <td className={`px-3 py-2 text-xs text-right ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>${(Number(item.tarifa) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
       <td className="px-3 py-2 text-xs text-right text-emerald-400 font-medium">${(Number(item.monto_total) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
     </tr>
   );
 }
 
 function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGallery: (item: OrdenMontajeINVIAN) => void }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const getOperacionColor = (op: string | null) => {
     switch (op) {
-      case 'BONIFICACION': return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-      case 'CORTESIA': return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
-      case 'INTERCAMBIO': return 'bg-purple-500/20 text-purple-300 border-purple-500/30';
-      default: return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+      case 'BONIFICACION': return isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'CORTESIA': return isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200';
+      case 'INTERCAMBIO': return isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200';
+      default: return isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200';
     }
   };
   const operacionColor = getOperacionColor(item.Operacion);
@@ -1659,15 +1664,15 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
   const fileName = item.ArteUrl?.split('/').pop() || null;
 
   return (
-    <tr className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
-      <td className="px-3 py-2 text-xs text-white font-medium max-w-[140px] truncate" title={item.Campania || ''}>{item.Campania || '-'}</td>
-      <td className="px-3 py-2 text-xs text-zinc-300 max-w-[120px] truncate" title={item.Anunciante || ''}>{item.Anunciante || '-'}</td>
+    <tr className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-white' : 'text-gray-900'} font-medium max-w-[140px] truncate`} title={item.Campania || ''}>{item.Campania || '-'}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[120px] truncate`} title={item.Anunciante || ''}>{item.Anunciante || '-'}</td>
       <td className="px-3 py-2">
         <span className={`px-2 py-0.5 rounded-full text-[10px] border ${operacionColor}`}>
           {item.Operacion || '-'}
         </span>
       </td>
-      <td className="px-3 py-2 text-xs text-zinc-400 font-mono">{item.CodigoContrato || '-'}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono`}>{item.CodigoContrato || '-'}</td>
       <td className="px-3 py-2 text-xs text-right text-emerald-400 font-medium">${(Number(item.PrecioPorCara) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
       <td className="px-3 py-2">
         {item.Vendedor ? (
@@ -1675,16 +1680,16 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
             <div className={`w-6 h-6 rounded-full ${getAvatarColor(item.Vendedor)} flex items-center justify-center text-[10px] font-bold text-white`}>
               {getInitials(item.Vendedor)}
             </div>
-            <span className="text-xs text-zinc-300 truncate max-w-[80px]" title={item.Vendedor}>{item.Vendedor}</span>
+            <span className={`text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} truncate max-w-[80px]`} title={item.Vendedor}>{item.Vendedor}</span>
           </div>
         ) : (
-          <span className="text-xs text-zinc-500">-</span>
+          <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
         )}
       </td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.InicioPeriodo || '-'}</td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.FinSegmento || '-'}</td>
       {/* Nombre Arte */}
-      <td className="px-3 py-2 text-xs text-zinc-300 max-w-[150px] truncate" title={fileName || ''}>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[150px] truncate`} title={fileName || ''}>
         {fileName || '-'}
       </td>
       {/* Artes */}
@@ -1708,7 +1713,7 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
                 <img
                   src={arteUrl}
                   alt="Arte"
-                  className="w-10 h-[30px] object-cover rounded border border-zinc-700 hover:border-purple-400 transition-colors"
+                  className={`w-10 h-[30px] object-cover rounded border ${isDark ? 'border-zinc-700' : 'border-gray-200'} hover:border-purple-400 transition-colors`}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               </a>
@@ -1727,16 +1732,16 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
               </a>
             );
           }
-          return <span className="text-zinc-500">-</span>;
+          return <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>-</span>;
         })()}
       </td>
       {/* Indicaciones */}
-      <td className="px-3 py-2 text-xs text-zinc-300 max-w-[180px] truncate" title={item.indicaciones || ''}>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[180px] truncate`} title={item.indicaciones || ''}>
         {item.indicaciones || '-'}
       </td>
       <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.Unidad || '-'}</td>
-      <td className="px-3 py-2 text-xs text-zinc-300">{item.Cara || '-'}</td>
-      <td className="px-3 py-2 text-xs text-zinc-300">{item.Ciudad || '-'}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.Cara || '-'}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.Ciudad || '-'}</td>
       <td className="px-3 py-2">
         <span className={`px-2 py-0.5 rounded-full text-[10px] border ${tipoDistColor}`}>
           {item.TipoDistribucion || '-'}
