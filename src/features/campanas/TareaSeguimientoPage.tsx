@@ -5297,7 +5297,7 @@ function TaskDetailModal({
                                 <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
                                   {faltante.arte ? (
                                     <img
-                                      src={faltante.arte}
+                                      src={getImageUrl(faltante.arte) || faltante.arte}
                                       alt="Arte"
                                       className="w-full h-full object-cover"
                                     />
@@ -5447,10 +5447,28 @@ function TaskDetailModal({
                         const artesArray = Object.entries(artesAgrupados);
 
                         if (artesArray.length === 0) {
+                          let fallbackThumb: string | null = null;
+                          if (task.evidencia) {
+                            try {
+                              const evidenciaObj = JSON.parse(task.evidencia);
+                              const arteFromFaltantes = evidenciaObj?.faltantesPorArte?.[0]?.arte;
+                              if (arteFromFaltantes) {
+                                fallbackThumb = getImageUrl(arteFromFaltantes) || arteFromFaltantes;
+                              }
+                            } catch {}
+                          }
                           return (
                             <div className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
                               <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700 flex items-center justify-center">
-                                <Image className="h-5 w-5 text-zinc-600" />
+                                {fallbackThumb ? (
+                                  <img
+                                    src={fallbackThumb}
+                                    alt="Arte"
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <Image className="h-5 w-5 text-zinc-600" />
+                                )}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-white">{impresionesOrdenadas} solicitada{impresionesOrdenadas !== 1 ? 's' : ''}</p>
