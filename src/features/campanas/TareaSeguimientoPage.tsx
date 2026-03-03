@@ -2658,7 +2658,7 @@ function TaskDetailModal({
   onUpdateArteDigital: (reservaIds: number[], files: { file: File; spot: number }[], deleteArchivos?: string[]) => Promise<void>;
   onTaskComplete: (taskId: string, observaciones?: string, archivoTestigo?: string) => Promise<void>;
   onSendToReview: (reservaIds: number[], responsableOriginal: string) => Promise<void>;
-  onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string, asignadoId?: string) => Promise<void>;
+  onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string, asignadoId?: string, guiaPdfUrl?: string) => Promise<void>;
   onCreateRecepcionFaltante: (faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[], observaciones: string) => Promise<void>;
   onUpdateTask: (taskId: string, data: { evidencia?: string; estatus?: string }) => Promise<void>;
   isUpdating: boolean;
@@ -2910,7 +2910,7 @@ function TaskDetailModal({
   const [isFinalizandoRecepcion, setIsFinalizandoRecepcion] = useState(false);
   const [recepcionFiles, setRecepcionFiles] = useState<{ file: File; preview: string }[]>([]);
   const [isUploadingRecepcion, setIsUploadingRecepcion] = useState(false);
-  const [recepcionPdfFile, setRecepcionPdfFile] = useState<File | null>(null);
+  const [impresionPdfFile, setImpresionPdfFile] = useState<File | null>(null);
 
   // Parsear datos de impresiones desde evidencia (para tareas de Impresión y Recepción)
   const impresionesData = useMemo(() => {
@@ -2925,6 +2925,16 @@ function TaskDetailModal({
     }
     return null;
   }, [task]);
+
+  const guiaPdfUrl = useMemo(() => {
+    if (!task?.evidencia) return null;
+    try {
+      const ev = JSON.parse(task.evidencia);
+      return ev?.guia_pdf || null;
+    } catch {
+      return null;
+    }
+  }, [task?.evidencia]);
 
 
   // Estados para editar arte
@@ -4189,10 +4199,21 @@ function TaskDetailModal({
 
     setIsCreatingRecepcion(true);
     try {
-      await onCreateRecepcion(task.id, recepcionAsignadoNombre || undefined, recepcionAsignadoId || undefined);
+      let guiaPdfUrlCreada: string | undefined;
+      if (impresionPdfFile) {
+        const pdfResult = await campanasService.uploadTestigoFile(impresionPdfFile);
+        guiaPdfUrlCreada = pdfResult.url;
+      }
+      await onCreateRecepcion(
+        task.id,
+        recepcionAsignadoNombre || undefined,
+        recepcionAsignadoId || undefined,
+        guiaPdfUrlCreada
+      );
       setRecepcionAsignadoNombre('');
       setRecepcionAsignadoId('');
       setRecepcionAsignadoSearch('');
+      setImpresionPdfFile(null);
       onClose();
     } catch (error) {
       console.error('Error al crear tarea de recepción:', error);
@@ -4312,17 +4333,6 @@ function TaskDetailModal({
         }
       }
 
-      // Subir PDF guía del proveedor si existe
-      if (recepcionPdfFile) {
-        try {
-          const pdfResult = await campanasService.uploadTestigoFile(recepcionPdfFile);
-          const existingEvidencia = task.evidencia ? JSON.parse(task.evidencia) : {};
-          await onUpdateTask(task.id, { evidencia: JSON.stringify({ ...existingEvidencia, guia_pdf: pdfResult.url }) });
-        } catch (pdfErr) {
-          console.error('Error al subir PDF guía:', pdfErr);
-        }
-      }
-
       // Actualizar la tarea actual como completada (con observaciones y foto comprobatoria)
       await onTaskComplete(task.id, observacionesRecepcion || undefined, archivoTestigoUrl);
 
@@ -4348,7 +4358,7 @@ function TaskDetailModal({
       setCantidadesRecibidas({});
       setObservacionesRecepcion('');
       setRecepcionFiles([]);
-      setRecepcionPdfFile(null);
+      setImpresionPdfFile(null);
     }
   }, [isOpen]);
 
@@ -4681,6 +4691,51 @@ function TaskDetailModal({
                         ))}
                       </div>
                     )}
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor en PDF (opcional)</label>
+                    {impresionPdfFile ? (
+                      <div className="flex items-center gap-2 mb-2 p-2 bg-zinc-800 rounded border border-border">
+                        <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
+                        <span className="text-xs text-zinc-300 truncate flex-1">{impresionPdfFile.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setImpresionPdfFile(null)}
+                          className="text-red-400 hover:text-red-300 text-xs"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : null}
+                    <div className="border-2 border-dashed border-purple-500/30 rounded-lg p-3 text-center hover:border-purple-500/50 transition-colors">
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 20 * 1024 * 1024) {
+                              alert(`${file.name} supera 20MB`);
+                            } else {
+                              setImpresionPdfFile(file);
+                            }
+                          }
+                          e.target.value = '';
+                        }}
+                        className="hidden"
+                        id="impresion-pdf-input"
+                        disabled={isCreatingRecepcion}
+                      />
+                      <label htmlFor="impresion-pdf-input" className="cursor-pointer">
+                        <div className="space-y-1 py-1">
+                          <Upload className="h-6 w-6 text-zinc-500 mx-auto" />
+                          <p className="text-xs text-zinc-400">
+                            {impresionPdfFile ? 'Cambiar PDF' : 'Sube la guía del proveedor'}
+                          </p>
+                          <p className="text-[10px] text-zinc-500">PDF (máx. 20MB)</p>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 </div>
               )}
@@ -5453,51 +5508,24 @@ function TaskDetailModal({
                       </div>
                     </div>
 
-                    {/* PDF guía del proveedor */}
+                    {/* PDF guía del proveedor (solo lectura en Recepción) */}
                     <div>
-                      <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor en PDF (opcional)</label>
-                      {recepcionPdfFile ? (
-                        <div className="flex items-center gap-2 mb-2 p-2 bg-zinc-800 rounded border border-border">
+                      <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor (PDF)</label>
+                      {guiaPdfUrl ? (
+                        <a
+                          href={getImageUrl(guiaPdfUrl) || guiaPdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-border rounded-lg text-sm text-zinc-300 transition-colors"
+                        >
                           <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
-                          <span className="text-xs text-zinc-300 truncate flex-1">{recepcionPdfFile.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => setRecepcionPdfFile(null)}
-                            className="text-red-400 hover:text-red-300 text-xs"
-                          >
-                            ×
-                          </button>
+                          <span>Ver / descargar guía PDF</span>
+                        </a>
+                      ) : (
+                        <div className="px-3 py-2 bg-zinc-900/40 border border-border rounded-lg text-xs text-zinc-500">
+                          Esta tarea no tiene guía PDF adjunta.
                         </div>
-                      ) : null}
-                      <div className="border-2 border-dashed border-purple-500/30 rounded-lg p-3 text-center hover:border-purple-500/50 transition-colors">
-                        <input
-                          type="file"
-                          accept="application/pdf"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              if (file.size > 20 * 1024 * 1024) {
-                                alert(`${file.name} supera 20MB`);
-                              } else {
-                                setRecepcionPdfFile(file);
-                              }
-                            }
-                            e.target.value = '';
-                          }}
-                          className="hidden"
-                          id="recepcion-pdf-input"
-                          disabled={isFinalizandoRecepcion}
-                        />
-                        <label htmlFor="recepcion-pdf-input" className="cursor-pointer">
-                          <div className="space-y-1 py-1">
-                            <Upload className="h-6 w-6 text-zinc-500 mx-auto" />
-                            <p className="text-xs text-zinc-400">
-                              {recepcionPdfFile ? 'Cambiar PDF' : 'Sube la guía del proveedor'}
-                            </p>
-                            <p className="text-[10px] text-zinc-500">PDF (máx. 20MB)</p>
-                          </div>
-                        </label>
-                      </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -16282,7 +16310,7 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
             ids_reservas: reservaIds.join(','),
           });
         }}
-        onCreateRecepcion={async (tareaImpresionId, asignadoNombre, asignadoId) => {
+        onCreateRecepcion={async (tareaImpresionId, asignadoNombre, asignadoId, guiaPdfUrl) => {
           if (!selectedTask) return;
 
           // 1. Marcar la tarea de Impresión como "Atendido"
@@ -16300,10 +16328,14 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
             const evidenciaObj = evidenciaRecepcion ? JSON.parse(evidenciaRecepcion) : {};
             // Agregar tipo para identificar que es recepción normal (no faltantes)
             evidenciaObj.tipo = 'recepcion_normal';
+            if (guiaPdfUrl) evidenciaObj.guia_pdf = guiaPdfUrl;
             evidenciaRecepcion = JSON.stringify(evidenciaObj);
           } catch (e) {
             // Si no es JSON válido, crear objeto nuevo
-            evidenciaRecepcion = JSON.stringify({ tipo: 'recepcion_normal' });
+            evidenciaRecepcion = JSON.stringify({
+              tipo: 'recepcion_normal',
+              ...(guiaPdfUrl ? { guia_pdf: guiaPdfUrl } : {})
+            });
           }
 
           // Usar el usuario seleccionado o fallback al asignado/creador original
