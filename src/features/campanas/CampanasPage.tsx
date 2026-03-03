@@ -2152,6 +2152,11 @@ export function CampanasPage() {
                               <Gift className="h-3 w-3" /> {campana.bonificacion}
                             </span>
                           )}
+                          {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0) > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Caras rentadas sin bonificación">
+                              <MapPin className="h-3 w-3" /> {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0)}
+                            </span>
+                          )}
                           <span className="px-2 py-0.5 rounded-full text-[10px] bg-green-500/15 text-green-300 border border-green-500/25 flex items-center gap-1" title="Inversión">
                             <DollarSign className="h-3 w-3" /> {campana.inversion != null && Number(campana.inversion) > 0 ? `$${Number(campana.inversion).toLocaleString()}` : 'Sin inversión'}
                           </span>
@@ -2288,7 +2293,16 @@ export function CampanasPage() {
                                                     const carasTotales = grupo.items.length;
                                                     const sumTarifa = grupo.items.reduce((s, i) => s + (Number((i as any).tarifa_publica_sc) || 0), 0);
                                                     const sumRenta = grupo.items.reduce((s, i) => s + (Number((i as any).renta) || 0), 0);
-                                                    const sumBonif = grupo.items.reduce((s, i) => s + (Number((i as any).bonificacion_sc) || 0), 0);
+                                                    // bonificacion_sc viene repetida por fila en algunos inventarios.
+                                                    // Para evitar inflar (ej. 50 filas x 50 = 2500), usar el valor de campaña;
+                                                    // si no existe, tomar el mayor valor reportado en el grupo.
+                                                    const bonifCampana = Number(campana.bonificacion) || 0;
+                                                    const bonifGrupoFallback = grupo.items.reduce((max, i) => {
+                                                      const val = Number((i as any).bonificacion_sc) || 0;
+                                                      return val > max ? val : max;
+                                                    }, 0);
+                                                    const sumBonif = Math.min(carasTotales, (bonifCampana > 0 ? bonifCampana : bonifGrupoFallback));
+                                                    const sumNormales = Math.max(carasTotales - sumBonif, 0);
                                                     const inversionTotal = sumTarifa;
                                                     const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
                                                     return (
@@ -2318,6 +2332,11 @@ export function CampanasPage() {
                                                         {sumBonif > 0 && (
                                                           <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/25" title="Bonificación">
                                                             Bonif: {sumBonif}
+                                                          </span>
+                                                        )}
+                                                        {sumNormales > 0 && (
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Caras rentadas sin bonificación">
+                                                            <MapPin className="h-2.5 w-2.5" /> {sumNormales}
                                                           </span>
                                                         )}
                                                         <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 flex items-center gap-1" title="Artes subidos">
