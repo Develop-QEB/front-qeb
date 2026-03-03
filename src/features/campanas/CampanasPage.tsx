@@ -1018,8 +1018,6 @@ export function CampanasPage() {
       subgroups?: { name: string; campanas: Campana[] }[];
     }> = {};
 
-    const CATORCENAS_POR_ANIO = 26;
-
     filteredData.forEach(item => {
       const isMensual = (item as any).tipo_periodo === 'mensual';
       if (isMensual && item.fecha_inicio) {
@@ -1036,28 +1034,17 @@ export function CampanasPage() {
         }
         groups[key].campanas.push(item);
       } else if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
-        const finNum = item.catorcena_fin_num ?? item.catorcena_inicio_num;
-        const finAnio = item.catorcena_fin_anio ?? item.catorcena_inicio_anio;
-
-        let num = item.catorcena_inicio_num;
-        let anio = item.catorcena_inicio_anio;
-
-        while (anio < finAnio || (anio === finAnio && num <= finNum)) {
-          const key = `${anio}-${String(num).padStart(2, '0')}`;
-          if (!groups[key]) {
-            groups[key] = {
-              catorcena: { num, anio },
-              campanas: []
-            };
-          }
-          groups[key].campanas.push(item);
-
-          num++;
-          if (num > CATORCENAS_POR_ANIO) {
-            num = 1;
-            anio++;
-          }
+        // Esta vista es "por periodo de inicio": cada campaña debe aparecer solo una vez.
+        const num = item.catorcena_inicio_num;
+        const anio = item.catorcena_inicio_anio;
+        const key = `${anio}-${String(num).padStart(2, '0')}`;
+        if (!groups[key]) {
+          groups[key] = {
+            catorcena: { num, anio },
+            campanas: []
+          };
         }
+        groups[key].campanas.push(item);
       }
     });
 
