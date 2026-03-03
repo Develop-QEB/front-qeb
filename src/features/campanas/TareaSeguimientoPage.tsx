@@ -11498,9 +11498,15 @@ export function TareaSeguimientoPage() {
           estadoImpresion = 'recibido';
           tareaRecepcionId = recepcionCompletada.id;
         } else {
-          // Hay recepciones pero ninguna completada normal
+          // Hay recepciones pendientes: debe mantenerse en pendiente de recepción
           estadoImpresion = 'pendiente_recepcion';
-          // Priorizar la tarea de recepción normal (no faltantes) para mostrar su estatus
+
+          // Priorizar SIEMPRE una recepción pendiente para mostrar estatus correcto en tabla.
+          const recepcionPendiente = tareasRecepcionRelacionadas.find(recepcion =>
+            recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
+          );
+
+          // Fallback: si no encuentra (caso raro), usar una recepción normal.
           const recepcionNormal = tareasRecepcionRelacionadas.find(recepcion => {
             let esFaltantes = false;
             if (recepcion.evidencia) {
@@ -11511,7 +11517,8 @@ export function TareaSeguimientoPage() {
             }
             return !esFaltantes;
           });
-          tareaRecepcionId = recepcionNormal?.id || tareasRecepcionRelacionadas[0]?.id;
+
+          tareaRecepcionId = recepcionPendiente?.id || recepcionNormal?.id || tareasRecepcionRelacionadas[0]?.id;
         }
       }
 
