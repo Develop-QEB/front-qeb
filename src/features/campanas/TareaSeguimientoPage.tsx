@@ -2662,7 +2662,8 @@ function TaskDetailModal({
   onCreateRecepcionFaltante: (
     faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[],
     observaciones: string,
-    guiaPdfUrl?: string
+    guiaPdfUrl?: string,
+    faltantesInventoryIds?: string[]
   ) => Promise<void>;
   onUpdateTask: (taskId: string, data: { evidencia?: string; estatus?: string }) => Promise<void>;
   isUpdating: boolean;
@@ -4277,6 +4278,15 @@ function TaskDetailModal({
     try {
       // Calcular faltantes por arte
       const faltantesPorArte: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[] = [];
+      const faltantesInventoryIds = new Set<string>();
+
+      // Mapa de ids de inventario por arte para poder crear la tarea de faltantes solo con esos ids
+      const inventoryIdsByArte = taskInventory.reduce((acc, item) => {
+        const key = item.archivo_arte || 'sin_arte';
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(String(item.id));
+        return acc;
+      }, {} as Record<string, string[]>);
 
       // Verificar tipo de tarea desde evidencia
       let tipoEvidencia = '';
@@ -4311,6 +4321,8 @@ function TaskDetailModal({
               recibidas,
               faltantes: diferencia
             });
+            const idsArte = inventoryIdsByArte[key] || inventoryIdsByArte['sin_arte'] || [];
+            idsArte.slice(0, diferencia).forEach(id => faltantesInventoryIds.add(id));
           }
         });
       } else if (Object.keys(impresionesData).length > 0) {
@@ -4326,6 +4338,8 @@ function TaskDetailModal({
               recibidas,
               faltantes
             });
+            const idsArte = inventoryIdsByArte[arteUrl] || inventoryIdsByArte['sin_arte'] || [];
+            idsArte.slice(0, faltantes).forEach(id => faltantesInventoryIds.add(id));
           }
         });
       } else {
@@ -4353,6 +4367,8 @@ function TaskDetailModal({
               recibidas,
               faltantes
             });
+            const idsArte = inventoryIdsByArte[key] || [];
+            idsArte.slice(0, faltantes).forEach(id => faltantesInventoryIds.add(id));
           }
         });
       }
@@ -4362,7 +4378,8 @@ function TaskDetailModal({
         await onCreateRecepcionFaltante(
           faltantesPorArte,
           observacionesRecepcion,
-          guiaPdfUrl || undefined
+          guiaPdfUrl || undefined,
+          Array.from(faltantesInventoryIds)
         );
       }
 
@@ -11516,11 +11533,26 @@ export function TareaSeguimientoPage() {
       return normalizedIds;
     };
 
+    const recepcionIdsMap = new Map<number, Set<string>>();
+    const recepcionEsFaltantesMap = new Map<number, boolean>();
+
+    tareasRecepcion.forEach(recepcion => {
+      const listadoRecepcion = recepcion.listado_inventario || recepcion.ids_reservas || '';
+      recepcionIdsMap.set(recepcion.id, normalizeToInventoryIds(listadoRecepcion));
+      let esFaltantes = false;
+      if (recepcion.evidencia) {
+        try {
+          const evidenciaObj = JSON.parse(recepcion.evidencia);
+          esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
+        } catch {}
+      }
+      recepcionEsFaltantesMap.set(recepcion.id, esFaltantes);
+    });
+
     // Crear mapa de tarea de impresión -> tareas de recepción relacionadas (puede haber varias: normal + faltantes)
     const impresionToRecepcionesMap = new Map<number, typeof tareasRecepcion>();
     tareasRecepcion.forEach(recepcion => {
-      const listadoRecepcion = recepcion.listado_inventario || recepcion.ids_reservas || '';
-      const recepcionIds = normalizeToInventoryIds(listadoRecepcion);
+      const recepcionIds = recepcionIdsMap.get(recepcion.id) || new Set<string>();
 
       tareasImpresion.forEach(impresion => {
         const listadoImpresion = impresion.listado_inventario || impresion.ids_reservas || '';
@@ -11551,78 +11583,43 @@ export function TareaSeguimientoPage() {
       // Reemplazar asteriscos con comas y luego dividir (ids_reservas puede usar * como separador)
       const ids = listado.replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean);
 
-      // Determinar estado del flujo de impresión
       const tareasRecepcionRelacionadas = impresionToRecepcionesMap.get(tarea.id) || [];
-      let estadoImpresion: EstadoImpresion = 'en_impresion';
-      let tareaRecepcionId: number | undefined;
-
-      if (tareasRecepcionRelacionadas.length > 0) {
-        // Buscar si hay alguna recepción completada (no faltantes)
-        const recepcionCompletada = tareasRecepcionRelacionadas.find(recepcion => {
-          const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
-          // Verificar si es tarea de faltantes
-          let esFaltantes = false;
-          if (recepcion.evidencia) {
-            try {
-              const evidenciaObj = JSON.parse(recepcion.evidencia);
-              esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
-            } catch (e) {}
-          }
-          return esCompletada && !esFaltantes;
+      ids.forEach(id => {
+        const recepcionesDelId = tareasRecepcionRelacionadas.filter(recepcion => {
+          const idsRecepcion = recepcionIdsMap.get(recepcion.id);
+          return idsRecepcion?.has(id);
         });
 
-        // Si existe CUALQUIER recepción pendiente (normal o faltantes),
-        // el flujo sigue en "pendiente recepción" y NO debe marcarse como recibido.
-        const hasRecepcionPendiente = tareasRecepcionRelacionadas.some(recepcion =>
-          recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
-        );
+        let estadoImpresion: EstadoImpresion = 'en_impresion';
+        let tareaRecepcionId: number | undefined;
+        let estatusMostrado = tarea.estatus || 'Pendiente';
+        let tituloMostrado = tarea.titulo || `Impresión #${tarea.id}`;
 
-        if (recepcionCompletada && !hasRecepcionPendiente) {
-          estadoImpresion = 'recibido';
-          tareaRecepcionId = recepcionCompletada.id;
-        } else {
-          // Hay recepciones pendientes: debe mantenerse en pendiente de recepción
-          estadoImpresion = 'pendiente_recepcion';
+        if (recepcionesDelId.length > 0) {
+          const recepcionCompletadaNormal = recepcionesDelId.find(recepcion => {
+            const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
+            return esCompletada && !recepcionEsFaltantesMap.get(recepcion.id);
+          });
 
-          // Priorizar SIEMPRE una recepción pendiente para mostrar estatus correcto en tabla.
-          const recepcionPendiente = tareasRecepcionRelacionadas.find(recepcion =>
+          const recepcionPendiente = recepcionesDelId.find(recepcion =>
             recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
           );
 
-          // Fallback: si no encuentra (caso raro), usar una recepción normal.
-          const recepcionNormal = tareasRecepcionRelacionadas.find(recepcion => {
-            let esFaltantes = false;
-            if (recepcion.evidencia) {
-              try {
-                const evidenciaObj = JSON.parse(recepcion.evidencia);
-                esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
-              } catch (e) {}
-            }
-            return !esFaltantes;
-          });
-
-          tareaRecepcionId = recepcionPendiente?.id || recepcionNormal?.id || tareasRecepcionRelacionadas[0]?.id;
-        }
-      }
-
-      // Si hay tarea de recepción pendiente, mostrar su estatus en vez del de impresión
-      let estatusMostrado = tarea.estatus || 'Pendiente';
-      let tituloMostrado = tarea.titulo || `Impresión #${tarea.id}`;
-      if (estadoImpresion === 'pendiente_recepcion') {
-        if (tareaRecepcionId) {
-          const tareaRecepcion = tareasRecepcionRelacionadas.find(r => r.id === tareaRecepcionId);
-          if (tareaRecepcion) {
-            estatusMostrado = tareaRecepcion.estatus || 'Pendiente';
-            tituloMostrado = tareaRecepcion.titulo || `Recepción #${tareaRecepcionId}`;
+          if (recepcionCompletadaNormal && !recepcionPendiente) {
+            estadoImpresion = 'recibido';
+            tareaRecepcionId = recepcionCompletadaNormal.id;
           } else {
-            estatusMostrado = 'Pendiente';
+            estadoImpresion = 'pendiente_recepcion';
+            tareaRecepcionId = recepcionPendiente?.id || recepcionesDelId[0]?.id;
+            if (recepcionPendiente) {
+              estatusMostrado = recepcionPendiente.estatus || 'Pendiente';
+              tituloMostrado = recepcionPendiente.titulo || `Recepción #${recepcionPendiente.id}`;
+            } else {
+              estatusMostrado = 'Pendiente';
+            }
           }
-        } else {
-          estatusMostrado = 'Pendiente';
         }
-      }
 
-      ids.forEach(id => {
         reservaToTareaMap.set(id, {
           tarea_id: estadoImpresion === 'pendiente_recepcion' && tareaRecepcionId ? tareaRecepcionId : tarea.id,
           tarea_estatus: estatusMostrado,
@@ -11681,10 +11678,26 @@ export function TareaSeguimientoPage() {
 
     if (tareasImpresion.length === 0) return map;
 
+    const recepcionIdsMap = new Map<number, Set<string>>();
+    const recepcionEsFaltantesMap = new Map<number, boolean>();
+
+    tareasRecepcion.forEach(recepcion => {
+      const idsRecepcion = new Set((recepcion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
+      recepcionIdsMap.set(recepcion.id, idsRecepcion);
+      let esFaltantes = false;
+      if (recepcion.evidencia) {
+        try {
+          const evidenciaObj = JSON.parse(recepcion.evidencia);
+          esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
+        } catch {}
+      }
+      recepcionEsFaltantesMap.set(recepcion.id, esFaltantes);
+    });
+
     // Crear mapa de tarea impresión -> tareas de recepción (puede haber varias: normal + faltantes)
     const impresionToRecepciones = new Map<number, typeof tareasRecepcion>();
     tareasRecepcion.forEach(recepcion => {
-      const recepcionIds = new Set((recepcion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
+      const recepcionIds = recepcionIdsMap.get(recepcion.id) || new Set<string>();
       tareasImpresion.forEach(impresion => {
         const impresionIds = new Set((impresion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
         const hasCommon = [...impresionIds].some(id => recepcionIds.has(id));
@@ -11700,38 +11713,24 @@ export function TareaSeguimientoPage() {
     tareasImpresion.forEach(tarea => {
       const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
       const tareasRecepcionRelacionadas = impresionToRecepciones.get(tarea.id) || [];
-
-      let estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido' = 'en_impresion';
-
-      if (tareasRecepcionRelacionadas.length > 0) {
-        // Si hay ALGUNA recepción completada (no faltantes), el estado puede ser 'recibido'
-        // solo cuando no queda ninguna recepción pendiente.
-        const hayRecepcionCompletada = tareasRecepcionRelacionadas.some(recepcion => {
-          const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
-          // Verificar si es tarea de faltantes
-          let esFaltantes = false;
-          if (recepcion.evidencia) {
-            try {
-              const evidenciaObj = JSON.parse(recepcion.evidencia);
-              esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
-            } catch (e) {}
-          }
-          return esCompletada && !esFaltantes;
+      ids.forEach(id => {
+        const recepcionesDelId = tareasRecepcionRelacionadas.filter(recepcion => {
+          const idsRecepcion = recepcionIdsMap.get(recepcion.id);
+          return idsRecepcion?.has(id);
         });
 
-        const hayRecepcionPendiente = tareasRecepcionRelacionadas.some(recepcion =>
-          recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
-        );
-
-        if (hayRecepcionCompletada && !hayRecepcionPendiente) {
-          estado = 'recibido';
-        } else {
-          // Hay recepciones pero ninguna completada (o solo faltantes)
-          estado = 'pendiente_recepcion';
+        let estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido' = 'en_impresion';
+        if (recepcionesDelId.length > 0) {
+          const hayRecepcionCompletadaNormal = recepcionesDelId.some(recepcion => {
+            const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
+            return esCompletada && !recepcionEsFaltantesMap.get(recepcion.id);
+          });
+          const hayRecepcionPendiente = recepcionesDelId.some(recepcion =>
+            recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
+          );
+          estado = (hayRecepcionCompletadaNormal && !hayRecepcionPendiente) ? 'recibido' : 'pendiente_recepcion';
         }
-      }
 
-      ids.forEach(id => {
         map.set(id, { estado, titulo: tarea.titulo || `Impresión #${tarea.id}` });
       });
     });
@@ -16402,7 +16401,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
           // Refrescar lista de tareas
           queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
         }}
-        onCreateRecepcionFaltante={async (faltantes, observaciones, guiaPdfUrlParam) => {
+        onCreateRecepcionFaltante={async (faltantes, observaciones, guiaPdfUrlParam, faltantesInventoryIds) => {
           if (!selectedTask) return;
 
           // Construir descripción con detalle de faltantes
@@ -16452,7 +16451,9 @@ Por favor registra la cantidad de impresiones recibidas.`,
             tipo: 'Recepción',
             asignado: selectedTask.asignado || selectedTask.creador || '',
             id_asignado: (selectedTask as any).id_asignado || '',
-            ids_reservas: selectedTask.inventario_ids?.join(',') || '',
+            ids_reservas: (faltantesInventoryIds && faltantesInventoryIds.length > 0)
+              ? faltantesInventoryIds.join(',')
+              : (selectedTask.inventario_ids?.join(',') || ''),
             evidencia: evidenciaFaltantes,
             num_impresiones: totalFaltantes,
           });
