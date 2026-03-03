@@ -2139,11 +2139,14 @@ export function CampanasPage() {
                           )}
                           {/* Resumen de campaña: circuitos (grupos), bonificación, inversión */}
                           {(() => {
-                            const inv = campanaInventarios[campana.id] || [];
-                            const gruposUnicos = new Set(inv.map(i => i.solicitud_caras_id).filter(Boolean));
+                            // Priorizar el campo de campana para mantener valor estable aun con grupo cerrado.
+                            const circuitosCampana = Number((campana as any).circuitos ?? (campana as any).circuito ?? 0) || 0;
+                            // Fallback: contar grupos reales renderizados (APS + Sin APS).
+                            const circuitosDesdeGrupos = apsAgrupados.reduce((sum, apsGroup) => sum + apsGroup.grupos.length, 0);
+                            const circuitosCount = circuitosCampana > 0 ? circuitosCampana : circuitosDesdeGrupos;
                             return (
                               <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Circuitos (grupos)">
-                                <Layers className="h-3 w-3" /> Circuitos {gruposUnicos.size || campana.total_caras || 0}
+                                <Layers className="h-3 w-3" /> Circuitos {circuitosCount}
                               </span>
                             );
                           })()}
