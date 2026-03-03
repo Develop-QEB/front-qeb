@@ -2288,6 +2288,7 @@ export function CampanasPage() {
                                                     const carasTotales = grupo.items.length;
                                                     const sumTarifa = grupo.items.reduce((s, i) => s + (Number((i as any).tarifa_publica_sc) || 0), 0);
                                                     const sumRenta = grupo.items.reduce((s, i) => s + (Number((i as any).renta) || 0), 0);
+                                                    const sumBonif = grupo.items.reduce((s, i) => s + (Number((i as any).bonificacion_sc) || 0), 0);
                                                     const inversionTotal = sumTarifa;
                                                     const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
                                                     return (
@@ -2314,6 +2315,11 @@ export function CampanasPage() {
                                                         <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/25" title="Inversión total (tarifa)">
                                                           {inversionTotal > 0 ? <>Inversión: {'$'}{inversionTotal.toLocaleString()}</> : 'Sin inversión'}
                                                         </span>
+                                                        {sumBonif > 0 && (
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/25" title="Bonificación">
+                                                            Bonif: {sumBonif}
+                                                          </span>
+                                                        )}
                                                         <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 flex items-center gap-1" title="Artes subidos">
                                                           <Image className="h-2.5 w-2.5" /> {artesSubidos}/{carasTotales}
                                                         </span>
@@ -2325,17 +2331,11 @@ export function CampanasPage() {
                                                   <div className="pl-5 py-1 space-y-0.5">
                                                     {/* Resumen del grupo */}
                                                     {(() => {
-                                                      const sumBonif = grupo.items.reduce((s, i) => s + (Number((i as any).bonificacion_sc) || 0), 0);
                                                       // Indicaciones de programación/instalación del grupo
                                                       const conIndicacionesProg = grupo.items.filter(i => (i as any).indicaciones_programacion).length;
                                                       const conIndicacionesInst = grupo.items.filter(i => (i as any).indicaciones_instalacion).length;
                                                       return (
                                                         <div className="flex flex-wrap items-center gap-2 py-1.5 px-1 mb-1 border-b border-zinc-800/40">
-                                                          {sumBonif > 0 && (
-                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/25" title="Bonificación">
-                                                              Bonif: {sumBonif}
-                                                            </span>
-                                                          )}
                                                           {conIndicacionesProg > 0 && (
                                                             <span className="px-1.5 py-0.5 rounded text-[9px] bg-orange-500/15 text-orange-300 border border-orange-500/25 flex items-center gap-1" title="Con indicaciones de programación">
                                                               <FileText className="h-2.5 w-2.5" /> Prog: {conIndicacionesProg}
