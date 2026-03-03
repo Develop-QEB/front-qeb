@@ -4378,6 +4378,19 @@ function TaskDetailModal({
         });
       } else {
         // Fallback: usar taskInventory
+        if (taskInventory.length === 0) {
+          const recibidasTotal = cantidadesRecibidas.__total__ || 0;
+          const faltantesTotal = Math.max(0, impresionesOrdenadas - recibidasTotal);
+          if (faltantesTotal > 0) {
+            faltantesPorArte.push({
+              arte: 'Sin arte',
+              solicitadas: impresionesOrdenadas,
+              recibidas: recibidasTotal,
+              faltantes: faltantesTotal
+            });
+          }
+        }
+
         const artesAgrupados = taskInventory.reduce((acc, item) => {
           const key = item.archivo_arte || 'sin_arte';
           if (!acc[key]) {
@@ -5435,8 +5448,44 @@ function TaskDetailModal({
 
                         if (artesArray.length === 0) {
                           return (
-                            <div className="p-4 text-center text-zinc-500">
-                              No hay items asociados a esta tarea
+                            <div className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
+                              <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700 flex items-center justify-center">
+                                <Image className="h-5 w-5 text-zinc-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white">{impresionesOrdenadas} solicitada{impresionesOrdenadas !== 1 ? 's' : ''}</p>
+                                <p className="text-xs text-zinc-500 truncate">Sin desglose de arte</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-zinc-500">Recibidas:</span>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  value={cantidadesRecibidas.__total__ ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '' || /^\d+$/.test(val)) {
+                                      setCantidadesRecibidas(prev => ({
+                                        ...prev,
+                                        __total__: val === '' ? 0 : parseInt(val)
+                                      }));
+                                    }
+                                  }}
+                                  onFocus={(e) => {
+                                    if (cantidadesRecibidas.__total__ === 0) {
+                                      setCantidadesRecibidas(prev => ({ ...prev, __total__: '' as any }));
+                                    }
+                                    e.target.select();
+                                  }}
+                                  onBlur={(e) => {
+                                    if (e.target.value === '') {
+                                      setCantidadesRecibidas(prev => ({ ...prev, __total__: 0 }));
+                                    }
+                                  }}
+                                  className="w-20 px-2 py-1 text-center text-sm bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                />
+                              </div>
                             </div>
                           );
                         }
