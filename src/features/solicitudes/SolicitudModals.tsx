@@ -1358,10 +1358,13 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
         });
       }
 
-      // 2. Add all users from Tráfico area (if not already added)
-      const traficoUsers = users.filter(u =>
-        u.area?.toLowerCase() === 'tráfico' || u.area?.toLowerCase() === 'trafico'
-      );
+      // 2. Add all users from Tráfico area/puesto (if not already added)
+      const traficoUsers = users.filter(u => {
+        const area = u.area?.toLowerCase() || '';
+        const puesto = u.puesto?.toLowerCase() || '';
+        return area.includes('tráfico') || area.includes('trafico') ||
+               puesto.includes('tráfico') || puesto.includes('trafico');
+      });
       traficoUsers.forEach(u => {
         if (!addedIds.has(u.id)) {
           combinedAsignados.push({ id: u.id, nombre: u.nombre });

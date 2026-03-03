@@ -23,6 +23,8 @@ const AREAS_DISPONIBLES = [
   'Compras',
   'Operaciones',
   'Facturación',
+  'Mejora Continua',
+  'TI',
 ];
 
 // Mapeo de puestos por área
@@ -69,6 +71,12 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
     'Coordinador de Facturación y Cobranza',
     'Mesa de Control',
     'Analista de Facturación y Cobranza',
+  ],
+  'Mejora Continua': [
+    'Mejora Continua',
+  ],
+  'TI': [
+    'TI',
   ],
 };
 

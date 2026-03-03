@@ -784,10 +784,15 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
       const combinedUsers: { id: number; nombre: string }[] = [];
       const addedIds = new Set<number>();
 
-      // Get IDs of Tráfico area users to exclude them
+      // Get IDs of Tráfico area/puesto users to exclude them
       const traficoUserIds = new Set(
         allUsers
-          .filter(u => u.area?.toLowerCase() === 'tráfico' || u.area?.toLowerCase() === 'trafico')
+          .filter(u => {
+            const area = u.area?.toLowerCase() || '';
+            const puesto = u.puesto?.toLowerCase() || '';
+            return area.includes('tráfico') || area.includes('trafico') ||
+                   puesto.includes('tráfico') || puesto.includes('trafico');
+          })
           .map(u => u.id)
       );
 
