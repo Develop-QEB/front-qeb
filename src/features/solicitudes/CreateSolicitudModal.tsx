@@ -258,8 +258,8 @@ const getFormatoFromArticulo = (itemName: string): string => {
   // Totem
   if (name.includes('TOTEM')) return 'TOTEM';
 
-  // Kiosco
-  if (name.includes('KIOSCO')) return 'Kiosco';
+  // Kiosco (SAP usa "KIOSKO" con K)
+  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'Kiosco';
 
   // Formatos estándar
   if (name.includes('CASETA DE TAXIS')) return 'CASETA DE TAXIS';
@@ -275,10 +275,12 @@ const getFormatoFromArticulo = (itemName: string): string => {
 };
 
 // Mapeo formato → tipo de periodo requerido
-// CATORCENAL: PB y Columna, Kioscos, Digital PB y Columna, Boleros
-// MENSUAL: Mi Macro, Puentes Peatonales, Carteleras Digitales/Unipolares, Bajo Puentes
-// Formatos mensuales (no existen en tabla inventarios, lista fija)
+// CATORCENAL: PB y Columna, Digital PB y Columna
+// MENSUAL: Kioscos, Boleros, Mi Macro, Puentes Peatonales, Carteleras Digitales/Unipolares, Bajo Puentes
+// Formatos mensuales (lista fija)
 const FORMATOS_MENSUALES = [
+  'Kiosco',
+  'BOLERO',
   'MI MACRO',
   'MI MACRO Vidrio Int',
   'MI MACRO Vidrio Ext',
@@ -309,11 +311,15 @@ const getRequiredPeriodoForFormato = (formato: string): 'catorcena' | 'mensual' 
 const getRequiredPeriodoForArticulo = (itemName: string): 'catorcena' | 'mensual' => {
   if (!itemName) return 'catorcena';
   const name = itemName.toUpperCase();
+  // Mensual: Kioscos, Boleros, Mi Macro, Puentes Peatonales, Carteleras/Unipolares, Bajo Puentes
+  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'mensual';
+  if (name.includes('BOLERO')) return 'mensual';
   if (name.includes('MI MACRO')) return 'mensual';
-  if (name.includes('PUENTE PEATONAL')) return 'mensual';
+  if (name.includes('PEATONAL')) return 'mensual';
   if (name.includes('BAJO PUENTE')) return 'mensual';
   if (name.includes('CARTELERA')) return 'mensual';
   if (name.includes('UNIPOLAR')) return 'mensual';
+  // Catorcenal: PB y Columna, Digital PB y Columna (y todo lo demás)
   return 'catorcena';
 };
 

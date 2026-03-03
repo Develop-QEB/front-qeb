@@ -2122,7 +2122,8 @@ export function CampanasPage() {
                   const renderCampana = (campana: Campana, indent: number = 0) => {
                     const statusColor = getStatusColor(campana.status);
                     const periodStatus = getPeriodStatus(campana.fecha_inicio, campana.fecha_fin);
-                    const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
+                    const PERIOD_COLORS_LOCAL = getPeriodColors(isDark);
+                    const periodColor = PERIOD_COLORS_LOCAL[periodStatus] || getDefaultStatusColor(isDark);
                     const isExpanded = expandedCampanas.has(campana.id);
                     const inventarios = campanaInventarios[campana.id] || [];
                     const isLoadingInv = loadingInventarios.has(campana.id);
@@ -2257,7 +2258,7 @@ export function CampanasPage() {
                                               estatusCount[estatus] = (estatusCount[estatus] || 0) + 1;
                                             });
                                             const estatusPredominante = Object.entries(estatusCount).sort((a, b) => b[1] - a[1])[0];
-                                            const estatusGrupoColor = estatusPredominante ? getEstatusArteColor(estatusPredominante[0]) : DEFAULT_STATUS_COLOR;
+                                            const estatusGrupoColor = estatusPredominante ? getEstatusArteColor(estatusPredominante[0]) : getDefaultStatusColor(isDark);
                                             return (
                                               <div key={grupo.key} className="border-l-2 border-zinc-700 pl-2">
                                                 <button
