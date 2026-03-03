@@ -10619,7 +10619,7 @@ export function TareaSeguimientoPage() {
   // Main tabs
   const [activeMainTab, setActiveMainTab] = useState<MainTab>('versionario');
   const [activeFormat, setActiveFormat] = useState<FormatTab>('tradicional');
-  const [initialTabDetermined, setInitialTabDetermined] = useState(false);
+  const [initialTabDetermined] = useState(true);
   const [activeTasksTab, setActiveTasksTab] = useState<TasksTab>('tradicionales');
 
   // Inventory state
@@ -10763,11 +10763,15 @@ export function TareaSeguimientoPage() {
   const tipoPeriodo = (campana as any)?.tipo_periodo || 'catorcena';
 
   // Inventario SIN arte (para tab "Subir Artes")
-  // Se carga siempre inicialmente para determinar el tab por defecto
-  const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte, isFetched: isFetchedSinArte } = useQuery({
+  const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte } = useQuery({
     queryKey: ['campana-inventario-sin-arte', campanaId],
     queryFn: () => campanasService.getInventarioSinArte(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'versionario' || !initialTabDetermined),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   // Inventario CON arte (para tab "Revisar y Aprobar", "Programación" e "Impresiones")
@@ -10776,14 +10780,24 @@ export function TareaSeguimientoPage() {
     queryKey: ['campana-inventario-arte', campanaId],
     queryFn: () => campanasService.getInventarioConArte(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'atender' || activeMainTab === 'programacion' || activeMainTab === 'impresiones' || !initialTabDetermined || isTaskDetailModalOpen),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   // Inventario para TESTIGOS (para tab "Validar Instalación")
   // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
-  const { data: inventarioTestigosAPI = [], isLoading: isLoadingInventarioTestigos, isFetched: isFetchedTestigos } = useQuery({
+  const { data: inventarioTestigosAPI = [], isLoading: isLoadingInventarioTestigos } = useQuery({
     queryKey: ['campana-inventario-testigos', campanaId],
     queryFn: () => campanasService.getInventarioTestigos(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'testigo' || !initialTabDetermined),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   // Tareas de la campaña (todas para poder filtrar en activas/completadas)
@@ -10826,47 +10840,8 @@ export function TareaSeguimientoPage() {
     return map;
   }, [digitalFileSummaries]);
 
-  // ---- Determinar tab inicial basado en contenido y permisos ----
-  useEffect(() => {
-    // Solo ejecutar una vez cuando los datos estén disponibles
-    if (initialTabDetermined) return;
-
-    // Esperar a que las queries hayan terminado de hacer fetch (no solo que no estén cargando)
-    const allQueriesFetched = isFetchedSinArte && isFetchedConArte && isFetchedTestigos;
-    if (!allQueriesFetched) return;
-
-    // Determinar el tab con contenido (prioridad: versionario > atender > testigo)
-    // Pero respetando permisos
-    if (inventarioSinArteAPI.length > 0 && permissions.canSeeTabSubirArtes) {
-      setActiveMainTab('versionario');
-    } else if (inventarioArteAPI.length > 0 && permissions.canSeeTabRevisarAprobar) {
-      setActiveMainTab('atender');
-    } else if (inventarioTestigosAPI.length > 0 && permissions.canSeeTabValidacionInstalacion) {
-      setActiveMainTab('testigo');
-    } else {
-      // Fallback: seleccionar el primer tab disponible según permisos
-      if (permissions.canSeeTabSubirArtes) setActiveMainTab('versionario');
-      else if (permissions.canSeeTabRevisarAprobar) setActiveMainTab('atender');
-      else if (permissions.canSeeTabProgramacion) setActiveMainTab('programacion');
-      else if (permissions.canSeeTabImpresiones) setActiveMainTab('impresiones');
-      else if (permissions.canSeeTabValidacionInstalacion) setActiveMainTab('testigo');
-    }
-
-    setInitialTabDetermined(true);
-  }, [
-    initialTabDetermined,
-    isFetchedSinArte,
-    isFetchedConArte,
-    isFetchedTestigos,
-    inventarioSinArteAPI.length,
-    inventarioArteAPI.length,
-    inventarioTestigosAPI.length,
-    permissions.canSeeTabSubirArtes,
-    permissions.canSeeTabRevisarAprobar,
-    permissions.canSeeTabProgramacion,
-    permissions.canSeeTabImpresiones,
-    permissions.canSeeTabValidacionInstalacion,
-  ]);
+  // No precargar los 3 tabs al inicio: se consulta solo el tab activo para evitar
+  // cargas pesadas y recargas lentas en campañas con mucho inventario.
 
   // ---- Determinar tab de estado_arte inicial basado en contenido ----
   useEffect(() => {
