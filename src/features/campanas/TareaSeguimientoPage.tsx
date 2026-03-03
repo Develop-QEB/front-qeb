@@ -4276,6 +4276,18 @@ function TaskDetailModal({
 
     setIsFinalizandoRecepcion(true);
     try {
+      const normalizeArteKey = (value?: string | null): string => {
+        if (!value) return 'sin_arte';
+        const cleaned = value.split('?')[0].trim();
+        const slashIdx = Math.max(cleaned.lastIndexOf('/'), cleaned.lastIndexOf('\\'));
+        const base = slashIdx >= 0 ? cleaned.substring(slashIdx + 1) : cleaned;
+        try {
+          return decodeURIComponent(base).toLowerCase();
+        } catch {
+          return base.toLowerCase();
+        }
+      };
+
       // Calcular faltantes por arte
       const faltantesPorArte: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[] = [];
       const faltantesInventoryIds = new Set<string>();
@@ -4287,6 +4299,20 @@ function TaskDetailModal({
         acc[key].push(String(item.id));
         return acc;
       }, {} as Record<string, string[]>);
+      const inventoryIdsByArteNorm = taskInventory.reduce((acc, item) => {
+        const keyNorm = normalizeArteKey(item.archivo_arte || 'sin_arte');
+        if (!acc[keyNorm]) acc[keyNorm] = [];
+        acc[keyNorm].push(String(item.id));
+        return acc;
+      }, {} as Record<string, string[]>);
+
+      const getIdsForArte = (arteKey: string): string[] => {
+        const direct = inventoryIdsByArte[arteKey];
+        if (direct && direct.length > 0) return direct;
+        const norm = inventoryIdsByArteNorm[normalizeArteKey(arteKey)];
+        if (norm && norm.length > 0) return norm;
+        return [];
+      };
 
       // Verificar tipo de tarea desde evidencia
       let tipoEvidencia = '';
@@ -4321,7 +4347,7 @@ function TaskDetailModal({
               recibidas,
               faltantes: diferencia
             });
-            const idsArte = inventoryIdsByArte[key] || inventoryIdsByArte['sin_arte'] || [];
+            const idsArte = getIdsForArte(key);
             idsArte.slice(0, diferencia).forEach(id => faltantesInventoryIds.add(id));
           }
         });
@@ -4338,7 +4364,7 @@ function TaskDetailModal({
               recibidas,
               faltantes
             });
-            const idsArte = inventoryIdsByArte[arteUrl] || inventoryIdsByArte['sin_arte'] || [];
+            const idsArte = getIdsForArte(arteUrl);
             idsArte.slice(0, faltantes).forEach(id => faltantesInventoryIds.add(id));
           }
         });
@@ -4367,10 +4393,19 @@ function TaskDetailModal({
               recibidas,
               faltantes
             });
-            const idsArte = inventoryIdsByArte[key] || [];
+            const idsArte = getIdsForArte(key);
             idsArte.slice(0, faltantes).forEach(id => faltantesInventoryIds.add(id));
           }
         });
+      }
+
+      // Fallback defensivo: si hay faltantes pero no se pudo mapear por arte,
+      // limitar a la cantidad faltante total (nunca incluir todos los IDs).
+      if (faltantesPorArte.length > 0 && faltantesInventoryIds.size === 0) {
+        const totalFaltantes = faltantesPorArte.reduce((sum, f) => sum + f.faltantes, 0);
+        (task.inventario_ids || [])
+          .slice(0, totalFaltantes)
+          .forEach(id => faltantesInventoryIds.add(String(id)));
       }
 
       // Si hay faltantes, crear nueva tarea de recepción
