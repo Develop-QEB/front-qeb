@@ -574,6 +574,51 @@ function getGroupKeyForField(item: InventoryRow, field: GroupByField, tipoPeriod
   }
 }
 
+function formatCurrencyMXN(value: number): string {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function getVersionarioGroupMetrics(items: InventoryRow[]) {
+  const totalCaras = items.reduce((sum, item) => {
+    const caras = Number((item as any).caras_totales ?? (item as any).caras ?? 0);
+    return sum + (Number.isFinite(caras) ? caras : 0);
+  }, 0);
+
+  const renta = items.reduce((sum, item) => {
+    const carasRenta = Number((item as any).caras ?? (item as any).caras_totales ?? 1);
+    return sum + (Number.isFinite(carasRenta) ? carasRenta : 0);
+  }, 0);
+
+  const tarifaValues = items
+    .map((item) => Number((item as any).tarifa_publica ?? (item as any).tarifa ?? 0))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  const tarifa = tarifaValues.length > 0 ? tarifaValues[0] : 0;
+
+  const inversion = items.reduce((sum, item) => {
+    const carasRenta = Number((item as any).caras ?? (item as any).caras_totales ?? 1);
+    const tarifaItem = Number((item as any).tarifa_publica ?? (item as any).tarifa ?? tarifa);
+    return sum + ((Number.isFinite(carasRenta) ? carasRenta : 0) * (Number.isFinite(tarifaItem) ? tarifaItem : 0));
+  }, 0);
+
+  const ciudades = [...new Set(items.map((i) => i.ciudad).filter(Boolean))];
+  const muebles = [...new Set(items.map((i) => i.mueble).filter(Boolean))];
+  const conArte = items.filter((i) => Boolean(i.archivo_arte)).length;
+
+  return {
+    totalCaras,
+    ciudad: ciudades[0] || '-',
+    mueble: muebles[0] || '-',
+    tarifa,
+    renta,
+    inversion,
+    progreso: `${conArte}/${items.length}`,
+  };
+}
+
 const estadoTareaLabels: Record<string, string> = {
   sin_atender: 'Sin Atender',
   en_progreso: 'En progreso',
@@ -14827,6 +14872,7 @@ export function TareaSeguimientoPage() {
                                     {Object.entries(level3Groups).map(([level3Key, items]) => {
                                       const level3NodeKey = `${level2NodeKey}|${level3Key}`;
                                       const level3Expanded = expandedNodes.has(level3NodeKey);
+                                      const groupMetrics = getVersionarioGroupMetrics(items);
                                       return (
                                         <div key={level3NodeKey} className="border-l-2 border-purple-500/20">
                                           {/* Nivel 3 */}
@@ -14834,13 +14880,34 @@ export function TareaSeguimientoPage() {
                                             onClick={() => toggleNode(level3NodeKey)}
                                             className="w-full px-4 py-1.5 flex items-center justify-between hover:bg-purple-900/10 transition-colors"
                                           >
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
                                               {level3Expanded ? (
                                                 <ChevronDown className="h-3 w-3 text-zinc-400" />
                                               ) : (
                                                 <ChevronRight className="h-3 w-3 text-zinc-400" />
                                               )}
                                               <span className="text-[11px] font-medium text-zinc-400">{level3Key}</span>
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                                                {groupMetrics.totalCaras} caras
+                                              </span>
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                                                {groupMetrics.ciudad}
+                                              </span>
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                                                {groupMetrics.mueble}
+                                              </span>
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                                                Tarifa: {groupMetrics.tarifa > 0 ? formatCurrencyMXN(groupMetrics.tarifa) : '-'}
+                                              </span>
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">
+                                                Renta: {groupMetrics.renta.toLocaleString('es-MX')}
+                                              </span>
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                                                Inversion: {groupMetrics.inversion > 0 ? formatCurrencyMXN(groupMetrics.inversion) : '-'}
+                                              </span>
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">
+                                                {groupMetrics.progreso}
+                                              </span>
                                               {/* Checkbox para seleccionar todo el nivel 3 */}
                                               <button
                                                 onClick={(e) => {
@@ -14869,9 +14936,6 @@ export function TareaSeguimientoPage() {
                                             <div className="flex items-center gap-1">
                                               <FlowStepIcons items={items} impresionMap={impresionStatusMap} programacionMap={programacionStatusMap} instalacionMap={instalacionStatusMap} />
                                               <FlujoBadges items={items} tab={activeMainTab} />
-                                              <span className="text-[10px] text-zinc-500">
-                                                {items.length} cara{items.length !== 1 ? 's' : ''}
-                                              </span>
                                             </div>
                                           </button>
                                           {level3Expanded && (
