@@ -988,7 +988,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Fin o Segmento': item.FinSegmento || '',
         'Arte': item.Arte || '',
         'Código de arte (Opcional)': item.CodigoArte || '',
-        'Nombre Arte': item.nombres_artes_digitales || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
+        'Nombre Arte': item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
         'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
         'Origen del arte (Opcional)': item.OrigenArte || '',
         'Indicaciones': item.indicaciones || '',
@@ -1016,7 +1016,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Fin o Segmento': item.FinSegmento || '',
         'Arte': item.Arte || '',
         'Código de arte (Opcional)': item.CodigoArte || '',
-        'Nombre Arte': item.nombres_artes_digitales || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
+        'Nombre Arte': item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
         'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
         'Origen del arte (Opcional)': item.OrigenArte || '',
         'Indicaciones': item.indicaciones || '',
@@ -1966,7 +1966,7 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
   const hasTraditionalArte = item.ArteUrl === 'HAS_ARTE';
   const arteUrl = hasTraditionalArte ? null : getFileUrl(item.ArteUrl);
   // For digital items with multiple artes, show comma-separated filenames from backend
-  const fileName = item.nombres_artes_digitales || (hasTraditionalArte ? 'Arte' : item.ArteUrl?.split('/').pop()) || null;
+  const fileName = item.nombres_artes_digitales || item.ArteFileName || (hasTraditionalArte ? 'Arte' : item.ArteUrl?.split('/').pop()) || null;
 
   return (
     <tr className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>

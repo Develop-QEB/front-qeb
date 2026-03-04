@@ -590,13 +590,17 @@ export function SolicitudesPage() {
     queryFn: () => solicitudesService.getStats({ yearInicio, yearFin, catorcenaInicio, catorcenaFin }),
   });
 
+  // When grouping or advanced filters are active, fetch ALL data
+  const needsAllData = !!groupBy || advancedFilters.length > 0;
+  const effectiveLimit = needsAllData ? 9999 : limit;
+
   // Fetch solicitudes
   const { data, isLoading } = useQuery({
-    queryKey: ['solicitudes', page, status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo],
+    queryKey: ['solicitudes', page, status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
     queryFn: () =>
       solicitudesService.getAll({
-        page,
-        limit,
+        page: needsAllData ? 1 : page,
+        limit: effectiveLimit,
         status: status || undefined,
         search: debouncedSearch || undefined,
         yearInicio,

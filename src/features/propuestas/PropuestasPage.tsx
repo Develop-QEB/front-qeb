@@ -1071,12 +1071,16 @@ export function PropuestasPage() {
     queryFn: () => propuestasService.getStats(),
   });
 
+  // When grouping or advanced filters are active, fetch ALL data
+  const needsAllData = !!groupBy || advancedFilters.length > 0;
+  const effectiveLimit = needsAllData ? 9999 : limit;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['propuestas', page, status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo],
+    queryKey: ['propuestas', page, status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
     queryFn: () =>
       propuestasService.getAll({
-        page,
-        limit,
+        page: needsAllData ? 1 : page,
+        limit: effectiveLimit,
         status: status || undefined,
         search: debouncedSearch || undefined,
         yearInicio,
@@ -1818,7 +1822,7 @@ export function PropuestasPage() {
           </div>
 
           {/* Pagination */}
-          {data?.pagination && totalPages > 1 && (
+          {!groupBy && data?.pagination && totalPages > 1 && (
             <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
               <span className="text-sm text-purple-300/70">
                 Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{totalPages}</span>

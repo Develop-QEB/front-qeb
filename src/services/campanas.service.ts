@@ -309,6 +309,7 @@ export interface OrdenMontajeINVIAN {
   Arte: string | null;
   CodigoArte: number | null;
   ArteUrl: string | null;
+  ArteFileName: string | null;
   OrigenArte: string | null;
   Unidad: string | null;
   Cara: string | null;

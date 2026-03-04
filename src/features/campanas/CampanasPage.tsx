@@ -696,12 +696,16 @@ export function CampanasPage() {
     queryFn: () => solicitudesService.getCatorcenas(),
   });
 
+  // When grouping, advanced filters, sorting, or catorcena filter are active, fetch ALL data
+  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio;
+  const effectiveLimit = needsAllData ? 9999 : limit;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, debouncedSearch, tipoPeriodo],
+    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, debouncedSearch, tipoPeriodo, needsAllData],
     queryFn: () =>
       campanasService.getAll({
-        page,
-        limit,
+        page: needsAllData ? 1 : page,
+        limit: effectiveLimit,
         status: status || undefined,
         search: debouncedSearch || undefined,
         yearInicio,
