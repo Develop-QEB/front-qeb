@@ -430,15 +430,9 @@ function GoogleMapsChart({
       clustererRef.current = null;
     }
 
-<<<<<<< HEAD
-    if (showPins && visibleCoords.length > 0) {
-      // Crear marcadores solo para coords visibles en el viewport actual
-      const markers = visibleCoords.map(coord => {
-=======
     if (showPins && filteredCoords.length > 0) {
       // Crear marcadores para cada inventario (sin limite)
       const markers = filteredCoords.map(coord => {
->>>>>>> f376d6a1329419a0ed4dd1fb3ab59fa76d3de373
         const marker = new google.maps.Marker({
           position: { lat: coord.lat, lng: coord.lng },
           icon: {
@@ -568,13 +562,8 @@ function GoogleMapsChart({
             </span>
           )}
           {selectedInventoryIds.size > 0 && (
-<<<<<<< HEAD
-            <span className="px-3 py-1.5 rounded-xl bg-pink-500/20 text-pink-300 text-xs font-medium border border-pink-500/30">
-              {filteredCoords.length} de {allCoords.length.toLocaleString()} seleccionados
-=======
             <span className={`px-3 py-1.5 rounded-xl ${isDark ? 'bg-pink-500/20 text-pink-300 border-pink-500/30' : 'bg-pink-50 text-pink-600 border-pink-200'} text-xs font-medium border`}>
               {filteredCoords.length} de {allCoords.length.toLocaleString()} pines
->>>>>>> f376d6a1329419a0ed4dd1fb3ab59fa76d3de373
             </span>
           )}
           <button
