@@ -2178,17 +2178,25 @@ export function CampanasPage() {
                           )}
                           {/* Resumen de campaña: circuitos (grupos), bonificación, inversión */}
                           {(() => {
-                            const inv = campanaInventarios[campana.id] || [];
-                            const gruposUnicos = new Set(inv.map(i => i.solicitud_caras_id).filter(Boolean));
+                            // Priorizar el campo de campana para mantener valor estable aun con grupo cerrado.
+                            const circuitosCampana = Number((campana as any).circuitos ?? (campana as any).circuito ?? 0) || 0;
+                            // Fallback: contar grupos reales renderizados (APS + Sin APS).
+                            const circuitosDesdeGrupos = apsAgrupados.reduce((sum, apsGroup) => sum + apsGroup.grupos.length, 0);
+                            const circuitosCount = circuitosCampana > 0 ? circuitosCampana : circuitosDesdeGrupos;
                             return (
                               <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Circuitos (grupos)">
-                                <Layers className="h-3 w-3" /> Circuitos {gruposUnicos.size || campana.total_caras || 0}
+                                <Layers className="h-3 w-3" /> Circuitos {circuitosCount}
                               </span>
                             );
                           })()}
                           {Number(campana.bonificacion) > 0 && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 flex items-center gap-1" title="Bonificación">
                               <Gift className="h-3 w-3" /> {campana.bonificacion}
+                            </span>
+                          )}
+                          {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0) > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Caras rentadas sin bonificación">
+                              <MapPin className="h-3 w-3" /> {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0)}
                             </span>
                           )}
                           <span className="px-2 py-0.5 rounded-full text-[10px] bg-green-500/15 text-green-300 border border-green-500/25 flex items-center gap-1" title="Inversión">
@@ -2325,10 +2333,23 @@ export function CampanasPage() {
                                                     const plazas = [...new Set(grupo.items.map(i => i.plaza).filter(Boolean))];
                                                     const formato = (grupo.items[0] as any)?.formato || null;
                                                     const carasTotales = grupo.items.length;
-                                                    const sumTarifa = grupo.items.reduce((s, i) => s + (Number((i as any).tarifa_publica_sc) || 0), 0);
-                                                    const sumRenta = grupo.items.reduce((s, i) => s + (Number((i as any).renta) || 0), 0);
-                                                    const sumBonif = grupo.items.reduce((s, i) => s + (Number((i as any).bonificacion_sc) || 0), 0);
-                                                    const inversionTotal = sumTarifa;
+                                                    const tarifasGrupo = grupo.items
+                                                      .map(i => Number((i as any).tarifa_publica_sc) || 0)
+                                                      .filter(v => v > 0);
+                                                    // Tarifa: valor publico por cara (normalmente constante por grupo).
+                                                    const tarifaPublica = tarifasGrupo.length > 0 ? tarifasGrupo[0] : 0;
+                                                    // bonificacion_sc viene repetida por fila en algunos inventarios.
+                                                    // Para evitar inflar (ej. 50 filas x 50 = 2500), usar el valor de campaña;
+                                                    // si no existe, tomar el mayor valor reportado en el grupo.
+                                                    const bonifCampana = Number(campana.bonificacion) || 0;
+                                                    const bonifGrupoFallback = grupo.items.reduce((max, i) => {
+                                                      const val = Number((i as any).bonificacion_sc) || 0;
+                                                      return val > max ? val : max;
+                                                    }, 0);
+                                                    const sumBonif = Math.min(carasTotales, (bonifCampana > 0 ? bonifCampana : bonifGrupoFallback));
+                                                    const sumNormales = Math.max(carasTotales - sumBonif, 0);
+                                                    // Inversion: tarifa por cara * caras rentadas (excluye bonificadas).
+                                                    const inversionTotal = tarifaPublica * sumNormales;
                                                     const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
                                                     return (
                                                       <>
@@ -2346,10 +2367,7 @@ export function CampanasPage() {
                                                           </span>
                                                         )}
                                                         <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25" title="Tarifa pública">
-                                                          {sumTarifa > 0 ? <>Tarifa: {'$'}{sumTarifa.toLocaleString()}</> : 'Sin tarifa'}
-                                                        </span>
-                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-green-500/15 text-green-300 border border-green-500/25" title="Renta">
-                                                          {sumRenta > 0 ? <>Renta: {'$'}{sumRenta.toLocaleString()}</> : 'Sin renta'}
+                                                          {tarifaPublica > 0 ? <>Tarifa: {'$'}{tarifaPublica.toLocaleString()}</> : 'Sin tarifa'}
                                                         </span>
                                                         <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/25" title="Inversión total (tarifa)">
                                                           {inversionTotal > 0 ? <>Inversión: {'$'}{inversionTotal.toLocaleString()}</> : 'Sin inversión'}
@@ -2357,6 +2375,11 @@ export function CampanasPage() {
                                                         {sumBonif > 0 && (
                                                           <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/25" title="Bonificación">
                                                             Bonif: {sumBonif}
+                                                          </span>
+                                                        )}
+                                                        {sumNormales > 0 && (
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Caras rentadas sin bonificación">
+                                                            <MapPin className="h-2.5 w-2.5" /> {sumNormales}
                                                           </span>
                                                         )}
                                                         <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 flex items-center gap-1" title="Artes subidos">

@@ -2671,8 +2671,13 @@ function TaskDetailModal({
   onUpdateArteDigital: (reservaIds: number[], files: { file: File; spot: number }[], deleteArchivos?: string[]) => Promise<void>;
   onTaskComplete: (taskId: string, observaciones?: string, archivoTestigo?: string) => Promise<void>;
   onSendToReview: (reservaIds: number[], responsableOriginal: string) => Promise<void>;
-  onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string, asignadoId?: string) => Promise<void>;
-  onCreateRecepcionFaltante: (faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[], observaciones: string) => Promise<void>;
+  onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string, asignadoId?: string, guiaPdfUrl?: string) => Promise<void>;
+  onCreateRecepcionFaltante: (
+    faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[],
+    observaciones: string,
+    guiaPdfUrl?: string,
+    faltantesReservaIds?: string[]
+  ) => Promise<void>;
   onUpdateTask: (taskId: string, data: { evidencia?: string; estatus?: string }) => Promise<void>;
   isUpdating: boolean;
   campanaId: number;
@@ -2923,7 +2928,7 @@ function TaskDetailModal({
   const [isFinalizandoRecepcion, setIsFinalizandoRecepcion] = useState(false);
   const [recepcionFiles, setRecepcionFiles] = useState<{ file: File; preview: string }[]>([]);
   const [isUploadingRecepcion, setIsUploadingRecepcion] = useState(false);
-  const [recepcionPdfFile, setRecepcionPdfFile] = useState<File | null>(null);
+  const [impresionPdfFile, setImpresionPdfFile] = useState<File | null>(null);
 
   // Parsear datos de impresiones desde evidencia (para tareas de Impresión y Recepción)
   const impresionesData = useMemo(() => {
@@ -2938,6 +2943,59 @@ function TaskDetailModal({
     }
     return null;
   }, [task]);
+
+  const guiaPdfUrl = useMemo(() => {
+    if (!task?.evidencia) return null;
+    try {
+      const ev = JSON.parse(task.evidencia);
+      return ev?.guia_pdf || null;
+    } catch {
+      return null;
+    }
+  }, [task?.evidencia]);
+
+  const { data: tareasGuiaFallback } = useQuery({
+    queryKey: ['campana-tareas-guia-fallback', campanaId, task?.id],
+    queryFn: () => campanasService.getTareas(campanaId),
+    enabled: isOpen && task?.tipo === 'Recepción' && !guiaPdfUrl,
+    staleTime: 30_000,
+  });
+
+  const guiaPdfUrlResolved = useMemo(() => {
+    if (guiaPdfUrl) return guiaPdfUrl;
+    if (!task || !tareasGuiaFallback?.length) return null;
+
+    const idsActuales = (task.ids_reservas || '')
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean);
+
+    const comparteReservas = (ids?: string | null) => {
+      const arr = (ids || '').split(',').map(v => v.trim()).filter(Boolean);
+      return arr.some(id => idsActuales.includes(id));
+    };
+
+    const recepciones = tareasGuiaFallback
+      .filter(t => t.tipo === 'Recepción' && t.id !== Number(task.id))
+      .sort((a, b) => b.id - a.id);
+
+    for (const t of recepciones) {
+      if (!comparteReservas(t.ids_reservas)) continue;
+      try {
+        const ev = t.evidencia ? JSON.parse(t.evidencia) : null;
+        if (ev?.guia_pdf) return ev.guia_pdf as string;
+      } catch {}
+    }
+
+    for (const t of recepciones) {
+      try {
+        const ev = t.evidencia ? JSON.parse(t.evidencia) : null;
+        if (ev?.guia_pdf) return ev.guia_pdf as string;
+      } catch {}
+    }
+
+    return null;
+  }, [guiaPdfUrl, task, tareasGuiaFallback]);
 
 
   // Estados para editar arte
@@ -4202,10 +4260,21 @@ function TaskDetailModal({
 
     setIsCreatingRecepcion(true);
     try {
-      await onCreateRecepcion(task.id, recepcionAsignadoNombre || undefined, recepcionAsignadoId || undefined);
+      let guiaPdfUrlCreada: string | undefined;
+      if (impresionPdfFile) {
+        const pdfResult = await campanasService.uploadTestigoFile(impresionPdfFile);
+        guiaPdfUrlCreada = pdfResult.url;
+      }
+      await onCreateRecepcion(
+        task.id,
+        recepcionAsignadoNombre || undefined,
+        recepcionAsignadoId || undefined,
+        guiaPdfUrlCreada
+      );
       setRecepcionAsignadoNombre('');
       setRecepcionAsignadoId('');
       setRecepcionAsignadoSearch('');
+      setImpresionPdfFile(null);
       onClose();
     } catch (error) {
       console.error('Error al crear tarea de recepción:', error);
@@ -4220,8 +4289,51 @@ function TaskDetailModal({
 
     setIsFinalizandoRecepcion(true);
     try {
+      const normalizeArteKey = (value?: string | null): string => {
+        if (!value) return 'sin_arte';
+        const cleaned = value.split('?')[0].trim();
+        const slashIdx = Math.max(cleaned.lastIndexOf('/'), cleaned.lastIndexOf('\\'));
+        const base = slashIdx >= 0 ? cleaned.substring(slashIdx + 1) : cleaned;
+        try {
+          return decodeURIComponent(base).toLowerCase();
+        } catch {
+          return base.toLowerCase();
+        }
+      };
+
       // Calcular faltantes por arte
       const faltantesPorArte: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[] = [];
+      const faltantesReservaIds = new Set<string>();
+
+      // Mapa de ids de reservas por arte para crear tarea de faltantes con ids_reservas correctos
+      const reservaIdsByArte = taskInventory.reduce((acc, item) => {
+        const key = item.archivo_arte || 'sin_arte';
+        if (!acc[key]) acc[key] = [];
+        const rsvIds = String(item.rsv_id || item.id)
+          .split(',')
+          .map(v => v.trim())
+          .filter(Boolean);
+        acc[key].push(...rsvIds);
+        return acc;
+      }, {} as Record<string, string[]>);
+      const reservaIdsByArteNorm = taskInventory.reduce((acc, item) => {
+        const keyNorm = normalizeArteKey(item.archivo_arte || 'sin_arte');
+        if (!acc[keyNorm]) acc[keyNorm] = [];
+        const rsvIds = String(item.rsv_id || item.id)
+          .split(',')
+          .map(v => v.trim())
+          .filter(Boolean);
+        acc[keyNorm].push(...rsvIds);
+        return acc;
+      }, {} as Record<string, string[]>);
+
+      const getReservaIdsForArte = (arteKey: string): string[] => {
+        const direct = reservaIdsByArte[arteKey];
+        if (direct && direct.length > 0) return direct;
+        const norm = reservaIdsByArteNorm[normalizeArteKey(arteKey)];
+        if (norm && norm.length > 0) return norm;
+        return [];
+      };
 
       // Verificar tipo de tarea desde evidencia
       let tipoEvidencia = '';
@@ -4256,6 +4368,8 @@ function TaskDetailModal({
               recibidas,
               faltantes: diferencia
             });
+            const idsArte = getReservaIdsForArte(key);
+            idsArte.slice(0, diferencia).forEach(id => faltantesReservaIds.add(id));
           }
         });
       } else if (Object.keys(impresionesData).length > 0) {
@@ -4271,10 +4385,25 @@ function TaskDetailModal({
               recibidas,
               faltantes
             });
+            const idsArte = getReservaIdsForArte(arteUrl);
+            idsArte.slice(0, faltantes).forEach(id => faltantesReservaIds.add(id));
           }
         });
       } else {
         // Fallback: usar taskInventory
+        if (taskInventory.length === 0) {
+          const recibidasTotal = cantidadesRecibidas.__total__ || 0;
+          const faltantesTotal = Math.max(0, impresionesOrdenadas - recibidasTotal);
+          if (faltantesTotal > 0) {
+            faltantesPorArte.push({
+              arte: 'Sin arte',
+              solicitadas: impresionesOrdenadas,
+              recibidas: recibidasTotal,
+              faltantes: faltantesTotal
+            });
+          }
+        }
+
         const artesAgrupados = taskInventory.reduce((acc, item) => {
           const key = item.archivo_arte || 'sin_arte';
           if (!acc[key]) {
@@ -4298,13 +4427,32 @@ function TaskDetailModal({
               recibidas,
               faltantes
             });
+            const idsArte = getReservaIdsForArte(key);
+            idsArte.slice(0, faltantes).forEach(id => faltantesReservaIds.add(id));
           }
         });
       }
 
+      // Fallback defensivo: si hay faltantes pero no se pudo mapear por arte,
+      // limitar a la cantidad faltante total (nunca incluir todos los IDs).
+      if (faltantesPorArte.length > 0 && faltantesReservaIds.size === 0) {
+        const totalFaltantes = faltantesPorArte.reduce((sum, f) => sum + f.faltantes, 0);
+        (task.ids_reservas || '')
+          .split(',')
+          .map(v => v.trim())
+          .filter(Boolean)
+          .slice(0, totalFaltantes)
+          .forEach(id => faltantesReservaIds.add(String(id)));
+      }
+
       // Si hay faltantes, crear nueva tarea de recepción
       if (faltantesPorArte.length > 0) {
-        await onCreateRecepcionFaltante(faltantesPorArte, observacionesRecepcion);
+        await onCreateRecepcionFaltante(
+          faltantesPorArte,
+          observacionesRecepcion,
+          guiaPdfUrl || undefined,
+          Array.from(faltantesReservaIds)
+        );
       }
 
       // Subir fotos comprobatorias si existen
@@ -4322,17 +4470,6 @@ function TaskDetailModal({
           console.error('Error al subir fotos comprobatorias:', uploadErr);
         } finally {
           setIsUploadingRecepcion(false);
-        }
-      }
-
-      // Subir PDF guía del proveedor si existe
-      if (recepcionPdfFile) {
-        try {
-          const pdfResult = await campanasService.uploadTestigoFile(recepcionPdfFile);
-          const existingEvidencia = task.evidencia ? JSON.parse(task.evidencia) : {};
-          await onUpdateTask(task.id, { evidencia: JSON.stringify({ ...existingEvidencia, guia_pdf: pdfResult.url }) });
-        } catch (pdfErr) {
-          console.error('Error al subir PDF guía:', pdfErr);
         }
       }
 
@@ -4361,7 +4498,7 @@ function TaskDetailModal({
       setCantidadesRecibidas({});
       setObservacionesRecepcion('');
       setRecepcionFiles([]);
-      setRecepcionPdfFile(null);
+      setImpresionPdfFile(null);
     }
   }, [isOpen]);
 
@@ -4694,6 +4831,51 @@ function TaskDetailModal({
                         ))}
                       </div>
                     )}
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor en PDF (opcional)</label>
+                    {impresionPdfFile ? (
+                      <div className="flex items-center gap-2 mb-2 p-2 bg-zinc-800 rounded border border-border">
+                        <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
+                        <span className="text-xs text-zinc-300 truncate flex-1">{impresionPdfFile.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setImpresionPdfFile(null)}
+                          className="text-red-400 hover:text-red-300 text-xs"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : null}
+                    <div className="border-2 border-dashed border-purple-500/30 rounded-lg p-3 text-center hover:border-purple-500/50 transition-colors">
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 20 * 1024 * 1024) {
+                              alert(`${file.name} supera 20MB`);
+                            } else {
+                              setImpresionPdfFile(file);
+                            }
+                          }
+                          e.target.value = '';
+                        }}
+                        className="hidden"
+                        id="impresion-pdf-input"
+                        disabled={isCreatingRecepcion}
+                      />
+                      <label htmlFor="impresion-pdf-input" className="cursor-pointer">
+                        <div className="space-y-1 py-1">
+                          <Upload className="h-6 w-6 text-zinc-500 mx-auto" />
+                          <p className="text-xs text-zinc-400">
+                            {impresionPdfFile ? 'Cambiar PDF' : 'Sube la guía del proveedor'}
+                          </p>
+                          <p className="text-[10px] text-zinc-500">PDF (máx. 20MB)</p>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 </div>
               )}
@@ -5128,7 +5310,7 @@ function TaskDetailModal({
                                 <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
                                   {faltante.arte ? (
                                     <img
-                                      src={faltante.arte}
+                                      src={getImageUrl(faltante.arte) || faltante.arte}
                                       alt="Arte"
                                       className="w-full h-full object-cover"
                                     />
@@ -5278,9 +5460,63 @@ function TaskDetailModal({
                         const artesArray = Object.entries(artesAgrupados);
 
                         if (artesArray.length === 0) {
+                          let fallbackThumb: string | null = null;
+                          if (task.evidencia) {
+                            try {
+                              const evidenciaObj = JSON.parse(task.evidencia);
+                              const arteFromFaltantes = evidenciaObj?.faltantesPorArte?.[0]?.arte;
+                              if (arteFromFaltantes) {
+                                fallbackThumb = getImageUrl(arteFromFaltantes) || arteFromFaltantes;
+                              }
+                            } catch {}
+                          }
                           return (
-                            <div className="p-4 text-center text-zinc-500">
-                              No hay items asociados a esta tarea
+                            <div className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
+                              <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700 flex items-center justify-center">
+                                {fallbackThumb ? (
+                                  <img
+                                    src={fallbackThumb}
+                                    alt="Arte"
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <Image className="h-5 w-5 text-zinc-600" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white">{impresionesOrdenadas} solicitada{impresionesOrdenadas !== 1 ? 's' : ''}</p>
+                                <p className="text-xs text-zinc-500 truncate">Sin desglose de arte</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-zinc-500">Recibidas:</span>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  value={cantidadesRecibidas.__total__ ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '' || /^\d+$/.test(val)) {
+                                      setCantidadesRecibidas(prev => ({
+                                        ...prev,
+                                        __total__: val === '' ? 0 : parseInt(val)
+                                      }));
+                                    }
+                                  }}
+                                  onFocus={(e) => {
+                                    if (cantidadesRecibidas.__total__ === 0) {
+                                      setCantidadesRecibidas(prev => ({ ...prev, __total__: '' as any }));
+                                    }
+                                    e.target.select();
+                                  }}
+                                  onBlur={(e) => {
+                                    if (e.target.value === '') {
+                                      setCantidadesRecibidas(prev => ({ ...prev, __total__: 0 }));
+                                    }
+                                  }}
+                                  className="w-20 px-2 py-1 text-center text-sm bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                />
+                              </div>
                             </div>
                           );
                         }
@@ -5466,51 +5702,24 @@ function TaskDetailModal({
                       </div>
                     </div>
 
-                    {/* PDF guía del proveedor */}
+                    {/* PDF guía del proveedor (solo lectura en Recepción) */}
                     <div>
-                      <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor en PDF (opcional)</label>
-                      {recepcionPdfFile ? (
-                        <div className="flex items-center gap-2 mb-2 p-2 bg-zinc-800 rounded border border-border">
+                      <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor (PDF)</label>
+                      {guiaPdfUrlResolved ? (
+                        <a
+                          href={getImageUrl(guiaPdfUrlResolved) || guiaPdfUrlResolved}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-border rounded-lg text-sm text-zinc-300 transition-colors"
+                        >
                           <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
-                          <span className="text-xs text-zinc-300 truncate flex-1">{recepcionPdfFile.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => setRecepcionPdfFile(null)}
-                            className="text-red-400 hover:text-red-300 text-xs"
-                          >
-                            ×
-                          </button>
+                          <span>Ver / descargar guía PDF</span>
+                        </a>
+                      ) : (
+                        <div className="px-3 py-2 bg-zinc-900/40 border border-border rounded-lg text-xs text-zinc-500">
+                          Esta tarea no tiene guía PDF adjunta.
                         </div>
-                      ) : null}
-                      <div className="border-2 border-dashed border-purple-500/30 rounded-lg p-3 text-center hover:border-purple-500/50 transition-colors">
-                        <input
-                          type="file"
-                          accept="application/pdf"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              if (file.size > 20 * 1024 * 1024) {
-                                alert(`${file.name} supera 20MB`);
-                              } else {
-                                setRecepcionPdfFile(file);
-                              }
-                            }
-                            e.target.value = '';
-                          }}
-                          className="hidden"
-                          id="recepcion-pdf-input"
-                          disabled={isFinalizandoRecepcion}
-                        />
-                        <label htmlFor="recepcion-pdf-input" className="cursor-pointer">
-                          <div className="space-y-1 py-1">
-                            <Upload className="h-6 w-6 text-zinc-500 mx-auto" />
-                            <p className="text-xs text-zinc-400">
-                              {recepcionPdfFile ? 'Cambiar PDF' : 'Sube la guía del proveedor'}
-                            </p>
-                            <p className="text-[10px] text-zinc-500">PDF (máx. 20MB)</p>
-                          </div>
-                        </label>
-                      </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -5556,27 +5765,20 @@ function TaskDetailModal({
                       </div>
                     </div>
                   )}
-                  {(() => {
-                    try {
-                      const ev = task.evidencia ? JSON.parse(task.evidencia) : {};
-                      if (!ev.guia_pdf) return null;
-                      const pdfUrl = getImageUrl(ev.guia_pdf) || ev.guia_pdf;
-                      return (
-                        <div className="mt-3 pt-3 border-t border-green-500/20">
-                          <p className="text-xs font-medium text-zinc-400 mb-2">Guía del proveedor:</p>
-                          <a
-                            href={pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-border rounded-lg text-sm text-zinc-300 transition-colors"
-                          >
-                            <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
-                            <span>Descargar guía PDF</span>
-                          </a>
-                        </div>
-                      );
-                    } catch { return null; }
-                  })()}
+                  {guiaPdfUrlResolved && (
+                    <div className="mt-3 pt-3 border-t border-green-500/20">
+                      <p className="text-xs font-medium text-zinc-400 mb-2">Guía del proveedor:</p>
+                      <a
+                        href={getImageUrl(guiaPdfUrlResolved) || guiaPdfUrlResolved}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-border rounded-lg text-sm text-zinc-300 transition-colors"
+                      >
+                        <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
+                        <span>Descargar guía PDF</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -11432,11 +11634,26 @@ export function TareaSeguimientoPage() {
       return normalizedIds;
     };
 
+    const recepcionIdsMap = new Map<number, Set<string>>();
+    const recepcionEsFaltantesMap = new Map<number, boolean>();
+
+    tareasRecepcion.forEach(recepcion => {
+      const listadoRecepcion = recepcion.listado_inventario || recepcion.ids_reservas || '';
+      recepcionIdsMap.set(recepcion.id, normalizeToInventoryIds(listadoRecepcion));
+      let esFaltantes = false;
+      if (recepcion.evidencia) {
+        try {
+          const evidenciaObj = JSON.parse(recepcion.evidencia);
+          esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
+        } catch {}
+      }
+      recepcionEsFaltantesMap.set(recepcion.id, esFaltantes);
+    });
+
     // Crear mapa de tarea de impresión -> tareas de recepción relacionadas (puede haber varias: normal + faltantes)
     const impresionToRecepcionesMap = new Map<number, typeof tareasRecepcion>();
     tareasRecepcion.forEach(recepcion => {
-      const listadoRecepcion = recepcion.listado_inventario || recepcion.ids_reservas || '';
-      const recepcionIds = normalizeToInventoryIds(listadoRecepcion);
+      const recepcionIds = recepcionIdsMap.get(recepcion.id) || new Set<string>();
 
       tareasImpresion.forEach(impresion => {
         const listadoImpresion = impresion.listado_inventario || impresion.ids_reservas || '';
@@ -11467,78 +11684,43 @@ export function TareaSeguimientoPage() {
       // Reemplazar asteriscos con comas y luego dividir (ids_reservas puede usar * como separador)
       const ids = listado.replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean);
 
-      // Determinar estado del flujo de impresión
       const tareasRecepcionRelacionadas = impresionToRecepcionesMap.get(tarea.id) || [];
-      let estadoImpresion: EstadoImpresion = 'en_impresion';
-      let tareaRecepcionId: number | undefined;
-
-      if (tareasRecepcionRelacionadas.length > 0) {
-        // Buscar si hay alguna recepción completada (no faltantes)
-        const recepcionCompletada = tareasRecepcionRelacionadas.find(recepcion => {
-          const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
-          // Verificar si es tarea de faltantes
-          let esFaltantes = false;
-          if (recepcion.evidencia) {
-            try {
-              const evidenciaObj = JSON.parse(recepcion.evidencia);
-              esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
-            } catch (e) {}
-          }
-          return esCompletada && !esFaltantes;
+      ids.forEach(id => {
+        const recepcionesDelId = tareasRecepcionRelacionadas.filter(recepcion => {
+          const idsRecepcion = recepcionIdsMap.get(recepcion.id);
+          return idsRecepcion?.has(id);
         });
 
-        // Si existe CUALQUIER recepción pendiente (normal o faltantes),
-        // el flujo sigue en "pendiente recepción" y NO debe marcarse como recibido.
-        const hasRecepcionPendiente = tareasRecepcionRelacionadas.some(recepcion =>
-          recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
-        );
+        let estadoImpresion: EstadoImpresion = 'en_impresion';
+        let tareaRecepcionId: number | undefined;
+        let estatusMostrado = tarea.estatus || 'Pendiente';
+        let tituloMostrado = tarea.titulo || `Impresión #${tarea.id}`;
 
-        if (recepcionCompletada && !hasRecepcionPendiente) {
-          estadoImpresion = 'recibido';
-          tareaRecepcionId = recepcionCompletada.id;
-        } else {
-          // Hay recepciones pendientes: debe mantenerse en pendiente de recepción
-          estadoImpresion = 'pendiente_recepcion';
+        if (recepcionesDelId.length > 0) {
+          const recepcionCompletadaNormal = recepcionesDelId.find(recepcion => {
+            const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
+            return esCompletada && !recepcionEsFaltantesMap.get(recepcion.id);
+          });
 
-          // Priorizar SIEMPRE una recepción pendiente para mostrar estatus correcto en tabla.
-          const recepcionPendiente = tareasRecepcionRelacionadas.find(recepcion =>
+          const recepcionPendiente = recepcionesDelId.find(recepcion =>
             recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
           );
 
-          // Fallback: si no encuentra (caso raro), usar una recepción normal.
-          const recepcionNormal = tareasRecepcionRelacionadas.find(recepcion => {
-            let esFaltantes = false;
-            if (recepcion.evidencia) {
-              try {
-                const evidenciaObj = JSON.parse(recepcion.evidencia);
-                esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
-              } catch (e) {}
-            }
-            return !esFaltantes;
-          });
-
-          tareaRecepcionId = recepcionPendiente?.id || recepcionNormal?.id || tareasRecepcionRelacionadas[0]?.id;
-        }
-      }
-
-      // Si hay tarea de recepción pendiente, mostrar su estatus en vez del de impresión
-      let estatusMostrado = tarea.estatus || 'Pendiente';
-      let tituloMostrado = tarea.titulo || `Impresión #${tarea.id}`;
-      if (estadoImpresion === 'pendiente_recepcion') {
-        if (tareaRecepcionId) {
-          const tareaRecepcion = tareasRecepcionRelacionadas.find(r => r.id === tareaRecepcionId);
-          if (tareaRecepcion) {
-            estatusMostrado = tareaRecepcion.estatus || 'Pendiente';
-            tituloMostrado = tareaRecepcion.titulo || `Recepción #${tareaRecepcionId}`;
+          if (recepcionCompletadaNormal && !recepcionPendiente) {
+            estadoImpresion = 'recibido';
+            tareaRecepcionId = recepcionCompletadaNormal.id;
           } else {
-            estatusMostrado = 'Pendiente';
+            estadoImpresion = 'pendiente_recepcion';
+            tareaRecepcionId = recepcionPendiente?.id || recepcionesDelId[0]?.id;
+            if (recepcionPendiente) {
+              estatusMostrado = recepcionPendiente.estatus || 'Pendiente';
+              tituloMostrado = recepcionPendiente.titulo || `Recepción #${recepcionPendiente.id}`;
+            } else {
+              estatusMostrado = 'Pendiente';
+            }
           }
-        } else {
-          estatusMostrado = 'Pendiente';
         }
-      }
 
-      ids.forEach(id => {
         reservaToTareaMap.set(id, {
           tarea_id: estadoImpresion === 'pendiente_recepcion' && tareaRecepcionId ? tareaRecepcionId : tarea.id,
           tarea_estatus: estatusMostrado,
@@ -11597,10 +11779,26 @@ export function TareaSeguimientoPage() {
 
     if (tareasImpresion.length === 0) return map;
 
+    const recepcionIdsMap = new Map<number, Set<string>>();
+    const recepcionEsFaltantesMap = new Map<number, boolean>();
+
+    tareasRecepcion.forEach(recepcion => {
+      const idsRecepcion = new Set((recepcion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
+      recepcionIdsMap.set(recepcion.id, idsRecepcion);
+      let esFaltantes = false;
+      if (recepcion.evidencia) {
+        try {
+          const evidenciaObj = JSON.parse(recepcion.evidencia);
+          esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
+        } catch {}
+      }
+      recepcionEsFaltantesMap.set(recepcion.id, esFaltantes);
+    });
+
     // Crear mapa de tarea impresión -> tareas de recepción (puede haber varias: normal + faltantes)
     const impresionToRecepciones = new Map<number, typeof tareasRecepcion>();
     tareasRecepcion.forEach(recepcion => {
-      const recepcionIds = new Set((recepcion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
+      const recepcionIds = recepcionIdsMap.get(recepcion.id) || new Set<string>();
       tareasImpresion.forEach(impresion => {
         const impresionIds = new Set((impresion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
         const hasCommon = [...impresionIds].some(id => recepcionIds.has(id));
@@ -11616,38 +11814,24 @@ export function TareaSeguimientoPage() {
     tareasImpresion.forEach(tarea => {
       const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
       const tareasRecepcionRelacionadas = impresionToRecepciones.get(tarea.id) || [];
-
-      let estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido' = 'en_impresion';
-
-      if (tareasRecepcionRelacionadas.length > 0) {
-        // Si hay ALGUNA recepción completada (no faltantes), el estado puede ser 'recibido'
-        // solo cuando no queda ninguna recepción pendiente.
-        const hayRecepcionCompletada = tareasRecepcionRelacionadas.some(recepcion => {
-          const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
-          // Verificar si es tarea de faltantes
-          let esFaltantes = false;
-          if (recepcion.evidencia) {
-            try {
-              const evidenciaObj = JSON.parse(recepcion.evidencia);
-              esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
-            } catch (e) {}
-          }
-          return esCompletada && !esFaltantes;
+      ids.forEach(id => {
+        const recepcionesDelId = tareasRecepcionRelacionadas.filter(recepcion => {
+          const idsRecepcion = recepcionIdsMap.get(recepcion.id);
+          return idsRecepcion?.has(id);
         });
 
-        const hayRecepcionPendiente = tareasRecepcionRelacionadas.some(recepcion =>
-          recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
-        );
-
-        if (hayRecepcionCompletada && !hayRecepcionPendiente) {
-          estado = 'recibido';
-        } else {
-          // Hay recepciones pero ninguna completada (o solo faltantes)
-          estado = 'pendiente_recepcion';
+        let estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido' = 'en_impresion';
+        if (recepcionesDelId.length > 0) {
+          const hayRecepcionCompletadaNormal = recepcionesDelId.some(recepcion => {
+            const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
+            return esCompletada && !recepcionEsFaltantesMap.get(recepcion.id);
+          });
+          const hayRecepcionPendiente = recepcionesDelId.some(recepcion =>
+            recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
+          );
+          estado = (hayRecepcionCompletadaNormal && !hayRecepcionPendiente) ? 'recibido' : 'pendiente_recepcion';
         }
-      }
 
-      ids.forEach(id => {
         map.set(id, { estado, titulo: tarea.titulo || `Impresión #${tarea.id}` });
       });
     });
@@ -16270,7 +16454,7 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
             ids_reservas: reservaIds.join(','),
           });
         }}
-        onCreateRecepcion={async (tareaImpresionId, asignadoNombre, asignadoId) => {
+        onCreateRecepcion={async (tareaImpresionId, asignadoNombre, asignadoId, guiaPdfUrl) => {
           if (!selectedTask) return;
 
           // 1. Marcar la tarea de Impresión como "Atendido"
@@ -16288,10 +16472,14 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
             const evidenciaObj = evidenciaRecepcion ? JSON.parse(evidenciaRecepcion) : {};
             // Agregar tipo para identificar que es recepción normal (no faltantes)
             evidenciaObj.tipo = 'recepcion_normal';
+            if (guiaPdfUrl) evidenciaObj.guia_pdf = guiaPdfUrl;
             evidenciaRecepcion = JSON.stringify(evidenciaObj);
           } catch (e) {
             // Si no es JSON válido, crear objeto nuevo
-            evidenciaRecepcion = JSON.stringify({ tipo: 'recepcion_normal' });
+            evidenciaRecepcion = JSON.stringify({
+              tipo: 'recepcion_normal',
+              ...(guiaPdfUrl ? { guia_pdf: guiaPdfUrl } : {})
+            });
           }
 
           // Usar el usuario seleccionado o fallback al asignado/creador original
@@ -16314,7 +16502,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
           // Refrescar lista de tareas
           queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
         }}
-        onCreateRecepcionFaltante={async (faltantes, observaciones) => {
+        onCreateRecepcionFaltante={async (faltantes, observaciones, guiaPdfUrlParam, faltantesReservaIds) => {
           if (!selectedTask) return;
 
           // Construir descripción con detalle de faltantes
@@ -16329,14 +16517,24 @@ Por favor registra la cantidad de impresiones recibidas.`,
             (selectedTask.titulo?.match(/TASK-\d+/) || [''])[0] ||
             `TASK-${selectedTask.id}`;
 
-          // Guardar info de faltantes en evidencia para que el modal lo lea correctamente
+          // Guardar info de faltantes en evidencia y conservar guía PDF previa si existe
+          let guiaPdfAnterior: string | undefined;
+          try {
+            const evidenciaAnterior = selectedTask.evidencia ? JSON.parse(selectedTask.evidencia) : {};
+            guiaPdfAnterior = evidenciaAnterior?.guia_pdf;
+          } catch {
+            guiaPdfAnterior = undefined;
+          }
+          const guiaPdfFinal = guiaPdfUrlParam || guiaPdfAnterior;
+
           const evidenciaFaltantes = JSON.stringify({
             tipo: 'recepcion_faltantes',
             faltantesPorArte: faltantes.map(f => ({
               arte: f.arte,
               cantidad: f.faltantes
             })),
-            totalFaltantes
+            totalFaltantes,
+            ...(guiaPdfFinal ? { guia_pdf: guiaPdfFinal } : {})
           });
 
           await createTareaMutation.mutateAsync({
@@ -16354,7 +16552,9 @@ Por favor registra la cantidad de impresiones recibidas.`,
             tipo: 'Recepción',
             asignado: selectedTask.asignado || selectedTask.creador || '',
             id_asignado: (selectedTask as any).id_asignado || '',
-            ids_reservas: selectedTask.inventario_ids?.join(',') || '',
+            ids_reservas: (faltantesReservaIds && faltantesReservaIds.length > 0)
+              ? faltantesReservaIds.join(',')
+              : (selectedTask.inventario_ids?.join(',') || ''),
             evidencia: evidenciaFaltantes,
             num_impresiones: totalFaltantes,
           });
