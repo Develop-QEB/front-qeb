@@ -17,6 +17,7 @@ import { useSocketEquipos, useSocketCampana } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
 import { usePermissions } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
+import { useThemeStore } from '../../store/themeStore';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
@@ -302,6 +303,7 @@ interface MultiSelectProps {
 }
 
 function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Seleccionar...' }: MultiSelectProps) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -328,19 +330,19 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Selec
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex items-center justify-between"
+        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex items-center justify-between`}
       >
-        <span className={selected.length === 0 ? 'text-zinc-500' : ''}>
+        <span className={selected.length === 0 ? (isDark ? 'text-zinc-500' : 'text-gray-400') : ''}>
           {selected.length === 0 ? placeholder : selected.length === 1 ? selected[0] : `${selected.length} seleccionados`}
         </span>
-        <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'} transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+        <div className={`absolute z-50 mt-1 w-full ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-200'} border rounded-lg shadow-xl max-h-48 overflow-y-auto`}>
           {options.map(option => (
             <label
               key={option}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 cursor-pointer text-sm text-white"
+              className={`flex items-center gap-2 px-3 py-2 ${isDark ? 'hover:bg-zinc-700 text-white' : 'hover:bg-gray-100 text-gray-900'} cursor-pointer text-sm`}
             >
               <input
                 type="checkbox"
@@ -352,7 +354,7 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Selec
             </label>
           ))}
           {options.length === 0 && (
-            <div className="px-3 py-2 text-zinc-500 text-sm">Sin opciones</div>
+            <div className={`px-3 py-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Sin opciones</div>
           )}
         </div>
       )}
@@ -418,6 +420,7 @@ function SearchableSelect({
   renderSelected?: (item: any) => React.ReactNode;
   loading?: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -443,14 +446,14 @@ function SearchableSelect({
         onClick={() => setOpen(!open)}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all ${value
           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600'
+          : isDark ? 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
           }`}
       >
         <span className="truncate text-left flex-1">
           {value && renderSelected ? renderSelected(value) : (displayValue || label)}
         </span>
         {value ? (
-          <X className="h-4 w-4 hover:text-white flex-shrink-0" onClick={(e) => { e.stopPropagation(); onClear(); }} />
+          <X className={`h-4 w-4 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} flex-shrink-0`} onClick={(e) => { e.stopPropagation(); onClear(); }} />
         ) : (
           <ChevronDown className="h-4 w-4 flex-shrink-0" />
         )}
@@ -459,16 +462,16 @@ function SearchableSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-2 border-b border-zinc-800">
+          <div className={`absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                 <input
                   type="text"
                   placeholder={`Buscar ${label.toLowerCase()}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  className={`w-full pl-9 pr-3 py-2 text-sm ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   autoFocus
                   onClick={(e) => e.stopPropagation()}
                 />
@@ -476,9 +479,9 @@ function SearchableSelect({
             </div>
             <div className="max-h-72 overflow-auto">
               {loading ? (
-                <div className="px-3 py-4 text-center text-zinc-500 text-sm">Cargando...</div>
+                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</div>
               ) : filteredOptions.length === 0 ? (
-                <div className="px-3 py-4 text-center text-zinc-500 text-sm">
+                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                   {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
                 </div>
               ) : (
@@ -487,9 +490,9 @@ function SearchableSelect({
                     key={`${option[valueKey]}-${idx}`}
                     type="button"
                     onClick={() => { onChange(option); handleClose(); }}
-                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b border-zinc-800/50 last:border-0 ${value && value[valueKey] === option[valueKey]
+                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} last:border-0 ${value && value[valueKey] === option[valueKey]
                       ? 'bg-purple-500/20 text-purple-300'
-                      : 'text-zinc-300 hover:bg-zinc-800'
+                      : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'
                       }`}
                   >
                     {renderOption ? renderOption(option) : (
@@ -499,7 +502,7 @@ function SearchableSelect({
                 ))
               )}
             </div>
-            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
+            <div className={`px-3 py-1.5 border-t ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'} text-[10px]`}>
               Mostrando {filteredOptions.length} de {options.length} opciones
             </div>
           </div>
@@ -514,6 +517,7 @@ const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const permissions = usePermissions(user?.rol);

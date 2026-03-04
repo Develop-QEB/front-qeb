@@ -4,6 +4,7 @@ import { User, Mail, Briefcase, Building2, Lock, Save, Eye, EyeOff, CheckCircle,
 import { Header } from '../../components/layout/Header';
 import { authService } from '../../services/auth.service';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 // Base URL for static files (without /api)
@@ -13,6 +14,7 @@ export function PerfilPage() {
   const queryClient = useQueryClient();
   const { user: storeUser, setUser } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
 
   // Estados del formulario de perfil
   const [profileForm, setProfileForm] = useState({
@@ -152,9 +154,16 @@ export function PerfilPage() {
     }
   };
 
+  // Clases reutilizables
+  const cardCls = `rounded-2xl border p-6 ${isDark ? 'bg-zinc-900/50 border-zinc-800/50' : 'bg-white border-gray-200 shadow-sm'}`;
+  const inputCls = `w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-purple-500/50 disabled:opacity-60 disabled:cursor-not-allowed ${
+    isDark ? 'bg-zinc-800/50 border-zinc-700/50 text-white placeholder-zinc-500' : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400'
+  }`;
+  const labelCls = `text-sm flex items-center gap-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`;
+
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col min-h-screen bg-[#0f0a15]">
+      <div className={`flex-1 flex flex-col min-h-screen ${isDark ? 'bg-[#0f0a15]' : 'bg-gray-50'}`}>
         <Header title="Mi Perfil" />
         <div className="flex-1 flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -164,13 +173,13 @@ export function PerfilPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen bg-[#0f0a15]">
+    <div className={`flex-1 flex flex-col min-h-screen ${isDark ? 'bg-[#0f0a15]' : 'bg-gray-50'}`}>
       <Header title="Mi Perfil" />
 
       <div className="flex-1 p-6">
         <div className="max-w-3xl mx-auto space-y-6">
           {/* Avatar y nombre */}
-          <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 p-6">
+          <div className={cardCls}>
             {photoMessage && (
               <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
                 photoMessage.type === 'success'
@@ -220,15 +229,15 @@ export function PerfilPage() {
                 </button>
               </div>
               <div>
-                <h2 className="text-2xl font-semibold text-white">
+                <h2 className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   {profile?.nombre || storeUser?.nombre}
                 </h2>
-                <p className="text-zinc-400 flex items-center gap-2 mt-1">
+                <p className={`flex items-center gap-2 mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                   <Mail className="h-4 w-4" />
                   {profile?.email || storeUser?.email}
                 </p>
                 <div className="flex items-center gap-2 mt-2">
-                  <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-xs font-medium">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'}`}>
                     {profile?.rol || storeUser?.rol || 'Usuario'}
                   </span>
                 </div>
@@ -237,16 +246,16 @@ export function PerfilPage() {
           </div>
 
           {/* Información del perfil */}
-          <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 p-6">
+          <div className={cardCls}>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-medium text-white flex items-center gap-2">
+              <h3 className={`text-lg font-medium flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                 <User className="h-5 w-5 text-purple-400" />
                 Información Personal
               </h3>
               {!isEditingProfile && (
                 <button
                   onClick={() => setIsEditingProfile(true)}
-                  className="px-4 py-2 text-sm rounded-lg bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 transition-colors"
+                  className={`px-4 py-2 text-sm rounded-lg transition-colors ${isDark ? 'bg-purple-600/20 text-purple-300 hover:bg-purple-600/30' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}
                 >
                   Editar
                 </button>
@@ -270,7 +279,7 @@ export function PerfilPage() {
 
             <form onSubmit={handleProfileSubmit} className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm text-zinc-400 flex items-center gap-2">
+                <label className={labelCls}>
                   <User className="h-4 w-4" /> Nombre
                 </label>
                 <input
@@ -278,13 +287,13 @@ export function PerfilPage() {
                   value={profileForm.nombre}
                   onChange={(e) => setProfileForm({ ...profileForm, nombre: e.target.value })}
                   disabled={!isEditingProfile}
-                  className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                  className={inputCls}
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm text-zinc-400 flex items-center gap-2">
+                  <label className={labelCls}>
                     <Building2 className="h-4 w-4" /> Área
                   </label>
                   <input
@@ -292,12 +301,12 @@ export function PerfilPage() {
                     value={profileForm.area}
                     onChange={(e) => setProfileForm({ ...profileForm, area: e.target.value })}
                     disabled={!isEditingProfile}
-                    className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className={inputCls}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm text-zinc-400 flex items-center gap-2">
+                  <label className={labelCls}>
                     <Briefcase className="h-4 w-4" /> Puesto
                   </label>
                   <input
@@ -305,7 +314,7 @@ export function PerfilPage() {
                     value={profileForm.puesto}
                     onChange={(e) => setProfileForm({ ...profileForm, puesto: e.target.value })}
                     disabled={!isEditingProfile}
-                    className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className={inputCls}
                   />
                 </div>
               </div>
@@ -315,7 +324,7 @@ export function PerfilPage() {
                   <button
                     type="button"
                     onClick={cancelProfileEdit}
-                    className="px-4 py-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                    className={`px-4 py-2 rounded-lg transition-colors ${isDark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
                   >
                     Cancelar
                   </button>
@@ -333,8 +342,8 @@ export function PerfilPage() {
           </div>
 
           {/* Cambiar contraseña */}
-          <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 p-6">
-            <h3 className="text-lg font-medium text-white flex items-center gap-2 mb-6">
+          <div className={cardCls}>
+            <h3 className={`text-lg font-medium flex items-center gap-2 mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
               <Lock className="h-5 w-5 text-purple-400" />
               Cambiar Contraseña
             </h3>
@@ -356,19 +365,19 @@ export function PerfilPage() {
 
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm text-zinc-400">Contraseña Actual</label>
+                <label className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Contraseña Actual</label>
                 <div className="relative">
                   <input
                     type={showPasswords.current ? 'text' : 'password'}
                     value={passwordForm.currentPassword}
                     onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                    className="w-full px-4 py-3 pr-12 rounded-xl bg-zinc-800/50 border border-zinc-700/50 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500/50"
+                    className={`${inputCls} pr-12`}
                     placeholder="Ingresa tu contraseña actual"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                    className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600'}`}
                   >
                     {showPasswords.current ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
@@ -377,19 +386,19 @@ export function PerfilPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm text-zinc-400">Nueva Contraseña</label>
+                  <label className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Nueva Contraseña</label>
                   <div className="relative">
                     <input
                       type={showPasswords.new ? 'text' : 'password'}
                       value={passwordForm.newPassword}
                       onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                      className="w-full px-4 py-3 pr-12 rounded-xl bg-zinc-800/50 border border-zinc-700/50 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500/50"
+                      className={`${inputCls} pr-12`}
                       placeholder="Mínimo 6 caracteres"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600'}`}
                     >
                       {showPasswords.new ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
@@ -397,19 +406,19 @@ export function PerfilPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm text-zinc-400">Confirmar Nueva Contraseña</label>
+                  <label className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Confirmar Nueva Contraseña</label>
                   <div className="relative">
                     <input
                       type={showPasswords.confirm ? 'text' : 'password'}
                       value={passwordForm.confirmPassword}
                       onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                      className="w-full px-4 py-3 pr-12 rounded-xl bg-zinc-800/50 border border-zinc-700/50 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500/50"
+                      className={`${inputCls} pr-12`}
                       placeholder="Repite la nueva contraseña"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600'}`}
                     >
                       {showPasswords.confirm ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>

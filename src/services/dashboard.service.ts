@@ -158,7 +158,7 @@ class DashboardService {
     return response.data.data;
   }
 
-  async getInventoryDetail(filters?: DashboardFilters & { estatus?: string; page?: number; limit?: number }): Promise<InventoryDetailResponse> {
+  async getInventoryDetail(filters?: DashboardFilters & { estatus?: string; page?: number; limit?: number; includeCoords?: boolean }): Promise<InventoryDetailResponse> {
     const params = new URLSearchParams();
 
     if (filters?.estado) params.append('estado', filters.estado);
@@ -171,6 +171,7 @@ class DashboardService {
     if (filters?.estatus) params.append('estatus', filters.estatus);
     if (filters?.page) params.append('page', filters.page.toString());
     if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.includeCoords) params.append('includeCoords', 'true');
 
     const queryString = params.toString();
     const url = `/dashboard/inventory-detail${queryString ? `?${queryString}` : ''}`;

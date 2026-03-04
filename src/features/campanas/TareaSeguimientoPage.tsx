@@ -75,6 +75,7 @@ function getPeriodoShort(item: { catorcena: number; anio: number; inicio_periodo
 import { Badge } from '../../components/ui/badge';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
 import * as XLSX from 'xlsx';
@@ -403,14 +404,14 @@ const flujoLabels: Record<string, string> = {
   instalado: 'Instalado',
 };
 
-const flujoColors: Record<string, string> = {
-  carga_artes: 'bg-zinc-500/20 text-zinc-400',
-  revision_artes: 'bg-amber-500/20 text-amber-400',
-  artes_aprobados: 'bg-green-500/20 text-green-400',
-  en_impresion: 'bg-blue-500/20 text-blue-400',
-  artes_recibidos: 'bg-cyan-500/20 text-cyan-400',
-  instalado: 'bg-emerald-500/20 text-emerald-400',
-};
+const getFlujoColors = (isDark: boolean): Record<string, string> => ({
+  carga_artes: isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500',
+  revision_artes: isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-50 text-amber-700',
+  artes_aprobados: isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  en_impresion: isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  artes_recibidos: isDark ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-50 text-cyan-700',
+  instalado: isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-50 text-emerald-700',
+});
 
 function getItemFlujoStatus(item: InventoryRow, tab: MainTab): string {
   switch (tab) {
@@ -432,13 +433,14 @@ function getItemFlujoStatus(item: InventoryRow, tab: MainTab): string {
   }
 }
 
-function FlujoBadges({ items, tab }: { items: InventoryRow[]; tab: MainTab }) {
+function FlujoBadges({ items, tab, isDark = true }: { items: InventoryRow[]; tab: MainTab; isDark?: boolean }) {
   const counts: Record<string, number> = {};
   items.forEach(item => {
     const status = getItemFlujoStatus(item, tab);
     counts[status] = (counts[status] || 0) + 1;
   });
 
+  const flujoColors = getFlujoColors(isDark);
   return (
     <span className="inline-flex flex-wrap gap-1 ml-2">
       {Object.entries(counts).map(([status, count]) => (
@@ -455,11 +457,12 @@ function FlujoBadges({ items, tab }: { items: InventoryRow[]; tab: MainTab }) {
 // Oculta Programación si el grupo es Tradicional, Impresiones si es Digital
 // Recibe mapas de estado de impresión, programación e instalación para sincronizar
 // correctamente con los tabs de gestión de artes
-function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }: {
+function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap, isDark = true }: {
   items: InventoryRow[];
   impresionMap?: Map<string, { estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido'; titulo: string }>;
   programacionMap?: Map<string, { estado: 'en_programacion' | 'programado' }>;
   instalacionMap?: Map<string, { estado: 'en_proceso' | 'validar_instalacion' | 'instalado'; titulo: string; tareaId: number }>;
+  isDark?: boolean;
 }) {
   if (items.length === 0) return null;
 
@@ -522,7 +525,7 @@ function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }:
   const getColor = (completed: number, inProgress: number) => {
     if (completed === total) return 'text-green-400';
     if (completed > 0 || inProgress > 0) return 'text-amber-400';
-    return 'text-zinc-600';
+    return isDark ? 'text-zinc-600' : 'text-gray-300';
   };
 
   const uploadColor = getColor(conArte, sinArte > 0 && conArte > 0 ? sinArte : 0);
@@ -580,30 +583,30 @@ const estadoTareaLabels: Record<string, string> = {
   atendido: 'Instalado',
 };
 
-const statusColors: Record<string, string> = {
-  sin_revisar: 'bg-zinc-500/20 text-zinc-400',
-  en_revision: 'bg-amber-500/20 text-amber-400',
-  aprobado: 'bg-green-500/20 text-green-400',
-  rechazado: 'bg-red-500/20 text-red-400',
-  sin_atender: 'bg-zinc-500/20 text-zinc-400',
-  en_progreso: 'bg-blue-500/20 text-blue-400',
-  atendido: 'bg-green-500/20 text-green-400',
-  pendiente: 'bg-amber-500/20 text-amber-400',
-  completada: 'bg-green-500/20 text-green-400',
-  cancelada: 'bg-red-500/20 text-red-400',
+const getStatusColors = (isDark: boolean): Record<string, string> => ({
+  sin_revisar: isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500',
+  en_revision: isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-50 text-amber-700',
+  aprobado: isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  rechazado: isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-50 text-red-700',
+  sin_atender: isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500',
+  en_progreso: isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  atendido: isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  pendiente: isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-50 text-amber-700',
+  completada: isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  cancelada: isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-50 text-red-700',
   // Valores de la BD (con mayúscula)
-  'Activo': 'bg-green-500/20 text-green-400',
-  'Pendiente': 'bg-amber-500/20 text-amber-400',
-  'Atendido': 'bg-blue-500/20 text-blue-400',
-  'En Progreso': 'bg-blue-500/20 text-blue-400',
-  'Completado': 'bg-green-500/20 text-green-400',
-  'Cancelado': 'bg-red-500/20 text-red-400',
-  'Notificación': 'bg-purple-500/20 text-purple-400',
-  'Enviada': 'bg-blue-500/20 text-blue-400',
-  'Activada': 'bg-blue-500/20 text-blue-400',
-  'Finalizada': 'bg-green-500/20 text-green-400',
-  validado: 'bg-green-500/20 text-green-400',
-};
+  'Activo': isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  'Pendiente': isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-50 text-amber-700',
+  'Atendido': isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  'En Progreso': isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  'Completado': isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  'Cancelado': isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-50 text-red-700',
+  'Notificación': isDark ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-50 text-purple-700',
+  'Enviada': isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  'Activada': isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  'Finalizada': isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  validado: isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+});
 
 // ============================================================================
 // SUB-COMPONENTS
@@ -711,18 +714,20 @@ function EmptyState({
   icon: Icon = FileText,
   action,
   onAction,
+  isDark = true,
 }: {
   message: string;
   description?: string;
   icon?: typeof FileText;
   action?: string;
   onAction?: () => void;
+  isDark?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
       <Icon className="h-12 w-12 mb-4 opacity-60" />
-      <p className="text-base font-semibold text-zinc-300">{message}</p>
-      {description && <p className="text-sm mt-2 text-center max-w-md text-zinc-400">{description}</p>}
+      <p className={`text-base font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{message}</p>
+      {description && <p className={`text-sm mt-2 text-center max-w-md ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{description}</p>}
       {action && onAction && (
         <button
           onClick={onAction}
@@ -736,9 +741,10 @@ function EmptyState({
 }
 
 // Status Badge Component
-function StatusBadge({ status, labels }: { status: string; labels?: Record<string, string> }) {
+function StatusBadge({ status, labels, isDark = true }: { status: string; labels?: Record<string, string>; isDark?: boolean }) {
   const label = labels ? labels[status] || status : status;
-  const colorClass = statusColors[status] || 'bg-zinc-500/20 text-zinc-400';
+  const statusColors = getStatusColors(isDark);
+  const colorClass = statusColors[status] || (isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500');
   return (
     <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${colorClass}`}>
       {label}
@@ -754,6 +760,7 @@ function TreeNode({
   isExpanded,
   onToggle,
   children,
+  isDark = true,
 }: {
   label: string;
   count: number;
@@ -761,6 +768,7 @@ function TreeNode({
   isExpanded: boolean;
   onToggle: () => void;
   children?: React.ReactNode;
+  isDark?: boolean;
 }) {
   return (
     <div>
@@ -776,7 +784,7 @@ function TreeNode({
         ) : (
           <ChevronRight className="h-4 w-4 text-purple-400 flex-shrink-0" />
         )}
-        <span className="text-xs font-medium text-zinc-300">{label}</span>
+        <span className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{label}</span>
         <span className="text-[10px] text-muted-foreground">({count})</span>
       </button>
       {isExpanded && children}
@@ -815,12 +823,14 @@ function DigitalGalleryModal({
   imagenes,
   isLoading,
   title,
+  isDark = true,
 }: {
   isOpen: boolean;
   onClose: () => void;
   imagenes: ImagenDigitalView[];
   isLoading: boolean;
   title?: string;
+  isDark?: boolean;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -868,7 +878,7 @@ function DigitalGalleryModal({
               <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
             </div>
           ) : imagenes.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-zinc-500">
+            <div className={`flex-1 flex items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
               <div className="text-center">
                 <Film className="h-12 w-12 mx-auto mb-2 opacity-30" />
                 <p>No hay archivos digitales</p>
@@ -934,7 +944,7 @@ function DigitalGalleryModal({
                       }`}
                     >
                       {img.tipo === 'video' ? (
-                        <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                        <div className={`w-full h-full ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} flex items-center justify-center`}>
                           <Play className="h-6 w-6 text-cyan-400" />
                         </div>
                       ) : (
@@ -959,7 +969,7 @@ function DigitalGalleryModal({
         <div className="flex items-center justify-end gap-2 p-4 border-t border-border flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors"
+            className={`px-4 py-2 text-sm font-medium ${isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'} transition-colors`}
           >
             Cerrar
           </button>
@@ -982,6 +992,7 @@ function UploadArtModal({
   error,
   campanaId,
   tipoPeriodo = 'catorcena',
+  isDark = true,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -994,6 +1005,7 @@ function UploadArtModal({
   error: string | null;
   campanaId: number;
   tipoPeriodo?: string;
+  isDark?: boolean;
 }) {
   const [selectedOption, setSelectedOption] = useState<UploadOption>('file');
   const [existingArtUrl, setExistingArtUrl] = useState('');
@@ -1796,6 +1808,7 @@ interface FilterToolbarProps {
   groupingOptions?: { field: GroupByField; label: string }[]; // Opciones de agrupación personalizadas
   hideGrouping?: boolean; // Ocultar botón de agrupación
   hideSort?: boolean; // Ocultar botón de ordenamiento
+  isDark?: boolean;
 }
 
 function FilterToolbar({
@@ -1804,7 +1817,7 @@ function FilterToolbar({
   sortField, sortDirection, showSort, setShowSort, setSortField, setSortDirection,
   filteredCount, totalCount, useFixedDropdowns = false,
   filterFields = FILTER_FIELDS_INVENTARIO, groupingOptions = GROUPING_OPTIONS_INVENTARIO,
-  hideGrouping = false, hideSort = false,
+  hideGrouping = false, hideSort = false, isDark = true,
 }: FilterToolbarProps) {
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const groupBtnRef = useRef<HTMLButtonElement>(null);
@@ -1863,7 +1876,7 @@ function FilterToolbar({
         </button>
         {showFilters && (
           <div
-            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[520px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4`}
+            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[520px] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-4`}
             style={useFixedDropdowns ? getDropdownPosition(filterBtnRef, 520) : undefined}
           >
             <div className="flex items-center justify-between mb-3">
@@ -1915,7 +1928,7 @@ function FilterToolbar({
           </button>
           {showGrouping && (
             <div
-              className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]`}
+              className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]`}
               style={useFixedDropdowns ? getDropdownPosition(groupBtnRef, 200) : undefined}
             >
               <div className="flex items-center justify-between mb-2 px-2">
@@ -6467,7 +6480,7 @@ function TaskDetailModal({
                             <td className="px-3 py-2 text-white">{item.ciudad}</td>
                             <td className="px-3 py-2 text-white">{item.catorcena}</td>
                             <td className="px-3 py-2">
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${statusColors[item.estado_arte || ''] || 'bg-zinc-500/20 text-zinc-400'}`}>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${getStatusColors(true)[item.estado_arte || ''] || 'bg-zinc-500/20 text-zinc-400'}`}>
                                 {item.estado_arte || '-'}
                               </span>
                             </td>
@@ -10817,7 +10830,7 @@ export function TareaSeguimientoPage() {
   // Main tabs
   const [activeMainTab, setActiveMainTab] = useState<MainTab>('versionario');
   const [activeFormat, setActiveFormat] = useState<FormatTab>('tradicional');
-  const [initialTabDetermined, setInitialTabDetermined] = useState(false);
+  const [initialTabDetermined] = useState(true);
   const [activeTasksTab, setActiveTasksTab] = useState<TasksTab>('tradicionales');
 
   // Inventory state
@@ -10963,11 +10976,15 @@ export function TareaSeguimientoPage() {
   const tipoPeriodo = (campana as any)?.tipo_periodo || 'catorcena';
 
   // Inventario SIN arte (para tab "Subir Artes")
-  // Se carga siempre inicialmente para determinar el tab por defecto
-  const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte, isFetched: isFetchedSinArte } = useQuery({
+  const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte } = useQuery({
     queryKey: ['campana-inventario-sin-arte', campanaId],
     queryFn: () => campanasService.getInventarioSinArte(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'versionario' || !initialTabDetermined),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   // Inventario CON arte (para tab "Revisar y Aprobar", "Programación" e "Impresiones")
@@ -10976,14 +10993,24 @@ export function TareaSeguimientoPage() {
     queryKey: ['campana-inventario-arte', campanaId],
     queryFn: () => campanasService.getInventarioConArte(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'atender' || activeMainTab === 'programacion' || activeMainTab === 'impresiones' || !initialTabDetermined || isTaskDetailModalOpen),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   // Inventario para TESTIGOS (para tab "Validar Instalación")
   // Se carga si es el tab activo o si aún no se ha determinado el tab inicial
-  const { data: inventarioTestigosAPI = [], isLoading: isLoadingInventarioTestigos, isFetched: isFetchedTestigos } = useQuery({
+  const { data: inventarioTestigosAPI = [], isLoading: isLoadingInventarioTestigos } = useQuery({
     queryKey: ['campana-inventario-testigos', campanaId],
     queryFn: () => campanasService.getInventarioTestigos(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'testigo' || !initialTabDetermined),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   // Tareas de la campaña (todas para poder filtrar en activas/completadas)
@@ -11026,47 +11053,8 @@ export function TareaSeguimientoPage() {
     return map;
   }, [digitalFileSummaries]);
 
-  // ---- Determinar tab inicial basado en contenido y permisos ----
-  useEffect(() => {
-    // Solo ejecutar una vez cuando los datos estén disponibles
-    if (initialTabDetermined) return;
-
-    // Esperar a que las queries hayan terminado de hacer fetch (no solo que no estén cargando)
-    const allQueriesFetched = isFetchedSinArte && isFetchedConArte && isFetchedTestigos;
-    if (!allQueriesFetched) return;
-
-    // Determinar el tab con contenido (prioridad: versionario > atender > testigo)
-    // Pero respetando permisos
-    if (inventarioSinArteAPI.length > 0 && permissions.canSeeTabSubirArtes) {
-      setActiveMainTab('versionario');
-    } else if (inventarioArteAPI.length > 0 && permissions.canSeeTabRevisarAprobar) {
-      setActiveMainTab('atender');
-    } else if (inventarioTestigosAPI.length > 0 && permissions.canSeeTabValidacionInstalacion) {
-      setActiveMainTab('testigo');
-    } else {
-      // Fallback: seleccionar el primer tab disponible según permisos
-      if (permissions.canSeeTabSubirArtes) setActiveMainTab('versionario');
-      else if (permissions.canSeeTabRevisarAprobar) setActiveMainTab('atender');
-      else if (permissions.canSeeTabProgramacion) setActiveMainTab('programacion');
-      else if (permissions.canSeeTabImpresiones) setActiveMainTab('impresiones');
-      else if (permissions.canSeeTabValidacionInstalacion) setActiveMainTab('testigo');
-    }
-
-    setInitialTabDetermined(true);
-  }, [
-    initialTabDetermined,
-    isFetchedSinArte,
-    isFetchedConArte,
-    isFetchedTestigos,
-    inventarioSinArteAPI.length,
-    inventarioArteAPI.length,
-    inventarioTestigosAPI.length,
-    permissions.canSeeTabSubirArtes,
-    permissions.canSeeTabRevisarAprobar,
-    permissions.canSeeTabProgramacion,
-    permissions.canSeeTabImpresiones,
-    permissions.canSeeTabValidacionInstalacion,
-  ]);
+  // No precargar los 3 tabs al inicio: se consulta solo el tab activo para evitar
+  // cargas pesadas y recargas lentas en campañas con mucho inventario.
 
   // ---- Determinar tab de estado_arte inicial basado en contenido ----
   useEffect(() => {

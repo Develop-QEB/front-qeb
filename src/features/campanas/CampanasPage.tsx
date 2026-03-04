@@ -21,24 +21,26 @@ import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { OrdenesMontajeModal } from './OrdenesMontajeModal';
 import { StatusCampanaModal } from './StatusCampanaModal';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampanas } from '../../hooks/useSocket';
 
 // Colors for dynamic tags
-const TAG_COLORS = [
-  { bg: 'bg-cyan-500/15', text: 'text-cyan-300', border: 'border-cyan-500/30' },
-  { bg: 'bg-fuchsia-500/15', text: 'text-fuchsia-300', border: 'border-fuchsia-500/30' },
-  { bg: 'bg-amber-500/15', text: 'text-amber-300', border: 'border-amber-500/30' },
-  { bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  { bg: 'bg-rose-500/15', text: 'text-rose-300', border: 'border-rose-500/30' },
-  { bg: 'bg-sky-500/15', text: 'text-sky-300', border: 'border-sky-500/30' },
-  { bg: 'bg-violet-500/15', text: 'text-violet-300', border: 'border-violet-500/30' },
-  { bg: 'bg-orange-500/15', text: 'text-orange-300', border: 'border-orange-500/30' },
-  { bg: 'bg-teal-500/15', text: 'text-teal-300', border: 'border-teal-500/30' },
-  { bg: 'bg-pink-500/15', text: 'text-pink-300', border: 'border-pink-500/30' },
+const getTagColors = (isDark: boolean) => [
+  { bg: isDark ? 'bg-cyan-500/15' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
+  { bg: isDark ? 'bg-fuchsia-500/15' : 'bg-fuchsia-50', text: isDark ? 'text-fuchsia-300' : 'text-fuchsia-700', border: 'border-fuchsia-500/30' },
+  { bg: isDark ? 'bg-amber-500/15' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+  { bg: isDark ? 'bg-emerald-500/15' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
+  { bg: isDark ? 'bg-rose-500/15' : 'bg-rose-50', text: isDark ? 'text-rose-300' : 'text-rose-700', border: 'border-rose-500/30' },
+  { bg: isDark ? 'bg-sky-500/15' : 'bg-sky-50', text: isDark ? 'text-sky-300' : 'text-sky-700', border: 'border-sky-500/30' },
+  { bg: isDark ? 'bg-violet-500/15' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30' },
+  { bg: isDark ? 'bg-orange-500/15' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: 'border-orange-500/30' },
+  { bg: isDark ? 'bg-teal-500/15' : 'bg-teal-50', text: isDark ? 'text-teal-300' : 'text-teal-700', border: 'border-teal-500/30' },
+  { bg: isDark ? 'bg-pink-500/15' : 'bg-pink-50', text: isDark ? 'text-pink-300' : 'text-pink-700', border: 'border-pink-500/30' },
 ];
 
-function getTagColor(name: string) {
+function getTagColor(name: string, isDark: boolean = true) {
+  const TAG_COLORS = getTagColors(isDark);
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -60,51 +62,55 @@ function getMonthShort(dateStr: string): string {
 }
 
 // Status Colors - colores únicos por cada tipo de status
-const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Aprobada': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  'inactiva': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
-  'finalizada': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
-  'por iniciar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'en curso': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
-  'pendiente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
-  'cancelada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
-  'pausada': { bg: 'bg-yellow-500/20', text: 'text-yellow-300', border: 'border-yellow-500/30' },
-};
+const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
+  'Aprobada': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
+  'inactiva': { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: isDark ? 'border-zinc-500/30' : 'border-zinc-300' },
+  'finalizada': { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
+  'por iniciar': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+  'en curso': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
+  'pendiente': { bg: isDark ? 'bg-orange-500/20' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: 'border-orange-500/30' },
+  'cancelada': { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
+  'pausada': { bg: isDark ? 'bg-yellow-500/20' : 'bg-yellow-50', text: isDark ? 'text-yellow-300' : 'text-yellow-700', border: 'border-yellow-500/30' },
+});
 
-const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
+const getDefaultStatusColor = (isDark: boolean) => ({ bg: isDark ? 'bg-violet-500/20' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30' });
 
 // Colores para estatus de artes
-const ESTATUS_ARTE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Carga Artes': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
-  'Revision Artes': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Artes Aprobados': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  'En Impresion': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
-  'Artes Recibidos': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
-  'Instalado': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
-};
+const getEstatusArteColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
+  'Carga Artes': { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: isDark ? 'border-zinc-500/30' : 'border-zinc-300' },
+  'Revision Artes': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+  'Artes Aprobados': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
+  'En Impresion': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
+  'Artes Recibidos': { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
+  'Instalado': { bg: isDark ? 'bg-green-500/20' : 'bg-green-50', text: isDark ? 'text-green-300' : 'text-green-700', border: 'border-green-500/30' },
+});
 
-function getEstatusArteColor(estatus: string | null | undefined) {
-  if (!estatus) return DEFAULT_STATUS_COLOR;
-  return ESTATUS_ARTE_COLORS[estatus] || DEFAULT_STATUS_COLOR;
+function getEstatusArteColor(estatus: string | null | undefined, isDark: boolean = true) {
+  const DEFAULT = getDefaultStatusColor(isDark);
+  if (!estatus) return DEFAULT;
+  const COLORS = getEstatusArteColors(isDark);
+  return COLORS[estatus] || DEFAULT;
 }
 
-function getStatusColor(status: string | null | undefined) {
-  if (!status) return DEFAULT_STATUS_COLOR;
+function getStatusColor(status: string | null | undefined, isDark: boolean = true) {
+  const DEFAULT = getDefaultStatusColor(isDark);
+  const STATUS_COLORS = getStatusColors(isDark);
+  if (!status) return DEFAULT;
   const trimmed = status.trim();
   // Buscar match exacto primero, luego lowercase
   if (STATUS_COLORS[trimmed]) return STATUS_COLORS[trimmed];
   const normalized = trimmed.toLowerCase();
   if (STATUS_COLORS[normalized]) return STATUS_COLORS[normalized];
   // Si no, generar un color dinámico basado en el nombre
-  return getTagColor(status);
+  return getTagColor(status, isDark);
 }
 
 // Period badge colors
-const PERIOD_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Pasada': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
-  'En curso': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  'Futura': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-};
+const getPeriodColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
+  'Pasada': { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: isDark ? 'border-zinc-500/30' : 'border-zinc-300' },
+  'En curso': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
+  'Futura': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+});
 
 // Colores para gráficas
 const CHART_COLORS = {
@@ -252,13 +258,15 @@ function FilterChip({
   options,
   value,
   onChange,
-  onClear
+  onClear,
+  isDark = true
 }: {
   label: string;
   options: string[];
   value: string;
   onChange: (value: string) => void;
   onClear: () => void;
+  isDark?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -281,12 +289,14 @@ function FilterChip({
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${value
           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+          : isDark
+            ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+            : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
           }`}
       >
         <span>{value || label}</span>
         {value ? (
-          <X className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); onClear(); }} />
+          <X className={`h-3 w-3 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`} onClick={(e) => { e.stopPropagation(); onClear(); }} />
         ) : (
           <ChevronDown className="h-3 w-3" />
         )}
@@ -295,21 +305,21 @@ function FilterChip({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-2 border-b border-zinc-800">
+          <div className={`absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <input
                 type="text"
                 placeholder={`Buscar ${label.toLowerCase()}...`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50"
+                className={`w-full px-3 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50`}
                 autoFocus
                 onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div className="max-h-52 overflow-auto">
               {filteredOptions.length === 0 ? (
-                <div className="px-3 py-3 text-xs text-zinc-500 text-center">
+                <div className={`px-3 py-3 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-center`}>
                   {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
                 </div>
               ) : (
@@ -319,7 +329,9 @@ function FilterChip({
                     onClick={() => { onChange(option); handleClose(); }}
                     className={`w-full px-3 py-2 text-left text-xs transition-colors ${value === option
                       ? 'bg-purple-500/20 text-purple-300'
-                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                      : isDark
+                        ? 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
                       }`}
                   >
                     {option}
@@ -327,7 +339,7 @@ function FilterChip({
                 ))
               )}
             </div>
-            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
+            <div className={`px-3 py-1.5 border-t ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'} text-[10px]`}>
               {filteredOptions.length} de {options.length} opciones
             </div>
           </div>
@@ -345,7 +357,8 @@ function PeriodFilterPopover({
   catorcenaInicio,
   catorcenaFin,
   onApply,
-  onClear
+  onClear,
+  isDark = true
 }: {
   catorcenasData: { years: number[]; data: Catorcena[] } | undefined;
   yearInicio: number | undefined;
@@ -354,6 +367,7 @@ function PeriodFilterPopover({
   catorcenaFin: number | undefined;
   onApply: (yearInicio: number, yearFin: number, catorcenaInicio?: number, catorcenaFin?: number) => void;
   onClear: () => void;
+  isDark?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [tempYearInicio, setTempYearInicio] = useState<number | undefined>(yearInicio);
@@ -432,13 +446,15 @@ function PeriodFilterPopover({
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${isActive
           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+          : isDark
+            ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+            : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
           }`}
       >
         <Calendar className="h-3 w-3" />
         <span>{getDisplayText()}</span>
         {isActive ? (
-          <X className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); handleClear(); }} />
+          <X className={`h-3 w-3 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`} onClick={(e) => { e.stopPropagation(); handleClear(); }} />
         ) : (
           <ChevronDown className="h-3 w-3" />
         )}
@@ -447,19 +463,19 @@ function PeriodFilterPopover({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-3 border-b border-zinc-800">
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <div className={`absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`p-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                 <Calendar className="h-4 w-4 text-purple-400" />
                 Filtro de Periodo
               </h3>
-              <p className="text-[10px] text-zinc-500 mt-1">Selecciona año inicio y fin (obligatorios)</p>
+              <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-1`}>Selecciona año inicio y fin (obligatorios)</p>
             </div>
 
             <div className="p-3 space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Año Inicio *</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Año Inicio *</label>
                   <select
                     value={tempYearInicio || ''}
                     onChange={(e) => {
@@ -471,7 +487,7 @@ function PeriodFilterPopover({
                         setTempCatorcenaFin(undefined);
                       }
                     }}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   >
                     <option value="">Seleccionar</option>
                     {yearInicioOptions.map(y => (
@@ -480,7 +496,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Cat. Inicio</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Cat. Inicio</label>
                   <select
                     value={tempCatorcenaInicio || ''}
                     onChange={(e) => {
@@ -491,7 +507,7 @@ function PeriodFilterPopover({
                       }
                     }}
                     disabled={!tempYearInicio}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50`}
                   >
                     <option value="">Todas</option>
                     {catorcenasInicioOptions.map(c => (
@@ -503,7 +519,7 @@ function PeriodFilterPopover({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Año Fin *</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Año Fin *</label>
                   <select
                     value={tempYearFin || ''}
                     onChange={(e) => {
@@ -515,7 +531,7 @@ function PeriodFilterPopover({
                         setTempCatorcenaInicio(undefined);
                       }
                     }}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   >
                     <option value="">Seleccionar</option>
                     {yearFinOptions.map(y => (
@@ -524,7 +540,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Cat. Fin</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Cat. Fin</label>
                   <select
                     value={tempCatorcenaFin || ''}
                     onChange={(e) => {
@@ -535,7 +551,7 @@ function PeriodFilterPopover({
                       }
                     }}
                     disabled={!tempYearFin}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50`}
                   >
                     <option value="">Todas</option>
                     {catorcenasFinOptions.map(c => (
@@ -546,17 +562,17 @@ function PeriodFilterPopover({
               </div>
             </div>
 
-            <div className="p-3 border-t border-zinc-800 flex items-center justify-between gap-2">
+            <div className={`p-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex items-center justify-between gap-2`}>
               <button
                 onClick={handleClear}
-                className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+                className={`px-3 py-1.5 text-xs ${isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'} transition-colors`}
               >
                 Limpiar
               </button>
               <button
                 onClick={handleApply}
                 disabled={!canApply}
-                className="px-4 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-colors"
+                className={`px-4 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg font-medium transition-colors`}
               >
                 Aplicar Filtro
               </button>
@@ -574,13 +590,15 @@ function GroupHeader({
   count,
   expanded,
   onToggle,
-  colSpan
+  colSpan,
+  isDark = true
 }: {
   groupName: string;
   count: number;
   expanded: boolean;
   onToggle: () => void;
   colSpan: number;
+  isDark?: boolean;
 }) {
   return (
     <tr
@@ -594,7 +612,7 @@ function GroupHeader({
           ) : (
             <ChevronRight className="h-4 w-4 text-purple-400" />
           )}
-          <span className="font-semibold text-white">{groupName || 'Sin asignar'}</span>
+          <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupName || 'Sin asignar'}</span>
           <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">
             {count} campañas
           </span>
@@ -611,6 +629,7 @@ export function CampanasPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const permissions = getPermissions(user?.rol);
 
   // WebSocket para actualizaciones en tiempo real
@@ -677,12 +696,16 @@ export function CampanasPage() {
     queryFn: () => solicitudesService.getCatorcenas(),
   });
 
+  // When grouping, advanced filters, sorting, or catorcena filter are active, fetch ALL data
+  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio;
+  const effectiveLimit = needsAllData ? 9999 : limit;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, debouncedSearch, tipoPeriodo],
+    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, debouncedSearch, tipoPeriodo, needsAllData],
     queryFn: () =>
       campanasService.getAll({
-        page,
-        limit,
+        page: needsAllData ? 1 : page,
+        limit: effectiveLimit,
         status: status || undefined,
         search: debouncedSearch || undefined,
         yearInicio,
@@ -1284,9 +1307,10 @@ export function CampanasPage() {
   };
 
   const renderCampanaRow = (item: Campana, index: number) => {
-    const statusColor = getStatusColor(item.status);
+    const statusColor = getStatusColor(item.status, isDark);
     const periodStatus = getPeriodStatus(item.fecha_inicio, item.fecha_fin);
-    const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
+    const PERIOD_COLORS = getPeriodColors(isDark);
+    const periodColor = PERIOD_COLORS[periodStatus] || getDefaultStatusColor(isDark);
 
     const isMensual = (item as any).tipo_periodo === 'mensual';
     const catIni = isMensual && item.fecha_inicio
@@ -1301,7 +1325,7 @@ export function CampanasPage() {
         : '-';
 
     return (
-      <tr key={`campana-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+      <tr key={`campana-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
         {/* ID */}
         <td className="px-4 py-3">
           <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">#{item.id}</span>
@@ -1319,27 +1343,29 @@ export function CampanasPage() {
               <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center">
                 <User className="h-3 w-3 text-purple-400" />
               </div>
-              <span className="text-zinc-300 text-sm">{item.creador_nombre}</span>
+              <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{item.creador_nombre}</span>
             </div>
           ) : (
-            <span className="text-zinc-500 text-xs">-</span>
+            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
           )}
         </td>
         {/* Campaña */}
         <td className="px-4 py-3">
-          <span className="font-medium text-white text-sm">{item.nombre}</span>
+          <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{item.nombre}</span>
         </td>
         {/* Cliente/Marca */}
         <td className="px-4 py-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-zinc-300 text-sm max-w-[180px] truncate" title={item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}>
+            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm max-w-[180px] truncate`} title={item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}>
               {item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}
             </span>
             {item.sap_database && (
               <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
-                item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                item.sap_database === 'CIMU'
+                  ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700') + ' border-blue-500/30'
+                  : item.sap_database === 'TEST'
+                    ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border-amber-500/30'
+                    : (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border-emerald-500/30'
               }`}>{item.sap_database}</span>
             )}
           </div>
@@ -1357,7 +1383,7 @@ export function CampanasPage() {
               {item.status}
             </button>
             {item.reservas_count != null && item.total_caras && Number(item.reservas_count) < Number(item.total_caras) && (
-              <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+              <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}>
                 Incompleta
               </span>
             )}
@@ -1366,11 +1392,11 @@ export function CampanasPage() {
         {/* Actividad */}
         <td className="px-4 py-3">
           {item.has_aps ? (
-            <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} border border-emerald-500/30`}>
               Activa
             </span>
           ) : (
-            <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-300 border border-zinc-500/30">
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/20 text-zinc-300' : 'bg-zinc-50 text-zinc-700'} border ${isDark ? 'border-zinc-500/30' : 'border-zinc-300'}`}>
               Inactiva
             </span>
           )}
@@ -1378,33 +1404,33 @@ export function CampanasPage() {
         {/* Cat. Inicio / Periodo Inicio - Badge style */}
         <td className="px-4 py-3">
           {isMensual && item.fecha_inicio ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} text-xs border border-cyan-500/20`}>
               <Calendar className="h-3 w-3" />
               {getMonthShort(item.fecha_inicio)}
             </span>
           ) : item.catorcena_inicio_num && item.catorcena_inicio_anio ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} text-xs border border-cyan-500/20`}>
               <Calendar className="h-3 w-3" />
               Cat {item.catorcena_inicio_num} / {item.catorcena_inicio_anio}
             </span>
           ) : (
-            <span className="text-zinc-500 text-xs">-</span>
+            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
           )}
         </td>
         {/* Cat. Fin / Periodo Fin - Badge style */}
         <td className="px-4 py-3">
           {isMensual && item.fecha_fin ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-700'} text-xs border border-amber-500/20`}>
               <Calendar className="h-3 w-3" />
               {getMonthShort(item.fecha_fin)}
             </span>
           ) : item.catorcena_fin_num && item.catorcena_fin_anio ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-700'} text-xs border border-amber-500/20`}>
               <Calendar className="h-3 w-3" />
               Cat {item.catorcena_fin_num} / {item.catorcena_fin_anio}
             </span>
           ) : (
-            <span className="text-zinc-500 text-xs">-</span>
+            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
           )}
         </td>
         {/* APS */}
@@ -1414,7 +1440,7 @@ export function CampanasPage() {
               <Check className="h-3.5 w-3.5 text-emerald-400" />
             </span>
           ) : (
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-zinc-800">
+            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-gray-100'}`}>
               <Minus className="h-3.5 w-3.5 text-zinc-600" />
             </span>
           )}
@@ -1444,8 +1470,12 @@ export function CampanasPage() {
                 disabled={isEditDisabled(item)}
                 className={`p-2 rounded-lg border transition-all ${
                   isEditDisabled(item)
-                    ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                    : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
+                    ? isDark
+                      ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                      : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                    : isDark
+                      ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
+                      : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 border-gray-200 hover:border-gray-300'
                 }`}
                 title={isEditDisabled(item) ? 'No editable (tiene APS o status no permite edición)' : 'Editar campaña'}
               >
@@ -1473,23 +1503,23 @@ export function CampanasPage() {
         {/* Dashboard KPIs Grid - Same style as Solicitudes/Propuestas */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Main KPI: Total Campañas */}
-          <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+          <div className={`col-span-1 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
             <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none group-hover:bg-purple-500/20 transition-all duration-500" />
             <div>
-              <p className="text-zinc-400 text-sm font-medium mb-1">Total Campañas</p>
-              <h3 className="text-4xl font-bold text-white tracking-tight">
+              <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Total Campañas</p>
+              <h3 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
                 {isLoadingStats ? '...' : (statsData?.total ?? 0).toLocaleString()}
               </h3>
             </div>
             <div className="mt-4 flex items-center gap-2">
-              <span className="text-xs px-2 py-1 rounded-full bg-zinc-800/80 text-zinc-300 border border-zinc-700/50">
+              <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-zinc-800/80 text-zinc-300 border-zinc-700/50' : 'bg-gray-100 text-gray-700 border-gray-200'} border`}>
                 {hasActiveFilters ? 'Filtrado' : 'Todas'}
               </span>
             </div>
           </div>
 
           {/* Chart Card: Status Distribution */}
-          <div className="col-span-1 md:col-span-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-4 flex items-center relative overflow-hidden">
+          <div className={`col-span-1 md:col-span-2 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-4 flex items-center relative overflow-hidden`}>
             {!isLoadingStats && statusChartData.length > 0 ? (
               <div className="w-full h-[140px] flex items-center">
                 <div className="h-full min-w-[140px]">
@@ -1511,12 +1541,12 @@ export function CampanasPage() {
                       </Pie>
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: '#18181b',
-                          border: '1px solid rgba(139, 92, 246, 0.3)',
+                          backgroundColor: isDark ? '#18181b' : '#ffffff',
+                          border: `1px solid ${isDark ? 'rgba(139, 92, 246, 0.3)' : 'rgba(229, 231, 235, 1)'}`,
                           borderRadius: '12px',
                           fontSize: '12px',
-                          color: '#fff',
-                          boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
+                          color: isDark ? '#fff' : '#111827',
+                          boxShadow: isDark ? '0 10px 40px rgba(0,0,0,0.5)' : '0 10px 40px rgba(0,0,0,0.1)'
                         }}
                         formatter={(value: number, _name: string, props: { payload?: { name?: string } }) => [
                           `${value} campañas`,
@@ -1529,33 +1559,33 @@ export function CampanasPage() {
                 {/* Legend / List */}
                 <div className="flex-1 flex flex-wrap gap-2 content-center pl-4 h-full overflow-y-auto scrollbar-thin">
                   {statusChartData.slice(0, 6).map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-zinc-800/30 border border-zinc-800/50 min-w-[100px]">
+                    <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border min-w-[100px]`}>
                       <div className="w-2 h-8 rounded-full" style={{ backgroundColor: item.color }} />
                       <div>
-                        <div className="text-sm font-bold text-white">{item.value}</div>
-                        <div className="text-[10px] text-zinc-400 uppercase tracking-wide truncate max-w-[70px]" title={item.name}>{item.name}</div>
+                        <div className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.value}</div>
+                        <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wide truncate max-w-[70px]`} title={item.name}>{item.name}</div>
                       </div>
                     </div>
                   ))}
                   {statusChartData.length > 6 && (
-                    <div className="flex items-center justify-center p-2 rounded-lg bg-zinc-800/30 border border-zinc-800/50 text-xs text-zinc-500">
+                    <div className={`flex items-center justify-center p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                       +{statusChartData.length - 6} más
                     </div>
                   )}
                 </div>
               </div>
             ) : (
-              <div className="w-full h-[140px] flex items-center justify-center text-zinc-500 text-sm">
+              <div className={`w-full h-[140px] flex items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                 {isLoadingStats ? 'Cargando...' : 'Sin datos'}
               </div>
             )}
           </div>
 
           {/* KPI: APS Status */}
-          <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+          <div className={`col-span-1 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl -mr-5 -mb-5 pointer-events-none group-hover:bg-emerald-500/20 transition-all duration-500" />
             <div>
-              <p className="text-zinc-400 text-sm font-medium mb-1">Con APS</p>
+              <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Con APS</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-bold text-emerald-400">
                   {isLoadingStats ? '...' : (statsData?.conAps ?? 0).toLocaleString()}
@@ -1564,13 +1594,13 @@ export function CampanasPage() {
               </div>
             </div>
             {/* Progress bar visual */}
-            <div className="mt-4 w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+            <div className={`mt-4 w-full h-1.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} rounded-full overflow-hidden`}>
               <div
                 className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500"
                 style={{ width: `${statsData?.total ? ((statsData.conAps / statsData.total) * 100) : 0}%` }}
               />
             </div>
-            <div className="mt-2 flex justify-between text-[10px] text-zinc-500">
+            <div className={`mt-2 flex justify-between text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
               <span>Sin APS: {statsData?.sinAps ?? 0}</span>
               <span>{statsData?.total ? Math.round((statsData.conAps / statsData.total) * 100) : 0}%</span>
             </div>
@@ -1578,7 +1608,7 @@ export function CampanasPage() {
         </div>
 
         {/* Control Bar */}
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4 relative z-30">
+        <div className={`rounded-2xl border border-purple-500/20 ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} backdrop-blur-xl p-4 relative z-30`}>
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
@@ -1588,7 +1618,7 @@ export function CampanasPage() {
                 <input
                   type="search"
                   placeholder="Buscar campaña, articulo, cliente..."
-                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40"
+                  className={`w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40`}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -1599,7 +1629,9 @@ export function CampanasPage() {
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
                   ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                  : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
+                  : isDark
+                    ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
+                    : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'
                   }`}
               >
                 <SlidersHorizontal className="h-4 w-4" />
@@ -1612,7 +1644,7 @@ export function CampanasPage() {
               {/* Export CSV */}
               <button
                 onClick={handleExportCSV}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200 transition-all"
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'} border transition-all`}
               >
                 <Download className="h-4 w-4" />
                 Exportar CSV
@@ -1632,7 +1664,7 @@ export function CampanasPage() {
 
             {/* Filters Row (Expandable) */}
             {showFilters && (
-              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-zinc-800/50 relative z-50">
+              <div className={`flex flex-wrap items-center gap-2 pt-3 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} relative z-50`}>
                 {/* Advanced Filter Button with Dropdown */}
                 <div className="relative">
                   <button
@@ -1653,12 +1685,12 @@ export function CampanasPage() {
                     )}
                   </button>
                   {showAdvancedFilters && (
-                    <div className="absolute left-0 top-full mt-1 z-[100] w-[520px] bg-zinc-900 border border-purple-500/30 rounded-xl shadow-2xl p-4">
+                    <div className={`absolute left-0 top-full mt-1 z-[100] w-[520px] ${isDark ? 'bg-zinc-900' : 'bg-white'} border border-purple-500/30 rounded-xl shadow-2xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-sm font-medium text-purple-300">Filtros avanzados</span>
                         <button
                           onClick={() => setShowAdvancedFilters(false)}
-                          className="text-zinc-500 hover:text-white"
+                          className={`${isDark ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -1673,7 +1705,7 @@ export function CampanasPage() {
                             <select
                               value={filter.field}
                               onChange={(e) => updateFilter(filter.id, { field: e.target.value })}
-                              className="w-[120px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                              className={`w-[120px] text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                             >
                               {CAMPANA_FILTER_FIELDS.map((f) => (
                                 <option key={f.field} value={f.field}>{f.label}</option>
@@ -1682,7 +1714,7 @@ export function CampanasPage() {
                             <select
                               value={filter.operator}
                               onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
-                              className="w-[100px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                              className={`w-[100px] text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                             >
                               {FILTER_OPERATORS.map((op) => (
                                 <option key={op.value} value={op.value}>{op.label}</option>
@@ -1691,7 +1723,7 @@ export function CampanasPage() {
                             <select
                               value={filter.value}
                               onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-                              className="flex-1 text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                              className={`flex-1 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                             >
                               <option value="">Seleccionar...</option>
                               {getUniqueFieldValues[filter.field]?.map((val) => (
@@ -1707,12 +1739,12 @@ export function CampanasPage() {
                           </div>
                         ))}
                         {advancedFilters.length === 0 && (
-                          <p className="text-xs text-zinc-500 text-center py-4">
+                          <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-center py-4`}>
                             Sin filtros avanzados. Haz clic en "Añadir" para crear uno.
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
+                      <div className={`flex items-center justify-between mt-3 pt-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                         <button
                           onClick={addFilter}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
@@ -1729,8 +1761,8 @@ export function CampanasPage() {
                         </button>
                       </div>
                       {advancedFilters.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-zinc-800">
-                          <span className="text-[10px] text-zinc-500">
+                        <div className={`mt-2 pt-2 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                             {filteredData.length} de {data?.data?.length || 0} registros
                           </span>
                         </div>
@@ -1739,31 +1771,33 @@ export function CampanasPage() {
                   )}
                 </div>
 
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} mx-1`} />
 
                 {/* Status Filter */}
-                <span className="text-xs text-zinc-500 mr-1">Status:</span>
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Status:</span>
                 <FilterChip
                   label="Status"
                   options={allStatuses}
                   value={status}
                   onChange={(val) => { setStatus(val); setPage(1); }}
                   onClear={() => { setStatus(''); setPage(1); }}
+                  isDark={isDark}
                 />
 
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} mx-1`} />
 
                 {/* Tipo Periodo Filter */}
-                <span className="text-xs text-zinc-500 mr-1">Periodo:</span>
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Periodo:</span>
                 <FilterChip
                   label="Tipo Periodo"
                   options={['catorcena', 'mensual']}
                   value={tipoPeriodo}
                   onChange={(val) => { setTipoPeriodo(val); setPage(1); }}
                   onClear={() => { setTipoPeriodo(''); setPage(1); }}
+                  isDark={isDark}
                 />
 
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} mx-1`} />
 
                 {/* Current Catorcena Indicator */}
                 {currentCatorcena && (
@@ -1772,7 +1806,7 @@ export function CampanasPage() {
                       <Clock className="h-3 w-3" />
                       <span>Actual: Cat. {currentCatorcena.numero_catorcena} / {currentCatorcena.a_o}</span>
                     </div>
-                    <div className="h-4 w-px bg-zinc-700 mx-1" />
+                    <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} mx-1`} />
                   </>
                 )}
 
@@ -1800,10 +1834,10 @@ export function CampanasPage() {
                 />
 
                 {/* Divider */}
-                <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-300'} mx-1`} />
 
                 {/* Sort Options */}
-                <span className="text-xs text-zinc-500 mr-1">
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>
                   <ArrowUpDown className="h-3 w-3 inline mr-1" />
                   Ordenar:
                 </span>
@@ -1813,16 +1847,17 @@ export function CampanasPage() {
                   value={sortField || ''}
                   onChange={(val) => { setSortField(val); setPage(1); }}
                   onClear={() => { setSortField(null); setPage(1); }}
+                  isDark={isDark}
                 />
                 <button
                   onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
-                  className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 transition-all"
+                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border-gray-200 hover:border-gray-300'} border transition-all`}
                 >
                   {sortDirection === 'asc' ? '↑ Asc' : '↓ Desc'}
                 </button>
 
                 {/* Divider */}
-                <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-300'} mx-1`} />
 
                 {/* Group By */}
                 <FilterChip
@@ -1836,7 +1871,7 @@ export function CampanasPage() {
                 {/* Clear All */}
                 {hasActiveFilters && (
                   <>
-                    <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+                    <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-300'} mx-1`} />
                     <button
                       onClick={clearAllFilters}
                       className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
@@ -1856,6 +1891,9 @@ export function CampanasPage() {
           <button
             onClick={() => {
               setActiveView('tabla');
+              // Limpiar agrupaciones del versionario al volver a tabla
+              setActiveGroupings([]);
+              setExpandedGroups(new Set());
             }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeView === 'tabla'
@@ -2091,7 +2129,8 @@ export function CampanasPage() {
                   const renderCampana = (campana: Campana, indent: number = 0) => {
                     const statusColor = getStatusColor(campana.status);
                     const periodStatus = getPeriodStatus(campana.fecha_inicio, campana.fecha_fin);
-                    const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
+                    const PERIOD_COLORS_LOCAL = getPeriodColors(isDark);
+                    const periodColor = PERIOD_COLORS_LOCAL[periodStatus] || getDefaultStatusColor(isDark);
                     const isExpanded = expandedCampanas.has(campana.id);
                     const inventarios = campanaInventarios[campana.id] || [];
                     const isLoadingInv = loadingInventarios.has(campana.id);
@@ -2234,7 +2273,7 @@ export function CampanasPage() {
                                               estatusCount[estatus] = (estatusCount[estatus] || 0) + 1;
                                             });
                                             const estatusPredominante = Object.entries(estatusCount).sort((a, b) => b[1] - a[1])[0];
-                                            const estatusGrupoColor = estatusPredominante ? getEstatusArteColor(estatusPredominante[0]) : DEFAULT_STATUS_COLOR;
+                                            const estatusGrupoColor = estatusPredominante ? getEstatusArteColor(estatusPredominante[0]) : getDefaultStatusColor(isDark);
                                             return (
                                               <div key={grupo.key} className="border-l-2 border-zinc-700 pl-2">
                                                 <button

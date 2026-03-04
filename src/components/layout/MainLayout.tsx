@@ -4,12 +4,14 @@ import { Sidebar } from './Sidebar';
 import { cn } from '../../lib/utils';
 import { LoadingScreen } from '../ui/LoadingScreen';
 import { usePrefetch } from '../../hooks/usePrefetch';
+import { useThemeStore } from '../../store/themeStore';
 
 export function MainLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [dataReady, setDataReady] = useState(false);
   const { prefetchAllAsync } = usePrefetch();
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
 
   useEffect(() => {
     let cancelled = false;
@@ -28,7 +30,15 @@ export function MainLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-main-pattern">
+    <div
+      className="min-h-screen"
+      style={{
+        backgroundAttachment: 'fixed',
+        background: isDark
+          ? 'linear-gradient(to bottom right, #0f0a18, #1a1025, #0f0a18)'
+          : 'linear-gradient(to bottom right, #ffffff, rgb(250 245 255 / 0.5), rgb(243 232 255 / 0.3))',
+      }}
+    >
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
 
       <main

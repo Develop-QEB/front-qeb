@@ -17,6 +17,7 @@ import { Notificacion, ComentarioTarea } from '../../types';
 import { formatDate } from '../../lib/utils';
 import { STATUS_CONFIG, getTipoConfig, getStatusConfig } from '../../lib/taskConfig';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import { TableroView } from './KanbanView';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
@@ -315,6 +316,7 @@ function TareaRow({
   onSelect: () => void;
   showBorder?: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const statusConfig = getStatusConfig(tarea.estatus);
   const tipoConfig = getTipoConfig(tarea.tipo);
   const StatusIcon = statusConfig.icon;
@@ -325,7 +327,7 @@ function TareaRow({
   return (
     <div
       onClick={onSelect}
-      className={`group flex items-center gap-4 px-4 py-3 cursor-pointer transition-all hover:bg-zinc-800/50 ${showBorder ? 'border-b border-zinc-800/60' : ''} ${isCompleted ? 'opacity-60' : ''}`}
+      className={`group flex items-center gap-4 px-4 py-3 cursor-pointer transition-all ${isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-gray-100'} ${showBorder ? `border-b ${isDark ? 'border-zinc-800/60' : 'border-gray-200'}` : ''} ${isCompleted ? 'opacity-60' : ''}`}
     >
       {/* Indicador de estado visual */}
       <div className={`w-1 h-8 rounded-full ${statusConfig.bg} ${isCompleted ? 'bg-emerald-500/40' : ''}`} />
@@ -344,36 +346,36 @@ function TareaRow({
       {/* Contenido principal */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className={`text-sm font-medium group-hover:text-purple-300 transition-colors ${isCompleted ? 'line-through text-zinc-500' : 'text-white'}`}>
+          <span className={`text-sm font-medium group-hover:text-purple-300 transition-colors ${isCompleted ? 'line-through text-zinc-500' : isDark ? 'text-white' : 'text-gray-900'}`}>
             {tarea.titulo}
           </span>
           <span className="text-[10px] text-zinc-600 font-mono">#{tarea.id}</span>
         </div>
         {tarea.mensaje && (
-          <p className="text-xs text-zinc-500 truncate mt-0.5 max-w-md">{tarea.mensaje}</p>
+          <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} truncate mt-0.5 max-w-md`}>{tarea.mensaje}</p>
         )}
       </div>
 
       {/* Metadatos agrupados */}
       <div className="flex items-center gap-3 flex-shrink-0">
         {tarea.asignado && (
-          <div className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-zinc-800/50" title={`Asignado: ${tarea.asignado}`}>
+          <div className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}`} title={`Asignado: ${tarea.asignado}`}>
             <UserAvatar nombre={tarea.asignado} size="sm" />
-            <span className="text-xs text-zinc-400 truncate max-w-16">{tarea.asignado}</span>
+            <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate max-w-16`}>{tarea.asignado}</span>
           </div>
         )}
 
         {!isNotificacion && (tarea.fecha_inicio || tarea.fecha_fin) && (
-          <div className="hidden lg:flex items-center gap-2 px-2 py-1 rounded-lg bg-zinc-800/30">
+          <div className={`hidden lg:flex items-center gap-2 px-2 py-1 rounded-lg ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}`}>
             {tarea.fecha_inicio && (
-              <div className="flex items-center gap-1 text-[11px] text-zinc-500" title="Fecha inicio">
+              <div className={`flex items-center gap-1 text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title="Fecha inicio">
                 <Calendar className="h-3 w-3 text-blue-400" />
                 <span>{formatDate(tarea.fecha_inicio)}</span>
               </div>
             )}
-            {tarea.fecha_inicio && tarea.fecha_fin && <span className="text-zinc-700">→</span>}
+            {tarea.fecha_inicio && tarea.fecha_fin && <span className={isDark ? 'text-zinc-700' : 'text-gray-300'}>→</span>}
             {tarea.fecha_fin && (
-              <div className="flex items-center gap-1 text-[11px] text-zinc-500" title="Fecha fin">
+              <div className={`flex items-center gap-1 text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title="Fecha fin">
                 <Clock className="h-3 w-3 text-amber-400" />
                 <span>{formatDate(tarea.fecha_fin)}</span>
               </div>
@@ -382,7 +384,7 @@ function TareaRow({
         )}
 
         {tarea.responsable && (
-          <span className="hidden xl:block text-[11px] text-zinc-600 px-2 py-1 rounded bg-zinc-800/30" title="Creador">
+          <span className={`hidden xl:block text-[11px] text-zinc-600 px-2 py-1 rounded ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}`} title="Creador">
             {tarea.responsable}
           </span>
         )}
@@ -405,59 +407,60 @@ function TareasTable({
   tareas: Notificacion[];
   onSelectTarea: (tarea: Notificacion) => void;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   return (
-    <div className="rounded-xl border border-zinc-800/80 overflow-hidden">
+    <div className={`rounded-xl border ${isDark ? 'border-zinc-800/80' : 'border-gray-200'} overflow-hidden`}>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="bg-zinc-800/50 border-b border-zinc-700/50">
-              <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">ID</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Tipo</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Título</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Asignado</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Fecha</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Creador</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider"># Propuesta</th>
+            <tr className={`${isDark ? 'bg-zinc-800/50 border-b border-zinc-700/50' : 'bg-gray-50 border-b border-gray-200'}`}>
+              <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wider`}>ID</th>
+              <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wider`}>Tipo</th>
+              <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wider`}>Título</th>
+              <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wider`}>Asignado</th>
+              <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wider`}>Fecha</th>
+              <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wider`}>Creador</th>
+              <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wider`}>Status</th>
+              <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wider`}># Propuesta</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-800/50">
+          <tbody className={`divide-y ${isDark ? 'divide-zinc-800/50' : 'divide-gray-200'}`}>
             {tareas.map((tarea) => {
               const statusConfig = getStatusConfig(tarea.estatus);
               return (
                 <tr
                   key={tarea.id}
                   onClick={() => onSelectTarea(tarea)}
-                  className="hover:bg-zinc-800/30 cursor-pointer transition-colors"
+                  className={`${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-100'} cursor-pointer transition-colors`}
                 >
-                  <td className="px-4 py-3 text-sm text-zinc-400">{tarea.id}</td>
+                  <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{tarea.id}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs ${statusConfig.bg} ${statusConfig.color} border ${statusConfig.border}`}>
                       {tarea.tipo}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-sm text-white font-medium">{tarea.titulo}</div>
+                    <div className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{tarea.titulo}</div>
                     {tarea.mensaje && (
-                      <div className="text-xs text-zinc-500 truncate max-w-xs">{tarea.mensaje}</div>
+                      <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} truncate max-w-xs`}>{tarea.mensaje}</div>
                     )}
                   </td>
                   <td className="px-4 py-3">
                     {tarea.asignado ? (
                       <div className="flex items-center gap-2">
                         <UserAvatar nombre={tarea.asignado} size="md" />
-                        <span className="text-sm text-zinc-300">{tarea.asignado}</span>
+                        <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{tarea.asignado}</span>
                       </div>
                     ) : (
                       <span className="text-sm text-zinc-600">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-zinc-400">
+                  <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                     {tarea.fecha_creacion ? formatDate(tarea.fecha_creacion) : '—'}
                   </td>
                   <td className="px-4 py-3">
                     {tarea.responsable ? (
-                      <span className="text-sm text-zinc-300">{tarea.responsable}</span>
+                      <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{tarea.responsable}</span>
                     ) : (
                       <span className="text-sm text-zinc-600">—</span>
                     )}
@@ -479,7 +482,7 @@ function TareasTable({
       </div>
       {tareas.length === 0 && (
         <div className="p-8 text-center">
-          <p className="text-zinc-500">No hay notificaciones que mostrar</p>
+          <p className={isDark ? 'text-zinc-500' : 'text-gray-400'}>No hay notificaciones que mostrar</p>
         </div>
       )}
     </div>
@@ -498,6 +501,7 @@ function NestedSection({
   groupByList: GroupByType[];
   onSelectTarea: (tarea: Notificacion) => void;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(true);
   const statusConfig = getStatusConfig(group.key);
   const currentGroupType = groupByList[level];
@@ -533,24 +537,24 @@ function NestedSection({
     <div className={`mb-3 ${level > 0 ? 'ml-4' : ''}`}>
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-2 w-full px-4 py-2.5 hover:bg-zinc-800/30 rounded-lg transition-all ${
-          level === 0 ? 'bg-zinc-800/20' : ''
+        className={`flex items-center gap-2 w-full px-4 py-2.5 ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-100'} rounded-lg transition-all ${
+          level === 0 ? (isDark ? 'bg-zinc-800/20' : 'bg-gray-50') : ''
         }`}
       >
         {open ? (
-          <ChevronDown className="h-4 w-4 text-zinc-500" />
+          <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
         ) : (
-          <ChevronRight className="h-4 w-4 text-zinc-500" />
+          <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
         )}
         {statusConfig ? (
           <statusConfig.icon className={`h-4 w-4 ${statusConfig.color}`} />
         ) : groupOption ? (
-          <groupOption.icon className="h-4 w-4 text-zinc-500" />
+          <groupOption.icon className={`h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
         ) : null}
-        <span className={`font-medium ${level === 0 ? 'text-white' : 'text-zinc-300'}`}>
+        <span className={`font-medium ${level === 0 ? (isDark ? 'text-white' : 'text-gray-900') : (isDark ? 'text-zinc-300' : 'text-gray-700')}`}>
           {group.key}
         </span>
-        <span className="px-2 py-0.5 rounded-full text-xs bg-zinc-800 text-zinc-500">
+        <span className={`px-2 py-0.5 rounded-full text-xs ${isDark ? 'bg-zinc-800 text-zinc-500' : 'bg-gray-100 text-gray-400'}`}>
           {group.tareas.length}
         </span>
         {level === 0 && groupOption && (
@@ -599,6 +603,7 @@ function CalendarView({
   tareas: Notificacion[];
   onSelectTarea: (tarea: Notificacion) => void;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
 
@@ -698,16 +703,16 @@ function CalendarView({
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('prev')}
-            className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+            className={`p-2 rounded-lg ${isDark ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'} transition-colors`}
           >
             <ChevronRight className="h-5 w-5 rotate-180" />
           </button>
-          <h3 className="text-lg font-semibold text-white min-w-[280px] text-center">
+          <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} min-w-[280px] text-center`}>
             {getPeriodTitle()}
           </h3>
           <button
             onClick={() => navigate('next')}
-            className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+            className={`p-2 rounded-lg ${isDark ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'} transition-colors`}
           >
             <ChevronRight className="h-5 w-5" />
           </button>
@@ -725,7 +730,7 @@ function CalendarView({
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               viewMode === 'week'
                 ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                : 'bg-zinc-800/80 text-zinc-400 hover:text-zinc-300'
+                : isDark ? 'bg-zinc-800/80 text-zinc-400 hover:text-zinc-300' : 'bg-gray-100 text-gray-500 hover:text-gray-700'
             }`}
           >
             Semana
@@ -735,7 +740,7 @@ function CalendarView({
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               viewMode === 'month'
                 ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                : 'bg-zinc-800/80 text-zinc-400 hover:text-zinc-300'
+                : isDark ? 'bg-zinc-800/80 text-zinc-400 hover:text-zinc-300' : 'bg-gray-100 text-gray-500 hover:text-gray-700'
             }`}
           >
             Mes
@@ -744,14 +749,14 @@ function CalendarView({
       </div>
 
       {/* Calendario */}
-      <div className="rounded-xl border border-zinc-800/80 overflow-hidden bg-zinc-900/30">
+      <div className={`rounded-xl border ${isDark ? 'border-zinc-800/80' : 'border-gray-200'} overflow-hidden ${isDark ? 'bg-zinc-900/30' : 'bg-white'}`}>
         {/* Header de días */}
-        <div className="grid grid-cols-7 border-b border-zinc-800/80">
+        <div className={`grid grid-cols-7 border-b ${isDark ? 'border-zinc-800/80' : 'border-gray-200'}`}>
           {dayNames.map((day, i) => (
             <div
               key={day}
               className={`px-2 py-3 text-center text-xs font-medium uppercase tracking-wider ${
-                i === 0 || i === 6 ? 'text-zinc-600' : 'text-zinc-400'
+                i === 0 || i === 6 ? 'text-zinc-600' : (isDark ? 'text-zinc-400' : 'text-gray-500')
               }`}
             >
               {day}
@@ -760,7 +765,7 @@ function CalendarView({
         </div>
 
         {/* Grid de días */}
-        <div className={`grid grid-cols-7 ${viewMode === 'week' ? '' : 'divide-y divide-zinc-800/50'}`}>
+        <div className={`grid grid-cols-7 ${viewMode === 'week' ? '' : `divide-y ${isDark ? 'divide-zinc-800/50' : 'divide-gray-200'}`}`}>
           {days.map((day, index) => {
             const tareasDelDia = getTareasForDay(day);
             const isToday = day.getTime() === today.getTime();
@@ -770,9 +775,9 @@ function CalendarView({
             return (
               <div
                 key={index}
-                className={`${viewMode === 'week' ? 'min-h-[400px]' : 'min-h-[120px]'} border-r border-zinc-800/50 last:border-r-0 ${
-                  !isCurrentMonth && viewMode === 'month' ? 'bg-zinc-900/50' : ''
-                } ${isWeekend ? 'bg-zinc-900/30' : ''}`}
+                className={`${viewMode === 'week' ? 'min-h-[400px]' : 'min-h-[120px]'} border-r ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} last:border-r-0 ${
+                  !isCurrentMonth && viewMode === 'month' ? (isDark ? 'bg-zinc-900/50' : 'bg-gray-50') : ''
+                } ${isWeekend ? (isDark ? 'bg-zinc-900/30' : 'bg-gray-50/50') : ''}`}
               >
                 {/* Número del día */}
                 <div className={`px-2 py-2 text-right ${!isCurrentMonth && viewMode === 'month' ? 'opacity-40' : ''}`}>
@@ -782,7 +787,7 @@ function CalendarView({
                         ? 'bg-purple-500 text-white'
                         : isWeekend
                         ? 'text-zinc-600'
-                        : 'text-zinc-400'
+                        : isDark ? 'text-zinc-400' : 'text-gray-500'
                     }`}
                   >
                     {day.getDate()}
@@ -805,14 +810,14 @@ function CalendarView({
                       >
                         <div className="flex items-center gap-1.5">
                           <statusConfig.icon className={`h-3 w-3 flex-shrink-0 ${statusConfig.color}`} />
-                          <span className={`text-xs font-medium truncate ${isCompleted ? 'line-through text-zinc-500' : 'text-white'}`}>
+                          <span className={`text-xs font-medium truncate ${isCompleted ? 'line-through text-zinc-500' : isDark ? 'text-white' : 'text-gray-900'}`}>
                             {tarea.titulo}
                           </span>
                         </div>
                         {viewMode === 'week' && tarea.asignado && (
                           <div className="flex items-center gap-1 mt-1 ml-4">
                             <UserAvatar nombre={tarea.asignado} size="xs" />
-                            <span className="text-[10px] text-zinc-500 truncate">{tarea.asignado}</span>
+                            <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} truncate`}>{tarea.asignado}</span>
                           </div>
                         )}
                       </div>
@@ -826,7 +831,7 @@ function CalendarView({
       </div>
 
       {/* Resumen */}
-      <div className="flex items-center justify-between text-sm text-zinc-500">
+      <div className={`flex items-center justify-between text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
         <span>
           {tareas.length} notificación{tareas.length !== 1 ? 'es' : ''} en total
         </span>
@@ -862,6 +867,7 @@ function getColorConfig(color: string | null) {
 }
 
 function NotasView() {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const [isCreating, setIsCreating] = useState(false);
   const [editingNota, setEditingNota] = useState<NotaPersonal | null>(null);
@@ -949,7 +955,7 @@ function NotasView() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <StickyNote className="h-5 w-5 text-purple-400" />
-          <span className="text-sm text-zinc-400">
+          <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
             {notas.length} nota{notas.length !== 1 ? 's' : ''} personal{notas.length !== 1 ? 'es' : ''}
           </span>
         </div>
@@ -966,14 +972,14 @@ function NotasView() {
 
       {/* Formulario de creación/edición */}
       {isCreating && (
-        <div className="rounded-xl border border-purple-500/40 bg-zinc-900/50 p-4 space-y-4">
+        <div className={`rounded-xl border border-purple-500/40 ${isDark ? 'bg-zinc-900/50' : 'bg-white'} p-4 space-y-4`}>
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-white">
+            <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
               {editingNota ? 'Editar nota' : 'Nueva nota'}
             </h3>
             <button
               onClick={cancelEdit}
-              className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+              className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'} transition-colors`}
             >
               <X className="h-4 w-4" />
             </button>
@@ -984,7 +990,7 @@ function NotasView() {
             value={formData.titulo}
             onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
             placeholder="Título (opcional)"
-            className="w-full px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-purple-500/50"
+            className={`w-full px-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800/50 border-zinc-700/50 text-white placeholder:text-zinc-600' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border text-sm focus:outline-none focus:border-purple-500/50`}
           />
 
           <textarea
@@ -992,12 +998,12 @@ function NotasView() {
             onChange={(e) => setFormData({ ...formData, contenido: e.target.value })}
             placeholder="Escribe tu nota aquí..."
             rows={4}
-            className="w-full px-4 py-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-purple-500/50 resize-none"
+            className={`w-full px-4 py-3 rounded-lg ${isDark ? 'bg-zinc-800/50 border-zinc-700/50 text-white placeholder:text-zinc-600' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border text-sm focus:outline-none focus:border-purple-500/50 resize-none`}
           />
 
           {/* Selector de color */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500">Color:</span>
+            <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Color:</span>
             <div className="flex gap-1.5">
               {NOTE_COLORS.map((color) => (
                 <button
@@ -1016,7 +1022,7 @@ function NotasView() {
           <div className="flex justify-end gap-2">
             <button
               onClick={cancelEdit}
-              className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              className={`px-4 py-2 rounded-lg text-sm ${isDark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'} transition-colors`}
             >
               Cancelar
             </button>
@@ -1033,9 +1039,9 @@ function NotasView() {
 
       {/* Grid de notas */}
       {notas.length === 0 && !isCreating ? (
-        <div className="rounded-xl border border-zinc-800 p-12 text-center bg-zinc-900/30">
+        <div className={`rounded-xl border ${isDark ? 'border-zinc-800' : 'border-gray-200'} p-12 text-center ${isDark ? 'bg-zinc-900/30' : 'bg-white'}`}>
           <StickyNote className="h-10 w-10 text-zinc-700 mx-auto mb-3" />
-          <p className="text-zinc-500">No tienes notas personales</p>
+          <p className={isDark ? 'text-zinc-500' : 'text-gray-400'}>No tienes notas personales</p>
           <p className="text-xs text-zinc-600 mt-1">Crea tu primera nota para comenzar</p>
           <button
             onClick={() => setIsCreating(true)}
@@ -1074,7 +1080,7 @@ function NotasView() {
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => startEdit(nota)}
-                      className="p-1.5 rounded-lg hover:bg-zinc-800/50 text-zinc-400 hover:text-white transition-colors"
+                      className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-zinc-800/50 text-zinc-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'} transition-colors`}
                       title="Editar"
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -1094,7 +1100,7 @@ function NotasView() {
                 </div>
 
                 {/* Contenido */}
-                <p className="text-sm text-zinc-300 whitespace-pre-wrap break-words line-clamp-6">
+                <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} whitespace-pre-wrap break-words line-clamp-6`}>
                   {nota.contenido}
                 </p>
               </div>
@@ -1118,6 +1124,7 @@ function NestedTableSection({
   groupByList: GroupByType[];
   onSelectTarea: (tarea: Notificacion) => void;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(true);
   const statusConfig = getStatusConfig(group.key);
   const currentGroupType = groupByList[level];
@@ -1148,22 +1155,22 @@ function NestedTableSection({
       {/* Header de la sección */}
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-3 w-full px-4 py-3 ${levelColor.header} hover:bg-zinc-800/30 transition-all`}
+        className={`flex items-center gap-3 w-full px-4 py-3 ${levelColor.header} ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-100'} transition-all`}
       >
         {open ? (
-          <ChevronDown className="h-4 w-4 text-zinc-400" />
+          <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
         ) : (
-          <ChevronRight className="h-4 w-4 text-zinc-400" />
+          <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
         )}
         {statusConfig ? (
           <statusConfig.icon className={`h-4 w-4 ${statusConfig.color}`} />
         ) : groupOption ? (
-          <groupOption.icon className="h-4 w-4 text-zinc-400" />
+          <groupOption.icon className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
         ) : null}
-        <span className={`font-medium ${level === 0 ? 'text-white' : 'text-zinc-300'}`}>
+        <span className={`font-medium ${level === 0 ? (isDark ? 'text-white' : 'text-gray-900') : (isDark ? 'text-zinc-300' : 'text-gray-700')}`}>
           {group.key}
         </span>
-        <span className="px-2 py-0.5 rounded-full text-xs bg-zinc-800 text-zinc-400">
+        <span className={`px-2 py-0.5 rounded-full text-xs ${isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-gray-100 text-gray-500'}`}>
           {group.tareas.length}
         </span>
         {groupOption && (
@@ -1328,6 +1335,7 @@ function TaskDrawer({
   onAutorizacionAction?: () => void;
   contentType: ContentType;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [comment, setComment] = useState('');
   const [rechazoMotivo, setRechazoMotivo] = useState('');
   const [showRechazoInput, setShowRechazoInput] = useState(false);
@@ -1516,11 +1524,11 @@ function TaskDrawer({
   };
 
   return (
-    <div className={`fixed inset-y-0 right-0 w-full max-w-md bg-zinc-900/95 backdrop-blur-xl border-l border-zinc-800 shadow-2xl z-50 flex flex-col ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`}>
+    <div className={`fixed inset-y-0 right-0 w-full max-w-md ${isDark ? 'bg-zinc-900/95' : 'bg-white/95'} backdrop-blur-xl border-l ${isDark ? 'border-zinc-800' : 'border-gray-200'} shadow-2xl z-50 flex flex-col ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`}>
       {/* Header con gradiente */}
       <div className="relative">
         <div className={`absolute inset-0 ${statusConfig.bg} opacity-30`} />
-        <div className="relative p-5 border-b border-zinc-800/50">
+        <div className={`relative p-5 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
           {/* Top row: tipo badge y close */}
           <div className="flex items-center justify-between mb-4">
             <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${tipoConfig.bg} border ${tipoConfig.border}`}>
@@ -1529,14 +1537,14 @@ function TaskDrawer({
             </div>
             <button
               onClick={onClose}
-              className="p-2 rounded-xl hover:bg-zinc-800/80 text-zinc-400 hover:text-white transition-all"
+              className={`p-2 rounded-xl ${isDark ? 'hover:bg-zinc-800/80 text-zinc-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'} transition-all`}
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
           {/* Título */}
-          <h2 className="text-xl font-semibold text-white leading-tight mb-3">
+          <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'} leading-tight mb-3`}>
             {tarea.titulo}
           </h2>
 
@@ -1568,7 +1576,7 @@ function TaskDrawer({
                 disabled={marcarLeidaMutation.isPending}
                 className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                   tarea.estatus === 'Atendido'
-                    ? 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-700'
+                    ? isDark ? 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-700' : 'bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200'
                     : 'bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/40'
                 } disabled:opacity-50`}
               >
@@ -1611,7 +1619,7 @@ function TaskDrawer({
               disabled={marcarLeidaMutation.isPending}
               className={`mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 tarea.estatus === 'Atendido'
-                  ? 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-700'
+                  ? isDark ? 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-700' : 'bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200'
                   : 'bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/40'
               } disabled:opacity-50`}
             >
@@ -1637,8 +1645,8 @@ function TaskDrawer({
       <div className="flex-1 overflow-y-auto">
         {/* Descripción */}
         {tarea.mensaje && (
-          <div className="p-5 border-b border-zinc-800/50">
-            <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+          <div className={`p-5 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+            <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} leading-relaxed whitespace-pre-wrap`}>
               {tarea.mensaje}
             </p>
           </div>
@@ -1646,7 +1654,7 @@ function TaskDrawer({
 
         {/*Contenido de Seguimiento Campaña */}
         {tarea.tipo === 'Seguimiento Campaña' && tarea.contenido && (
-          <div className="p-5 border-b border-zinc-800/50">
+          <div className={`p-5 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
             <h3 className="text-xs font-medium text-purple-400 uppercase tracking-wider mb-3 flex items-center gap-2">
               <Building2 className="h-3.5 w-3.5" />
               Información de la Campaña
@@ -1671,20 +1679,20 @@ function TaskDrawer({
                   const catMatch = lineaTrim.match(/^Cat\s+(\d+)[,\s]+(\S+)[,\s]+(\S+)/);
                   if (catMatch) {
                     return (
-                      <div key={idx} className="flex items-center gap-3 py-2.5 px-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                      <div key={idx} className={`flex items-center gap-3 py-2.5 px-3 ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-lg border`}>
                         <Calendar className="h-3.5 w-3.5 text-cyan-400 flex-shrink-0" />
-                        <span className="text-xs font-medium text-white">Cat {catMatch[1]}</span>
-                        <span className="text-[10px] text-zinc-500">|</span>
-                        <span className="text-xs text-zinc-400">{catMatch[2]}</span>
-                        <span className="text-xs text-zinc-500">→</span>
-                        <span className="text-xs text-zinc-400">{catMatch[3]}</span>
+                        <span className={`text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Cat {catMatch[1]}</span>
+                        <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>|</span>
+                        <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{catMatch[2]}</span>
+                        <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>→</span>
+                        <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{catMatch[3]}</span>
                       </div>
                     );
                   }
                   return (
-                    <div key={idx} className="flex items-center gap-2 py-2.5 px-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                    <div key={idx} className={`flex items-center gap-2 py-2.5 px-3 ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-lg border`}>
                       <Calendar className="h-3.5 w-3.5 text-cyan-400 flex-shrink-0" />
-                      <span className="text-xs text-zinc-300">{lineaTrim}</span>
+                      <span className={`text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{lineaTrim}</span>
                     </div>
                   );
                 }
@@ -1705,8 +1713,8 @@ function TaskDrawer({
 
                   return (
                     <div key={idx} className="flex items-center justify-between py-1.5">
-                      <span className="text-xs text-zinc-500 font-medium">{label}:</span>
-                      <span className="text-sm text-white">{value}</span>
+                      <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>{label}:</span>
+                      <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{value}</span>
                     </div>
                   );
                 }
@@ -1719,7 +1727,7 @@ function TaskDrawer({
 
         {/* Detalles en cards */}
         <div className="p-5 space-y-3">
-          <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Detalles</h3>
+          <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3`}>Detalles</h3>
 
           {/* Cliente (si es tarea de autorización) */}
           {carasPendientes.length > 0 && carasPendientes[0].cliente && (
@@ -1733,8 +1741,8 @@ function TaskDrawer({
           )}
 
           {/* Asignado */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
-            <div className="flex items-center gap-2 text-zinc-500">
+          <div className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
+            <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
               <User className="h-4 w-4" />
               <span className="text-xs">Asignado a</span>
             </div>
@@ -1742,7 +1750,7 @@ function TaskDrawer({
               <div className="relative" ref={asignadoRef}>
                 <button
                   onClick={() => setAsignadoOpen(v => !v)}
-                  className="flex items-center gap-1.5 text-sm bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white max-w-[200px]"
+                  className={`flex items-center gap-1.5 text-sm ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-gray-200 text-gray-900'} border rounded px-2 py-1 max-w-[200px]`}
                 >
                   <span className="truncate">
                     {selectedIds.length === 0
@@ -1752,16 +1760,16 @@ function TaskDrawer({
                   <ChevronDown className="h-3 w-3 flex-shrink-0 text-zinc-400" />
                 </button>
                 {asignadoOpen && (
-                  <div className="absolute right-0 top-full mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-1.5 min-w-[180px] max-h-[220px] overflow-y-auto">
+                  <div className={`absolute right-0 top-full mt-1 z-50 ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-1.5 min-w-[180px] max-h-[220px] overflow-y-auto`}>
                     {usuarios.map(u => (
-                      <label key={u.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 rounded cursor-pointer">
+                      <label key={u.id} className={`flex items-center gap-2 px-2 py-1.5 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded cursor-pointer`}>
                         <input
                           type="checkbox"
                           checked={selectedIds.includes(String(u.id))}
                           onChange={() => toggleAsignado(String(u.id))}
                           className="accent-purple-500"
                         />
-                        <span className="text-xs text-zinc-300">{u.nombre}</span>
+                        <span className={`text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{u.nombre}</span>
                       </label>
                     ))}
                   </div>
@@ -1770,37 +1778,37 @@ function TaskDrawer({
             ) : (
               <div className="flex items-center gap-2">
                 <UserAvatar nombre={tarea.asignado} size="md" />
-                <span className="text-sm text-white font-medium">{tarea.asignado || 'Sin asignar'}</span>
+                <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{tarea.asignado || 'Sin asignar'}</span>
               </div>
             )}
           </div>
 
           {/* Responsable/Creador */}
           {tarea.responsable && (
-            <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
-              <div className="flex items-center gap-2 text-zinc-500">
+            <div className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                 <Users className="h-4 w-4" />
                 <span className="text-xs">Creado por</span>
               </div>
-              <span className="text-sm text-zinc-300">{tarea.responsable}</span>
+              <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{tarea.responsable}</span>
             </div>
           )}
 
           {/* Fecha inicio (no editable) */}
           {tarea.fecha_inicio && (
-            <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
-              <div className="flex items-center gap-2 text-zinc-500">
+            <div className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                 <Clock className="h-4 w-4" />
                 <span className="text-xs">Fecha inicio</span>
               </div>
-              <span className="text-sm text-zinc-300">{formatDate(tarea.fecha_inicio)}</span>
+              <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{formatDate(tarea.fecha_inicio)}</span>
             </div>
           )}
 
           {/* Fecha límite - Editable */}
-          <div className="p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
+          <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-zinc-500">
+              <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                 <Calendar className="h-4 w-4" />
                 <span className="text-xs">Fecha límite</span>
               </div>
@@ -1814,7 +1822,7 @@ function TaskDrawer({
                   type="date"
                   value={fechaFinEdit}
                   onChange={(e) => setFechaFinEdit(e.target.value)}
-                  className="flex-1 px-3 py-2 text-sm rounded-lg bg-zinc-900 border border-purple-500/50 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  className={`flex-1 px-3 py-2 text-sm rounded-lg ${isDark ? 'bg-zinc-900 text-white' : 'bg-white text-gray-900'} border border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                 />
                 <button
                   onClick={() => {
@@ -1842,7 +1850,7 @@ function TaskDrawer({
                 onClick={() => setIsEditingFecha(true)}
                 className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 hover:border-purple-500/50 transition-all group"
               >
-                <span className={`text-sm font-medium ${tarea.fecha_fin ? 'text-white' : 'text-zinc-500'}`}>
+                <span className={`text-sm font-medium ${tarea.fecha_fin ? (isDark ? 'text-white' : 'text-gray-900') : (isDark ? 'text-zinc-500' : 'text-gray-400')}`}>
                   {tarea.fecha_fin ? formatDate(tarea.fecha_fin) : 'Sin fecha asignada'}
                 </span>
                 <Pencil className="h-4 w-4 text-purple-400 group-hover:text-purple-300 transition-colors" />

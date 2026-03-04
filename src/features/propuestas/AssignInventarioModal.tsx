@@ -17,6 +17,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketPropuesta, useSocketEquipos } from '../../hooks/useSocket';
+import { useThemeStore } from '../../store/themeStore';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
@@ -524,6 +525,7 @@ const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = false }: Props) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);

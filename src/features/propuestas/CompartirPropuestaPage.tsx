@@ -9,6 +9,7 @@ import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } fr
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { propuestasService, InventarioReservado, PropuestaFullDetails } from '../../services/propuestas.service';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { useThemeStore } from '../../store/themeStore';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
@@ -134,6 +135,7 @@ function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
 export function CompartirPropuestaPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const propuestaId = id ? parseInt(id, 10) : 0;
   const mapRef = useRef<google.maps.Map | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
@@ -843,27 +845,27 @@ export function CompartirPropuestaPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-zinc-950 via-purple-950/20 to-zinc-950">
+      <div className={`flex items-center justify-center h-screen ${isDark ? 'bg-gradient-to-br from-zinc-950 via-purple-950/20 to-zinc-950' : 'bg-white'}`}>
         <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-purple-950/20 to-zinc-950">
+    <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-zinc-950 via-purple-950/20 to-zinc-950' : 'bg-white'}`}>
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-gradient-to-r from-zinc-900/95 via-purple-900/20 to-zinc-900/95 backdrop-blur border-b border-purple-500/20">
+      <header className={`sticky top-0 z-50 backdrop-blur ${isDark ? 'bg-gradient-to-r from-zinc-900/95 via-purple-900/20 to-zinc-900/95 border-b border-purple-500/20' : 'bg-white/95 border-b border-gray-200'}`}>
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button onClick={() => navigate('/propuestas')} className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors">
-              <ArrowLeft className="h-5 w-5 text-zinc-400" />
+              <ArrowLeft className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
             </button>
             <div>
               <div className="flex items-center gap-2">
                 <Share2 className="h-5 w-5 text-purple-500" />
                 <h1 className="text-xl font-bold bg-gradient-to-r from-purple-500 to-pink-400 bg-clip-text text-transparent">Vista Compartir</h1>
               </div>
-              <p className="text-sm text-zinc-400">Propuesta #{propuestaId}</p>
+              <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Propuesta #{propuestaId}</p>
             </div>
           </div>
 
@@ -886,7 +888,7 @@ export function CompartirPropuestaPage() {
             </button>
             <button
               onClick={handleDownloadKMLAll}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-800/80 hover:bg-purple-500/20 text-white rounded-lg text-sm font-medium transition-colors border border-purple-500/30"
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${isDark ? 'bg-zinc-800/80 hover:bg-purple-500/20 text-white border-purple-500/30' : 'bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200'}`}
               title="Descargar KML de todos los inventarios"
             >
               <MapIcon className="h-4 w-4" />
@@ -894,7 +896,7 @@ export function CompartirPropuestaPage() {
             </button>
             <button
               onClick={handleGeneratePDF}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-800/80 hover:bg-purple-500/20 text-white rounded-lg text-sm font-medium transition-colors border border-purple-500/30"
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${isDark ? 'bg-zinc-800/80 hover:bg-purple-500/20 text-white border-purple-500/30' : 'bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200'}`}
             >
               <FileText className="h-4 w-4" />
               PDF
@@ -905,17 +907,17 @@ export function CompartirPropuestaPage() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Campaign Header */}
-        <div className="bg-gradient-to-r from-purple-900/40 via-violet-900/30 to-pink-900/20 rounded-2xl p-6 border border-purple-500/30 shadow-xl shadow-purple-500/10">
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent mb-2">
+        <div className={`rounded-2xl p-6 border shadow-xl ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-violet-900/30 to-pink-900/20 border-purple-500/30 shadow-purple-500/10' : 'bg-gradient-to-r from-purple-50 via-violet-50 to-pink-50 border-gray-200 shadow-gray-200/50'}`}>
+          <h2 className={`text-2xl font-bold bg-gradient-to-r bg-clip-text text-transparent mb-2 ${isDark ? 'from-white to-purple-200' : 'from-gray-900 to-purple-700'}`}>
             {details?.cotizacion?.nombre_campania || 'Propuesta sin nombre'}
           </h2>
-          <p className="text-zinc-400">{details?.propuesta?.descripcion || 'Sin descripción'}</p>
+          <p className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{details?.propuesta?.descripcion || 'Sin descripción'}</p>
           <div className="flex gap-4 mt-4 text-sm">
-            <span className="text-purple-300">
-              Inicio: <span className="text-white font-medium">{periodoInicio}</span>
+            <span className={isDark ? 'text-purple-300' : 'text-purple-600'}>
+              Inicio: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{periodoInicio}</span>
             </span>
-            <span className="text-purple-300">
-              Fin: <span className="text-white font-medium">{periodoFin}</span>
+            <span className={isDark ? 'text-purple-300' : 'text-purple-600'}>
+              Fin: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{periodoFin}</span>
             </span>
           </div>
         </div>
@@ -932,16 +934,16 @@ export function CompartirPropuestaPage() {
             { label: 'Agencia', value: details?.solicitud?.agencia },
             { label: 'Producto', value: details?.solicitud?.producto_nombre },
           ].map(({ label, value }) => (
-            <div key={label} className="bg-gradient-to-br from-zinc-900 to-zinc-900/80 rounded-xl p-4 border border-purple-500/10 hover:border-purple-500/30 transition-colors">
+            <div key={label} className={`rounded-xl p-4 border transition-colors ${isDark ? 'bg-gradient-to-br from-zinc-900 to-zinc-900/80 border-purple-500/10 hover:border-purple-500/30' : 'bg-gray-50 border-gray-200 hover:border-purple-300'}`}>
               <p className="text-xs text-purple-500/70">{label}</p>
-              <p className="text-sm font-medium text-white truncate">{value || 'N/A'}</p>
+              <p className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{value || 'N/A'}</p>
             </div>
           ))}
         </div>
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-gradient-to-br from-zinc-900 to-purple-900/10 rounded-2xl p-6 border border-purple-500/20">
+          <div className={`rounded-2xl p-6 border ${isDark ? 'bg-gradient-to-br from-zinc-900 to-purple-900/10 border-purple-500/20' : 'bg-gray-50 border-gray-200'}`}>
             <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-500 to-pink-400 bg-clip-text text-transparent mb-4">Reservas por Ciudad</h3>
             {chartCiudades.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
@@ -963,11 +965,11 @@ export function CompartirPropuestaPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-zinc-500 text-center py-10">No hay inventario reservado</p>
+              <p className={`text-center py-10 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay inventario reservado</p>
             )}
           </div>
 
-          <div className="bg-gradient-to-br from-zinc-900 to-purple-900/10 rounded-2xl p-6 border border-purple-500/20">
+          <div className={`rounded-2xl p-6 border ${isDark ? 'bg-gradient-to-br from-zinc-900 to-purple-900/10 border-purple-500/20' : 'bg-gray-50 border-gray-200'}`}>
             <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-500 to-pink-400 bg-clip-text text-transparent mb-4">Reservas por Tipo</h3>
             {chartFormatos.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
@@ -989,7 +991,7 @@ export function CompartirPropuestaPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-zinc-500 text-center py-10">No hay inventario reservado</p>
+              <p className={`text-center py-10 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay inventario reservado</p>
             )}
           </div>
         </div>
@@ -1004,20 +1006,20 @@ export function CompartirPropuestaPage() {
           ].map(({ label, value, color, bg }) => (
             <div key={label} className={`bg-gradient-to-br ${bg} rounded-xl p-4 border border-purple-500/20 text-center`}>
               <p className={`text-2xl font-bold ${color}`}>{value}</p>
-              <p className="text-xs text-zinc-400 mt-1">{label}</p>
+              <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{label}</p>
             </div>
           ))}
         </div>
 
         {/* Resumen de Caras - Tabla principal */}
-        <div className="bg-gradient-to-br from-zinc-900 to-purple-900/10 rounded-2xl border border-purple-500/20 overflow-hidden">
+        <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-gradient-to-br from-zinc-900 to-purple-900/10 border-purple-500/20' : 'bg-white border-gray-200'}`}>
           {/* Toolbar */}
-          <div className="px-5 py-4 border-b border-purple-500/20 bg-gradient-to-r from-purple-600/10 to-violet-600/10">
+          <div className={`px-5 py-4 border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-600/10 to-violet-600/10' : 'border-gray-200 bg-gray-50'}`}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-purple-300 flex items-center gap-2">
                 <Layers className="h-4 w-4" />
                 Resumen de Caras
-                <span className="text-xs text-zinc-500 font-normal">({filteredInventario.length} inventarios)</span>
+                <span className={`text-xs font-normal ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({filteredInventario.length} inventarios)</span>
               </h3>
               <div className="flex items-center gap-2">
                 <button onClick={handleDownloadCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
@@ -1039,19 +1041,19 @@ export function CompartirPropuestaPage() {
                   className="checkbox-purple"
                   title="Seleccionar todo"
                 />
-                <Filter className="h-3.5 w-3.5 text-zinc-500" />
+                <Filter className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                 <input
                   type="text"
                   placeholder="Buscar..."
                   value={filterText}
                   onChange={(e) => setFilterText(e.target.value)}
-                  className="px-3 py-1.5 bg-zinc-800/80 border border-purple-500/20 rounded-lg text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500 w-44"
+                  className={`px-3 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-purple-500 w-44 ${isDark ? 'bg-zinc-800/80 border-purple-500/20 text-white placeholder:text-zinc-500' : 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400'}`}
                 />
                 <button
                   onClick={() => setShowFilters(!showFilters)}
                   className={`px-2.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1 ${showFilters || filters.length > 0
                     ? 'bg-purple-600 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-purple-500/20'
+                    : isDark ? 'bg-zinc-800 text-zinc-400 hover:bg-purple-500/20' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
                 >
                   <Filter className="h-3 w-3" />
@@ -1059,8 +1061,8 @@ export function CompartirPropuestaPage() {
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                <ArrowUpDown className="h-3.5 w-3.5 text-zinc-500" />
-                <select value={sortField} onChange={(e) => setSortField(e.target.value)} className="px-2 py-1.5 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white focus:ring-1 focus:ring-purple-500">
+                <ArrowUpDown className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                <select value={sortField} onChange={(e) => setSortField(e.target.value)} className={`px-2 py-1.5 border rounded text-xs focus:ring-1 focus:ring-purple-500 ${isDark ? 'bg-zinc-800 border-purple-500/20 text-white' : 'bg-white border-gray-200 text-gray-900'}`}>
                   <option value="">Sin ordenar</option>
                   <option value="codigo_unico">Codigo</option>
                   <option value="plaza">Plaza</option>
@@ -1069,7 +1071,7 @@ export function CompartirPropuestaPage() {
                 </select>
                 <button
                   onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                  className="px-2 py-1.5 bg-zinc-800 hover:bg-purple-500/20 rounded text-xs text-zinc-400"
+                  className={`px-2 py-1.5 rounded text-xs ${isDark ? 'bg-zinc-800 hover:bg-purple-500/20 text-zinc-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-500'}`}
                 >
                   {sortOrder === 'asc' ? '↑' : '↓'}
                 </button>
@@ -1087,7 +1089,7 @@ export function CompartirPropuestaPage() {
 
           {/* Advanced Filters Panel */}
           {showFilters && (
-            <div className="p-4 border-b border-purple-500/10 bg-zinc-800/30">
+            <div className={`p-4 border-b ${isDark ? 'border-purple-500/10 bg-zinc-800/30' : 'border-gray-200 bg-gray-50'}`}>
               <div className="flex flex-wrap gap-2 mb-3">
                 {filters.map(filter => {
                   const fieldConfig = FILTER_FIELDS.find(f => f.field === filter.field);
@@ -1095,9 +1097,9 @@ export function CompartirPropuestaPage() {
                   return (
                     <div key={filter.id} className="flex items-center gap-1 px-2 py-1 bg-purple-500/20 rounded-lg text-xs">
                       <span className="text-purple-300">{fieldConfig?.label || filter.field}</span>
-                      <span className="text-zinc-500">{operatorConfig?.label || filter.operator}</span>
-                      <span className="text-white font-medium">{filter.value}</span>
-                      <button onClick={() => setFilters(filters.filter(f => f.id !== filter.id))} className="ml-1 text-zinc-400 hover:text-red-400">
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>{operatorConfig?.label || filter.operator}</span>
+                      <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{filter.value}</span>
+                      <button onClick={() => setFilters(filters.filter(f => f.id !== filter.id))} className={`ml-1 hover:text-red-400 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                         <X className="h-3 w-3" />
                       </button>
                     </div>
@@ -1105,14 +1107,14 @@ export function CompartirPropuestaPage() {
                 })}
               </div>
               <div className="flex items-center gap-2">
-                <select id="filter-field" className="px-2 py-1 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white" defaultValue="">
+                <select id="filter-field" className={`px-2 py-1 border rounded text-xs ${isDark ? 'bg-zinc-800 border-purple-500/20 text-white' : 'bg-white border-gray-200 text-gray-900'}`} defaultValue="">
                   <option value="" disabled>Campo</option>
                   {FILTER_FIELDS.map(f => (<option key={f.field} value={f.field}>{f.label}</option>))}
                 </select>
-                <select id="filter-operator" className="px-2 py-1 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white" defaultValue="=">
+                <select id="filter-operator" className={`px-2 py-1 border rounded text-xs ${isDark ? 'bg-zinc-800 border-purple-500/20 text-white' : 'bg-white border-gray-200 text-gray-900'}`} defaultValue="=">
                   {FILTER_OPERATORS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
                 </select>
-                <input id="filter-value" type="text" placeholder="Valor" className="px-2 py-1 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white w-32" />
+                <input id="filter-value" type="text" placeholder="Valor" className={`px-2 py-1 border rounded text-xs w-32 ${isDark ? 'bg-zinc-800 border-purple-500/20 text-white' : 'bg-white border-gray-200 text-gray-900'}`} />
                 <button
                   onClick={() => {
                     const field = (document.getElementById('filter-field') as HTMLSelectElement).value;
@@ -1126,7 +1128,7 @@ export function CompartirPropuestaPage() {
                   className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs"
                 >Agregar</button>
                 {filters.length > 0 && (
-                  <button onClick={() => setFilters([])} className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded text-xs">Limpiar</button>
+                  <button onClick={() => setFilters([])} className={`px-3 py-1 rounded text-xs ${isDark ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}>Limpiar</button>
                 )}
               </div>
             </div>
@@ -1141,7 +1143,7 @@ export function CompartirPropuestaPage() {
           )}
 
           {/* Resumen Tree */}
-          <div className="divide-y divide-purple-500/10">
+          <div className={`divide-y ${isDark ? 'divide-purple-500/10' : 'divide-gray-200'}`}>
             {resumenCaras.map((catGroup) => {
               const catItems = catGroup.articulos.flatMap(a => a.items);
               const catIds = catItems.map(i => i.id);
@@ -1151,7 +1153,7 @@ export function CompartirPropuestaPage() {
               return (
                 <div key={catGroup.catorcena}>
                   {/* Catorcena Header */}
-                  <div className="w-full px-5 py-3 flex items-center gap-3 hover:bg-purple-600/10 transition-colors bg-purple-600/5">
+                  <div className={`w-full px-5 py-3 flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-purple-600/10 bg-purple-600/5' : 'hover:bg-purple-50 bg-gray-50'}`}>
                     <input
                       type="checkbox"
                       checked={allCatSelected}
@@ -1170,14 +1172,14 @@ export function CompartirPropuestaPage() {
                         <span className="px-3 py-1 rounded-lg bg-purple-500/30 text-purple-200 text-xs font-medium border border-purple-400/30">
                           {catGroup.catorcena}
                         </span>
-                        <span className="text-zinc-500 text-xs">
+                        <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           ({catGroup.articulos.length} articulo{catGroup.articulos.length > 1 ? 's' : ''})
                         </span>
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-zinc-400 text-xs">Caras:</span>
-                          <span className="text-white text-sm font-semibold">{catGroup.totalCaras}</span>
+                          <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Caras:</span>
+                          <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{catGroup.totalCaras}</span>
                         </div>
                         <div className="flex items-center gap-1.5 pl-2 border-l border-purple-500/30">
                           <span className="text-emerald-400 text-xs">Inversion:</span>
@@ -1197,7 +1199,7 @@ export function CompartirPropuestaPage() {
 
                   {/* Articulo Groups */}
                   {expandedResumen.has(catGroup.catorcena) && (
-                    <div className="pl-6 border-l-2 border-purple-500/20 ml-5">
+                    <div className={`pl-6 border-l-2 ml-5 ${isDark ? 'border-purple-500/20' : 'border-gray-200'}`}>
                       {catGroup.articulos.map((artGroup) => {
                         const artKey = `${catGroup.catorcena}|${artGroup.articulo}`;
                         const artIds = artGroup.items.map(i => i.id);
@@ -1205,7 +1207,7 @@ export function CompartirPropuestaPage() {
                         const someArtSelected = artIds.some(id => selectedItems.has(id));
 
                         return (
-                          <div key={artKey} className="border-b border-purple-500/10 last:border-b-0">
+                          <div key={artKey} className={`border-b last:border-b-0 ${isDark ? 'border-purple-500/10' : 'border-gray-200'}`}>
                             <div className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-violet-600/10 transition-colors">
                               <input
                                 type="checkbox"
@@ -1225,12 +1227,12 @@ export function CompartirPropuestaPage() {
                                   <span className="px-2.5 py-0.5 rounded-md bg-violet-500/20 text-violet-200 text-xs font-medium border border-violet-400/20">
                                     {artGroup.articulo}
                                   </span>
-                                  <span className="text-zinc-500 text-xs">
+                                  <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                                     ({artGroup.items.length} inventario{artGroup.items.length > 1 ? 's' : ''})
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-3 text-xs">
-                                  <span className="text-zinc-400">Caras: <span className="text-white font-medium">{artGroup.totalCaras}</span></span>
+                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
                                   <span className="text-amber-300">Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
                                   <span className="text-emerald-400">{formatCurrency(artGroup.totalInversion)}</span>
                                 </div>
@@ -1250,15 +1252,15 @@ export function CompartirPropuestaPage() {
                                 {/* Summary badges */}
                                 <div className="flex flex-wrap gap-2 mb-3 px-2">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-xs text-zinc-500">Formatos:</span>
+                                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Formatos:</span>
                                     {artGroup.formatos.map(f => (
-                                      <span key={f} className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px] font-medium border border-purple-400/20">{f}</span>
+                                      <span key={f} className={`px-2 py-0.5 rounded text-[10px] font-medium border ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-400/20' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>{f}</span>
                                     ))}
                                   </div>
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-xs text-zinc-500">Plazas:</span>
+                                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plazas:</span>
                                     {artGroup.plazas.map(p => (
-                                      <span key={p} className="px-2 py-0.5 bg-zinc-700 text-zinc-300 rounded text-[10px] font-medium">{p}</span>
+                                      <span key={p} className={`px-2 py-0.5 rounded text-[10px] font-medium ${isDark ? 'bg-zinc-700 text-zinc-300' : 'bg-gray-200 text-gray-700'}`}>{p}</span>
                                     ))}
                                   </div>
                                 </div>

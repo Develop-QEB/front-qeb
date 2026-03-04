@@ -11,6 +11,7 @@ import { Badge } from '../../components/ui/badge';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { formatDate } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana } from '../../hooks/useSocket';
 
@@ -27,20 +28,21 @@ interface InfoItemProps {
   label: string;
   value: string | number | null | undefined;
   type?: InfoItemType;
+  isDark?: boolean;
 }
 
 // Estilos para chips según tipo de dato
-const chipStyles: Record<InfoItemType, string> = {
-  date: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-  catorcena: 'bg-violet-500/20 text-violet-300 border border-violet-500/30',
-  user: 'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-  id: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono',
-  amount: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold',
-  percent: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30',
-  status: 'bg-pink-500/20 text-pink-300 border border-pink-500/30',
-  category: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30',
-  default: 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30',
-};
+const getChipStyles = (isDark: boolean): Record<InfoItemType, string> => ({
+  date: isDark ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-blue-50 text-blue-700 border border-blue-200',
+  catorcena: isDark ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'bg-violet-50 text-violet-700 border border-violet-200',
+  user: isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-50 text-purple-700 border border-purple-200',
+  id: isDark ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono' : 'bg-amber-50 text-amber-700 border border-amber-200 font-mono',
+  amount: isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold',
+  percent: isDark ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border border-cyan-200',
+  status: isDark ? 'bg-pink-500/20 text-pink-300 border border-pink-500/30' : 'bg-pink-50 text-pink-700 border border-pink-200',
+  category: isDark ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+  default: isDark ? 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30' : 'bg-gray-100 text-gray-700 border border-gray-200',
+});
 
 // Formatear fecha como "Cat X / YYYY"
 function formatAsCatorcena(dateStr: string): string {
@@ -93,7 +95,7 @@ function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[], tipoPerio
   return dateStr;
 }
 
-function InfoItem({ label, value, type = 'default' }: InfoItemProps) {
+function InfoItem({ label, value, type = 'default', isDark = true }: InfoItemProps) {
   if (value === null || value === undefined || value === '') return null;
 
   // Formatear valor según tipo
@@ -112,6 +114,8 @@ function InfoItem({ label, value, type = 'default' }: InfoItemProps) {
     }).format(value);
   }
 
+  const chipStyles = getChipStyles(isDark);
+
   return (
     <div className="flex justify-between items-center py-1.5 border-b border-border/50 last:border-0">
       <span className="text-xs text-muted-foreground">{label}</span>
@@ -123,15 +127,15 @@ function InfoItem({ label, value, type = 'default' }: InfoItemProps) {
 }
 
 // Skeleton Components
-function InfoCardSkeleton() {
+function InfoCardSkeleton({ isDark = true }: { isDark?: boolean }) {
   return (
     <div className="bg-card rounded-xl border border-border p-4 animate-pulse">
       <div className="h-4 bg-purple-500/20 rounded w-24 mb-4"></div>
       <div className="space-y-3">
         {[...Array(6)].map((_, i) => (
           <div key={i} className="flex justify-between items-center py-1.5">
-            <div className="h-3 bg-zinc-700/50 rounded w-20"></div>
-            <div className="h-5 bg-zinc-700/30 rounded-md w-28"></div>
+            <div className={`h-3 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} rounded w-20`}></div>
+            <div className={`h-5 ${isDark ? 'bg-zinc-700/30' : 'bg-gray-100'} rounded-md w-28`}></div>
           </div>
         ))}
       </div>
@@ -139,7 +143,7 @@ function InfoCardSkeleton() {
   );
 }
 
-function TableSkeleton() {
+function TableSkeleton({ isDark = true }: { isDark?: boolean }) {
   return (
     <div className="animate-pulse">
       <div className="space-y-2">
@@ -159,7 +163,7 @@ function TableSkeleton() {
           {[...Array(5)].map((_, i) => (
             <div key={i} className="px-3 py-2.5 border-t border-border flex gap-4">
               {[...Array(6)].map((_, j) => (
-                <div key={j} className="h-3 bg-zinc-700/40 rounded w-16"></div>
+                <div key={j} className={`h-3 ${isDark ? 'bg-zinc-700/40' : 'bg-gray-200'} rounded w-16`}></div>
               ))}
             </div>
           ))}
@@ -169,19 +173,19 @@ function TableSkeleton() {
   );
 }
 
-function MapSkeleton() {
+function MapSkeleton({ isDark = true }: { isDark?: boolean }) {
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-purple-900/20 animate-pulse">
       <div className="w-12 h-12 rounded-full bg-purple-500/30 mb-3 flex items-center justify-center">
         <Loader2 className="h-6 w-6 text-purple-400 animate-spin" />
       </div>
       <div className="h-3 bg-purple-500/20 rounded w-32 mb-2"></div>
-      <div className="h-2 bg-zinc-700/30 rounded w-24"></div>
+      <div className={`h-2 ${isDark ? 'bg-zinc-700/30' : 'bg-gray-200'} rounded w-24`}></div>
     </div>
   );
 }
 
-function CommentsSkeleton() {
+function CommentsSkeleton({ isDark = true }: { isDark?: boolean }) {
   return (
     <div className="flex-1 overflow-hidden p-3 space-y-3 animate-pulse">
       {[...Array(4)].map((_, i) => (
@@ -189,12 +193,12 @@ function CommentsSkeleton() {
           <div className="w-6 h-6 rounded-full bg-purple-500/30 flex-shrink-0"></div>
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 bg-zinc-700/50 rounded w-20"></div>
-              <div className="h-2 bg-zinc-700/30 rounded w-16"></div>
+              <div className={`h-3 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} rounded w-20`}></div>
+              <div className={`h-2 ${isDark ? 'bg-zinc-700/30' : 'bg-gray-100'} rounded w-16`}></div>
             </div>
             <div className="space-y-1">
-              <div className="h-2 bg-zinc-700/40 rounded w-full"></div>
-              <div className="h-2 bg-zinc-700/40 rounded w-3/4"></div>
+              <div className={`h-2 ${isDark ? 'bg-zinc-700/40' : 'bg-gray-200'} rounded w-full`}></div>
+              <div className={`h-2 ${isDark ? 'bg-zinc-700/40' : 'bg-gray-200'} rounded w-3/4`}></div>
             </div>
           </div>
         </div>
@@ -213,15 +217,16 @@ interface EmptyStateProps {
     onClick: () => void;
   };
   className?: string;
+  isDark?: boolean;
 }
 
-function EmptyState({ icon, title, description, action, className = '' }: EmptyStateProps) {
+function EmptyState({ icon, title, description, action, className = '', isDark = true }: EmptyStateProps) {
   return (
     <div className={`flex flex-col items-center justify-center py-8 px-4 ${className}`}>
       <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-3">
         {icon || <Package className="h-6 w-6 text-purple-400" />}
       </div>
-      <p className="text-sm font-medium text-zinc-300 text-center">{title}</p>
+      <p className={`text-sm font-medium text-center ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{title}</p>
       {description && (
         <p className="text-xs text-muted-foreground text-center mt-1 max-w-xs">{description}</p>
       )}
@@ -312,13 +317,13 @@ function ErrorState({
 }
 
 // Map Empty State Component
-function MapEmptyState() {
+function MapEmptyState({ isDark = true }: { isDark?: boolean }) {
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-purple-900/10">
       <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-3">
         <MapPinOff className="h-6 w-6 text-purple-400" />
       </div>
-      <p className="text-sm font-medium text-zinc-300">Sin ubicaciones</p>
+      <p className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Sin ubicaciones</p>
       <p className="text-xs text-muted-foreground text-center mt-1">
         No hay coordenadas disponibles para mostrar en el mapa
       </p>
@@ -468,7 +473,7 @@ function fmtMoney(n: number): string {
   return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-function GroupSummaryInline({ items, groupField }: { items: InventarioReservado[]; groupField: string }) {
+function GroupSummaryInline({ items, groupField, isDark = true }: { items: InventarioReservado[]; groupField: string; isDark?: boolean }) {
   if (groupField === 'aps') return null;
   const carasTotal = items.reduce((s, i) => s + (Number(i.caras_totales) || 0), 0);
   const getTarifa = (i: InventarioReservado) => Number(i.tarifa_publica_sc) || Number(i.tarifa_publica) || 0;
@@ -478,14 +483,14 @@ function GroupSummaryInline({ items, groupField }: { items: InventarioReservado[
   const showTarifa = groupField !== 'inicio_periodo' && uniformTarifa > 0;
   return (
     <div className="flex items-center gap-2 text-[10px] ml-2 shrink-0">
-      <span className="text-zinc-400">Caras: <span className="text-white font-medium">{carasTotal}</span></span>
-      {showTarifa && <span className="text-zinc-400">Tarifa: <span className="text-amber-400 font-medium">{fmtMoney(uniformTarifa)}</span></span>}
-      {totalInversion > 0 && <span className="text-zinc-400">Inv: <span className="text-emerald-400 font-medium">{fmtMoney(totalInversion)}</span></span>}
+      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{carasTotal}</span></span>
+      {showTarifa && <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Tarifa: <span className="text-amber-400 font-medium">{fmtMoney(uniformTarifa)}</span></span>}
+      {totalInversion > 0 && <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inv: <span className="text-emerald-400 font-medium">{fmtMoney(totalInversion)}</span></span>}
     </div>
   );
 }
 
-function GroupMetaBadges({ items, skipFields }: { items: InventarioReservado[]; skipFields: string[] }) {
+function GroupMetaBadges({ items, skipFields, isDark = true }: { items: InventarioReservado[]; skipFields: string[]; isDark?: boolean }) {
   const plazas = [...new Set(items.map(i => i.plaza).filter(Boolean))] as string[];
   const formatos = [...new Set(items.map(i => i.formato ?? i.tipo_de_cara).filter(Boolean))] as string[];
   const articulos = [...new Set(items.map(i => i.articulo).filter(Boolean))] as string[];
@@ -497,34 +502,34 @@ function GroupMetaBadges({ items, skipFields }: { items: InventarioReservado[]; 
     <div className="flex flex-wrap gap-x-3 gap-y-1 px-2 py-1.5 mb-1 border-b border-purple-900/10">
       {showPlazas && (
         <div className="flex items-center gap-1">
-          <span className="text-[10px] text-zinc-500">Plaza:</span>
-          {plazas.slice(0, 3).map(p => <span key={p} className="px-1.5 py-0.5 bg-zinc-800 text-zinc-300 rounded text-[10px]">{p}</span>)}
-          {plazas.length > 3 && <span className="text-[10px] text-zinc-500">+{plazas.length - 3}</span>}
+          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plaza:</span>
+          {plazas.slice(0, 3).map(p => <span key={p} className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{p}</span>)}
+          {plazas.length > 3 && <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>+{plazas.length - 3}</span>}
         </div>
       )}
       {showArticulos && (
         <div className="flex items-center gap-1">
-          <span className="text-[10px] text-zinc-500">Art:</span>
-          {articulos.slice(0, 2).map(a => <span key={a} className="px-1.5 py-0.5 bg-violet-900/40 text-violet-300 rounded text-[10px]">{a}</span>)}
-          {articulos.length > 2 && <span className="text-[10px] text-zinc-500">+{articulos.length - 2}</span>}
+          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Art:</span>
+          {articulos.slice(0, 2).map(a => <span key={a} className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-violet-900/40 text-violet-300' : 'bg-violet-50 text-violet-700'}`}>{a}</span>)}
+          {articulos.length > 2 && <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>+{articulos.length - 2}</span>}
         </div>
       )}
       {showFormatos && (
         <div className="flex items-center gap-1">
-          <span className="text-[10px] text-zinc-500">Formato:</span>
-          {formatos.slice(0, 2).map(f => <span key={f} className="px-1.5 py-0.5 bg-purple-900/40 text-purple-300 rounded text-[10px]">{f}</span>)}
-          {formatos.length > 2 && <span className="text-[10px] text-zinc-500">+{formatos.length - 2}</span>}
+          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Formato:</span>
+          {formatos.slice(0, 2).map(f => <span key={f} className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-purple-900/40 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>{f}</span>)}
+          {formatos.length > 2 && <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>+{formatos.length - 2}</span>}
         </div>
       )}
     </div>
   );
 }
 
-function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5') {
-  if (col.field === 'codigo_unico') return <td key={col.field} className={`${p} text-white font-medium`}>{item.codigo_unico || '-'}</td>;
-  if (col.field === 'caras_totales') return <td key={col.field} className={`${p} text-center`}><span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">{item.caras_totales}</span></td>;
-  if (col.field === 'renta') return <td key={col.field} className={`${p} text-center text-violet-300 text-[10px]`}>{item.renta != null ? item.renta : '-'}</td>;
-  if (col.field === 'bonificacion_sc') return <td key={col.field} className={`${p} text-center text-pink-300 text-[10px]`}>{item.bonificacion_sc != null ? item.bonificacion_sc : '-'}</td>;
+function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', isDark = true) {
+  if (col.field === 'codigo_unico') return <td key={col.field} className={`${p} ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{item.codigo_unico || '-'}</td>;
+  if (col.field === 'caras_totales') return <td key={col.field} className={`${p} text-center`}><span className={`px-1 py-0.5 rounded text-[10px] ${isDark ? 'bg-pink-500/20 text-pink-400' : 'bg-pink-50 text-pink-700'}`}>{item.caras_totales}</span></td>;
+  if (col.field === 'renta') return <td key={col.field} className={`${p} text-center ${isDark ? 'text-violet-300' : 'text-violet-700'} text-[10px]`}>{item.renta != null ? item.renta : '-'}</td>;
+  if (col.field === 'bonificacion_sc') return <td key={col.field} className={`${p} text-center ${isDark ? 'text-pink-300' : 'text-pink-700'} text-[10px]`}>{item.bonificacion_sc != null ? item.bonificacion_sc : '-'}</td>;
   if (col.field === 'tarifa_publica') {
     const t = Number(item.tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
     return <td key={col.field} className={`${p} text-amber-400 text-right font-mono text-[10px]`}>{t > 0 ? fmtMoney(t) : '-'}</td>;
@@ -534,17 +539,17 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
     const inv = t * (Number(item.caras_totales) || 0);
     return <td key={col.field} className={`${p} text-emerald-400 text-right font-mono font-medium text-[10px]`}>{inv > 0 ? fmtMoney(inv) : '-'}</td>;
   }
-  if (col.field === 'latitud') return <td key={col.field} className={`${p} text-zinc-500 font-mono text-[10px]`}>{item.latitud != null ? item.latitud.toFixed(5) : '-'}</td>;
-  if (col.field === 'longitud') return <td key={col.field} className={`${p} text-zinc-500 font-mono text-[10px]`}>{item.longitud != null ? item.longitud.toFixed(5) : '-'}</td>;
-  if (col.field === 'medidas') return <td key={col.field} className={`${p} text-zinc-400 text-[10px]`}>{item.ancho && item.alto ? `${item.ancho}×${item.alto}` : '-'}</td>;
+  if (col.field === 'latitud') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-mono text-[10px]`}>{item.latitud != null ? item.latitud.toFixed(5) : '-'}</td>;
+  if (col.field === 'longitud') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-mono text-[10px]`}>{item.longitud != null ? item.longitud.toFixed(5) : '-'}</td>;
+  if (col.field === 'medidas') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{item.ancho && item.alto ? `${item.ancho}×${item.alto}` : '-'}</td>;
   const value = item[col.field as keyof InventarioReservado];
-  return <td key={col.field} className={`${p} text-zinc-300`}>{value !== null && value !== undefined ? String(value) : '-'}</td>;
+  return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{value !== null && value !== undefined ? String(value) : '-'}</td>;
 }
 
-function renderAPSCell(item: InventarioConAPS, col: TableColumn, p = 'p-1.5') {
-  if (col.field === 'aps') return <td key={col.field} className={`${p} text-center`}><span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium">{item.aps}</span></td>;
-  if (col.field === 'estatus_reserva') return <td key={col.field} className={p}><span className={`px-1.5 py-0.5 rounded text-[10px] ${item.estatus_reserva === 'confirmado' ? 'bg-green-500/20 text-green-400' : item.estatus_reserva === 'pendiente' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-zinc-500/20 text-zinc-400'}`}>{item.estatus_reserva || 'N/A'}</span></td>;
-  return renderReservadoCell(item, col, p);
+function renderAPSCell(item: InventarioConAPS, col: TableColumn, p = 'p-1.5', isDark = true) {
+  if (col.field === 'aps') return <td key={col.field} className={`${p} text-center`}><span className={`px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-50 text-cyan-700'}`}>{item.aps}</span></td>;
+  if (col.field === 'estatus_reserva') return <td key={col.field} className={p}><span className={`px-1.5 py-0.5 rounded text-[10px] ${item.estatus_reserva === 'confirmado' ? (isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700') : item.estatus_reserva === 'pendiente' ? (isDark ? 'bg-yellow-500/20 text-yellow-400' : 'bg-yellow-50 text-yellow-700') : (isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500')}`}>{item.estatus_reserva || 'N/A'}</span></td>;
+  return renderReservadoCell(item, col, p, isDark);
 }
 
 // Función para aplicar filtros a los datos
@@ -667,6 +672,7 @@ export function CampanaDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const permissions = getPermissions(user?.rol);
   const campanaId = id ? parseInt(id, 10) : 1;
 
@@ -1522,7 +1528,7 @@ export function CampanaDetailPage() {
               {campana.status}
             </Badge>
             {campana.reservas_count != null && campana.total_caras && Number(campana.reservas_count) < Number(campana.total_caras) && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+              <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs border ${isDark ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
                 Incompleta ({campana.reservas_count}/{campana.total_caras} caras)
               </span>
             )}
@@ -1541,7 +1547,7 @@ export function CampanaDetailPage() {
           <div className="bg-card rounded-xl border border-border p-3 md:p-4">
             <h3 className="text-xs md:text-sm font-semibold mb-2 md:mb-3 text-purple-300 uppercase tracking-wide">Campaña</h3>
             <div className="space-y-0">
-              <InfoItem label="Articulo" value={campana.articulo} type="category" />
+              <InfoItem label="Articulo" value={campana.articulo} type="category" isDark={isDark} />
               {campana.fecha_inicio && (
                 <div className="flex justify-between items-center py-1.5 border-b border-border/50">
                   <span className="text-xs text-muted-foreground">Inicio</span>
@@ -1558,13 +1564,13 @@ export function CampanaDetailPage() {
                   </span>
                 </div>
               )}
-              <InfoItem label="Total Caras" value={campana.total_caras} type="default" />
-              <InfoItem label="Frontal" value={campana.frontal} type="default" />
-              <InfoItem label="Cruzada" value={campana.cruzada} type="default" />
-              <InfoItem label="NSE" value={campana.nivel_socioeconomico ? [...new Set(campana.nivel_socioeconomico.split(",").map(s => s.trim()))].join(", ") : null} type="category" />
-              <InfoItem label="Bonificacion" value={campana.bonificacion} type="default" />
-              <InfoItem label="Descuento" value={campana.descuento ? `${campana.descuento}%` : null} type="percent" />
-              <InfoItem label="Inversion" value={typeof campana.inversion === "string" ? parseFloat(campana.inversion) : campana.inversion} type="amount" />
+              <InfoItem label="Total Caras" value={campana.total_caras} type="default" isDark={isDark} />
+              <InfoItem label="Frontal" value={campana.frontal} type="default" isDark={isDark} />
+              <InfoItem label="Cruzada" value={campana.cruzada} type="default" isDark={isDark} />
+              <InfoItem label="NSE" value={campana.nivel_socioeconomico ? [...new Set(campana.nivel_socioeconomico.split(",").map(s => s.trim()))].join(", ") : null} type="category" isDark={isDark} />
+              <InfoItem label="Bonificacion" value={campana.bonificacion} type="default" isDark={isDark} />
+              <InfoItem label="Descuento" value={campana.descuento ? `${campana.descuento}%` : null} type="percent" isDark={isDark} />
+              <InfoItem label="Inversion" value={typeof campana.inversion === "string" ? parseFloat(campana.inversion) : campana.inversion} type="amount" isDark={isDark} />
               {/*<InfoItem label="Precio" value={typeof campana.precio === "string" ? parseFloat(campana.precio) : campana.precio} type="amount" /> */}
             </div>
           </div>
@@ -1576,12 +1582,12 @@ export function CampanaDetailPage() {
               <InfoItem label="Cliente" value={campana.T0_U_Cliente} type="user" />
               {campana.sap_database && (
                 <div className="flex items-center gap-2 px-3 py-1.5">
-                  <span className="text-zinc-500 text-xs">SAP BD:</span>
+                  <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>SAP BD:</span>
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                    campana.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                    campana.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                    campana.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
-                    'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                    campana.sap_database === 'CIMU' ? (isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200') :
+                    campana.sap_database === 'TEST' ? (isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200') :
+                    campana.sap_database === 'TRADE' ? (isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200') :
+                    (isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-100 text-gray-700 border-gray-200')
                   }`}>{campana.sap_database}</span>
                 </div>
               )}
@@ -1637,7 +1643,7 @@ export function CampanaDetailPage() {
               <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
             </div>
           ) : historial.length === 0 ? (
-            <div className="text-center py-6 text-zinc-500 text-sm">
+            <div className={`text-center py-6 text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
               No hay acciones registradas
             </div>
           ) : (
@@ -1655,18 +1661,18 @@ export function CampanaDetailPage() {
                   >
                     <div className="flex-shrink-0 w-2 h-2 rounded-full bg-purple-400" />
                     <div className="flex-1 min-w-0">
-                      <span className="text-sm text-zinc-200">
+                      <span className={`text-sm ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
                         {item.accion} {tipoCapitalizado}
                       </span>
                       {item.detalles && (
-                        <p className="text-xs text-zinc-500 truncate" title={item.detalles}>
+                        <p className={`text-xs truncate ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title={item.detalles}>
                           {item.detalles}
                         </p>
                       )}
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <span className="text-xs text-zinc-500 block">{fecha}</span>
-                      <span className="text-xs text-zinc-600">{hora}</span>
+                      <span className={`text-xs block ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{fecha}</span>
+                      <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-300'}`}>{hora}</span>
                     </div>
                   </div>
                 );

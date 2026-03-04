@@ -293,6 +293,7 @@ export interface OrdenMontajeCAT {
   tipo_fila: string | null;
   catorcena_numero: number | null;
   catorcena_year: number | null;
+  tradicional_digital: string | null;
 }
 
 export interface OrdenMontajeINVIAN {
@@ -308,6 +309,7 @@ export interface OrdenMontajeINVIAN {
   Arte: string | null;
   CodigoArte: number | null;
   ArteUrl: string | null;
+  ArteFileName: string | null;
   OrigenArte: string | null;
   Unidad: string | null;
   Cara: string | null;
@@ -323,6 +325,7 @@ export interface OrdenMontajeINVIAN {
   tradicional_digital?: string | null;
   indicaciones?: string | null;
   num_artes_digitales?: number | null;
+  nombres_artes_digitales?: string | null;
   cortesia?: number | null;
   numero_articulo?: string | null;
 }
@@ -655,6 +658,14 @@ export const campanasService = {
       throw new Error(response.data.error || 'Error al obtener imágenes digitales');
     }
     return response.data.data;
+  },
+
+  async getReservaArchivo(campanaId: number, reservaId: number): Promise<string | null> {
+    const response = await api.get<ApiResponse<{ archivo: string | null }>>(`/campanas/${campanaId}/reserva-archivo/${reservaId}`);
+    if (!response.data.success || !response.data.data) {
+      return null;
+    }
+    return response.data.data.archivo;
   },
 
   async getDigitalFileSummaries(campanaId: number): Promise<DigitalFileSummary[]> {
