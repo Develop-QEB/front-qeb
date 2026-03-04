@@ -6480,7 +6480,7 @@ function TaskDetailModal({
                             <td className="px-3 py-2 text-white">{item.ciudad}</td>
                             <td className="px-3 py-2 text-white">{item.catorcena}</td>
                             <td className="px-3 py-2">
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${statusColors[item.estado_arte || ''] || 'bg-zinc-500/20 text-zinc-400'}`}>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${getStatusColors(true)[item.estado_arte || ''] || 'bg-zinc-500/20 text-zinc-400'}`}>
                                 {item.estado_arte || '-'}
                               </span>
                             </td>

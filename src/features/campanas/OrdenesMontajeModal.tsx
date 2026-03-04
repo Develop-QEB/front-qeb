@@ -466,7 +466,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       catorcenaInicio,
       catorcenaFin,
     }),
-    enabled: isOpen && (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'ocupacion-digital'),
+    enabled: isOpen && (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital'),
   });
 
   // Query for INVIAN data

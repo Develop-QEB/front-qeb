@@ -1691,6 +1691,7 @@ export function PropuestasPage() {
                   yearFin={yearFin}
                   catorcenaInicio={catorcenaInicio}
                   catorcenaFin={catorcenaFin}
+                  isDark={isDark}
                   onApply={(yi, yf, ci, cf) => {
                     setYearInicio(yi);
                     setYearFin(yf);
@@ -1740,6 +1741,7 @@ export function PropuestasPage() {
                   value={groupBy}
                   onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); }}
                   onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); }}
+                  isDark={isDark}
                 />
 
                 {/* Clear All */}
@@ -1809,6 +1811,7 @@ export function PropuestasPage() {
                         count={items.length}
                         expanded={expandedGroups.has(groupName)}
                         onToggle={() => toggleGroup(groupName)}
+                        isDark={isDark}
                       />
                       {expandedGroups.has(groupName) && items.map((item, idx) => renderPropuestaRow(item, idx))}
                     </React.Fragment>

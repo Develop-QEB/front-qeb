@@ -1555,6 +1555,9 @@ function CreateTicketModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const isDark = useThemeStore((s) => s.theme === 'dark');
+  const inputClasses = getInputClasses(isDark);
+  const labelClasses = `block text-sm font-medium mb-1.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`;
   const [form, setForm] = useState<CreateTicketInput>({
     titulo: '',
     descripcion: '',

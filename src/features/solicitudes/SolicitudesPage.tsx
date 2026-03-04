@@ -1263,6 +1263,7 @@ export function SolicitudesPage() {
                   value={status}
                   onChange={(val) => { setStatus(val); setPage(1); }}
                   onClear={() => { setStatus(''); setPage(1); }}
+                  isDark={isDark}
                 />
 
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
@@ -1275,6 +1276,7 @@ export function SolicitudesPage() {
                   value={tipoPeriodo}
                   onChange={(val) => { setTipoPeriodo(val); setPage(1); }}
                   onClear={() => { setTipoPeriodo(''); setPage(1); }}
+                  isDark={isDark}
                 />
 
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
@@ -1297,6 +1299,7 @@ export function SolicitudesPage() {
                   yearFin={yearFin}
                   catorcenaInicio={catorcenaInicio}
                   catorcenaFin={catorcenaFin}
+                  isDark={isDark}
                   onApply={(yi, yf, ci, cf) => {
                     setYearInicio(yi);
                     setYearFin(yf);
@@ -1326,6 +1329,7 @@ export function SolicitudesPage() {
                   value={sortBy}
                   onChange={(val) => { setSortBy(val); setPage(1); }}
                   onClear={() => { setSortBy('fecha'); setPage(1); }}
+                  isDark={isDark}
                 />
                 <FilterChip
                   label="Orden"
@@ -1333,6 +1337,7 @@ export function SolicitudesPage() {
                   value={sortOrder}
                   onChange={(val) => { setSortOrder(val as 'asc' | 'desc'); setPage(1); }}
                   onClear={() => { setSortOrder('desc'); setPage(1); }}
+                  isDark={isDark}
                 />
 
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
@@ -1348,6 +1353,7 @@ export function SolicitudesPage() {
                   value={groupBy}
                   onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); setPage(1); }}
                   onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); setPage(1); }}
+                  isDark={isDark}
                 />
 
                 {hasActiveFilters && (
@@ -1410,6 +1416,7 @@ export function SolicitudesPage() {
                             count={items.length}
                             expanded={expandedGroups.has(groupName)}
                             onToggle={() => toggleGroup(groupName)}
+                            isDark={isDark}
                           />
                           {expandedGroups.has(groupName) && items.map((item, idx) => renderSolicitudRow(item, idx))}
                         </React.Fragment>
