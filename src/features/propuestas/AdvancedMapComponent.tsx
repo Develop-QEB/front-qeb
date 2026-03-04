@@ -87,7 +87,7 @@ export function AdvancedMapComponent({
   const [mapBounds, setMapBounds] = useState<google.maps.LatLngBounds | null>(null);
   const [mapZoom, setMapZoom] = useState(13);
 
-  const MIN_ZOOM_FOR_PINS = 9;
+  const MIN_ZOOM_FOR_PINS = 11;
 
   const visibleInventarios = useMemo(() => {
     if (mapZoom < MIN_ZOOM_FOR_PINS || !mapBounds) return [];
