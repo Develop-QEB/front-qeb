@@ -82,6 +82,19 @@ export function AdvancedMapComponent({
   // Panel collapsed
   const [panelCollapsed, setPanelCollapsed] = useState(false);
 
+  const [mapBounds, setMapBounds] = useState<google.maps.LatLngBounds | null>(null);
+  const [mapZoom, setMapZoom] = useState(13);
+
+  const MIN_ZOOM_FOR_PINS = 9;
+
+  const visibleInventarios = useMemo(() => {
+    if (mapZoom < MIN_ZOOM_FOR_PINS || !mapBounds) return [];
+    return inventarios.filter(inv =>
+      inv.latitud && inv.longitud &&
+      mapBounds.contains({ lat: inv.latitud, lng: inv.longitud })
+    );
+  }, [inventarios, mapBounds, mapZoom]);
+
   // Calculate location groups to determine if Flujo and Contraflujo are at same position
   const locationFlowMap = useMemo(() => {
     const map = new Map<string, { hasFlujo: boolean; hasContraflujo: boolean }>();
@@ -765,6 +778,12 @@ export function AdvancedMapComponent({
             zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_CENTER },
           }}
           onLoad={handleMapLoad}
+          onIdle={() => {
+            if (mapRef.current) {
+              setMapBounds(mapRef.current.getBounds() ?? null);
+              setMapZoom(mapRef.current.getZoom() ?? 0);
+            }
+          }}
         >
           {/* POI Markers & Circles */}
           {poiMarkers.map(marker => (
@@ -797,7 +816,9 @@ export function AdvancedMapComponent({
           ))}
 
           {/* Inventory Markers */}
-          {inventarios.map(inv => (
+          {mapZoom < MIN_ZOOM_FOR_PINS ? (
+            <div /> 
+          ) : visibleInventarios.map(inv => (
             inv.latitud && inv.longitud && (
               <Marker
                 key={inv.espacio_id ? `${inv.id}_${inv.espacio_id}` : inv.id}

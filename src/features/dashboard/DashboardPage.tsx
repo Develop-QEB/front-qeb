@@ -213,6 +213,10 @@ function GoogleMapsChart({
   const markersRef = useRef<google.maps.Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(5);
+  const [mapBounds, setMapBounds] = useState<google.maps.LatLngBounds | null>(null);
+
+  // Solo mostrar pins individuales cuando el zoom es suficiente para verlos
+  const MIN_ZOOM_FOR_PINS = 9;
 
   // Umbral de zoom para ocultar círculos de densidad (cuando zoom > 7, ocultar círculos)
   const ZOOM_THRESHOLD_HIDE_CIRCLES = 7;
@@ -255,6 +259,15 @@ function GoogleMapsChart({
     }
     return allCoords.filter(coord => selectedInventoryIds.has(coord.id));
   }, [allCoords, selectedInventoryIds]);
+
+  // Solo renderizar los markers que están dentro del viewport visible
+  // Evita crear miles de markers cuando el mapa está muy alejado
+  const visibleCoords = useMemo(() => {
+    if (!mapBounds || zoomLevel < MIN_ZOOM_FOR_PINS) return [];
+    return filteredCoords.filter(coord =>
+      mapBounds.contains(new google.maps.LatLng(coord.lat, coord.lng))
+    );
+  }, [filteredCoords, mapBounds, zoomLevel]);
 // Auto-fit bounds when data changes (allCoords viene filtrado del backend)
   useEffect(() => {
     if (!mapRef.current || !mapReady) return;
@@ -363,9 +376,9 @@ function GoogleMapsChart({
       clustererRef.current = null;
     }
 
-    if (showPins && filteredCoords.length > 0) {
-      // Crear marcadores para cada inventario (sin límite)
-      const markers = filteredCoords.map(coord => {
+    if (showPins && visibleCoords.length > 0) {
+      // Crear marcadores solo para coords visibles en el viewport actual
+      const markers = visibleCoords.map(coord => {
         const marker = new google.maps.Marker({
           position: { lat: coord.lat, lng: coord.lng },
           icon: {
@@ -439,7 +452,7 @@ function GoogleMapsChart({
         clustererRef.current = null;
       }
     };
-  }, [showPins, filteredCoords, isLoaded, allCoords.length]);
+  }, [showPins, visibleCoords, isLoaded]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -451,6 +464,12 @@ function GoogleMapsChart({
       if (currentZoom !== undefined) {
         setZoomLevel(currentZoom);
       }
+    });
+
+    // Actualizar bounds cuando el mapa termina de moverse/hacer zoom
+    map.addListener('idle', () => {
+      const bounds = map.getBounds();
+      if (bounds) setMapBounds(bounds);
     });
   }, []);
 
@@ -478,9 +497,19 @@ function GoogleMapsChart({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {showPins && zoomLevel < MIN_ZOOM_FOR_PINS && (
+            <span className="px-3 py-1.5 rounded-xl bg-zinc-700/60 text-zinc-400 text-xs border border-zinc-600/40">
+              Haz zoom para ver pines
+            </span>
+          )}
+          {showPins && zoomLevel >= MIN_ZOOM_FOR_PINS && (
+            <span className="px-3 py-1.5 rounded-xl bg-pink-500/20 text-pink-300 text-xs font-medium border border-pink-500/30">
+              {visibleCoords.length} pines visibles
+            </span>
+          )}
           {selectedInventoryIds.size > 0 && (
             <span className="px-3 py-1.5 rounded-xl bg-pink-500/20 text-pink-300 text-xs font-medium border border-pink-500/30">
-              {filteredCoords.length} de {allCoords.length.toLocaleString()} pines
+              {filteredCoords.length} de {allCoords.length.toLocaleString()} seleccionados
             </span>
           )}
           <button
