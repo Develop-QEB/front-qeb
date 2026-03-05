@@ -1382,7 +1382,7 @@ export function CampanasPage() {
             >
               {item.status}
             </button>
-            {item.reservas_count != null && item.total_caras && Number(item.reservas_count) < Number(item.total_caras) && (
+            {item.caras_ultima_cat != null && Number(item.caras_ultima_cat) > 0 && Number(item.reservas_count_ultima_cat) < Number(item.caras_ultima_cat) && (
               <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}>
                 Incompleta
               </span>

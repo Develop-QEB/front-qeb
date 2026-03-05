@@ -550,6 +550,28 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   const pendientesDcm = caras?.filter(c => c.autorizacion_dcm === 'pendiente').length || 0;
   const tienePendientes = pendientesDg > 0 || pendientesDcm > 0;
 
+  // Query para obtener las reservas y verificar si están completas
+  const { data: reservas } = useQuery({
+    queryKey: ['propuesta-reservas-modal', propuesta?.id],
+    queryFn: () => propuestasService.getReservasForModal(propuesta!.id),
+    enabled: isOpen && !!propuesta,
+  });
+
+  // Verificar si todas las caras tienen sus reservas completas
+  const reservasIncompletas = useMemo(() => {
+    if (!caras || !reservas) return false;
+    return caras.some(cara => {
+      const caraReservas = reservas.filter(r => r.solicitud_cara_id === cara.id);
+      const flujoReservado = caraReservas.filter(r => r.tipo_de_cara === 'A' || r.tipo_de_cara === 'Flujo').length;
+      const contraflujoReservado = caraReservas.filter(r => r.tipo_de_cara === 'B' || r.tipo_de_cara === 'Contraflujo').length;
+      const bonificacionReservado = caraReservas.filter(r => r.tipo_de_cara === 'Bonificacion').length;
+      const flujoRequerido = cara.caras_flujo || 0;
+      const contraflujoRequerido = cara.caras_contraflujo || 0;
+      const bonificacionRequerido = cara.bonificacion || 0;
+      return flujoReservado !== flujoRequerido || contraflujoReservado !== contraflujoRequerido || bonificacionReservado !== bonificacionRequerido;
+    });
+  }, [caras, reservas]);
+
   const { data: comments, refetch: refetchComments } = useQuery({
     queryKey: ['propuesta-comments', propuesta?.id],
     queryFn: () => propuestasService.getComments(propuesta!.id),
@@ -643,6 +665,17 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
               </div>
             </div>
           )}
+          {reservasIncompletas && (
+            <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className={`text-sm ${isDark ? 'text-red-200' : 'text-red-700'} font-medium`}>Reservas incompletas</p>
+                <p className={`text-xs ${isDark ? 'text-red-300/70' : 'text-red-600/70'} mt-1`}>
+                  No todos los grupos tienen sus reservas completas. No se puede cambiar a "Pase a ventas" o "Aprobada" hasta completar el inventario.
+                </p>
+              </div>
+            </div>
+          )}
           <label className={`block text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2`}>Cambiar estado a:</label>
           <div className="flex items-center gap-3">
             <select
@@ -655,21 +688,21 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
                 <option value={propuesta.status} disabled>{propuesta.status} (actual)</option>
               )}
               {availableStatuses.map(s => {
-                const isBlockedByAuth = tienePendientes && (s === 'Aprobada' || s === 'Pase a ventas');
+                const isBlockedByAuth = (tienePendientes || reservasIncompletas) && (s === 'Aprobada' || s === 'Pase a ventas');
                 return (
                   <option
                     key={s}
                     value={s}
                     disabled={isBlockedByAuth}
                   >
-                    {s}{isBlockedByAuth ? ' (Requiere autorización)' : ''}
+                    {s}{isBlockedByAuth ? (reservasIncompletas ? ' (Reservas incompletas)' : ' (Requiere autorización)') : ''}
                   </option>
                 );
               })}
             </select>
             <button
               onClick={handleChangeStatus}
-              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || (tienePendientes && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas'))}
+              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || ((tienePendientes || reservasIncompletas) && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas'))}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
             >
               {updateStatusMutation.isPending ? (
