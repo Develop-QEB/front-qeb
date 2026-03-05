@@ -132,7 +132,7 @@ const SOLICITUD_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'id', label: 'ID', type: 'number' },
   { field: 'razon_social', label: 'Cliente', type: 'string' },
   { field: 'cuic', label: 'CUIC', type: 'string' },
-  { field: 'descripcion', label: 'Descripción', type: 'string' },
+  { field: 'nombre_campania', label: 'Campaña', type: 'string' },
   { field: 'marca_nombre', label: 'Marca', type: 'string' },
   { field: 'presupuesto', label: 'Presupuesto', type: 'number' },
   { field: 'asignado', label: 'Asignado', type: 'string' },
@@ -857,7 +857,7 @@ export function SolicitudesPage() {
           </div>
         </td>
         <td className="px-4 py-3">
-          <span className={`max-w-[200px] truncate block ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>{item.descripcion || '-'}</span>
+          <span className={`max-w-[200px] truncate block ${isDark ? 'text-white' : 'text-gray-900'} text-sm`} title={item.nombre_campania || '-'}>{item.nombre_campania || '-'}</span>
         </td>
         <td className="px-4 py-3">
           <span className="text-fuchsia-300 text-xs">{item.marca_nombre || '-'}</span>
@@ -1396,7 +1396,7 @@ export function SolicitudesPage() {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">ID</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fecha</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Descripcion</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Presupuesto</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Tipo</th>

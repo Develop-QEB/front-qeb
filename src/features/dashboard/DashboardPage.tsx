@@ -270,7 +270,7 @@ function GoogleMapsChart({
   const [mapBounds, setMapBounds] = useState<google.maps.LatLngBounds | null>(null);
 
   // Solo mostrar pins individuales cuando el zoom es suficiente para verlos
-  const MIN_ZOOM_FOR_PINS = 9;
+  const MIN_ZOOM_FOR_PINS = 11;
 
   // Umbral de zoom para ocultar circulos de densidad (cuando zoom > 7, ocultar circulos)
   const ZOOM_THRESHOLD_HIDE_CIRCLES = 7;
@@ -432,7 +432,7 @@ function GoogleMapsChart({
 
     if (showPins && filteredCoords.length > 0) {
       // Crear marcadores para cada inventario (sin limite)
-      const markers = filteredCoords.map(coord => {
+      const markers = visibleCoords.map(coord => {
         const marker = new google.maps.Marker({
           position: { lat: coord.lat, lng: coord.lng },
           icon: {

@@ -532,12 +532,12 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
   if (col.field === 'bonificacion_sc') return <td key={col.field} className={`${p} text-center ${isDark ? 'text-pink-300' : 'text-pink-700'} text-[10px]`}>{item.bonificacion_sc != null ? item.bonificacion_sc : '-'}</td>;
   if (col.field === 'tarifa_publica') {
     const t = Number(item.tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
-    return <td key={col.field} className={`${p} text-amber-400 text-right font-mono text-[10px]`}>{t > 0 ? fmtMoney(t) : '-'}</td>;
+    return <td key={col.field} className={`${p} text-amber-400 text-right font-mono text-[10px]`}>{fmtMoney(t)}</td>;
   }
   if (col.field === 'total_inversion') {
     const t = Number(item.tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
     const inv = t * (Number(item.caras_totales) || 0);
-    return <td key={col.field} className={`${p} text-emerald-400 text-right font-mono font-medium text-[10px]`}>{inv > 0 ? fmtMoney(inv) : '-'}</td>;
+    return <td key={col.field} className={`${p} text-emerald-400 text-right font-mono font-medium text-[10px]`}>{fmtMoney(inv)}</td>;
   }
   if (col.field === 'latitud') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-mono text-[10px]`}>{item.latitud != null ? item.latitud.toFixed(5) : '-'}</td>;
   if (col.field === 'longitud') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-mono text-[10px]`}>{item.longitud != null ? item.longitud.toFixed(5) : '-'}</td>;
