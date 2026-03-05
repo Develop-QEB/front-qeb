@@ -99,8 +99,7 @@ type RegisterForm = z.infer<typeof registerSchema>;
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const theme = useThemeStore((s) => s.theme);
-  const isDark = theme === 'dark';
+  const isDark = useThemeStore((s) => s.theme === 'dark');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -221,28 +220,28 @@ export function RegisterPage() {
               <div className="space-y-2">
                 <Label htmlFor="nombre" className={`text-sm font-light ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>Nombre completo</Label>
                 <Input id="nombre" type="text" placeholder="Tu nombre completo" {...register('nombre')} className={`${inputCls} ${errors.nombre ? 'border-red-500' : ''}`} />
-                {errors.nombre && <p className="text-sm text-red-400">{errors.nombre.message}</p>}
+                {errors.nombre && <p className={`text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>{errors.nombre.message}</p>}
               </div>
 
               {/* Correo */}
               <div className="space-y-2">
                 <Label htmlFor="correo" className={`text-sm font-light ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>Correo electrónico</Label>
                 <Input id="correo" type="email" placeholder="tu@email.com" {...register('correo')} className={`${inputCls} ${errors.correo ? 'border-red-500' : ''}`} />
-                {errors.correo && <p className="text-sm text-red-400">{errors.correo.message}</p>}
+                {errors.correo && <p className={`text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>{errors.correo.message}</p>}
               </div>
 
               {/* Password */}
               <div className="space-y-2">
                 <Label htmlFor="password" className={`text-sm font-light ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>Contraseña</Label>
                 <Input id="password" type="password" placeholder="Mínimo 6 caracteres" {...register('password')} className={`${inputCls} ${errors.password ? 'border-red-500' : ''}`} />
-                {errors.password && <p className="text-sm text-red-400">{errors.password.message}</p>}
+                {errors.password && <p className={`text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>{errors.password.message}</p>}
               </div>
 
               {/* Confirm Password */}
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword" className={`text-sm font-light ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>Confirmar contraseña</Label>
                 <Input id="confirmPassword" type="password" placeholder="Repite tu contraseña" {...register('confirmPassword')} className={`${inputCls} ${errors.confirmPassword ? 'border-red-500' : ''}`} />
-                {errors.confirmPassword && <p className="text-sm text-red-400">{errors.confirmPassword.message}</p>}
+                {errors.confirmPassword && <p className={`text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>{errors.confirmPassword.message}</p>}
               </div>
 
               {/* Area */}
@@ -254,7 +253,7 @@ export function RegisterPage() {
                     <option key={area} value={area} className={optionCls}>{area}</option>
                   ))}
                 </select>
-                {errors.area && <p className="text-sm text-red-400">{errors.area.message}</p>}
+                {errors.area && <p className={`text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>{errors.area.message}</p>}
               </div>
 
               {/* Puesto */}
@@ -273,7 +272,7 @@ export function RegisterPage() {
                     <option key={puesto} value={puesto} className={optionCls}>{puesto}</option>
                   ))}
                 </select>
-                {errors.puesto && <p className="text-sm text-red-400">{errors.puesto.message}</p>}
+                {errors.puesto && <p className={`text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>{errors.puesto.message}</p>}
               </div>
 
               <Button

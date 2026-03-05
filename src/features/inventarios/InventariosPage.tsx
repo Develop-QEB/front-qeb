@@ -51,7 +51,7 @@ function FilterChip({ label, options, value, onChange, onClear }: {
       <button
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${value
-          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+          ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
           : `${isDark ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'}`
         }`}
       >
@@ -65,7 +65,7 @@ function FilterChip({ label, options, value, onChange, onClear }: {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => { setOpen(false); setSearchTerm(''); }} />
-          <div className={`absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+          <div className={`absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
             <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <input
                 type="text"
@@ -81,7 +81,7 @@ function FilterChip({ label, options, value, onChange, onClear }: {
                 <button
                   key={opt}
                   onClick={() => { onChange(opt); setOpen(false); setSearchTerm(''); }}
-                  className={`w-full text-left px-3 py-2 text-xs transition-colors hover:bg-purple-500/10 ${value === opt ? 'bg-purple-500/20 text-purple-300' : isDark ? 'text-zinc-300' : 'text-gray-700'}`}
+                  className={`w-full text-left px-3 py-2 text-xs transition-colors ${isDark ? 'hover:bg-purple-500/10' : 'hover:bg-purple-50'} ${value === opt ? (isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-50 text-purple-700') : isDark ? 'text-zinc-300' : 'text-gray-700'}`}
                 >
                   {opt}
                 </button>
@@ -188,7 +188,7 @@ export function InventariosPage() {
 
   const SortIcon = ({ col }: { col: SortCol }) => {
     if (sortCol !== col) return <ArrowUpDown className={`h-3 w-3 ${isDark ? 'text-zinc-600' : 'text-gray-400'} ml-1`} />;
-    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 text-purple-400 ml-1" /> : <ArrowDown className="h-3 w-3 text-purple-400 ml-1" />;
+    return sortDir === 'asc' ? <ArrowUp className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'} ml-1`} /> : <ArrowDown className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'} ml-1`} />;
   };
 
   const openEdit = (item: Inventario) => {
@@ -434,16 +434,16 @@ export function InventariosPage() {
 
   const renderFormModal = (isEdit: boolean) => (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => { setIsCreateOpen(false); setIsEditOpen(false); }}>
-      <div className={`${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl shadow-purple-500/10`} onClick={e => e.stopPropagation()}>
+      <div className={`${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl shadow-purple-500/10`} onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="p-5 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-fuchsia-900/10 to-purple-900/20 flex items-center justify-between">
+        <div className={`p-5 border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-fuchsia-900/10 to-purple-900/20' : 'border-purple-200 bg-gradient-to-r from-purple-50 via-fuchsia-50 to-purple-50'} flex items-center justify-between`}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-              {isEdit ? <Edit2 className="h-5 w-5 text-purple-400" /> : <Plus className="h-5 w-5 text-purple-400" />}
+            <div className={`w-10 h-10 rounded-xl ${isDark ? 'bg-purple-500/20' : 'bg-purple-50'} flex items-center justify-center`}>
+              {isEdit ? <Edit2 className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} /> : <Plus className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />}
             </div>
             <div>
               <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{isEdit ? 'Editar Inventario' : 'Nuevo Inventario'}</h2>
-              {isEdit && selectedId && <p className="text-xs text-purple-300/50">ID: #{selectedId}</p>}
+              {isEdit && selectedId && <p className={`text-xs ${isDark ? 'text-purple-300/50' : 'text-purple-400'}`}>ID: #{selectedId}</p>}
             </div>
           </div>
           <button onClick={() => { setIsCreateOpen(false); setIsEditOpen(false); }} className={`p-2 rounded-lg ${isDark ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'} transition-colors`}>
@@ -455,7 +455,7 @@ export function InventariosPage() {
           <div className="grid grid-cols-2 gap-3">
             {FORM_FIELDS.map(f => (
               <div key={f.key} className={f.span === 2 ? 'col-span-2' : ''}>
-                <label className="text-[10px] text-purple-300/50 uppercase tracking-wide mb-1 block">{f.label}</label>
+                <label className={`text-[10px] ${isDark ? 'text-purple-300/50' : 'text-purple-400'} uppercase tracking-wide mb-1 block`}>{f.label}</label>
                 {f.options ? (
                   <select
                     value={formData[f.key] || ''}
@@ -479,7 +479,7 @@ export function InventariosPage() {
           </div>
         </div>
         {/* Footer */}
-        <div className="p-5 border-t border-purple-500/20 bg-gradient-to-r from-purple-900/10 via-transparent to-fuchsia-900/10 flex justify-end gap-3">
+        <div className={`p-5 border-t ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/10 via-transparent to-fuchsia-900/10' : 'border-purple-200 bg-gradient-to-r from-purple-50/50 via-transparent to-fuchsia-50/50'} flex justify-end gap-3`}>
           <button onClick={() => { setIsCreateOpen(false); setIsEditOpen(false); }}
             className={`px-4 py-2.5 rounded-xl text-sm ${isDark ? 'text-zinc-400 hover:text-white border-zinc-700/50 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-900 border-gray-200 hover:bg-gray-100'} border transition-all`}>
             Cancelar
@@ -506,7 +506,7 @@ export function InventariosPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Total */}
           <div className={`rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none group-hover:bg-purple-500/20 transition-all duration-500" />
+            <div className={`absolute top-0 right-0 w-32 h-32 ${isDark ? 'bg-purple-500/10 group-hover:bg-purple-500/20' : 'bg-purple-100/50 group-hover:bg-purple-100'} rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none transition-all duration-500`} />
             <div>
               <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Total Inventarios</p>
               <h3 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
@@ -546,16 +546,16 @@ export function InventariosPage() {
         </div>
 
         {/* Control Bar - matching CampanasPage */}
-        <div className={`rounded-2xl border border-purple-500/20 ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} backdrop-blur-xl p-4 relative z-30`}>
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
               {/* Search */}
               <div className="relative flex-1 w-full lg:max-w-xl">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
+                <Search className={`absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
                 <input
                   type="search"
                   placeholder="Buscar por código, ubicación, municipio..."
-                  className={`w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40`}
+                  className={`w-full pl-11 pr-4 py-3 rounded-xl border ${isDark ? 'border-purple-500/20 hover:border-purple-500/40' : 'border-purple-200 hover:border-purple-300'} ${isDark ? 'bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all`}
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 />
@@ -565,13 +565,13 @@ export function InventariosPage() {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
-                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                  ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
                   : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'
                 }`}
               >
                 <SlidersHorizontal className="h-4 w-4" />
                 Filtros
-                {hasActiveFilters && <span className="w-2 h-2 rounded-full bg-purple-400" />}
+                {hasActiveFilters && <span className={`w-2 h-2 rounded-full ${isDark ? 'bg-purple-400' : 'bg-purple-500'}`} />}
               </button>
 
               {/* View Toggle */}
@@ -580,7 +580,7 @@ export function InventariosPage() {
                   onClick={() => setViewMode('table')}
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                     viewMode === 'table'
-                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                      ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
                       : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
                   }`}
                 >
@@ -591,7 +591,7 @@ export function InventariosPage() {
                   onClick={() => setViewMode('map')}
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                     viewMode === 'map'
-                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                      ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
                       : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
                   }`}
                 >
@@ -629,7 +629,7 @@ export function InventariosPage() {
                 {hasActiveFilters && (
                   <button
                     onClick={() => { setSearch(''); setTipo(''); setPlaza(''); setEstatus(''); setPage(1); }}
-                    className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                    className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'} border transition-all`}
                   >
                     <X className="h-3 w-3" /> Limpiar todo
                   </button>
@@ -642,7 +642,7 @@ export function InventariosPage() {
         {/* Results Badge */}
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs">
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${isDark ? 'bg-purple-500/10 border-purple-500/20 text-purple-300' : 'bg-purple-50 border-purple-200 text-purple-700'} border text-xs`}>
               <Package className="h-3.5 w-3.5" />
               {totalItems} resultados
             </div>
@@ -651,15 +651,15 @@ export function InventariosPage() {
 
         {/* Table View */}
         {viewMode === 'table' && (
-          <div className={`rounded-2xl border border-purple-500/20 ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5`}>
+          <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-white'} backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5`}>
             {isLoading ? (
               <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
               </div>
             ) : sortedData.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3">
-                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
-                  <Package className="h-6 w-6 text-purple-400" />
+                <div className={`w-12 h-12 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} flex items-center justify-center`}>
+                  <Package className={`h-6 w-6 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
                 </div>
                 <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>No se encontraron inventarios</p>
               </div>
@@ -668,7 +668,7 @@ export function InventariosPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
+                      <tr className={`border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30' : 'border-purple-200 bg-gradient-to-r from-purple-50 via-fuchsia-50 to-purple-50'}`}>
                         {[
                           { col: 'id' as SortCol, label: 'ID', sortable: true },
                           { col: 'codigo_unico' as SortCol, label: 'Código', sortable: true },
@@ -682,7 +682,7 @@ export function InventariosPage() {
                           <th
                             key={label}
                             onClick={sortable ? () => handleSort(col) : undefined}
-                            className={`px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider ${sortable ? 'cursor-pointer hover:text-purple-200' : ''}`}
+                            className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider ${sortable ? isDark ? 'cursor-pointer hover:text-purple-200' : 'cursor-pointer hover:text-purple-900' : ''}`}
                           >
                             <span className="flex items-center">
                               {label}
@@ -690,7 +690,7 @@ export function InventariosPage() {
                             </span>
                           </th>
                         ))}
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-purple-300 uppercase tracking-wider">Acciones</th>
+                        <th className={`px-4 py-3 text-center text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -701,7 +701,7 @@ export function InventariosPage() {
                         return (
                           <tr key={item.id} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors ${isBlocked ? 'opacity-40' : ''}`}>
                             <td className="px-4 py-3">
-                              <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">#{item.id}</span>
+                              <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.id}</span>
                             </td>
                             <td className="px-4 py-3">
                               <span className={`font-mono text-xs ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{item.codigo_unico || '-'}</span>
@@ -740,14 +740,14 @@ export function InventariosPage() {
                               <div className="flex items-center justify-center gap-1">
                                 <button
                                   onClick={() => openEdit(item)}
-                                  className={`p-1.5 rounded-lg hover:bg-purple-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} hover:text-purple-300 transition-colors`}
+                                  className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-purple-500/10 hover:text-purple-300' : 'hover:bg-purple-50 hover:text-purple-600'} ${isDark ? 'text-zinc-500' : 'text-gray-400'} transition-colors`}
                                   title="Editar"
                                 >
                                   <Edit2 className="h-3.5 w-3.5" />
                                 </button>
                                 <button
                                   onClick={() => { setSelectedId(item.id); setIsHistorialOpen(true); }}
-                                  className={`p-1.5 rounded-lg hover:bg-purple-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} hover:text-purple-300 transition-colors`}
+                                  className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-purple-500/10 hover:text-purple-300' : 'hover:bg-purple-50 hover:text-purple-600'} ${isDark ? 'text-zinc-500' : 'text-gray-400'} transition-colors`}
                                   title="Historial"
                                 >
                                   <History className="h-3.5 w-3.5" />
@@ -755,8 +755,8 @@ export function InventariosPage() {
                                 <button
                                   onClick={() => toggleBlockMutation.mutate(item.id)}
                                   className={`p-1.5 rounded-lg transition-colors ${isBlocked
-                                    ? 'hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300'
-                                    : `hover:bg-red-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} hover:text-red-400`
+                                    ? isDark ? 'hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300' : 'hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700'
+                                    : `${isDark ? 'hover:bg-red-500/10 hover:text-red-400' : 'hover:bg-red-50 hover:text-red-600'} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`
                                   }`}
                                   title={isBlocked ? 'Desbloquear' : 'Bloquear'}
                                 >
@@ -773,23 +773,23 @@ export function InventariosPage() {
 
                 {/* Pagination - matching CampanasPage */}
                 {totalPages > 1 && (
-                  <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
-                    <span className="text-sm text-purple-300/70">
-                      Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{totalPages}</span>
-                      <span className="text-purple-300/50 ml-2">({totalItems.toLocaleString()} total)</span>
+                  <div className={`flex items-center justify-between border-t ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-200 bg-gradient-to-r from-purple-50/50 via-transparent to-fuchsia-50/50'} px-4 py-3`}>
+                    <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-600/70'}`}>
+                      Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
+                      <span className={`${isDark ? 'text-purple-300/50' : 'text-purple-400'} ml-2`}>({totalItems.toLocaleString()} total)</span>
                     </span>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setPage(p => Math.max(1, p - 1))}
                         disabled={page === 1}
-                        className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                       >
                         Anterior
                       </button>
                       <button
                         onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                         disabled={page === totalPages}
-                        className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                       >
                         Siguiente
                       </button>
@@ -803,7 +803,7 @@ export function InventariosPage() {
 
         {/* Map View */}
         {viewMode === 'map' && (
-          <div className={`rounded-2xl border border-purple-500/20 ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5`} style={{ height: '600px' }}>
+          <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-white'} backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5`} style={{ height: '600px' }}>
             <InventarioMap tipo={tipo} estatus={estatus} plaza={plaza} />
           </div>
         )}
@@ -818,17 +818,17 @@ export function InventariosPage() {
       {/* Historial Modal */}
       {isHistorialOpen && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => { setIsHistorialOpen(false); setSelectedId(null); }}>
-          <div className={`${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl shadow-purple-500/10`} onClick={e => e.stopPropagation()}>
+          <div className={`${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl shadow-purple-500/10`} onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div className="p-5 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-fuchsia-900/10 to-purple-900/20 flex items-center justify-between">
+            <div className={`p-5 border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-fuchsia-900/10 to-purple-900/20' : 'border-purple-200 bg-gradient-to-r from-purple-50 via-fuchsia-50 to-purple-50'} flex items-center justify-between`}>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                  <History className="h-5 w-5 text-purple-400" />
+                <div className={`w-10 h-10 rounded-xl ${isDark ? 'bg-purple-500/20' : 'bg-purple-50'} flex items-center justify-center`}>
+                  <History className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                 </div>
                 <div>
                   <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Historial del Inventario</h2>
                   {historialData?.inventario && (
-                    <p className="text-xs text-purple-300/50">{historialData.inventario.codigo_unico} — {historialData.inventario.ubicacion}</p>
+                    <p className={`text-xs ${isDark ? 'text-purple-300/50' : 'text-purple-400'}`}>{historialData.inventario.codigo_unico} — {historialData.inventario.ubicacion}</p>
                   )}
                 </div>
               </div>
@@ -865,19 +865,19 @@ export function InventariosPage() {
 
                   {historialData.historial.length === 0 ? (
                     <div className="text-center py-8">
-                      <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mx-auto mb-3">
-                        <History className="h-6 w-6 text-purple-400" />
+                      <div className={`w-12 h-12 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} flex items-center justify-center mx-auto mb-3`}>
+                        <History className={`h-6 w-6 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
                       </div>
                       <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay historial para este inventario</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
                       {historialData.historial.map((item, index) => (
-                        <div key={`${item.reserva_id}-${index}`} className={`p-4 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border hover:border-purple-500/20 transition-colors`}>
+                        <div key={`${item.reserva_id}-${index}`} className={`p-4 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50 hover:border-purple-500/20' : 'bg-gray-50 border-gray-200 hover:border-purple-200'} border transition-colors`}>
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">
+                                <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>
                                   #{item.campana_id}
                                 </span>
                                 <span className={`px-2 py-0.5 rounded-full text-[10px] ${
@@ -895,7 +895,7 @@ export function InventariosPage() {
                               <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium text-sm`}>{item.campana_nombre}</p>
                               <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{item.cliente_nombre || 'Sin cliente'}</p>
                               <div className={`flex items-center gap-3 mt-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} flex-wrap`}>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'} border`}>
                                   <CalendarIcon className="h-3 w-3" />
                                   {item.inicio_periodo?.split('T')[0]} — {item.fin_periodo?.split('T')[0]}
                                 </span>
@@ -934,16 +934,16 @@ export function InventariosPage() {
       {/* Bulk Upload Modal */}
       {isBulkOpen && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={closeBulkModal}>
-          <div className={`${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-amber-500/20 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl shadow-amber-500/10`} onClick={e => e.stopPropagation()}>
+          <div className={`${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border ${isDark ? 'border-amber-500/20' : 'border-amber-200'} w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl shadow-amber-500/10`} onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div className="p-5 border-b border-amber-500/20 bg-gradient-to-r from-amber-900/20 via-orange-900/10 to-amber-900/20 flex items-center justify-between">
+            <div className={`p-5 border-b ${isDark ? 'border-amber-500/20 bg-gradient-to-r from-amber-900/20 via-orange-900/10 to-amber-900/20' : 'border-amber-200 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50'} flex items-center justify-between`}>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                  <Upload className="h-5 w-5 text-amber-400" />
+                <div className={`w-10 h-10 rounded-xl ${isDark ? 'bg-amber-500/20' : 'bg-amber-50'} flex items-center justify-center`}>
+                  <Upload className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
                 </div>
                 <div>
                   <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Carga Masiva de Inventarios</h2>
-                  <p className="text-xs text-amber-300/50">Sube un archivo CSV para agregar múltiples inventarios</p>
+                  <p className={`text-xs ${isDark ? 'text-amber-300/50' : 'text-amber-500'}`}>Sube un archivo CSV para agregar múltiples inventarios</p>
                 </div>
               </div>
               <button onClick={closeBulkModal} className={`p-2 rounded-lg ${isDark ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'} transition-colors`}>
@@ -984,18 +984,18 @@ export function InventariosPage() {
                       <Package className="h-3.5 w-3.5" />
                       {bulkCsvData.length} filas totales
                     </div>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-xs">
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${isDark ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} border text-xs`}>
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       {bulkValidation.valid} válidas
                     </div>
                     {bulkValidation.errors.length > 0 && (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-300 border border-red-500/20 text-xs">
+                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${isDark ? 'bg-red-500/10 text-red-300 border-red-500/20' : 'bg-red-50 text-red-700 border-red-200'} border text-xs`}>
                         <AlertTriangle className="h-3.5 w-3.5" />
                         {new Set(bulkValidation.errors.map(e => e.fila)).size} con errores
                       </div>
                     )}
                     {bulkValidation.duplicatesInCsv > 0 && (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 text-xs">
+                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${isDark ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-amber-50 text-amber-700 border-amber-200'} border text-xs`}>
                         <AlertCircle className="h-3.5 w-3.5" />
                         {bulkValidation.duplicatesInCsv} duplicados en CSV
                       </div>
@@ -1004,16 +1004,16 @@ export function InventariosPage() {
 
                   {/* Error details */}
                   {bulkValidation.errors.length > 0 && (
-                    <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-3 max-h-32 overflow-auto">
-                      <p className="text-xs text-red-300 font-medium mb-2">Errores encontrados:</p>
+                    <div className={`${isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-200'} border rounded-xl p-3 max-h-32 overflow-auto`}>
+                      <p className={`text-xs ${isDark ? 'text-red-300' : 'text-red-700'} font-medium mb-2`}>Errores encontrados:</p>
                       <div className="space-y-1">
                         {bulkValidation.errors.slice(0, 50).map((err, idx) => (
-                          <p key={idx} className="text-[11px] text-red-300/80">
-                            Fila {err.fila}: <span className="text-red-400 font-mono">{err.campo}</span> — {err.mensaje}
+                          <p key={idx} className={`text-[11px] ${isDark ? 'text-red-300/80' : 'text-red-600'}`}>
+                            Fila {err.fila}: <span className={`${isDark ? 'text-red-400' : 'text-red-700'} font-mono`}>{err.campo}</span> — {err.mensaje}
                           </p>
                         ))}
                         {bulkValidation.errors.length > 50 && (
-                          <p className="text-[11px] text-red-400">... y {bulkValidation.errors.length - 50} errores más</p>
+                          <p className={`text-[11px] ${isDark ? 'text-red-400' : 'text-red-600'}`}>... y {bulkValidation.errors.length - 50} errores más</p>
                         )}
                       </div>
                     </div>
@@ -1072,11 +1072,11 @@ export function InventariosPage() {
                                 </td>
                                 <td className="px-2 py-1.5">
                                   {hasError ? (
-                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${isDupInCsv ? 'bg-amber-500/20 text-amber-300' : 'bg-red-500/20 text-red-300'}`}>
+                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${isDupInCsv ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') : (isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-50 text-red-700')}`}>
                                       {isDupInCsv ? 'Duplicado' : 'Error'}
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300">OK</span>
+                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}>OK</span>
                                   )}
                                 </td>
                               </tr>
@@ -1094,38 +1094,38 @@ export function InventariosPage() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-4 flex-wrap">
                     {bulkResult.insertados > 0 && (
-                      <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                        <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                      <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'} border`}>
+                        <CheckCircle2 className={`h-5 w-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
                         <div>
-                          <p className="text-sm font-medium text-emerald-300">{bulkResult.insertados} insertados</p>
-                          <p className="text-[10px] text-emerald-400/60">Agregados a la base de datos</p>
+                          <p className={`text-sm font-medium ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{bulkResult.insertados} insertados</p>
+                          <p className={`text-[10px] ${isDark ? 'text-emerald-400/60' : 'text-emerald-500'}`}>Agregados a la base de datos</p>
                         </div>
                       </div>
                     )}
                     {bulkResult.duplicados > 0 && (
-                      <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                        <AlertCircle className="h-5 w-5 text-amber-400" />
+                      <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'} border`}>
+                        <AlertCircle className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
                         <div>
-                          <p className="text-sm font-medium text-amber-300">{bulkResult.duplicados} duplicados</p>
-                          <p className="text-[10px] text-amber-400/60">Ya existían en la BD</p>
+                          <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{bulkResult.duplicados} duplicados</p>
+                          <p className={`text-[10px] ${isDark ? 'text-amber-400/60' : 'text-amber-500'}`}>Ya existían en la BD</p>
                         </div>
                       </div>
                     )}
                     {bulkResult.errores.length > 0 && (
-                      <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                        <AlertTriangle className="h-5 w-5 text-red-400" />
+                      <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'} border`}>
+                        <AlertTriangle className={`h-5 w-5 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
                         <div>
-                          <p className="text-sm font-medium text-red-300">{bulkResult.errores.length} errores</p>
-                          <p className="text-[10px] text-red-400/60">No se pudieron insertar</p>
+                          <p className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>{bulkResult.errores.length} errores</p>
+                          <p className={`text-[10px] ${isDark ? 'text-red-400/60' : 'text-red-500'}`}>No se pudieron insertar</p>
                         </div>
                       </div>
                     )}
                   </div>
                   {bulkResult.errores.length > 0 && (
-                    <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-3 max-h-32 overflow-auto">
+                    <div className={`${isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-200'} border rounded-xl p-3 max-h-32 overflow-auto`}>
                       {bulkResult.errores.map((err, idx) => (
-                        <p key={idx} className="text-[11px] text-red-300/80">
-                          {err.fila > 0 ? `Fila ${err.fila}: ` : ''}<span className="font-mono text-red-400">{err.campo}</span> — {err.mensaje}
+                        <p key={idx} className={`text-[11px] ${isDark ? 'text-red-300/80' : 'text-red-600'}`}>
+                          {err.fila > 0 ? `Fila ${err.fila}: ` : ''}<span className={`font-mono ${isDark ? 'text-red-400' : 'text-red-700'}`}>{err.campo}</span> — {err.mensaje}
                         </p>
                       ))}
                     </div>
@@ -1135,7 +1135,7 @@ export function InventariosPage() {
             </div>
 
             {/* Footer */}
-            <div className="p-5 border-t border-amber-500/20 bg-gradient-to-r from-amber-900/10 via-transparent to-orange-900/10 flex justify-end gap-3">
+            <div className={`p-5 border-t ${isDark ? 'border-amber-500/20 bg-gradient-to-r from-amber-900/10 via-transparent to-orange-900/10' : 'border-amber-200 bg-gradient-to-r from-amber-50/50 via-transparent to-orange-50/50'} flex justify-end gap-3`}>
               <button onClick={closeBulkModal}
                 className={`px-4 py-2.5 rounded-xl text-sm ${isDark ? 'text-zinc-400 hover:text-white border-zinc-700/50 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-900 border-gray-200 hover:bg-gray-100'} border transition-all`}>
                 {bulkResult ? 'Cerrar' : 'Cancelar'}

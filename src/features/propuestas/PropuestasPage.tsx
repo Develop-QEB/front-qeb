@@ -110,7 +110,7 @@ function FilterChip({
       <button
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${value
-          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+          ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
           : isDark
             ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
             : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
@@ -150,7 +150,7 @@ function FilterChip({
                     key={option}
                     onClick={() => { onChange(option); handleClose(); }}
                     className={`w-full px-3 py-2 text-left text-xs transition-colors ${value === option
-                      ? 'bg-purple-500/20 text-purple-300'
+                      ? isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-50 text-purple-700'
                       : isDark
                         ? 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
                         : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
@@ -345,7 +345,7 @@ function PeriodFilterPopover({
       <button
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${isActive
-          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+          ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
           : isDark
             ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
             : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
@@ -366,7 +366,7 @@ function PeriodFilterPopover({
           <div className={`absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900' : 'border-gray-200 bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
             <div className={`p-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
-                <Calendar className="h-4 w-4 text-purple-400" />
+                <Calendar className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                 Filtro de Periodo
               </h3>
               <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-1`}>Todos los campos son obligatorios</p>
@@ -501,17 +501,17 @@ function GroupHeader({
   return (
     <tr
       onClick={onToggle}
-      className="bg-purple-500/10 border-b border-purple-500/20 cursor-pointer hover:bg-purple-500/20 transition-colors"
+      className={`${isDark ? 'bg-purple-500/10 border-b border-purple-500/20 hover:bg-purple-500/20' : 'bg-purple-50 border-b border-purple-200 hover:bg-purple-100'} cursor-pointer transition-colors`}
     >
       <td colSpan={11} className="px-4 py-3">
         <div className="flex items-center gap-2">
           {expanded ? (
-            <ChevronDown className="h-4 w-4 text-purple-400" />
+            <ChevronDown className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
           ) : (
-            <ChevronRight className="h-4 w-4 text-purple-400" />
+            <ChevronRight className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
           )}
           <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupName || 'Sin asignar'}</span>
-          <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">
+          <span className={`px-2 py-0.5 rounded-full text-xs ${isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'}`}>
             {count} propuestas
           </span>
         </div>
@@ -637,7 +637,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-3">
-            <MessageSquare className="h-5 w-5 text-purple-400" />
+            <MessageSquare className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
             <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Estado y Comentarios</h2>
             <span className={`px-2 py-1 rounded-full text-xs ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
               {propuesta.status}
@@ -652,11 +652,11 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
         <div className={`px-6 py-4 border-b ${isDark ? 'border-zinc-800 bg-zinc-800/30' : 'border-gray-200 bg-gray-50'}`}>
           {/* Alerta de autorizaciones pendientes */}
           {tienePendientes && (
-            <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className={`mb-4 p-3 rounded-lg ${isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-200'} border flex items-start gap-3`}>
+              <AlertTriangle className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-600'} flex-shrink-0 mt-0.5`} />
               <div>
-                <p className="text-sm text-amber-200 font-medium">Autorización pendiente</p>
-                <p className="text-xs text-amber-300/70 mt-1">
+                <p className={`text-sm font-medium ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>Autorización pendiente</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-amber-300/70' : 'text-amber-700'}`}>
                   Esta propuesta tiene {pendientesDg + pendientesDcm} cara(s) pendientes de autorización.
                   {pendientesDg > 0 && ` DG: ${pendientesDg}.`}
                   {pendientesDcm > 0 && ` DCM: ${pendientesDcm}.`}
@@ -942,7 +942,7 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
                 {selectedUsers.map(u => (
                   <span
                     key={u.id}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs border border-emerald-500/30"
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs border ${isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}
                   >
                     {u.nombre}
                     <X
@@ -985,9 +985,9 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
           </div>
 
           {/* Info */}
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
-            <p className="text-amber-300 text-sm font-medium mb-1">Al aprobar esta propuesta:</p>
-            <ul className="text-amber-200/80 text-xs space-y-1">
+          <div className={`${isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-200'} border rounded-xl p-4`}>
+            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>Al aprobar esta propuesta:</p>
+            <ul className={`text-xs space-y-1 ${isDark ? 'text-amber-200/80' : 'text-amber-700'}`}>
               <li>• Se actualizarán las reservas de inventario</li>
               <li>• La cotización y campaña se activarán</li>
               <li>• Se crearán tareas de seguimiento</li>
@@ -1301,7 +1301,7 @@ export function PropuestasPage() {
     return (
       <tr key={`prop-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
         <td className="px-4 py-3">
-          <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">#{item.id}</span>
+          <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.id}</span>
         </td>
         <td className="px-4 py-3">
           <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{formatDate(item.fecha)}</span>
@@ -1311,9 +1311,11 @@ export function PropuestasPage() {
             <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-medium`}>{item.marca_nombre || item.articulo || '-'}</span>
             {item.sap_database && (
               <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
-                item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                item.sap_database === 'CIMU'
+                  ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200'
+                  : item.sap_database === 'TEST'
+                    ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200'
+                    : isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
               }`}>{item.sap_database}</span>
             )}
           </div>
@@ -1333,16 +1335,16 @@ export function PropuestasPage() {
           <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{item.asignado || 'Sin asignar'}</span>
         </td>
         <td className="px-4 py-3">
-          <span className="font-medium text-amber-400">{formatCurrency(item.inversion)}</span>
+          <span className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{formatCurrency(item.inversion)}</span>
         </td>
         <td className="px-4 py-3">
           {item.tipo_periodo === 'mensual' && item.fecha_inicio ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
               <Calendar className="h-3 w-3" />
               {getMonthShort(item.fecha_inicio)}
             </span>
           ) : item.catorcena_inicio ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
               <Calendar className="h-3 w-3" />
               Cat {item.catorcena_inicio} / {item.anio_inicio}
             </span>
@@ -1352,12 +1354,12 @@ export function PropuestasPage() {
         </td>
         <td className="px-4 py-3">
           {item.tipo_periodo === 'mensual' && item.fecha_fin ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
               <Calendar className="h-3 w-3" />
               {getMonthShort(item.fecha_fin)}
             </span>
           ) : item.catorcena_fin ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
               <Calendar className="h-3 w-3" />
               Cat {item.catorcena_fin} / {item.anio_fin}
             </span>
@@ -1386,8 +1388,8 @@ export function PropuestasPage() {
                 onClick={() => setApprovePropuesta(item)}
                 disabled={item.status !== 'Pase a ventas' || isLocked}
                 className={`p-2 rounded-lg border transition-all ${item.status !== 'Pase a ventas' || isLocked
-                  ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
-                  : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40'
+                  ? isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
+                  : isDark ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 border-emerald-200 hover:border-emerald-300'
                   }`}
                 title={isLocked ? 'No disponible en este estatus' : (item.status !== 'Pase a ventas' ? 'Solo disponible con estatus Pase a ventas' : 'Aprobar propuesta')}
               >
@@ -1398,8 +1400,8 @@ export function PropuestasPage() {
               onClick={() => { setSelectedPropuestaForAssign(item); setShowAssignModal(true); }}
               disabled={permissions.canAsignarInventario && (item.status === 'Aprobada' || isLocked)}
               className={`p-2 rounded-lg border transition-all ${permissions.canAsignarInventario && (item.status === 'Aprobada' || isLocked)
-                ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
-                : 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
+                ? isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
+                : isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
                 }`}
               title={permissions.canAsignarInventario ? (isLocked ? 'No disponible en este estatus' : (item.status === 'Aprobada' ? 'No disponible para propuestas aprobadas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : 'Asignar a Inventario'))) : 'Ver Propuesta'}
             >
@@ -1410,8 +1412,8 @@ export function PropuestasPage() {
                 disabled={(item.status !== 'Aprobada' && item.status !== 'Atendido' && item.status !== 'Pase a ventas') || isLocked}
                 onClick={() => !isLocked && (item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas') && navigate(`/propuestas/compartir/${item.id}`)}
                 className={`p-2 rounded-lg border transition-all ${(item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas') && !isLocked
-                  ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40'
-                  : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+                  ? isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 hover:text-cyan-700 border-cyan-200 hover:border-cyan-300'
+                  : isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
                   }`}
                 title={isLocked ? 'No disponible en este estatus' : (item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas' ? 'Compartir propuesta' : 'Solo disponible en status Aprobada o Pase a ventas')}
               >
@@ -1504,10 +1506,10 @@ export function PropuestasPage() {
             <div>
               <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Sin Aprobar</p>
               <div className="flex items-baseline gap-2">
-                <h3 className="text-3xl font-bold text-amber-400">
+                <h3 className={`text-3xl font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
                   {((stats?.total || 0) - (stats?.byStatus['Pase a ventas'] || 0)).toLocaleString()}
                 </h3>
-                <span className="text-xs text-amber-500/80 font-medium">Atención requerida</span>
+                <span className={`text-xs font-medium ${isDark ? 'text-amber-500/80' : 'text-amber-600'}`}>Atención requerida</span>
               </div>
             </div>
 
@@ -1529,7 +1531,7 @@ export function PropuestasPage() {
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
               {/* Search */}
               <div className="relative flex-1 w-full lg:max-w-xl">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
+                <Search className={`absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
                 <input
                   type="search"
                   placeholder="Buscar artículo, descripción, asignado..."
@@ -1543,7 +1545,7 @@ export function PropuestasPage() {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
-                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                  ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
                   : isDark
                     ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
                     : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'
@@ -1552,7 +1554,7 @@ export function PropuestasPage() {
                 <SlidersHorizontal className="h-4 w-4" />
                 Filtros
                 {hasActiveFilters && (
-                  <span className="w-2 h-2 rounded-full bg-purple-400" />
+                  <span className={`w-2 h-2 rounded-full ${isDark ? 'bg-purple-400' : 'bg-purple-500'}`} />
                 )}
               </button>
 
@@ -1576,14 +1578,16 @@ export function PropuestasPage() {
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                       advancedFilters.length > 0
                         ? 'bg-purple-600 text-white'
-                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                        : isDark
+                          ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                          : 'bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700'
                     }`}
                     title="Filtros avanzados"
                   >
                     <Filter className="h-3.5 w-3.5" />
                     <span>Filtrar</span>
                     {advancedFilters.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-purple-800 text-[10px]">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-purple-800' : 'bg-purple-700'}`}>
                         {advancedFilters.length}
                       </span>
                     )}
@@ -1591,7 +1595,7 @@ export function PropuestasPage() {
                   {showAdvancedFilters && (
                     <div className={`absolute left-0 top-full mt-1 z-[100] w-[520px] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-gray-200'} border rounded-xl shadow-2xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-medium text-purple-300">Filtros avanzados</span>
+                        <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros avanzados</span>
                         <button
                           onClick={() => setShowAdvancedFilters(false)}
                           className={`${isDark ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}
@@ -1603,7 +1607,7 @@ export function PropuestasPage() {
                         {advancedFilters.map((filter, index) => (
                           <div key={filter.id} className="flex items-center gap-2">
                             {index > 0 && (
-                              <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>
+                              <span className={`text-[10px] font-medium w-8 ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>AND</span>
                             )}
                             {index === 0 && <span className="w-8"></span>}
                             <select
@@ -1662,7 +1666,7 @@ export function PropuestasPage() {
                         <button
                           onClick={clearAdvancedFilters}
                           disabled={advancedFilters.length === 0}
-                          className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          className={`px-3 py-1.5 text-xs font-medium rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors border ${isDark ? 'text-red-400 hover:text-red-300 hover:bg-red-900/30 border-red-500/30' : 'text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200'}`}
                         >
                           Limpiar
                         </button>
@@ -1709,7 +1713,7 @@ export function PropuestasPage() {
                 {/* Current Catorcena Indicator */}
                 {currentCatorcena && (
                   <>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs">
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border ${isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
                       <Clock className="h-3 w-3" />
                       <span>Actual: Cat. {currentCatorcena.numero_catorcena} / {currentCatorcena.a_o}</span>
                     </div>
@@ -1745,7 +1749,7 @@ export function PropuestasPage() {
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
 
                 {/* Sort Options */}
-                <span className="text-xs text-zinc-500 mr-1">
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>
                   <ArrowUpDown className="h-3 w-3 inline mr-1" />
                   Ordenar:
                 </span>
@@ -1759,7 +1763,7 @@ export function PropuestasPage() {
                 />
                 <button
                   onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                  className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 transition-all"
+                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all ${isDark ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'}`}
                 >
                   {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
                 </button>
@@ -1783,7 +1787,7 @@ export function PropuestasPage() {
                     <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
                     <button
                       onClick={clearAllFilters}
-                      className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                      className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all border ${isDark ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'}`}
                     >
                       <X className="h-3 w-3" />
                       Limpiar todo
@@ -1796,22 +1800,22 @@ export function PropuestasPage() {
         </div>
 
         {/* Table */}
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5">
+        <div className={`rounded-2xl border backdrop-blur-xl overflow-hidden shadow-xl ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 shadow-purple-500/5' : 'border-gray-200 bg-white shadow-gray-200/50'}`}>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fecha Creación</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Creador</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Asignados</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Inversión</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Inicio</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fin</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Acciones</th>
+                <tr className={`border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30' : 'border-gray-200 bg-gray-50'}`}>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>ID</th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>Fecha Creación</th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>Marca</th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>Creador</th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>Campaña</th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>Asignados</th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>Inversión</th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>Inicio</th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>Fin</th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>Estatus</th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -1819,8 +1823,8 @@ export function PropuestasPage() {
                   <tr>
                     <td colSpan={11} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
-                        <div className="w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-                        <span className="text-zinc-500 text-sm">Cargando propuestas...</span>
+                        <div className={`w-8 h-8 border-2 rounded-full animate-spin ${isDark ? 'border-purple-500/30 border-t-purple-500' : 'border-purple-200 border-t-purple-600'}`} />
+                        <span className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cargando propuestas...</span>
                       </div>
                     </td>
                   </tr>
@@ -1828,10 +1832,10 @@ export function PropuestasPage() {
                   <tr>
                     <td colSpan={11} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
-                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-purple-500/10">
-                          <FileText className="w-6 h-6 text-purple-400" />
+                        <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'}`}>
+                          <FileText className={`w-6 h-6 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
                         </div>
-                        <span className="text-zinc-500 text-sm">No se encontraron propuestas</span>
+                        <span className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No se encontraron propuestas</span>
                       </div>
                     </td>
                   </tr>
@@ -1859,23 +1863,23 @@ export function PropuestasPage() {
 
           {/* Pagination */}
           {!groupBy && data?.pagination && totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
-              <span className="text-sm text-purple-300/70">
-                Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{totalPages}</span>
-                <span className="text-purple-300/50 ml-2">({total} total)</span>
+            <div className={`flex items-center justify-between border-t px-4 py-3 ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-gray-200 bg-gray-50'}`}>
+              <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>
+                Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{totalPages}</span>
+                <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-gray-400'}`}>({total} total)</span>
               </span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page === 1}
-                  className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                  className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
                 >
                   Anterior
                 </button>
                 <button
                   onClick={() => setPage(Math.min(totalPages, page + 1))}
                   disabled={page === totalPages}
-                  className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                  className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
                 >
                   Siguiente
                 </button>

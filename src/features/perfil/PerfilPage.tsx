@@ -14,7 +14,7 @@ export function PerfilPage() {
   const queryClient = useQueryClient();
   const { user: storeUser, setUser } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const isDark = useThemeStore((s) => s.theme === 'dark');
 
   // Estados del formulario de perfil
   const [profileForm, setProfileForm] = useState({
@@ -183,8 +183,8 @@ export function PerfilPage() {
             {photoMessage && (
               <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
                 photoMessage.type === 'success'
-                  ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                  : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  ? isDark ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-green-50 text-green-700 border border-green-200'
+                  : isDark ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'
               }`}>
                 {photoMessage.type === 'success' ? (
                   <CheckCircle className="h-4 w-4" />
@@ -206,7 +206,7 @@ export function PerfilPage() {
                 />
                 {profile?.foto_perfil ? (
                   <img
-                    src={`${STATIC_URL}${profile.foto_perfil}`}
+                    src={profile.foto_perfil.startsWith('http') ? profile.foto_perfil : `${STATIC_URL}${profile.foto_perfil}`}
                     alt="Foto de perfil"
                     className="h-20 w-20 rounded-full object-cover shadow-lg shadow-purple-500/20"
                   />
@@ -265,8 +265,8 @@ export function PerfilPage() {
             {profileMessage && (
               <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
                 profileMessage.type === 'success'
-                  ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                  : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  ? isDark ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-green-50 text-green-700 border border-green-200'
+                  : isDark ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'
               }`}>
                 {profileMessage.type === 'success' ? (
                   <CheckCircle className="h-4 w-4" />
@@ -351,8 +351,8 @@ export function PerfilPage() {
             {passwordMessage && (
               <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
                 passwordMessage.type === 'success'
-                  ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                  : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  ? isDark ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-green-50 text-green-700 border border-green-200'
+                  : isDark ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'
               }`}>
                 {passwordMessage.type === 'success' ? (
                   <CheckCircle className="h-4 w-4" />

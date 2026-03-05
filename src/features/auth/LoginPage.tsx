@@ -24,8 +24,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const setAuth = useAuthStore((state) => state.setAuth);
-  const theme = useThemeStore((s) => s.theme);
-  const isDark = theme === 'dark';
+  const isDark = useThemeStore((s) => s.theme === 'dark');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -115,7 +114,7 @@ export function LoginPage() {
                 } ${errors.email ? 'border-red-500' : ''}`}
               />
               {errors.email && (
-                <p className="text-sm text-red-400">{errors.email.message}</p>
+                <p className={`text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>{errors.email.message}</p>
               )}
             </div>
 
@@ -135,7 +134,7 @@ export function LoginPage() {
                 } ${errors.password ? 'border-red-500' : ''}`}
               />
               {errors.password && (
-                <p className="text-sm text-red-400">{errors.password.message}</p>
+                <p className={`text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>{errors.password.message}</p>
               )}
             </div>
 

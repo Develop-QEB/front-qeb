@@ -74,7 +74,7 @@ function TicketCard({
               {new Date(ticket.created_at).toLocaleDateString('es-MX')}
             </span>
             {ticket.imagen && (
-              <span className="flex items-center gap-1 text-purple-400">
+              <span className={`flex items-center gap-1 ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>
                 <Image className="h-3 w-3" />
                 Imagen
               </span>
@@ -178,7 +178,7 @@ function TicketDetail({
           <div className={sectionCls}>
             <button
               onClick={() => setShowImage(!showImage)}
-              className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors"
+              className={`flex items-center gap-2 transition-colors ${isDark ? 'text-purple-400 hover:text-purple-300' : 'text-purple-600 hover:text-purple-700'}`}
             >
               <Image className="h-4 w-4" />
               <span className="text-sm font-medium">
@@ -200,10 +200,10 @@ function TicketDetail({
 
         {/* Respuesta anterior */}
         {ticket.respuesta && (
-          <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20">
+          <div className={`p-4 rounded-xl border ${isDark ? 'bg-green-500/10 border-green-500/20' : 'bg-green-50 border-green-200'}`}>
             <div className="flex items-center gap-2 mb-2">
-              <MessageSquare className="h-4 w-4 text-green-400" />
-              <h3 className="text-sm font-medium text-green-400">Respuesta</h3>
+              <MessageSquare className={`h-4 w-4 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+              <h3 className={`text-sm font-medium ${isDark ? 'text-green-400' : 'text-green-700'}`}>Respuesta</h3>
             </div>
             <p className={`whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>{ticket.respuesta}</p>
             {ticket.respondido_por && (
@@ -329,7 +329,7 @@ export function DevTicketsPage() {
           ].map((stat) => (
             <div
               key={stat.label}
-              className={`p-4 rounded-xl border border-${stat.color}-500/20 bg-${stat.color}-500/10`}
+              className={`p-4 rounded-xl border ${isDark ? `border-${stat.color}-500/20 bg-${stat.color}-500/10` : `border-${stat.color}-200 bg-${stat.color}-50`}`}
             >
               <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{stat.value}</p>
               <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{stat.label}</p>
@@ -341,7 +341,7 @@ export function DevTicketsPage() {
         <div className={`${panelCls} p-4 mb-6`}>
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
+              <Search className={`absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
               <input
                 type="search"
                 placeholder="Buscar tickets..."
@@ -392,7 +392,7 @@ export function DevTicketsPage() {
           <div className={panelCls}>
             <div className={panelHeaderCls}>
               <h2 className={`font-semibold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                <Ticket className="h-5 w-5 text-purple-400" />
+                <Ticket className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                 Tickets ({tickets.length})
               </h2>
             </div>
@@ -400,11 +400,11 @@ export function DevTicketsPage() {
             <div className="p-3 space-y-2 max-h-[600px] overflow-y-auto">
               {isLoading ? (
                 <div className="flex items-center justify-center py-10">
-                  <Loader2 className="h-8 w-8 text-purple-400 animate-spin" />
+                  <Loader2 className={`h-8 w-8 animate-spin ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
                 </div>
               ) : tickets.length === 0 ? (
                 <div className="text-center py-10">
-                  <Ticket className="h-12 w-12 text-purple-400/50 mx-auto mb-3" />
+                  <Ticket className={`h-12 w-12 mx-auto mb-3 ${isDark ? 'text-purple-400/50' : 'text-purple-300'}`} />
                   <p className={isDark ? 'text-zinc-400' : 'text-gray-500'}>No hay tickets</p>
                 </div>
               ) : (
@@ -435,7 +435,7 @@ export function DevTicketsPage() {
             ) : (
               <div className="h-full flex items-center justify-center p-10">
                 <div className="text-center">
-                  <MessageSquare className="h-16 w-16 text-purple-400/30 mx-auto mb-4" />
+                  <MessageSquare className={`h-16 w-16 mx-auto mb-4 ${isDark ? 'text-purple-400/30' : 'text-purple-300/50'}`} />
                   <p className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Selecciona un ticket para ver los detalles</p>
                 </div>
               </div>

@@ -11,6 +11,7 @@ import { Cliente } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketClientes } from '../../hooks/useSocket';
+import { useThemeStore } from '../../store/themeStore';
 
 // ============ TIPOS Y CONFIGURACIÓN DE FILTROS/ORDENAMIENTO ============
 type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
@@ -114,6 +115,8 @@ interface ViewClienteModalProps {
 }
 
 function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
+  const isDark = useThemeStore((s) => s.theme === 'dark');
+
   // Bloquear scroll del body cuando el modal está abierto
   useEffect(() => {
     if (isOpen) {
@@ -130,9 +133,9 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 isolate">
-      <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative z-50">
+      <div className={`${isDark ? 'bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border-zinc-800/50' : 'bg-white border-gray-200'} border rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative z-50`}>
         {/* Header */}
-        <div className="relative px-6 py-5 border-b border-purple-500/20 bg-gradient-to-r from-purple-600/20 via-fuchsia-600/15 to-pink-600/10">
+        <div className={`relative px-6 py-5 border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-600/20 via-fuchsia-600/15 to-pink-600/10' : 'border-purple-200 bg-gradient-to-r from-purple-50 via-fuchsia-50 to-pink-50'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-purple-500/25">
@@ -140,26 +143,29 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-white">Cliente</h2>
-                  <span className="font-mono text-sm px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cliente</h2>
+                  <span className={`font-mono text-sm px-2 py-0.5 rounded-lg ${isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-100 text-purple-700 border border-purple-200'}`}>
                     CUIC: {cliente.CUIC || '-'}
                   </span>
                   {cliente.sap_database && (
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-lg border ${
-                      cliente.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                      cliente.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                      cliente.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
-                      'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                      cliente.sap_database === 'CIMU'
+                        ? (isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200')
+                        : cliente.sap_database === 'TEST'
+                        ? (isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200')
+                        : cliente.sap_database === 'TRADE'
+                        ? (isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200')
+                        : (isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-100 text-gray-600 border-gray-200')
                     }`}>
                       {cliente.sap_database}
                     </span>
                   )}
                 </div>
-                <p className="text-zinc-400 text-sm">{cliente.T0_U_Cliente || 'Sin nombre'}</p>
+                <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{cliente.T0_U_Cliente || 'Sin nombre'}</p>
               </div>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-xl transition-colors">
-              <X className="h-5 w-5 text-zinc-400" />
+            <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-xl transition-colors`}>
+              <X className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-400'}`} />
             </button>
           </div>
         </div>
@@ -168,23 +174,23 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
         <div className="flex-1 overflow-y-auto p-5">
           <div className="space-y-5">
             {/* Stats Row */}
-            <div className="bg-gradient-to-r from-purple-600/10 via-fuchsia-600/10 to-pink-600/10 rounded-2xl p-5 border border-purple-500/20">
+            <div className={`${isDark ? 'bg-gradient-to-r from-purple-600/10 via-fuchsia-600/10 to-pink-600/10 border-purple-500/20' : 'bg-gradient-to-r from-purple-50 via-fuchsia-50 to-pink-50 border-purple-200'} rounded-2xl p-5 border`}>
               <div className="grid grid-cols-4 gap-6">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-white font-mono">{cliente.CUIC || '-'}</p>
-                  <p className="text-xs text-zinc-400 mt-1">CUIC</p>
+                  <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} font-mono`}>{cliente.CUIC || '-'}</p>
+                  <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>CUIC</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold text-purple-400 truncate">{cliente.T2_U_Marca || '-'}</p>
-                  <p className="text-xs text-zinc-400 mt-1">Marca</p>
+                  <p className={`text-lg font-bold ${isDark ? 'text-purple-400' : 'text-purple-600'} truncate`}>{cliente.T2_U_Marca || '-'}</p>
+                  <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Marca</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold text-cyan-400 truncate">{cliente.T0_U_Agencia || '-'}</p>
-                  <p className="text-xs text-zinc-400 mt-1">Agencia</p>
+                  <p className={`text-lg font-bold ${isDark ? 'text-cyan-400' : 'text-cyan-600'} truncate`}>{cliente.T0_U_Agencia || '-'}</p>
+                  <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Agencia</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold text-amber-400 truncate">{cliente.T2_U_Categoria || '-'}</p>
-                  <p className="text-xs text-zinc-400 mt-1">Categoría</p>
+                  <p className={`text-lg font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'} truncate`}>{cliente.T2_U_Categoria || '-'}</p>
+                  <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Categoría</p>
                 </div>
               </div>
             </div>
@@ -192,57 +198,57 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
             {/* Two Column Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {/* Información General */}
-              <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
-                <h3 className="text-sm font-semibold text-purple-400 mb-4 flex items-center gap-2">
+              <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} mb-4 flex items-center gap-2`}>
                   <FileText className="h-4 w-4" />
                   Información General
                 </h3>
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-zinc-500 text-sm">ID</span>
-                    <span className="text-white text-sm font-mono">{cliente.id}</span>
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>ID</span>
+                    <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{cliente.id}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500 text-sm">CUIC</span>
-                    <span className="text-purple-300 text-sm font-mono font-medium">{cliente.CUIC || '-'}</span>
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>CUIC</span>
+                    <span className={`${isDark ? 'text-purple-300' : 'text-purple-600'} text-sm font-mono font-medium`}>{cliente.CUIC || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500 text-sm">Cliente</span>
-                    <span className="text-white text-sm font-medium truncate ml-4 max-w-[200px]">{cliente.T0_U_Cliente || '-'}</span>
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Cliente</span>
+                    <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-medium truncate ml-4 max-w-[200px]`}>{cliente.T0_U_Cliente || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500 text-sm">Razón Social</span>
-                    <span className="text-white text-sm truncate ml-4 max-w-[200px]">{cliente.T0_U_RazonSocial || '-'}</span>
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Razón Social</span>
+                    <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm truncate ml-4 max-w-[200px]`}>{cliente.T0_U_RazonSocial || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500 text-sm">Unidad de Negocio</span>
-                    <span className="text-cyan-300 text-sm">{cliente.T1_U_UnidadNegocio || cliente.ASESOR_U_UnidadNegocio || '-'}</span>
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Unidad de Negocio</span>
+                    <span className={`${isDark ? 'text-cyan-300' : 'text-cyan-600'} text-sm`}>{cliente.T1_U_UnidadNegocio || cliente.ASESOR_U_UnidadNegocio || '-'}</span>
                   </div>
                 </div>
               </div>
 
               {/* Asesor Comercial */}
-              <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
-                <h3 className="text-sm font-semibold text-purple-400 mb-4 flex items-center gap-2">
+              <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} mb-4 flex items-center gap-2`}>
                   <User className="h-4 w-4" />
                   Asesor Comercial
                 </h3>
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-zinc-500 text-sm">Asesor</span>
-                    <span className="text-emerald-400 text-sm font-medium">{cliente.ASESOR_U_Asesor || cliente.T0_U_Asesor || '-'}</span>
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Asesor</span>
+                    <span className={`${isDark ? 'text-emerald-400' : 'text-emerald-600'} text-sm font-medium`}>{cliente.ASESOR_U_Asesor || cliente.T0_U_Asesor || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500 text-sm">ID Asesor</span>
-                    <span className="text-white text-sm font-mono">{cliente.ASESOR_U_IDAsesor || cliente.T0_U_IDAsesor || '-'}</span>
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>ID Asesor</span>
+                    <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{cliente.ASESOR_U_IDAsesor || cliente.T0_U_IDAsesor || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500 text-sm">Código SAP</span>
-                    <span className="text-white text-sm font-mono">{cliente.ASESOR_U_SAPCode || '-'}</span>
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Código SAP</span>
+                    <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{cliente.ASESOR_U_SAPCode || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500 text-sm">Unidad Asesor</span>
-                    <span className="text-white text-sm">{cliente.ASESOR_U_UnidadNegocio || '-'}</span>
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Unidad Asesor</span>
+                    <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{cliente.ASESOR_U_UnidadNegocio || '-'}</span>
                   </div>
                 </div>
               </div>
@@ -251,88 +257,88 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
             {/* Three Column Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {/* Agencia */}
-              <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
-                <h3 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
+              <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} mb-3 flex items-center gap-2`}>
                   <Building2 className="h-4 w-4" />
                   Agencia
                 </h3>
-                <p className="text-white font-medium text-lg">{cliente.T0_U_Agencia || '-'}</p>
-                <p className="text-zinc-500 text-xs mt-1">ID: {cliente.T0_U_IDAgencia || '-'}</p>
+                <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium text-lg`}>{cliente.T0_U_Agencia || '-'}</p>
+                <p className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs mt-1`}>ID: {cliente.T0_U_IDAgencia || '-'}</p>
               </div>
 
               {/* Marca y Producto */}
-              <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
-                <h3 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
+              <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} mb-3 flex items-center gap-2`}>
                   <Tag className="h-4 w-4" />
                   Marca & Producto
                 </h3>
-                <p className="text-fuchsia-300 font-medium">{cliente.T2_U_Marca || '-'}</p>
-                <p className="text-zinc-500 text-xs mt-0.5">ID Marca: {cliente.T1_U_IDMarca || '-'}</p>
-                <div className="mt-2 pt-2 border-t border-zinc-700/50">
-                  <p className="text-amber-300 font-medium">{cliente.T2_U_Producto || '-'}</p>
-                  <p className="text-zinc-500 text-xs mt-0.5">ID Producto: {cliente.T2_U_IDProducto || '-'}</p>
+                <p className={`${isDark ? 'text-fuchsia-300' : 'text-fuchsia-600'} font-medium`}>{cliente.T2_U_Marca || '-'}</p>
+                <p className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs mt-0.5`}>ID Marca: {cliente.T1_U_IDMarca || '-'}</p>
+                <div className={`mt-2 pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
+                  <p className={`${isDark ? 'text-amber-300' : 'text-amber-600'} font-medium`}>{cliente.T2_U_Producto || '-'}</p>
+                  <p className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs mt-0.5`}>ID Producto: {cliente.T2_U_IDProducto || '-'}</p>
                 </div>
               </div>
 
               {/* Categoría */}
-              <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
-                <h3 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
+              <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} mb-3 flex items-center gap-2`}>
                   <Layers className="h-4 w-4" />
                   Categoría
                 </h3>
-                <p className="text-white font-medium text-lg">{cliente.T2_U_Categoria || '-'}</p>
-                <p className="text-zinc-500 text-xs mt-1">ID: {cliente.T2_U_IDCategoria || '-'}</p>
+                <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium text-lg`}>{cliente.T2_U_Categoria || '-'}</p>
+                <p className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs mt-1`}>ID: {cliente.T2_U_IDCategoria || '-'}</p>
               </div>
             </div>
 
             {/* Vigencias */}
-            <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
-              <h3 className="text-sm font-semibold text-purple-400 mb-4 flex items-center gap-2">
+            <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} mb-4 flex items-center gap-2`}>
                 <Calendar className="h-4 w-4" />
                 Vigencias
               </h3>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <span className="text-zinc-500 text-xs block mb-1">Válido Desde (T1)</span>
-                  <span className="text-white text-sm">{formatDate(cliente.T1_U_ValidFrom)}</span>
+                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs block mb-1`}>Válido Desde (T1)</span>
+                  <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{formatDate(cliente.T1_U_ValidFrom)}</span>
                 </div>
                 <div>
-                  <span className="text-zinc-500 text-xs block mb-1">Válido Hasta (T1)</span>
-                  <span className="text-white text-sm">{formatDate(cliente.T1_U_ValidTo)}</span>
+                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs block mb-1`}>Válido Hasta (T1)</span>
+                  <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{formatDate(cliente.T1_U_ValidTo)}</span>
                 </div>
                 <div>
-                  <span className="text-zinc-500 text-xs block mb-1">Válido Desde (T2)</span>
-                  <span className="text-white text-sm">{formatDate(cliente.T2_U_ValidFrom)}</span>
+                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs block mb-1`}>Válido Desde (T2)</span>
+                  <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{formatDate(cliente.T2_U_ValidFrom)}</span>
                 </div>
                 <div>
-                  <span className="text-zinc-500 text-xs block mb-1">Válido Hasta (T2)</span>
-                  <span className="text-white text-sm">{formatDate(cliente.T2_U_ValidTo)}</span>
+                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs block mb-1`}>Válido Hasta (T2)</span>
+                  <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{formatDate(cliente.T2_U_ValidTo)}</span>
                 </div>
               </div>
             </div>
 
             {/* IDs Técnicos */}
-            <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
-              <h3 className="text-sm font-semibold text-purple-400 mb-4 flex items-center gap-2">
+            <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} mb-4 flex items-center gap-2`}>
                 <Hash className="h-4 w-4" />
                 IDs Técnicos
               </h3>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <span className="text-zinc-500 text-xs block mb-1">T0 IDACA</span>
-                  <span className="text-white text-sm font-mono">{cliente.T0_U_IDACA || '-'}</span>
+                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs block mb-1`}>T0 IDACA</span>
+                  <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{cliente.T0_U_IDACA || '-'}</span>
                 </div>
                 <div>
-                  <span className="text-zinc-500 text-xs block mb-1">T1 IDACA</span>
-                  <span className="text-white text-sm font-mono">{cliente.T1_U_IDACA || '-'}</span>
+                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs block mb-1`}>T1 IDACA</span>
+                  <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{cliente.T1_U_IDACA || '-'}</span>
                 </div>
                 <div>
-                  <span className="text-zinc-500 text-xs block mb-1">T1 IDCM</span>
-                  <span className="text-white text-sm font-mono">{cliente.T1_U_IDCM || '-'}</span>
+                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs block mb-1`}>T1 IDCM</span>
+                  <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{cliente.T1_U_IDCM || '-'}</span>
                 </div>
                 <div>
-                  <span className="text-zinc-500 text-xs block mb-1">T2 IDCM</span>
-                  <span className="text-white text-sm font-mono">{cliente.T2_U_IDCM || '-'}</span>
+                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs block mb-1`}>T2 IDCM</span>
+                  <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{cliente.T2_U_IDCM || '-'}</span>
                 </div>
               </div>
             </div>
@@ -340,8 +346,8 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-zinc-800 bg-zinc-900/50">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 border border-zinc-700">
+        <div className={`flex items-center justify-end gap-3 px-6 py-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50'}`}>
+          <button onClick={onClose} className={`px-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300'} text-sm border`}>
             Cerrar
           </button>
         </div>
@@ -364,6 +370,7 @@ function StatCard({
   color: string;
   delay?: number;
 }) {
+  const isDark = useThemeStore((s) => s.theme === 'dark');
   const [animate, setAnimate] = useState(false);
   const [displayValue, setDisplayValue] = useState(0);
 
@@ -400,22 +407,29 @@ function StatCard({
     violet: 'from-violet-500/20 to-indigo-500/20 border-violet-500/30',
   };
 
+  const colorClassesLight: Record<string, string> = {
+    purple: 'from-purple-50 to-fuchsia-50 border-purple-200',
+    cyan: 'from-cyan-50 to-blue-50 border-cyan-200',
+    pink: 'from-pink-50 to-rose-50 border-pink-200',
+    violet: 'from-violet-50 to-indigo-50 border-violet-200',
+  };
+
   const iconColors: Record<string, string> = {
-    purple: 'text-purple-400',
-    cyan: 'text-cyan-400',
-    pink: 'text-pink-400',
-    violet: 'text-violet-400',
+    purple: isDark ? 'text-purple-400' : 'text-purple-600',
+    cyan: isDark ? 'text-cyan-400' : 'text-cyan-600',
+    pink: isDark ? 'text-pink-400' : 'text-pink-600',
+    violet: isDark ? 'text-violet-400' : 'text-violet-600',
   };
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${colorClasses[color]} backdrop-blur-sm p-5 transition-all duration-500 hover:scale-[1.02] ${animate ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+      className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${isDark ? colorClasses[color] : colorClassesLight[color]} backdrop-blur-sm p-5 transition-all duration-500 hover:scale-[1.02] ${animate ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
     >
       <div className="flex items-center gap-2 mb-2">
         <Icon className={`h-5 w-5 ${iconColors[color]}`} />
-        <span className="text-sm font-medium text-zinc-400 uppercase tracking-wide">{title}</span>
+        <span className={`text-sm font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wide`}>{title}</span>
       </div>
-      <p className="text-4xl font-bold text-white">
+      <p className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
         {displayValue.toLocaleString()}
       </p>
     </div>
@@ -438,19 +452,22 @@ function TabButton({
   count?: number;
   loading?: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme === 'dark');
   return (
     <button
       onClick={onClick}
       className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 ${
         active
           ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-lg shadow-purple-500/20'
-          : 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 border border-zinc-700/50'
+          : isDark
+            ? 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 border border-zinc-700/50'
+            : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700 border border-gray-200'
       }`}
     >
       <Icon className="h-4 w-4" />
       <span>{label}</span>
       <span className={`px-1.5 py-0.5 rounded-md text-xs ${
-        active ? 'bg-white/20' : 'bg-zinc-700'
+        active ? 'bg-white/20' : isDark ? 'bg-zinc-700' : 'bg-gray-200'
       }`}>
         {loading ? '...' : (count ?? 0).toLocaleString()}
       </span>
@@ -472,30 +489,35 @@ function GroupHeader({
   onToggle: () => void;
   level?: 1 | 2;
 }) {
+  const isDark = useThemeStore((s) => s.theme === 'dark');
   const isLevel1 = level === 1;
   return (
     <tr
       onClick={onToggle}
       className={`border-b cursor-pointer transition-colors ${
         isLevel1
-          ? 'bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20'
-          : 'bg-fuchsia-500/5 border-fuchsia-500/10 hover:bg-fuchsia-500/10'
+          ? isDark
+            ? 'bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20'
+            : 'bg-purple-50 border-purple-200 hover:bg-purple-100'
+          : isDark
+            ? 'bg-fuchsia-500/5 border-fuchsia-500/10 hover:bg-fuchsia-500/10'
+            : 'bg-fuchsia-50 border-fuchsia-100 hover:bg-fuchsia-100'
       }`}
     >
       <td colSpan={8} className={`px-4 py-2.5 ${isLevel1 ? '' : 'pl-10'}`}>
         <div className="flex items-center gap-2">
           {expanded ? (
-            <ChevronDown className={`h-4 w-4 ${isLevel1 ? 'text-purple-400' : 'text-fuchsia-400'}`} />
+            <ChevronDown className={`h-4 w-4 ${isLevel1 ? (isDark ? 'text-purple-400' : 'text-purple-600') : (isDark ? 'text-fuchsia-400' : 'text-fuchsia-600')}`} />
           ) : (
-            <ChevronRight className={`h-4 w-4 ${isLevel1 ? 'text-purple-400' : 'text-fuchsia-400'}`} />
+            <ChevronRight className={`h-4 w-4 ${isLevel1 ? (isDark ? 'text-purple-400' : 'text-purple-600') : (isDark ? 'text-fuchsia-400' : 'text-fuchsia-600')}`} />
           )}
-          <span className={`font-semibold ${isLevel1 ? 'text-white' : 'text-zinc-200 text-sm'}`}>
+          <span className={`font-semibold ${isLevel1 ? (isDark ? 'text-white' : 'text-gray-900') : (isDark ? 'text-zinc-200' : 'text-gray-700') + ' text-sm'}`}>
             {groupName || 'Sin asignar'}
           </span>
           <span className={`px-2 py-0.5 rounded-full text-xs ${
             isLevel1
-              ? 'bg-purple-500/20 text-purple-300'
-              : 'bg-fuchsia-500/20 text-fuchsia-300'
+              ? isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'
+              : isDark ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'bg-fuchsia-100 text-fuchsia-700'
           }`}>
             {count} {count === 1 ? 'cliente' : 'clientes'}
           </span>
@@ -506,6 +528,7 @@ function GroupHeader({
 }
 
 export function ClientesPage() {
+  const isDark = useThemeStore((s) => s.theme === 'dark');
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
@@ -843,51 +866,51 @@ export function ClientesPage() {
   };
 
   const sapDatabaseBadgeClasses: Record<string, string> = {
-    CIMU: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-    TEST: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-    TRADE: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    CIMU: isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200',
+    TEST: isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200',
+    TRADE: isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200',
   };
 
   const renderClientRow = (item: Cliente, isDbRow: boolean, index: number) => (
-    <tr key={isDbRow ? `db-${item.id}` : `sap-${index}-${item.CUIC}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+    <tr key={isDbRow ? `db-${item.id}` : `sap-${index}-${item.CUIC}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-100 hover:bg-gray-50'} transition-colors`}>
       <td className="px-2 py-2">
         <div className="flex items-center gap-1">
-          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300">{item.CUIC || '-'}</span>
+          <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>{item.CUIC || '-'}</span>
           {isDbRow && item.sap_database && (
-            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${sapDatabaseBadgeClasses[item.sap_database] || 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'}`}>
+            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${sapDatabaseBadgeClasses[item.sap_database] || (isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-100 text-gray-600 border-gray-200')}`}>
               {item.sap_database}
             </span>
           )}
         </div>
       </td>
       <td className="px-2 py-2">
-        <span className="font-semibold text-white text-xs truncate block max-w-[120px]">{item.T0_U_Cliente || '-'}</span>
+        <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'} text-xs truncate block max-w-[120px]`}>{item.T0_U_Cliente || '-'}</span>
       </td>
       <td className="px-2 py-2 hidden lg:table-cell">
-        <span className="max-w-[150px] truncate block text-zinc-400 text-[11px]">{item.T0_U_RazonSocial || '-'}</span>
+        <span className={`max-w-[150px] truncate block ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[11px]`}>{item.T0_U_RazonSocial || '-'}</span>
       </td>
       <td className="px-2 py-2 hidden md:table-cell">
         <span className="inline-flex items-center gap-1 max-w-[100px]">
-          <Building2 className="h-3 w-3 text-cyan-400 flex-shrink-0" />
-          <span className="text-cyan-300 text-[11px] truncate">{item.T0_U_Agencia || '-'}</span>
+          <Building2 className={`h-3 w-3 ${isDark ? 'text-cyan-400' : 'text-cyan-600'} flex-shrink-0`} />
+          <span className={`${isDark ? 'text-cyan-300' : 'text-cyan-600'} text-[11px] truncate`}>{item.T0_U_Agencia || '-'}</span>
         </span>
       </td>
       <td className="px-2 py-2">
         <span className="inline-flex items-center gap-1 max-w-[100px]">
-          <Tag className="h-3 w-3 text-fuchsia-400 flex-shrink-0" />
-          <span className="text-fuchsia-300 text-[11px] truncate">{item.T2_U_Marca || '-'}</span>
+          <Tag className={`h-3 w-3 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'} flex-shrink-0`} />
+          <span className={`${isDark ? 'text-fuchsia-300' : 'text-fuchsia-600'} text-[11px] truncate`}>{item.T2_U_Marca || '-'}</span>
         </span>
       </td>
       <td className="px-2 py-2 hidden xl:table-cell">
-        <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 truncate max-w-[80px] block">
+        <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200'} border truncate max-w-[80px] block`}>
           {item.T2_U_Categoria || '-'}
         </span>
       </td>
       {isDbRow && (
         <td className="px-2 py-2 hidden xl:table-cell">
           <span className="inline-flex items-center gap-1 max-w-[100px]">
-            <Package className="h-3 w-3 text-amber-400 flex-shrink-0" />
-            <span className="text-amber-300 text-[11px] truncate">{item.T2_U_Producto || '-'}</span>
+            <Package className={`h-3 w-3 ${isDark ? 'text-amber-400' : 'text-amber-600'} flex-shrink-0`} />
+            <span className={`${isDark ? 'text-amber-300' : 'text-amber-600'} text-[11px] truncate`}>{item.T2_U_Producto || '-'}</span>
           </span>
         </td>
       )}
@@ -895,7 +918,7 @@ export function ClientesPage() {
         <div className="flex items-center gap-0.5">
           <button
             onClick={(e) => { e.stopPropagation(); setSelectedCliente(item); setShowViewModal(true); }}
-            className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border border-purple-500/20 hover:border-purple-500/40 transition-all"
+            className={`p-1.5 rounded-lg ${isDark ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/40' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 hover:text-purple-700 border-purple-200 hover:border-purple-300'} border transition-all`}
             title="Ver detalles"
           >
             <Eye className="h-3 w-3" />
@@ -904,7 +927,7 @@ export function ClientesPage() {
             <button
               onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
               disabled={deleteMutation.isPending}
-              className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 transition-all disabled:opacity-50"
+              className={`p-1.5 rounded-lg ${isDark ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border-red-500/20 hover:border-red-500/40' : 'bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border-red-200 hover:border-red-300'} border transition-all disabled:opacity-50`}
               title="Eliminar"
             >
               <Trash2 className="h-3 w-3" />
@@ -914,7 +937,7 @@ export function ClientesPage() {
             <button
               onClick={(e) => { e.stopPropagation(); handleAddToDatabase(item); }}
               disabled={addingCuic !== null}
-              className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 transition-all disabled:opacity-50"
+              className={`p-1.5 rounded-lg ${isDark ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 border-emerald-200 hover:border-emerald-300'} border transition-all disabled:opacity-50`}
               title="Agregar a BD"
             >
               {addingCuic === item.CUIC ? (
@@ -973,7 +996,7 @@ export function ClientesPage() {
         </div>
 
         {/* Control Bar */}
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4 relative z-[45]">
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-gradient-to-br from-white via-purple-50/30 to-white'} backdrop-blur-xl p-4 relative z-[45]`}>
           <div className="flex flex-col gap-4">
             {/* Top Row: Tabs + Search */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
@@ -1015,7 +1038,7 @@ export function ClientesPage() {
                   <button
                     onClick={handleRefreshSap}
                     disabled={activeSapFetching}
-                    className="p-2 rounded-lg bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200 transition-all disabled:opacity-50"
+                    className={`p-2 rounded-lg ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'} border transition-all disabled:opacity-50`}
                     title="Refrescar SAP"
                   >
                     <RefreshCw className={`h-4 w-4 ${activeSapFetching ? 'animate-spin' : ''}`} />
@@ -1025,11 +1048,11 @@ export function ClientesPage() {
 
               {/* Search */}
               <div className="relative flex-1 w-full lg:max-w-xl">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
+                <Search className={`absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
                 <input
                   type="search"
                   placeholder="Buscar..."
-                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40"
+                  className={`w-full pl-11 pr-4 py-3 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 text-white placeholder:text-zinc-500 focus:ring-purple-500/30 focus:border-purple-500/40 hover:border-purple-500/40' : 'border-purple-200 bg-white text-gray-900 placeholder:text-gray-400 focus:ring-purple-300 focus:border-purple-300 hover:border-purple-300'} text-sm focus:outline-none focus:ring-2 transition-all`}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -1053,7 +1076,9 @@ export function ClientesPage() {
                     className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
                       filters.length > 0
                         ? 'bg-purple-600 text-white'
-                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                        : isDark
+                          ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                          : 'bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-600'
                     }`}
                     title="Filtrar"
                   >
@@ -1065,22 +1090,22 @@ export function ClientesPage() {
                     )}
                   </button>
                   {showFilterPopup && (
-                    <div className="absolute right-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                    <div className={`absolute right-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
-                        <button onClick={() => setShowFilterPopup(false)} className="text-zinc-400 hover:text-white">
+                        <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros de búsqueda</span>
+                        <button onClick={() => setShowFilterPopup(false)} className={`${isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-400 hover:text-gray-700'}`}>
                           <X className="h-4 w-4" />
                         </button>
                       </div>
                       <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                         {filters.map((filter, index) => (
                           <div key={filter.id} className="flex items-center gap-2">
-                            {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
+                            {index > 0 && <span className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-600'} font-medium w-8`}>AND</span>}
                             {index === 0 && <span className="w-8"></span>}
                             <select
                               value={filter.field}
                               onChange={(e) => updateFilter(filter.id, { field: e.target.value })}
-                              className="w-[130px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                              className={`w-[130px] text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded px-2 py-1.5`}
                             >
                               {FILTER_FIELDS.map((f) => (
                                 <option key={f.field} value={f.field}>{f.label}</option>
@@ -1089,7 +1114,7 @@ export function ClientesPage() {
                             <select
                               value={filter.operator}
                               onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
-                              className="w-[110px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                              className={`w-[110px] text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded px-2 py-1.5`}
                             >
                               {OPERATORS.map((op) => (
                                 <option key={op.value} value={op.value}>{op.label}</option>
@@ -1101,7 +1126,7 @@ export function ClientesPage() {
                               value={filter.value}
                               onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
                               placeholder="Escribe o selecciona..."
-                              className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
+                              className={`flex-1 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 focus:border-purple-500' : 'bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-purple-400'} border rounded px-2 py-1.5 focus:outline-none`}
                             />
                             <datalist id={`datalist-${filter.id}`}>
                               {getUniqueValues[filter.field]?.map((val) => (
@@ -1114,20 +1139,20 @@ export function ClientesPage() {
                           </div>
                         ))}
                         {filters.length === 0 && (
-                          <p className="text-[11px] text-zinc-500 text-center py-3">Sin filtros. Haz clic en "Añadir".</p>
+                          <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-center py-3`}>Sin filtros. Haz clic en "Añadir".</p>
                         )}
                       </div>
-                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-purple-900/30">
+                      <div className={`flex items-center justify-between mt-3 pt-3 border-t ${isDark ? 'border-purple-900/30' : 'border-purple-100'}`}>
                         <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
                           <Plus className="h-3 w-3" /> Añadir
                         </button>
-                        <button onClick={clearFilters} disabled={filters.length === 0} className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        <button onClick={clearFilters} disabled={filters.length === 0} className={`px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 ${isDark ? 'hover:bg-red-900/30 border-red-500/30' : 'hover:bg-red-50 border-red-200'} border rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors`}>
                           Limpiar
                         </button>
                       </div>
                       {filters.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-purple-900/30">
-                          <span className="text-[10px] text-zinc-500">{filteredData.length} de {currentData.length} registros</span>
+                        <div className={`mt-2 pt-2 border-t ${isDark ? 'border-purple-900/30' : 'border-purple-100'}`}>
+                          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{filteredData.length} de {currentData.length} registros</span>
                         </div>
                       )}
                     </div>
@@ -1141,7 +1166,9 @@ export function ClientesPage() {
                     className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
                       activeGroupings.length > 0
                         ? 'bg-purple-600 text-white'
-                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                        : isDark
+                          ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                          : 'bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-600'
                     }`}
                     title="Agrupar"
                   >
@@ -1153,28 +1180,28 @@ export function ClientesPage() {
                     )}
                   </button>
                   {showGroupPopup && (
-                    <div className="absolute right-0 top-full mt-1 z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
-                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 2)</p>
+                    <div className={`absolute right-0 top-full mt-1 z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-2 min-w-[180px]`}>
+                      <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide px-2 py-1`}>Agrupar por (max 2)</p>
                       {AVAILABLE_GROUPINGS.map(({ field, label }) => (
                         <button
                           key={field}
                           onClick={() => toggleGrouping(field)}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
-                            activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded ${isDark ? 'hover:bg-purple-900/30' : 'hover:bg-purple-50'} transition-colors ${
+                            activeGroupings.includes(field) ? (isDark ? 'text-purple-300' : 'text-purple-700') : (isDark ? 'text-zinc-400' : 'text-gray-500')
                           }`}
                         >
                           <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                            activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
+                            activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : isDark ? 'border-purple-500/50' : 'border-purple-300'
                           }`}>
                             {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
                           </div>
                           {label}
-                          {activeGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
-                          {activeGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+                          {activeGroupings.indexOf(field) === 0 && <span className={`ml-auto text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>1°</span>}
+                          {activeGroupings.indexOf(field) === 1 && <span className={`ml-auto text-[10px] ${isDark ? 'text-pink-400' : 'text-pink-600'}`}>2°</span>}
                         </button>
                       ))}
-                      <div className="border-t border-purple-900/30 mt-2 pt-2">
-                        <button onClick={() => setActiveGroupings([])} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                      <div className={`border-t ${isDark ? 'border-purple-900/30' : 'border-purple-100'} mt-2 pt-2`}>
+                        <button onClick={() => setActiveGroupings([])} className={`w-full text-xs ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600'} py-1`}>
                           Quitar agrupación
                         </button>
                       </div>
@@ -1189,17 +1216,19 @@ export function ClientesPage() {
                     className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
                       sortField
                         ? 'bg-purple-600 text-white'
-                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                        : isDark
+                          ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                          : 'bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-600'
                     }`}
                     title="Ordenar"
                   >
                     <ArrowUpDown className="h-4 w-4" />
                   </button>
                   {showSortPopup && (
-                    <div className="absolute right-0 top-full mt-1 z-[60] w-[300px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
+                    <div className={`absolute right-0 top-full mt-1 z-[60] w-[300px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-3`}>
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-medium text-purple-300">Ordenar por</span>
-                        <button onClick={() => setShowSortPopup(false)} className="text-zinc-400 hover:text-white">
+                        <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Ordenar por</span>
+                        <button onClick={() => setShowSortPopup(false)} className={`${isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-400 hover:text-gray-700'}`}>
                           <X className="h-4 w-4" />
                         </button>
                       </div>
@@ -1208,10 +1237,12 @@ export function ClientesPage() {
                           <div
                             key={field.field}
                             className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
-                              sortField === field.field ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-purple-900/20'
+                              sortField === field.field
+                                ? isDark ? 'bg-purple-600/20 border border-purple-500/30' : 'bg-purple-50 border border-purple-200'
+                                : isDark ? 'hover:bg-purple-900/20' : 'hover:bg-purple-50'
                             }`}
                           >
-                            <span className={sortField === field.field ? 'text-purple-300 font-medium' : 'text-zinc-300'}>
+                            <span className={sortField === field.field ? (isDark ? 'text-purple-300 font-medium' : 'text-purple-700 font-medium') : (isDark ? 'text-zinc-300' : 'text-gray-600')}>
                               {field.label}
                             </span>
                             <div className="flex items-center gap-1">
@@ -1220,7 +1251,7 @@ export function ClientesPage() {
                                 className={`p-1.5 rounded transition-colors ${
                                   sortField === field.field && sortDirection === 'asc'
                                     ? 'bg-purple-600 text-white'
-                                    : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                                    : isDark ? 'text-zinc-400 hover:text-white hover:bg-purple-900/50' : 'text-gray-400 hover:text-gray-700 hover:bg-purple-50'
                                 }`}
                                 title="Ascendente (A-Z)"
                               >
@@ -1231,7 +1262,7 @@ export function ClientesPage() {
                                 className={`p-1.5 rounded transition-colors ${
                                   sortField === field.field && sortDirection === 'desc'
                                     ? 'bg-purple-600 text-white'
-                                    : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                                    : isDark ? 'text-zinc-400 hover:text-white hover:bg-purple-900/50' : 'text-gray-400 hover:text-gray-700 hover:bg-purple-50'
                                 }`}
                                 title="Descendente (Z-A)"
                               >
@@ -1242,10 +1273,10 @@ export function ClientesPage() {
                         ))}
                       </div>
                       {sortField && (
-                        <div className="mt-3 pt-3 border-t border-purple-900/30">
+                        <div className={`mt-3 pt-3 border-t ${isDark ? 'border-purple-900/30' : 'border-purple-100'}`}>
                           <button
                             onClick={() => { setSortField(null); setSortDirection('asc'); }}
-                            className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors"
+                            className={`w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 ${isDark ? 'hover:bg-red-900/30 border-red-500/30' : 'hover:bg-red-50 border-red-200'} border rounded transition-colors`}
                           >
                             Quitar ordenamiento
                           </button>
@@ -1259,7 +1290,7 @@ export function ClientesPage() {
                 {hasActiveFilters && (
                   <button
                     onClick={clearAllFilters}
-                    className="flex items-center justify-center w-9 h-9 text-zinc-400 hover:text-white bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/50 transition-colors"
+                    className={`flex items-center justify-center w-9 h-9 ${isDark ? 'text-zinc-400 hover:text-white bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700/50' : 'text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 border-gray-200'} rounded-lg border transition-colors`}
                     title="Limpiar filtros"
                   >
                     <X className="h-4 w-4" />
@@ -1273,23 +1304,23 @@ export function ClientesPage() {
         {/* Info Badge */}
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs">
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${isDark ? 'bg-purple-500/10 border-purple-500/20 text-purple-300' : 'bg-purple-50 border-purple-200 text-purple-700'} border text-xs`}>
               <Filter className="h-3.5 w-3.5" />
               {filteredData.length} resultados
               {activeGroupings.length > 0 && (
-                <span className="text-zinc-500">
+                <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>
                   | Agrupado por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
                 </span>
               )}
               {sortField && (
-                <span className="text-zinc-500">| Ordenado por {FILTER_FIELDS.find(f => f.field === sortField)?.label} ({sortDirection === 'asc' ? '↑' : '↓'})</span>
+                <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>| Ordenado por {FILTER_FIELDS.find(f => f.field === sortField)?.label} ({sortDirection === 'asc' ? '↑' : '↓'})</span>
               )}
             </div>
           </div>
         )}
 
         {/* Data Table */}
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5 relative z-10">
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 shadow-purple-500/5' : 'border-purple-200 bg-white shadow-purple-100/50'} backdrop-blur-xl overflow-hidden shadow-xl relative z-10`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -1299,17 +1330,17 @@ export function ClientesPage() {
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
-                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">CUIC</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider hidden lg:table-cell">Razón Social</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider hidden md:table-cell">Agencia</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider hidden xl:table-cell">Categoría</th>
+                    <tr className={`border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30' : 'border-purple-100 bg-gradient-to-r from-purple-50 via-fuchsia-50 to-purple-50'}`}>
+                      <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider`}>CUIC</th>
+                      <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider`}>Cliente</th>
+                      <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider hidden lg:table-cell`}>Razón Social</th>
+                      <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider hidden md:table-cell`}>Agencia</th>
+                      <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider`}>Marca</th>
+                      <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider hidden xl:table-cell`}>Categoría</th>
                       {isDb && (
-                        <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider hidden xl:table-cell">Producto</th>
+                        <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider hidden xl:table-cell`}>Producto</th>
                       )}
-                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider"></th>
+                      <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider`}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1356,7 +1387,7 @@ export function ClientesPage() {
                     )}
                     {filteredData.length === 0 && !groupedData && (
                       <tr>
-                        <td colSpan={isDb ? 8 : 7} className="px-4 py-12 text-center text-zinc-500">
+                        <td colSpan={isDb ? 8 : 7} className={`px-4 py-12 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           {isSapTab ? `No hay clientes nuevos en SAP (${activeTab})` : "No se encontraron clientes"}
                         </td>
                       </tr>
@@ -1367,23 +1398,23 @@ export function ClientesPage() {
 
               {/* Pagination for DB only (when not filtering/grouping) */}
               {isDb && !needsFullData && dbData?.pagination && dbTotalPages > 1 && (
-                <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
-                  <span className="text-sm text-purple-300/70">
-                    Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{dbTotalPages}</span>
-                    <span className="text-purple-300/50 ml-2">({dbData.pagination.total} total)</span>
+                <div className={`flex items-center justify-between border-t ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-100 bg-gradient-to-r from-purple-50/50 via-transparent to-fuchsia-50/50'} px-4 py-3`}>
+                  <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-500'}`}>
+                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{dbTotalPages}</span>
+                    <span className={`${isDark ? 'text-purple-300/50' : 'text-purple-400'} ml-2`}>({dbData.pagination.total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
-                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Anterior
                     </button>
                     <button
                       onClick={() => setPage(p => Math.min(dbTotalPages, p + 1))}
                       disabled={page === dbTotalPages}
-                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Siguiente
                     </button>
@@ -1393,8 +1424,8 @@ export function ClientesPage() {
 
               {/* Full data info when filtering/grouping */}
               {isDb && needsFullData && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
-                  <span className="text-xs text-zinc-500">
+                <div className={`flex items-center justify-between px-4 py-3 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-100'}`}>
+                  <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                     Mostrando {filteredData.length} clientes filtrados
                   </span>
                 </div>
@@ -1402,24 +1433,24 @@ export function ClientesPage() {
 
               {/* SAP pagination + info */}
               {isSapTab && (
-                <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
-                  <span className="text-sm text-purple-300/70">
-                    Página <span className="font-semibold text-purple-300">{sapPage}</span> de <span className="font-semibold text-purple-300">{sapTotalPages}</span>
-                    <span className="text-purple-300/50 ml-2">({allSapData.length} total)</span>
+                <div className={`flex items-center justify-between border-t ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-100 bg-gradient-to-r from-purple-50/50 via-transparent to-fuchsia-50/50'} px-4 py-3`}>
+                  <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-500'}`}>
+                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{sapPage}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{sapTotalPages}</span>
+                    <span className={`${isDark ? 'text-purple-300/50' : 'text-purple-400'} ml-2`}>({allSapData.length} total)</span>
                     {activeSapData?.cached && <span className="ml-2 text-emerald-400 text-xs">(cache)</span>}
                   </span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setSapPage(p => Math.max(1, p - 1))}
                       disabled={sapPage === 1}
-                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Anterior
                     </button>
                     <button
                       onClick={() => setSapPage(p => Math.min(sapTotalPages, p + 1))}
                       disabled={sapPage === sapTotalPages}
-                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Siguiente
                     </button>
@@ -1441,14 +1472,14 @@ export function ClientesPage() {
       {/* Create Client Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowCreateModal(false)}>
-          <div className="bg-zinc-900 border border-purple-500/20 rounded-2xl w-full max-w-lg mx-4 overflow-hidden shadow-2xl shadow-purple-500/10" onClick={e => e.stopPropagation()}>
+          <div className={`${isDark ? 'bg-zinc-900 border-purple-500/20 shadow-purple-500/10' : 'bg-white border-purple-200 shadow-purple-100/50'} border rounded-2xl w-full max-w-lg mx-4 overflow-hidden shadow-2xl`} onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div className="bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40 px-6 py-4 border-b border-purple-500/20">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <Plus className="h-5 w-5 text-purple-400" />
+            <div className={`${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40 border-purple-500/20' : 'bg-gradient-to-r from-purple-50 via-fuchsia-50 to-purple-50 border-purple-200'} px-6 py-4 border-b`}>
+              <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
+                <Plus className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                 Nuevo Cliente Manual
               </h3>
-              <p className="text-xs text-zinc-400 mt-1">CUIC: <span className="text-purple-300 font-mono">0</span> (sin SAP)</p>
+              <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>CUIC: <span className={`${isDark ? 'text-purple-300' : 'text-purple-600'} font-mono`}>0</span> (sin SAP)</p>
             </div>
             {/* Form */}
             <form
@@ -1479,40 +1510,40 @@ export function ClientesPage() {
             >
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="text-xs text-zinc-400 mb-1 block">Razón Social *</label>
-                  <input name="razon_social" required className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Razón social del cliente" />
+                  <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Razón Social *</label>
+                  <input name="razon_social" required className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`} placeholder="Razón social del cliente" />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-xs text-zinc-400 mb-1 block">Cliente *</label>
-                  <input name="cliente" required className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Nombre del cliente" />
+                  <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Cliente *</label>
+                  <input name="cliente" required className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`} placeholder="Nombre del cliente" />
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-400 mb-1 block">Marca</label>
-                  <input name="marca" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Marca" />
+                  <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Marca</label>
+                  <input name="marca" className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`} placeholder="Marca" />
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-400 mb-1 block">Producto</label>
-                  <input name="producto" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Producto" />
+                  <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Producto</label>
+                  <input name="producto" className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`} placeholder="Producto" />
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-400 mb-1 block">Categoría</label>
-                  <input name="categoria" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Categoría" />
+                  <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Categoría</label>
+                  <input name="categoria" className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`} placeholder="Categoría" />
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-400 mb-1 block">Unidad de Negocio</label>
-                  <input name="unidad_negocio" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Unidad de negocio" />
+                  <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Unidad de Negocio</label>
+                  <input name="unidad_negocio" className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`} placeholder="Unidad de negocio" />
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-400 mb-1 block">Agencia</label>
-                  <input name="agencia" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Agencia" />
+                  <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Agencia</label>
+                  <input name="agencia" className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`} placeholder="Agencia" />
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-400 mb-1 block">Asesor</label>
-                  <input name="asesor" className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" placeholder="Asesor" />
+                  <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Asesor</label>
+                  <input name="asesor" className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`} placeholder="Asesor" />
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 rounded-lg border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 text-sm transition-all">
+                <button type="button" onClick={() => setShowCreateModal(false)} className={`px-4 py-2 rounded-lg border ${isDark ? 'border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500' : 'border-gray-300 text-gray-500 hover:text-gray-700 hover:border-gray-400'} text-sm transition-all`}>
                   Cancelar
                 </button>
                 <button type="submit" disabled={createMutation.isPending} className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white text-sm font-medium transition-all disabled:opacity-50">

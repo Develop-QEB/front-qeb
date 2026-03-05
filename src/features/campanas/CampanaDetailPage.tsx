@@ -149,9 +149,9 @@ function TableSkeleton({ isDark = true }: { isDark?: boolean }) {
       <div className="space-y-2">
         {/* Header skeleton */}
         <div className="flex items-center gap-2 pb-2">
-          <div className="h-7 bg-purple-900/30 rounded-lg w-32"></div>
-          <div className="h-7 bg-purple-900/30 rounded-lg w-24"></div>
-          <div className="h-7 bg-purple-900/30 rounded-lg w-20"></div>
+          <div className={`h-7 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'} rounded-lg w-32`}></div>
+          <div className={`h-7 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'} rounded-lg w-24`}></div>
+          <div className={`h-7 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'} rounded-lg w-20`}></div>
         </div>
         {/* Table rows skeleton */}
         <div className="border border-border rounded-lg overflow-hidden">
