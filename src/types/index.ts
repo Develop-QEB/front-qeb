@@ -196,6 +196,7 @@ export interface Solicitud {
   card_code?: string | null;
   salesperson_code?: number | null;
   sap_database?: string | null;
+  nombre_campania?: string | null;
 }
 
 export interface SolicitudStats {
