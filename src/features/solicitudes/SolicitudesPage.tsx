@@ -904,8 +904,14 @@ export function SolicitudesPage() {
             return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
           })()}
         </td>
-        <td className="px-4 py-3">
-          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{item.asignado || '-'}</span>
+        <td className="px-4 py-3 max-w-[160px]">
+          <span
+            className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs leading-relaxed`}
+            style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+            title={item.asignado || ''}
+          >
+            {item.asignado || '-'}
+          </span>
         </td>
         <td className="px-4 py-3">
           <button

@@ -480,12 +480,12 @@ function GroupSummaryInline({ items, groupField, isDark = true }: { items: Inven
   const totalInversion = items.reduce((s, i) => s + getTarifa(i) * (Number(i.caras_totales) || 0), 0);
   const tarifas = [...new Set(items.map(i => Math.round(getTarifa(i))).filter(t => t > 0))];
   const uniformTarifa = tarifas.length === 1 ? tarifas[0] : 0;
-  const showTarifa = groupField !== 'inicio_periodo' && uniformTarifa > 0;
+  const showTarifa = groupField !== 'inicio_periodo';
   return (
     <div className="flex items-center gap-2 text-[10px] ml-2 shrink-0">
       <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{carasTotal}</span></span>
-      {showTarifa && <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Tarifa: <span className="text-amber-400 font-medium">{fmtMoney(uniformTarifa)}</span></span>}
-      {totalInversion > 0 && <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inv: <span className="text-emerald-400 font-medium">{fmtMoney(totalInversion)}</span></span>}
+      {showTarifa && <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Tarifa: <span className="text-amber-400 font-medium">{uniformTarifa > 0 ? fmtMoney(uniformTarifa) : '$0'}</span></span>}
+      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inv: <span className="text-emerald-400 font-medium">{fmtMoney(totalInversion)}</span></span>
     </div>
   );
 }
