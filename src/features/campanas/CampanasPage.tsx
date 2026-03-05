@@ -288,7 +288,7 @@ function FilterChip({
       <button
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${value
-          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+          ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
           : isDark
             ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
             : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
@@ -305,7 +305,7 @@ function FilterChip({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className={`absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+          <div className={`absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
             <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <input
                 type="text"
@@ -328,7 +328,7 @@ function FilterChip({
                     key={option}
                     onClick={() => { onChange(option); handleClose(); }}
                     className={`w-full px-3 py-2 text-left text-xs transition-colors ${value === option
-                      ? 'bg-purple-500/20 text-purple-300'
+                      ? isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-50 text-purple-700'
                       : isDark
                         ? 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
                         : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
@@ -445,7 +445,7 @@ function PeriodFilterPopover({
       <button
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${isActive
-          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+          ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
           : isDark
             ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
             : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
@@ -463,10 +463,10 @@ function PeriodFilterPopover({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className={`absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+          <div className={`absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
             <div className={`p-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
-                <Calendar className="h-4 w-4 text-purple-400" />
+                <Calendar className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                 Filtro de Periodo
               </h3>
               <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-1`}>Selecciona año inicio y fin (obligatorios)</p>
@@ -603,17 +603,17 @@ function GroupHeader({
   return (
     <tr
       onClick={onToggle}
-      className="bg-purple-500/10 border-b border-purple-500/20 cursor-pointer hover:bg-purple-500/20 transition-colors"
+      className={`${isDark ? 'bg-purple-500/10 border-b border-purple-500/20 hover:bg-purple-500/20' : 'bg-purple-50 border-b border-purple-200 hover:bg-purple-100'} cursor-pointer transition-colors`}
     >
       <td colSpan={colSpan} className="px-4 py-3">
         <div className="flex items-center gap-2">
           {expanded ? (
-            <ChevronDown className="h-4 w-4 text-purple-400" />
+            <ChevronDown className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
           ) : (
-            <ChevronRight className="h-4 w-4 text-purple-400" />
+            <ChevronRight className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
           )}
           <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupName || 'Sin asignar'}</span>
-          <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">
+          <span className={`px-2 py-0.5 rounded-full text-xs ${isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'}`}>
             {count} campañas
           </span>
         </div>
@@ -1328,7 +1328,7 @@ export function CampanasPage() {
       <tr key={`campana-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
         {/* ID */}
         <td className="px-4 py-3">
-          <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">#{item.id}</span>
+          <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.id}</span>
         </td>
         {/* Periodo */}
         <td className="px-4 py-3">
@@ -1340,8 +1340,8 @@ export function CampanasPage() {
         <td className="px-4 py-3">
           {item.creador_nombre ? (
             <div className="flex items-center gap-1.5">
-              <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center">
-                <User className="h-3 w-3 text-purple-400" />
+              <div className={`w-6 h-6 rounded-full ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'} flex items-center justify-center`}>
+                <User className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
               </div>
               <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{item.creador_nombre}</span>
             </div>
@@ -1382,7 +1382,7 @@ export function CampanasPage() {
             >
               {item.status}
             </button>
-            {item.reservas_count != null && item.total_caras && Number(item.reservas_count) < Number(item.total_caras) && (
+            {item.caras_ultima_cat != null && Number(item.caras_ultima_cat) > 0 && Number(item.reservas_count_ultima_cat) < Number(item.caras_ultima_cat) && (
               <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}>
                 Incompleta
               </span>
@@ -1441,7 +1441,7 @@ export function CampanasPage() {
             </span>
           ) : (
             <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-gray-100'}`}>
-              <Minus className="h-3.5 w-3.5 text-zinc-600" />
+              <Minus className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
             </span>
           )}
         </td>
@@ -1450,7 +1450,7 @@ export function CampanasPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => handleOpenCampana(item.id)}
-              className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border border-purple-500/20 hover:border-purple-500/40 transition-all"
+              className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/40' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 hover:text-purple-700 border-purple-200 hover:border-purple-300'} border transition-all`}
               title="Abrir campaña"
             >
               <Eye className="h-3.5 w-3.5" />
@@ -1458,7 +1458,7 @@ export function CampanasPage() {
             {item.propuesta_id && (
               <button
                 onClick={() => navigate(`/propuestas/compartir/${item.propuesta_id}`)}
-                className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border border-cyan-500/20 hover:border-cyan-500/40 transition-all"
+                className={`p-2 rounded-lg ${isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 hover:text-cyan-700 border-cyan-200 hover:border-cyan-300'} border transition-all`}
                 title="Compartir campaña"
               >
                 <Share2 className="h-3.5 w-3.5" />
@@ -1504,7 +1504,7 @@ export function CampanasPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Main KPI: Total Campañas */}
           <div className={`col-span-1 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none group-hover:bg-purple-500/20 transition-all duration-500" />
+            <div className={`absolute top-0 right-0 w-32 h-32 ${isDark ? 'bg-purple-500/10 group-hover:bg-purple-500/20' : 'bg-purple-200/20 group-hover:bg-purple-200/30'} rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none transition-all duration-500`} />
             <div>
               <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Total Campañas</p>
               <h3 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
@@ -1608,17 +1608,17 @@ export function CampanasPage() {
         </div>
 
         {/* Control Bar */}
-        <div className={`rounded-2xl border border-purple-500/20 ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} backdrop-blur-xl p-4 relative z-30`}>
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
               {/* Search */}
               <div className="relative flex-1 w-full lg:max-w-xl">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
+                <Search className={`absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
                 <input
                   type="search"
                   placeholder="Buscar campaña, articulo, cliente..."
-                  className={`w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40`}
+                  className={`w-full pl-11 pr-4 py-3 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'border-purple-200 bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40`}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -1628,7 +1628,7 @@ export function CampanasPage() {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
-                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                  ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
                   : isDark
                     ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
                     : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'
@@ -1654,7 +1654,7 @@ export function CampanasPage() {
               {permissions.canSeeOrdenesMontajeButton && (
                 <button
                   onClick={() => setOrdenesMontajeModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30 transition-all"
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200'} border transition-all`}
                 >
                   <ClipboardList className="h-4 w-4" />
                   Órdenes de Montaje
@@ -1672,22 +1672,22 @@ export function CampanasPage() {
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                       advancedFilters.length > 0
                         ? 'bg-purple-600 text-white'
-                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                        : isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300' : 'bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700'
                     }`}
                     title="Filtros avanzados"
                   >
                     <Filter className="h-3.5 w-3.5" />
                     <span>Filtrar</span>
                     {advancedFilters.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-purple-800 text-[10px]">
+                      <span className={`px-1.5 py-0.5 rounded ${isDark ? 'bg-purple-800' : 'bg-purple-200'} text-[10px]`}>
                         {advancedFilters.length}
                       </span>
                     )}
                   </button>
                   {showAdvancedFilters && (
-                    <div className={`absolute left-0 top-full mt-1 z-[100] w-[520px] ${isDark ? 'bg-zinc-900' : 'bg-white'} border border-purple-500/30 rounded-xl shadow-2xl p-4`}>
+                    <div className={`absolute left-0 top-full mt-1 z-[100] w-[520px] ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-xl shadow-2xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-medium text-purple-300">Filtros avanzados</span>
+                        <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros avanzados</span>
                         <button
                           onClick={() => setShowAdvancedFilters(false)}
                           className={`${isDark ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}
@@ -1699,7 +1699,7 @@ export function CampanasPage() {
                         {advancedFilters.map((filter, index) => (
                           <div key={filter.id} className="flex items-center gap-2">
                             {index > 0 && (
-                              <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>
+                              <span className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-600'} font-medium w-8`}>AND</span>
                             )}
                             {index === 0 && <span className="w-8"></span>}
                             <select
@@ -1755,7 +1755,7 @@ export function CampanasPage() {
                         <button
                           onClick={clearFilters}
                           disabled={advancedFilters.length === 0}
-                          className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          className={`px-3 py-1.5 text-xs font-medium ${isDark ? 'text-red-400 hover:text-red-300 hover:bg-red-900/30 border-red-500/30' : 'text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200'} border rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors`}
                         >
                           Limpiar
                         </button>
@@ -1802,7 +1802,7 @@ export function CampanasPage() {
                 {/* Current Catorcena Indicator */}
                 {currentCatorcena && (
                   <>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs">
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} border text-xs`}>
                       <Clock className="h-3 w-3" />
                       <span>Actual: Cat. {currentCatorcena.numero_catorcena} / {currentCatorcena.a_o}</span>
                     </div>
@@ -1874,7 +1874,7 @@ export function CampanasPage() {
                     <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-300'} mx-1`} />
                     <button
                       onClick={clearAllFilters}
-                      className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                      className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'} border transition-all`}
                     >
                       <X className="h-3 w-3" />
                       Limpiar todo
@@ -1897,8 +1897,8 @@ export function CampanasPage() {
             }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeView === 'tabla'
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'
+                ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
+                : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
             }`}
           >
             <List className="h-4 w-4" />
@@ -1914,8 +1914,8 @@ export function CampanasPage() {
             }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeView === 'catorcena'
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'
+                ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
+                : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
             }`}
           >
             <LayoutGrid className="h-4 w-4" />
@@ -1926,16 +1926,16 @@ export function CampanasPage() {
         {/* Info Badge */}
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs">
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${isDark ? 'bg-purple-500/10 border border-purple-500/20 text-purple-300' : 'bg-purple-50 border border-purple-200 text-purple-700'} text-xs`}>
               <Filter className="h-3.5 w-3.5" />
               {filteredData.length} resultados
               {activeGroupings.length > 0 && (
-                <span className="text-zinc-500">
+                <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>
                   | Agrupado por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
                 </span>
               )}
               {sortField && (
-                <span className="text-zinc-500">| Ordenado por {SORT_FIELDS.find(f => f.field === sortField)?.label} ({sortDirection === 'asc' ? '↑' : '↓'})</span>
+                <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>| Ordenado por {SORT_FIELDS.find(f => f.field === sortField)?.label} ({sortDirection === 'asc' ? '↑' : '↓'})</span>
               )}
             </div>
           </div>
@@ -1943,7 +1943,7 @@ export function CampanasPage() {
 
         {/* Vista de Tabla */}
         {activeView === 'tabla' && (
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5">
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 shadow-xl shadow-purple-500/5' : 'border-purple-200 bg-white shadow-lg shadow-purple-100/30'} backdrop-blur-xl overflow-hidden`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -1953,18 +1953,18 @@ export function CampanasPage() {
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">ID</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Periodo</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Creador</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Actividad</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fecha Inicio</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fecha Fin</th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-purple-300 uppercase tracking-wider">APS</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Acciones</th>
+                    <tr className={`border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30' : 'border-purple-200 bg-purple-50'}`}>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>ID</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Periodo</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Creador</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Campaña</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Marca</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Estatus</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Actividad</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Fecha Inicio</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Fecha Fin</th>
+                      <th className={`px-4 py-3 text-center text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>APS</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1988,17 +1988,17 @@ export function CampanasPage() {
                                   {/* Level 2 Header */}
                                   <tr
                                     onClick={() => toggleGroup(`${group.name}|${subgroup.name}`)}
-                                    className="bg-fuchsia-500/5 border-b border-fuchsia-500/10 cursor-pointer hover:bg-fuchsia-500/10 transition-colors"
+                                    className={`${isDark ? 'bg-fuchsia-500/5 border-b border-fuchsia-500/10 hover:bg-fuchsia-500/10' : 'bg-fuchsia-50 border-b border-fuchsia-200 hover:bg-fuchsia-100'} cursor-pointer transition-colors`}
                                   >
                                     <td colSpan={11} className="px-4 py-2.5 pl-10">
                                       <div className="flex items-center gap-2">
                                         {expandedGroups.has(`${group.name}|${subgroup.name}`) ? (
-                                          <ChevronDown className="h-4 w-4 text-fuchsia-400" />
+                                          <ChevronDown className={`h-4 w-4 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
                                         ) : (
-                                          <ChevronRight className="h-4 w-4 text-fuchsia-400" />
+                                          <ChevronRight className={`h-4 w-4 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
                                         )}
-                                        <span className="font-semibold text-zinc-200 text-sm">{subgroup.name || 'Sin asignar'}</span>
-                                        <span className="px-2 py-0.5 rounded-full text-xs bg-fuchsia-500/20 text-fuchsia-300">
+                                        <span className={`font-semibold ${isDark ? 'text-zinc-200' : 'text-gray-700'} text-sm`}>{subgroup.name || 'Sin asignar'}</span>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
                                           {subgroup.items.length} campañas
                                         </span>
                                       </div>
@@ -2024,10 +2024,10 @@ export function CampanasPage() {
                       <tr>
                         <td colSpan={11} className="px-4 py-12 text-center">
                           <div className="flex flex-col items-center gap-3">
-                            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-purple-500/10">
-                              <Megaphone className="w-6 h-6 text-purple-400" />
+                            <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'}`}>
+                              <Megaphone className={`w-6 h-6 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                             </div>
-                            <span className="text-zinc-500 text-sm">No se encontraron campañas</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>No se encontraron campañas</span>
                           </div>
                         </td>
                       </tr>
@@ -2038,23 +2038,23 @@ export function CampanasPage() {
 
               {/* Pagination */}
               {activeGroupings.length === 0 && data?.pagination && totalPages > 1 && (
-                <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
-                  <span className="text-sm text-purple-300/70">
-                    Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{totalPages}</span>
-                    <span className="text-purple-300/50 ml-2">({total} total)</span>
+                <div className={`flex items-center justify-between border-t ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-200 bg-purple-50/50'} px-4 py-3`}>
+                  <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-600/70'}`}>
+                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
+                    <span className={`${isDark ? 'text-purple-300/50' : 'text-purple-500/50'} ml-2`}>({total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
-                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Anterior
                     </button>
                     <button
                       onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                       disabled={page === totalPages}
-                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Siguiente
                     </button>
@@ -2064,8 +2064,8 @@ export function CampanasPage() {
 
               {/* Grouped data info */}
               {activeGroupings.length > 0 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
-                  <span className="text-xs text-zinc-500">
+                <div className={`flex items-center justify-between px-4 py-3 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
+                  <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                     Mostrando {filteredData.length} campañas agrupadas por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
                   </span>
                 </div>
@@ -2077,28 +2077,28 @@ export function CampanasPage() {
 
         {/* Vista por Catorcena */}
         {activeView === 'catorcena' && (
-          <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm overflow-hidden">
+          <div className={`rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm overflow-hidden`}>
             {/* Header de la vista */}
-            <div className="px-5 py-4 border-b border-zinc-800/50 bg-gradient-to-r from-purple-900/20 via-fuchsia-900/10 to-purple-900/20">
+            <div className={`px-5 py-4 border-b ${isDark ? 'border-zinc-800/50 bg-gradient-to-r from-purple-900/20 via-fuchsia-900/10 to-purple-900/20' : 'border-gray-200 bg-purple-50/50'}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                    <Calendar className="h-5 w-5 text-purple-400" />
+                  <div className={`w-10 h-10 rounded-xl ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'} flex items-center justify-center`}>
+                    <Calendar className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-white">Vista por Catorcena</h3>
-                    <p className="text-xs text-zinc-500">Campañas agrupadas por periodo de inicio</p>
+                    <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Vista por Catorcena</h3>
+                    <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Campañas agrupadas por periodo de inicio</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-white">{campanasPorCatorcena.length}</p>
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Catorcenas</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{campanasPorCatorcena.length}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide`}>Catorcenas</p>
                   </div>
-                  <div className="w-px h-10 bg-zinc-800" />
+                  <div className={`w-px h-10 ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`} />
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-purple-400">{filteredData.length}</p>
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Campañas</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>{filteredData.length}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide`}>Campañas</p>
                   </div>
                 </div>
               </div>
@@ -2110,13 +2110,13 @@ export function CampanasPage() {
               </div>
             ) : campanasPorCatorcena.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
-                  <Calendar className="w-8 h-8 text-purple-400" />
+                <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} mb-4`}>
+                  <Calendar className={`w-8 h-8 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                 </div>
-                <p className="text-zinc-500">No hay campañas agrupadas por catorcena</p>
+                <p className={isDark ? 'text-zinc-500' : 'text-gray-400'}>No hay campañas agrupadas por catorcena</p>
               </div>
             ) : (
-              <div className="divide-y divide-zinc-800/30">
+              <div className={`divide-y ${isDark ? 'divide-zinc-800/30' : 'divide-gray-200'}`}>
                 {campanasPorCatorcena.map(({ key, catorcena, campanas, subgroups }) => {
                   const isCurrentCatorcena = currentCatorcena &&
                     currentCatorcena.numero_catorcena === catorcena.num &&
@@ -2137,21 +2137,21 @@ export function CampanasPage() {
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
 
                     return (
-                      <div key={campana.id} className="border-t border-zinc-800/30">
+                      <div key={campana.id} className={`border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
                         <button
                           onClick={() => toggleCampana(campana.id)}
-                          className="w-full flex items-center gap-3 px-6 py-3 hover:bg-zinc-800/30 transition-all"
+                          className={`w-full flex items-center gap-3 px-6 py-3 ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'} transition-all`}
                           style={{ paddingLeft: `${24 + indent * 16}px` }}
                         >
                           {isLoadingInv ? (
-                            <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
+                            <Loader2 className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'} animate-spin`} />
                           ) : isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-zinc-400" />
+                            <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
                           ) : (
-                            <ChevronRight className="h-4 w-4 text-zinc-400" />
+                            <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
                           )}
-                          <Megaphone className="h-4 w-4 text-zinc-500" />
-                          <span className="font-medium text-white text-sm flex-1 text-left truncate">
+                          <Megaphone className={`h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                          <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} text-sm flex-1 text-left truncate`}>
                             {campana.nombre}
                           </span>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
@@ -2168,11 +2168,11 @@ export function CampanasPage() {
                             {campana.status}
                           </span>
                           {campana.has_aps ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} border border-emerald-500/30 flex items-center gap-1`}>
                               <Check className="h-3 w-3" /> APS
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-400 border border-zinc-500/30 flex items-center gap-1">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' : 'bg-gray-100 text-gray-500 border-gray-300'} border flex items-center gap-1`}>
                               <Minus className="h-3 w-3" /> Sin APS
                             </span>
                           )}
@@ -2184,28 +2184,28 @@ export function CampanasPage() {
                             const circuitosDesdeGrupos = apsAgrupados.reduce((sum, apsGroup) => sum + apsGroup.grupos.length, 0);
                             const circuitosCount = circuitosCampana > 0 ? circuitosCampana : circuitosDesdeGrupos;
                             return (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Circuitos (grupos)">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`} title="Circuitos (grupos)">
                                 <Layers className="h-3 w-3" /> Circuitos {circuitosCount}
                               </span>
                             );
                           })()}
                           {Number(campana.bonificacion) > 0 && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 flex items-center gap-1" title="Bonificación">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25 flex items-center gap-1`} title="Bonificación">
                               <Gift className="h-3 w-3" /> {campana.bonificacion}
                             </span>
                           )}
                           {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0) > 0 && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Caras rentadas sin bonificación">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
                               <MapPin className="h-3 w-3" /> {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0)}
                             </span>
                           )}
-                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-green-500/15 text-green-300 border border-green-500/25 flex items-center gap-1" title="Inversión">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
                             <DollarSign className="h-3 w-3" /> {campana.inversion != null && Number(campana.inversion) > 0 ? `$${Number(campana.inversion).toLocaleString()}` : 'Sin inversión'}
                           </span>
                           <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => handleOpenCampana(campana.id)}
-                              className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all"
+                              className={`p-1.5 rounded-lg ${isDark ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border-purple-500/20' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-200'} border transition-all`}
                               title="Ver campaña"
                             >
                               <Eye className="h-3 w-3" />
@@ -2213,7 +2213,7 @@ export function CampanasPage() {
                             {campana.propuesta_id && (
                               <button
                                 onClick={() => navigate(`/propuestas/compartir/${campana.propuesta_id}`)}
-                                className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/20 transition-all"
+                                className={`p-1.5 rounded-lg ${isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border-cyan-500/20' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 border-cyan-200'} border transition-all`}
                                 title="Compartir campaña"
                               >
                                 <Share2 className="h-3 w-3" />
@@ -2225,8 +2225,8 @@ export function CampanasPage() {
                                 disabled={isEditDisabled(campana)}
                                 className={`p-1.5 rounded-lg border transition-all ${
                                   isEditDisabled(campana)
-                                    ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                                    : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20'
+                                    ? isDark ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                    : isDark ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20' : 'bg-gray-50 text-gray-500 hover:bg-gray-100 border-gray-200'
                                 }`}
                                 title={isEditDisabled(campana) ? 'No editable' : 'Editar campaña'}
                               >
@@ -2237,32 +2237,32 @@ export function CampanasPage() {
                         </button>
                         {/* Contenido expandible - inventario */}
                         {isExpanded && (
-                          <div className="bg-zinc-950/50 px-8 py-3" style={{ marginLeft: `${indent * 16}px` }}>
+                          <div className={`${isDark ? 'bg-zinc-950/50' : 'bg-gray-50'} px-8 py-3`} style={{ marginLeft: `${indent * 16}px` }}>
                             {isLoadingInv ? (
-                              <div className="flex items-center gap-2 text-zinc-500 text-sm">
+                              <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                                 <Loader2 className="h-4 w-4 animate-spin" />
                                 Cargando inventario...
                               </div>
                             ) : inventarios.length === 0 ? (
-                              <p className="text-sm text-zinc-500">No hay inventario con APS</p>
+                              <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay inventario con APS</p>
                             ) : (
                               <div className="space-y-2">
                                 {apsAgrupados.map(apsGroup => {
                                   const apsKey = `${campana.id}-${apsGroup.aps ?? 'sin-aps'}`;
                                   const isAPSExpanded = expandedAPS.has(apsKey);
                                   return (
-                                    <div key={apsGroup.aps ?? 'sin-aps'} className="border border-zinc-800/50 rounded-lg overflow-hidden">
+                                    <div key={apsGroup.aps ?? 'sin-aps'} className={`border ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} rounded-lg overflow-hidden`}>
                                       <button
                                         onClick={() => toggleAPS(campana.id, apsGroup.aps)}
-                                        className="w-full flex items-center gap-2 px-3 py-2 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all"
+                                        className={`w-full flex items-center gap-2 px-3 py-2 ${isDark ? 'bg-zinc-800/30 hover:bg-zinc-800/50' : 'bg-gray-100 hover:bg-gray-200'} transition-all`}
                                       >
-                                        {isAPSExpanded ? <ChevronDown className="h-3 w-3 text-zinc-400" /> : <ChevronRight className="h-3 w-3 text-zinc-400" />}
-                                        <Package className="h-3 w-3 text-emerald-400" />
-                                        <span className="text-xs text-white font-medium">{apsGroup.aps ? `APS ${apsGroup.aps}` : 'Sin APS'}</span>
-                                        <span className="text-[10px] text-zinc-500">{apsGroup.totalItems} ubicaciones</span>
+                                        {isAPSExpanded ? <ChevronDown className={`h-3 w-3 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} /> : <ChevronRight className={`h-3 w-3 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />}
+                                        <Package className={`h-3 w-3 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                                        <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{apsGroup.aps ? `APS ${apsGroup.aps}` : 'Sin APS'}</span>
+                                        <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{apsGroup.totalItems} ubicaciones</span>
                                       </button>
                                       {isAPSExpanded && (
-                                        <div className="px-3 py-2 space-y-1 bg-zinc-900/50">
+                                        <div className={`px-3 py-2 space-y-1 ${isDark ? 'bg-zinc-900/50' : 'bg-white'}`}>
                                           {apsGroup.grupos.map(grupo => {
                                             const grupoKey = `${apsKey}-${grupo.key}`;
                                             const isGrupoExpanded = expandedGrupos.has(grupoKey);
@@ -2275,21 +2275,21 @@ export function CampanasPage() {
                                             const estatusPredominante = Object.entries(estatusCount).sort((a, b) => b[1] - a[1])[0];
                                             const estatusGrupoColor = estatusPredominante ? getEstatusArteColor(estatusPredominante[0]) : getDefaultStatusColor(isDark);
                                             return (
-                                              <div key={grupo.key} className="border-l-2 border-zinc-700 pl-2">
+                                              <div key={grupo.key} className={`border-l-2 ${isDark ? 'border-zinc-700' : 'border-gray-300'} pl-2`}>
                                                 <button
                                                   onClick={() => toggleGrupo(campana.id, apsGroup.aps, grupo.key)}
-                                                  className="w-full flex items-center gap-2 py-1 text-left hover:bg-zinc-800/30 rounded px-1 flex-wrap"
+                                                  className={`w-full flex items-center gap-2 py-1 text-left ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'} rounded px-1 flex-wrap`}
                                                 >
-                                                  {isGrupoExpanded ? <ChevronDown className="h-3 w-3 text-zinc-500" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
-                                                  <ClipboardList className="h-3 w-3 text-purple-400" />
-                                                  <span className="text-[11px] text-zinc-300">
+                                                  {isGrupoExpanded ? <ChevronDown className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} /> : <ChevronRight className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />}
+                                                  <ClipboardList className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                                                  <span className={`text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                                                     {[
                                                       (grupo.items[0] as any)?.formato,
                                                       grupo.items[0]?.plaza,
                                                       grupo.items[0]?.articulo
                                                     ].filter(Boolean).join(' · ') || grupo.key}
                                                   </span>
-                                                  <span className="text-[10px] text-zinc-600">({grupo.items.length} caras)</span>
+                                                  <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>({grupo.items.length} caras)</span>
                                                   {/* 5 iconos de etapas de Gestión de Artes */}
                                                   {(() => {
                                                     const total = grupo.items.length;
@@ -2312,10 +2312,10 @@ export function CampanasPage() {
                                                       { icon: Camera, label: 'Validar Instalación', done: countAtOrPast(5) },
                                                     ];
                                                     return (
-                                                      <span className="inline-flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full bg-zinc-800/60 border border-zinc-700/40">
+                                                      <span className={`inline-flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full ${isDark ? 'bg-zinc-800/60 border-zinc-700/40' : 'bg-gray-100 border-gray-200'} border`}>
                                                         {tabs.map(({ icon: Icon, label, done }, idx) => (
                                                           <React.Fragment key={label}>
-                                                            {idx > 0 && <span className="w-px h-3 bg-zinc-700/60" />}
+                                                            {idx > 0 && <span className={`w-px h-3 ${isDark ? 'bg-zinc-700/60' : 'bg-gray-300'}`} />}
                                                             <span title={`${label}: ${done}/${total}`}>
                                                               <Icon className={`h-3.5 w-3.5 ${done === total ? 'text-green-400' : 'text-red-400/60'}`} />
                                                             </span>
@@ -2353,36 +2353,36 @@ export function CampanasPage() {
                                                     const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
                                                     return (
                                                       <>
-                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25 flex items-center gap-1" title="Caras totales">
+                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`} title="Caras totales">
                                                           <Hash className="h-2.5 w-2.5" /> {carasTotales} caras
                                                         </span>
                                                         {plazas.length > 0 && (
-                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Plaza(s)">
+                                                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Plaza(s)">
                                                             <MapPin className="h-2.5 w-2.5" /> {plazas.join(', ')}
                                                           </span>
                                                         )}
                                                         {formato && (
-                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-500/15 text-violet-300 border border-violet-500/25" title="Formato">
+                                                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-violet-500/15 text-violet-300' : 'bg-violet-50 text-violet-700'} border border-violet-500/25`} title="Formato">
                                                             {formato}
                                                           </span>
                                                         )}
-                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/25" title="Tarifa pública">
+                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25`} title="Tarifa pública">
                                                           {tarifaPublica > 0 ? <>Tarifa: {'$'}{tarifaPublica.toLocaleString()}</> : 'Sin tarifa'}
                                                         </span>
-                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/25" title="Inversión total (tarifa)">
+                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} border border-emerald-500/25`} title="Inversión total (tarifa)">
                                                           {inversionTotal > 0 ? <>Inversión: {'$'}{inversionTotal.toLocaleString()}</> : 'Sin inversión'}
                                                         </span>
                                                         {sumBonif > 0 && (
-                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/25" title="Bonificación">
+                                                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25`} title="Bonificación">
                                                             Bonif: {sumBonif}
                                                           </span>
                                                         )}
                                                         {sumNormales > 0 && (
-                                                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 flex items-center gap-1" title="Caras rentadas sin bonificación">
+                                                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
                                                             <MapPin className="h-2.5 w-2.5" /> {sumNormales}
                                                           </span>
                                                         )}
-                                                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 flex items-center gap-1" title="Artes subidos">
+                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-indigo-500/15 text-indigo-300' : 'bg-indigo-50 text-indigo-700'} border border-indigo-500/25 flex items-center gap-1`} title="Artes subidos">
                                                           <Image className="h-2.5 w-2.5" /> {artesSubidos}/{carasTotales}
                                                         </span>
                                                       </>
@@ -2397,14 +2397,14 @@ export function CampanasPage() {
                                                       const conIndicacionesProg = grupo.items.filter(i => (i as any).indicaciones_programacion).length;
                                                       const conIndicacionesInst = grupo.items.filter(i => (i as any).indicaciones_instalacion).length;
                                                       return (
-                                                        <div className="flex flex-wrap items-center gap-2 py-1.5 px-1 mb-1 border-b border-zinc-800/40">
+                                                        <div className={`flex flex-wrap items-center gap-2 py-1.5 px-1 mb-1 border-b ${isDark ? 'border-zinc-800/40' : 'border-gray-200'}`}>
                                                           {conIndicacionesProg > 0 && (
-                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-orange-500/15 text-orange-300 border border-orange-500/25 flex items-center gap-1" title="Con indicaciones de programación">
+                                                            <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-orange-500/15 text-orange-300' : 'bg-orange-50 text-orange-700'} border border-orange-500/25 flex items-center gap-1`} title="Con indicaciones de programación">
                                                               <FileText className="h-2.5 w-2.5" /> Prog: {conIndicacionesProg}
                                                             </span>
                                                           )}
                                                           {conIndicacionesInst > 0 && (
-                                                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-rose-500/15 text-rose-300 border border-rose-500/25 flex items-center gap-1" title="Con indicaciones de instalación">
+                                                            <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-rose-500/15 text-rose-300' : 'bg-rose-50 text-rose-700'} border border-rose-500/25 flex items-center gap-1`} title="Con indicaciones de instalación">
                                                               <FileText className="h-2.5 w-2.5" /> Inst: {conIndicacionesInst}
                                                             </span>
                                                           )}
@@ -2417,11 +2417,11 @@ export function CampanasPage() {
                                                       const indicacionesProg = (inv as any).indicaciones_programacion;
                                                       const indicacionesInst = (inv as any).indicaciones_instalacion;
                                                       return (
-                                                        <div key={inv.id} className="flex items-center gap-2 text-[10px] text-zinc-500 py-0.5 flex-wrap">
-                                                          <MapPin className="h-2.5 w-2.5 text-zinc-600" />
-                                                          <span className="text-zinc-400 font-mono">{inv.codigo_unico}</span>
+                                                        <div key={inv.id} className={`flex items-center gap-2 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} py-0.5 flex-wrap`}>
+                                                          <MapPin className={`h-2.5 w-2.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
+                                                          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono`}>{inv.codigo_unico}</span>
                                                           <span title={hasArte ? 'Arte subido' : 'Sin arte'} className="flex items-center gap-0.5">
-                                                            <Image className={`h-2.5 w-2.5 ${hasArte ? 'text-green-400' : 'text-zinc-600'}`} />
+                                                            <Image className={`h-2.5 w-2.5 ${hasArte ? 'text-green-400' : isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
                                                             {hasArte && <span className="text-green-400/70">Arte</span>}
                                                           </span>
                                                           {(inv as any).estatus_arte && (
@@ -2429,20 +2429,20 @@ export function CampanasPage() {
                                                               {(inv as any).estatus_arte}
                                                             </span>
                                                           )}
-                                                          <span className="text-zinc-600">•</span>
+                                                          <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>•</span>
                                                           <span>{inv.plaza || 'Sin plaza'}</span>
                                                           {indicacionesProg && (
                                                             <>
-                                                              <span className="text-zinc-600">•</span>
-                                                              <span className="text-orange-300/80 flex items-center gap-0.5" title="Indicaciones de programación">
+                                                              <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>•</span>
+                                                              <span className={`${isDark ? 'text-orange-300/80' : 'text-orange-600'} flex items-center gap-0.5`} title="Indicaciones de programación">
                                                                 <FileText className="h-2.5 w-2.5" /> Prog: {indicacionesProg}
                                                               </span>
                                                             </>
                                                           )}
                                                           {indicacionesInst && (
                                                             <>
-                                                              <span className="text-zinc-600">•</span>
-                                                              <span className="text-rose-300/80 flex items-center gap-0.5" title="Indicaciones de instalación">
+                                                              <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>•</span>
+                                                              <span className={`${isDark ? 'text-rose-300/80' : 'text-rose-600'} flex items-center gap-0.5`} title="Indicaciones de instalación">
                                                                 <FileText className="h-2.5 w-2.5" /> Inst: {indicacionesInst}
                                                               </span>
                                                             </>
@@ -2475,26 +2475,26 @@ export function CampanasPage() {
                       onClick={() => toggleCatorcena(key)}
                       className={`w-full flex items-center gap-3 px-5 py-4 transition-all ${
                         isCurrentCatorcena
-                          ? 'bg-gradient-to-r from-emerald-900/30 via-teal-900/20 to-emerald-900/30 hover:from-emerald-900/40 hover:via-teal-900/30 hover:to-emerald-900/40'
-                          : 'bg-zinc-800/30 hover:bg-zinc-800/50'
+                          ? isDark ? 'bg-gradient-to-r from-emerald-900/30 via-teal-900/20 to-emerald-900/30 hover:from-emerald-900/40 hover:via-teal-900/30 hover:to-emerald-900/40' : 'bg-emerald-50 hover:bg-emerald-100'
+                          : isDark ? 'bg-zinc-800/30 hover:bg-zinc-800/50' : 'bg-gray-50 hover:bg-gray-100'
                       }`}
                     >
                       {expandedCatorcenas.has(key) ? (
-                        <ChevronDown className="h-5 w-5 text-purple-400" />
+                        <ChevronDown className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                       ) : (
-                        <ChevronRight className="h-5 w-5 text-purple-400" />
+                        <ChevronRight className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                       )}
-                      <Calendar className="h-5 w-5 text-purple-400" />
-                      <span className="font-semibold text-white text-sm">
+                      <Calendar className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                      <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>
                         {(catorcena as any).isMensual
                           ? `${MESES_FULL[catorcena.num - 1]} ${catorcena.anio}`
                           : `Cat ${catorcena.num} / ${catorcena.anio}`}
                       </span>
-                      <span className="px-2.5 py-1 rounded-full text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      <span className={`px-2.5 py-1 rounded-full text-xs ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200'} border`}>
                         {campanas.length} campañas
                       </span>
                       {secondGroupingLabel && subgroups && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30' : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200'} border`}>
                           {subgroups.length} {secondGroupingLabel}
                         </span>
                       )}
@@ -2502,7 +2502,7 @@ export function CampanasPage() {
                       {currentCatorcena &&
                        currentCatorcena.numero_catorcena === catorcena.num &&
                        currentCatorcena.a_o === catorcena.anio && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} border border-emerald-500/30`}>
                           En curso
                         </span>
                       )}
@@ -2510,11 +2510,11 @@ export function CampanasPage() {
                       {(() => {
                         const totalInversion = campanas.reduce((s, c) => s + (Number(c.inversion) || 0), 0);
                         return totalInversion > 0 ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-green-500/15 text-green-300 border border-green-500/25 flex items-center gap-1" title="Inversión total">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión total">
                             <DollarSign className="h-3 w-3" /> {'$'}{totalInversion.toLocaleString()}
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/15 text-zinc-400 border border-zinc-500/25 flex items-center gap-1" title="Sin inversión registrada">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/15 text-zinc-400 border-zinc-500/25' : 'bg-gray-100 text-gray-500 border-gray-300'} border flex items-center gap-1`} title="Sin inversión registrada">
                             Sin inversión
                           </span>
                         );
@@ -2523,34 +2523,34 @@ export function CampanasPage() {
 
                     {/* Contenido expandible de catorcena */}
                     {expandedCatorcenas.has(key) && (
-                      <div className="bg-zinc-900/50">
+                      <div className={isDark ? 'bg-zinc-900/50' : 'bg-white'}>
                         {/* Si hay subgrupos, mostrar agrupado por la segunda columna */}
                         {subgroups && subgroups.length > 0 ? (
                           subgroups.map(subgroup => {
                             const subgroupKey = `${key}-${subgroup.name}`;
                             const isSubgroupExpanded = expandedGroups.has(subgroupKey);
-                            const subgroupColor = getTagColor(subgroup.name);
+                            const subgroupColor = getTagColor(subgroup.name, isDark);
                             return (
-                              <div key={subgroupKey} className="border-t border-zinc-800/30">
+                              <div key={subgroupKey} className={`border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
                                 <button
                                   onClick={() => toggleGroup(subgroupKey)}
-                                  className="w-full flex items-center gap-3 px-6 py-2.5 hover:bg-zinc-800/30 transition-all bg-zinc-800/20"
+                                  className={`w-full flex items-center gap-3 px-6 py-2.5 ${isDark ? 'hover:bg-zinc-800/30 bg-zinc-800/20' : 'hover:bg-gray-100 bg-gray-50'} transition-all`}
                                 >
                                   {isSubgroupExpanded ? (
-                                    <ChevronDown className="h-4 w-4 text-fuchsia-400" />
+                                    <ChevronDown className={`h-4 w-4 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
                                   ) : (
-                                    <ChevronRight className="h-4 w-4 text-fuchsia-400" />
+                                    <ChevronRight className={`h-4 w-4 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
                                   )}
-                                  <Layers className="h-4 w-4 text-fuchsia-400" />
+                                  <Layers className={`h-4 w-4 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
                                   <span className={`px-2 py-0.5 rounded text-xs ${subgroupColor.bg} ${subgroupColor.text} border ${subgroupColor.border}`}>
                                     {subgroup.name}
                                   </span>
-                                  <span className="text-xs text-zinc-500">
+                                  <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                                     {subgroup.campanas.length} campañas
                                   </span>
                                 </button>
                                 {isSubgroupExpanded && (
-                                  <div className="bg-zinc-900/30">
+                                  <div className={isDark ? 'bg-zinc-900/30' : 'bg-white'}>
                                     {subgroup.campanas.map(campana => renderCampana(campana, 1))}
                                   </div>
                                 )}
@@ -2573,18 +2573,18 @@ export function CampanasPage() {
 
         {/* Footer de vista catorcena - información */}
         {activeView === 'catorcena' && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-800/50 bg-zinc-900/30 text-xs text-zinc-500">
+          <div className={`flex items-center justify-between px-5 py-3 border-t ${isDark ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-400'} text-xs`}>
             <span>
               {campanasPorCatorcena.length} catorcenas · {filteredData.length} campañas
               {activeGroupings.length > 1 && (
-                <span className="text-fuchsia-400 ml-2">
+                <span className={`${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'} ml-2`}>
                   · Subagrupado por {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}
                 </span>
               )}
             </span>
             {currentCatorcena && (
-              <span className="text-xs text-emerald-400 flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className={`text-xs ${isDark ? 'text-emerald-400' : 'text-emerald-600'} flex items-center gap-1.5`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-emerald-400' : 'bg-emerald-500'} animate-pulse`} />
                 Catorcena actual: {currentCatorcena.numero_catorcena}/{currentCatorcena.a_o}
               </span>
             )}

@@ -119,9 +119,9 @@ function GroupHeader({
       <td colSpan={7} className={`px-5 py-3 ${isLevel1 ? '' : 'pl-10'}`}>
         <div className="flex items-center gap-2">
           {expanded ? (
-            <ChevronDown className={`h-4 w-4 ${isLevel1 ? 'text-purple-400' : 'text-fuchsia-400'}`} />
+            <ChevronDown className={`h-4 w-4 ${isLevel1 ? (isDark ? 'text-purple-400' : 'text-purple-600') : (isDark ? 'text-fuchsia-400' : 'text-fuchsia-600')}`} />
           ) : (
-            <ChevronRight className={`h-4 w-4 ${isLevel1 ? 'text-purple-400' : 'text-fuchsia-400'}`} />
+            <ChevronRight className={`h-4 w-4 ${isLevel1 ? (isDark ? 'text-purple-400' : 'text-purple-600') : (isDark ? 'text-fuchsia-400' : 'text-fuchsia-600')}`} />
           )}
           <span className={`font-semibold ${isLevel1 ? (isDark ? 'text-white' : 'text-gray-900') : (isDark ? 'text-zinc-200 text-sm' : 'text-gray-700 text-sm')}`}>
             {groupName || 'Sin asignar'}
@@ -144,11 +144,11 @@ function InfoItem({ icon: Icon, label, value, isLink, isDark }: { icon: React.El
   return (
     <div className={`p-4 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} border ${isDark ? 'border-purple-500/20' : 'border-gray-200'} hover:border-purple-500/40 transition-colors`}>
       <div className="flex items-center gap-2 mb-2">
-        <Icon className="h-4 w-4 text-purple-400" />
+        <Icon className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
         <span className={`text-xs font-medium ${isDark ? 'text-purple-300/70' : 'text-purple-600'} uppercase tracking-wider`}>{label}</span>
       </div>
       {isLink && value ? (
-        <a href={value.startsWith('http') ? value : `https://${value}`} target="_blank" rel="noopener noreferrer" className="text-sm text-fuchsia-400 hover:text-fuchsia-300 hover:underline transition-colors">
+        <a href={value.startsWith('http') ? value : `https://${value}`} target="_blank" rel="noopener noreferrer" className={`text-sm ${isDark ? 'text-fuchsia-400 hover:text-fuchsia-300' : 'text-fuchsia-600 hover:text-fuchsia-500'} hover:underline transition-colors`}>
           {value}
         </a>
       ) : (
@@ -175,15 +175,15 @@ function DetailsModal({
         {/* Header */}
         <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-gray-200'} bg-gradient-to-r ${isDark ? 'from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'from-purple-50 via-fuchsia-50/50 to-purple-50'}`}>
           <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/30 to-fuchsia-500/30 border border-purple-500/30">
+            <div className={`p-3 rounded-xl bg-gradient-to-br ${isDark ? 'from-purple-500/30 to-fuchsia-500/30 border border-purple-500/30' : 'from-purple-100 to-fuchsia-100 border border-purple-200'}`}>
               <Building2 className={`h-6 w-6 ${isDark ? 'text-purple-300' : 'text-purple-700'}`} />
             </div>
             <div>
               <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{proveedor.nombre}</h2>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium mt-1 ${
                 proveedor.estado === 'activo'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  : 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
+                  ? (isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')
+                  : (isDark ? 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30' : 'bg-gray-100 text-gray-500 border border-gray-200')
               }`}>
                 {proveedor.estado === 'activo' ? <CheckCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
                 {proveedor.estado || 'Sin estado'}
@@ -210,7 +210,7 @@ function DetailsModal({
           {/* Address */}
           <div className={`p-5 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} border ${isDark ? 'border-purple-500/20' : 'border-gray-200'}`}>
             <div className="flex items-center gap-2 mb-3">
-              <MapPin className="h-4 w-4 text-purple-400" />
+              <MapPin className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
               <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Direccion</span>
             </div>
             <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{proveedor.direccion || '-'}</p>
@@ -224,7 +224,7 @@ function DetailsModal({
           {proveedor.notas && (
             <div className={`p-5 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} border ${isDark ? 'border-purple-500/20' : 'border-gray-200'}`}>
               <div className="flex items-center gap-2 mb-3">
-                <FileText className="h-4 w-4 text-purple-400" />
+                <FileText className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
                 <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Notas</span>
               </div>
               <p className={`${isDark ? 'text-zinc-300' : 'text-gray-600'} text-sm whitespace-pre-wrap leading-relaxed`}>{proveedor.notas}</p>
@@ -260,8 +260,8 @@ function HistoryModal({
         {/* Header */}
         <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-gray-200'} bg-gradient-to-r ${isDark ? 'from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'from-purple-50 via-fuchsia-50/50 to-purple-50'}`}>
           <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-fuchsia-500/30 to-purple-500/30 border border-fuchsia-500/30">
-              <History className="h-6 w-6 text-fuchsia-300" />
+            <div className={`p-3 rounded-xl bg-gradient-to-br ${isDark ? 'from-fuchsia-500/30 to-purple-500/30 border border-fuchsia-500/30' : 'from-fuchsia-100 to-purple-100 border border-fuchsia-200'}`}>
+              <History className={`h-6 w-6 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`} />
             </div>
             <div>
               <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Historial</h2>
@@ -277,7 +277,7 @@ function HistoryModal({
         <div className="p-6 overflow-y-auto max-h-[60vh]">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <Loader2 className="h-10 w-10 text-purple-400 animate-spin mb-4" />
+              <Loader2 className={`h-10 w-10 ${isDark ? 'text-purple-400' : 'text-purple-500'} animate-spin mb-4`} />
               <p className={`${isDark ? 'text-purple-300/70' : 'text-purple-600'} text-sm`}>Cargando historial...</p>
             </div>
           ) : data && data.tareas.length > 0 ? (
@@ -297,19 +297,19 @@ function HistoryModal({
                       <h4 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{tarea.titulo || 'Sin titulo'}</h4>
                       <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1 line-clamp-2`}>{tarea.descripcion || 'Sin descripcion'}</p>
                       {tarea.campania && (
-                        <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-fuchsia-500/20 to-purple-500/20 border border-fuchsia-500/30">
-                          <Tag className="h-3.5 w-3.5 text-fuchsia-400" />
-                          <span className="text-xs font-medium text-fuchsia-300">{tarea.campania.nombre}</span>
+                        <div className={`mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r ${isDark ? 'from-fuchsia-500/20 to-purple-500/20 border border-fuchsia-500/30' : 'from-fuchsia-50 to-purple-50 border border-fuchsia-200'}`}>
+                          <Tag className={`h-3.5 w-3.5 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
+                          <span className={`text-xs font-medium ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>{tarea.campania.nombre}</span>
                         </div>
                       )}
                     </div>
                     <div className="text-right flex-shrink-0">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                         tarea.estatus === 'completada' || tarea.estatus === 'Completada'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          ? (isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')
                           : tarea.estatus === 'en_proceso' || tarea.estatus === 'En proceso'
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                          : 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
+                          ? (isDark ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-amber-50 text-amber-700 border border-amber-200')
+                          : (isDark ? 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30' : 'bg-gray-100 text-gray-500 border border-gray-200')
                       }`}>
                         {tarea.estatus || 'Sin estado'}
                       </span>
@@ -324,7 +324,7 @@ function HistoryModal({
           ) : (
             <div className="text-center py-16">
               <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} mb-4`}>
-                <History className="h-10 w-10 text-purple-500/50" />
+                <History className={`h-10 w-10 ${isDark ? 'text-purple-500/50' : 'text-purple-400'}`} />
               </div>
               <p className={`${isDark ? 'text-purple-300' : 'text-purple-700'} font-medium`}>Sin historial</p>
               <p className={`${isDark ? 'text-purple-300/50' : 'text-purple-500'} text-sm mt-1`}>Este proveedor no tiene tareas asociadas</p>
@@ -397,7 +397,7 @@ function FormModal({
         {/* Header */}
         <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-gray-200'} bg-gradient-to-r ${isDark ? 'from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'from-purple-50 via-fuchsia-50/50 to-purple-50'}`}>
           <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/30 to-fuchsia-500/30 border border-purple-500/30">
+            <div className={`p-3 rounded-xl bg-gradient-to-br ${isDark ? 'from-purple-500/30 to-fuchsia-500/30 border border-purple-500/30' : 'from-purple-100 to-fuchsia-100 border border-purple-200'}`}>
               {proveedor ? <Pencil className={`h-6 w-6 ${isDark ? 'text-purple-300' : 'text-purple-700'}`} /> : <Plus className={`h-6 w-6 ${isDark ? 'text-purple-300' : 'text-purple-700'}`} />}
             </div>
             <div>
@@ -419,7 +419,7 @@ function FormModal({
           <div className="space-y-6">
             {/* Basic Info Section */}
             <div>
-              <h3 className="text-sm font-semibold text-purple-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} uppercase tracking-wider mb-4 flex items-center gap-2`}>
                 <Building2 className="h-4 w-4" />
                 Informacion Basica
               </h3>
@@ -464,7 +464,7 @@ function FormModal({
 
             {/* Contact Section */}
             <div>
-              <h3 className="text-sm font-semibold text-purple-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} uppercase tracking-wider mb-4 flex items-center gap-2`}>
                 <Users className="h-4 w-4" />
                 Contacto
               </h3>
@@ -520,7 +520,7 @@ function FormModal({
 
             {/* Location Section */}
             <div>
-              <h3 className="text-sm font-semibold text-purple-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} uppercase tracking-wider mb-4 flex items-center gap-2`}>
                 <MapPin className="h-4 w-4" />
                 Ubicacion
               </h3>
@@ -565,7 +565,7 @@ function FormModal({
 
             {/* Notes Section */}
             <div>
-              <h3 className="text-sm font-semibold text-purple-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} uppercase tracking-wider mb-4 flex items-center gap-2`}>
                 <FileText className="h-4 w-4" />
                 Notas
               </h3>
@@ -620,10 +620,10 @@ function DeleteModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative z-50 w-full max-w-md bg-gradient-to-br ${isDark ? 'from-zinc-900 via-purple-950/20 to-zinc-900' : 'from-white via-purple-50/10 to-white'} border border-red-500/30 rounded-2xl shadow-2xl shadow-red-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
+      <div className={`relative z-50 w-full max-w-md bg-gradient-to-br ${isDark ? 'from-zinc-900 via-purple-950/20 to-zinc-900' : 'from-white via-purple-50/10 to-white'} border ${isDark ? 'border-red-500/30' : 'border-red-200'} rounded-2xl shadow-2xl ${isDark ? 'shadow-red-500/10' : 'shadow-red-100/50'} overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
         <div className="p-6 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/20 mb-4">
-            <Trash2 className="h-8 w-8 text-red-400" />
+          <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${isDark ? 'bg-red-500/20' : 'bg-red-50'} mb-4`}>
+            <Trash2 className={`h-8 w-8 ${isDark ? 'text-red-400' : 'text-red-500'}`} />
           </div>
           <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>Eliminar Proveedor</h3>
           <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>
@@ -899,7 +899,7 @@ export function ProveedoresPage() {
       </td>
       <td className="px-2 py-2">
         <span className="inline-flex items-center gap-1 max-w-[80px]">
-          <MapPin className="h-3 w-3 text-purple-400 flex-shrink-0" />
+          <MapPin className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-500'} flex-shrink-0`} />
           <span className={`${isDark ? 'text-purple-300' : 'text-purple-700'} text-[11px] truncate`}>{proveedor.ciudad || '-'}</span>
         </span>
       </td>
@@ -908,25 +908,25 @@ export function ProveedoresPage() {
       </td>
       <td className="px-2 py-2 hidden md:table-cell">
         <span className="inline-flex items-center gap-1">
-          <Phone className="h-3 w-3 text-purple-400/50 flex-shrink-0" />
+          <Phone className={`h-3 w-3 ${isDark ? 'text-purple-400/50' : 'text-purple-400'} flex-shrink-0`} />
           <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[11px]`}>{proveedor.telefono || '-'}</span>
         </span>
       </td>
       <td className="px-2 py-2">
-        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${proveedor.estado === 'activo' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'}`}>
+        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${proveedor.estado === 'activo' ? (isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-200') : (isDark ? 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30' : 'bg-gray-100 text-gray-500 border border-gray-200')}`}>
           {proveedor.estado === 'activo' ? <CheckCircle className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5" />}
           <span className="hidden sm:inline">{proveedor.estado || '-'}</span>
         </span>
       </td>
       <td className="px-2 py-2">
         <div className="flex items-center gap-0.5">
-          <button onClick={() => setDetailsProveedor(proveedor)} className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all" title="Ver detalles"><Eye className="h-3 w-3" /></button>
-          <button onClick={() => setHistoryProveedor({ id: proveedor.id, name: proveedor.nombre })} className="p-1.5 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 border border-fuchsia-500/20 transition-all hidden sm:block" title="Historial"><History className="h-3 w-3" /></button>
+          <button onClick={() => setDetailsProveedor(proveedor)} className={`p-1.5 rounded-lg ${isDark ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200'} transition-all`} title="Ver detalles"><Eye className="h-3 w-3" /></button>
+          <button onClick={() => setHistoryProveedor({ id: proveedor.id, name: proveedor.nombre })} className={`p-1.5 rounded-lg ${isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 border border-fuchsia-500/20' : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 border border-fuchsia-200'} transition-all hidden sm:block`} title="Historial"><History className="h-3 w-3" /></button>
           {permissions.canEditProveedores && (
-            <button onClick={() => { setSelectedProveedor(proveedor); setFormModalOpen(true); }} className="p-1.5 rounded-lg bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border border-zinc-500/20 transition-all" title="Editar"><Pencil className="h-3 w-3" /></button>
+            <button onClick={() => { setSelectedProveedor(proveedor); setFormModalOpen(true); }} className={`p-1.5 rounded-lg ${isDark ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border border-zinc-500/20' : 'bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200'} transition-all`} title="Editar"><Pencil className="h-3 w-3" /></button>
           )}
           {permissions.canDeleteProveedores && (
-            <button onClick={() => setDeleteProveedor({ id: proveedor.id, name: proveedor.nombre })} className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all" title="Eliminar"><Trash2 className="h-3 w-3" /></button>
+            <button onClick={() => setDeleteProveedor({ id: proveedor.id, name: proveedor.nombre })} className={`p-1.5 rounded-lg ${isDark ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20' : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'} transition-all`} title="Eliminar"><Trash2 className="h-3 w-3" /></button>
           )}
         </div>
       </td>
@@ -943,7 +943,7 @@ export function ProveedoresPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             {/* Search */}
             <div className="relative flex-1 w-full sm:max-w-md">
-              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
+              <Search className={`absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
               <input
                 type="search"
                 placeholder="Buscar proveedores..."
@@ -984,7 +984,7 @@ export function ProveedoresPage() {
                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                       {filters.map((filter, index) => (
                         <div key={filter.id} className="flex items-center gap-2">
-                          {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
+                          {index > 0 && <span className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-600'} font-medium w-8`}>AND</span>}
                           {index === 0 && <span className="w-8"></span>}
                           <select
                             value={filter.field}
@@ -1017,7 +1017,7 @@ export function ProveedoresPage() {
                               <option key={val} value={val} />
                             ))}
                           </datalist>
-                          <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                          <button onClick={() => removeFilter(filter.id)} className={`${isDark ? 'text-red-400 hover:text-red-300' : 'text-red-500 hover:text-red-600'} p-0.5`}>
                             <Trash2 className="h-3 w-3" />
                           </button>
                         </div>
@@ -1030,7 +1030,7 @@ export function ProveedoresPage() {
                       <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
                         <Plus className="h-3 w-3" /> Anadir
                       </button>
-                      <button onClick={clearFilters} disabled={filters.length === 0} className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                      <button onClick={clearFilters} disabled={filters.length === 0} className={`px-2 py-1 text-xs font-medium ${isDark ? 'text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30' : 'text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200'} rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors`}>
                         Limpiar
                       </button>
                     </div>
@@ -1073,13 +1073,13 @@ export function ProveedoresPage() {
                         }`}
                       >
                         <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                          activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
+                          activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : (isDark ? 'border-purple-500/50' : 'border-gray-300')
                         }`}>
                           {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
                         </div>
                         {label}
-                        {activeGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1</span>}
-                        {activeGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2</span>}
+                        {activeGroupings.indexOf(field) === 0 && <span className={`ml-auto text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>1</span>}
+                        {activeGroupings.indexOf(field) === 1 && <span className={`ml-auto text-[10px] ${isDark ? 'text-pink-400' : 'text-pink-600'}`}>2</span>}
                       </button>
                     ))}
                     <div className={`border-t ${isDark ? 'border-purple-900/30' : 'border-gray-200'} mt-2 pt-2`}>
@@ -1154,7 +1154,7 @@ export function ProveedoresPage() {
                       <div className={`mt-3 pt-3 border-t ${isDark ? 'border-purple-900/30' : 'border-gray-200'}`}>
                         <button
                           onClick={() => { setSortField(null); setSortDirection('asc'); }}
-                          className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors"
+                          className={`w-full px-2 py-1 text-xs font-medium ${isDark ? 'text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30' : 'text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200'} rounded transition-colors`}
                         >
                           Quitar ordenamiento
                         </button>
@@ -1211,7 +1211,7 @@ export function ProveedoresPage() {
         <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-gray-200'} bg-gradient-to-br ${isDark ? 'from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'from-white via-purple-50/30 to-white'} backdrop-blur-xl overflow-hidden shadow-xl ${isDark ? 'shadow-purple-500/5' : 'shadow-gray-200/50'}`}>
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20">
-              <Loader2 className="h-10 w-10 text-purple-400 animate-spin mb-4" />
+              <Loader2 className={`h-10 w-10 ${isDark ? 'text-purple-400' : 'text-purple-500'} animate-spin mb-4`} />
               <p className={`${isDark ? 'text-purple-300/70' : 'text-purple-600'} text-sm`}>Cargando proveedores...</p>
             </div>
           ) : (
@@ -1219,7 +1219,7 @@ export function ProveedoresPage() {
               {/* Loading overlay for fetching */}
               {isFetching && !isLoading && (
                 <div className={`absolute inset-0 ${isDark ? 'bg-zinc-950/50' : 'bg-white/70'} backdrop-blur-sm z-10 flex items-center justify-center`}>
-                  <Loader2 className="h-8 w-8 text-purple-400 animate-spin" />
+                  <Loader2 className={`h-8 w-8 ${isDark ? 'text-purple-400' : 'text-purple-500'} animate-spin`} />
                 </div>
               )}
 
@@ -1278,7 +1278,7 @@ export function ProveedoresPage() {
                       <tr>
                         <td colSpan={7} className="px-5 py-16 text-center">
                           <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} mb-4`}>
-                            <Building2 className="w-8 h-8 text-purple-400" />
+                            <Building2 className={`w-8 h-8 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
                           </div>
                           <p className={`${isDark ? 'text-purple-300/70' : 'text-purple-600'} text-sm`}>No se encontraron proveedores</p>
                         </td>

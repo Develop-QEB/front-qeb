@@ -3947,13 +3947,9 @@ function TaskDetailModal({
     try {
       let archivo = '';
       if (uploadOption === 'file' && selectedFile) {
-        // Convertir archivo a base64 (como en solicitudes)
-        archivo = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error('Error al leer el archivo'));
-          reader.readAsDataURL(selectedFile);
-        });
+        // Subir archivo a Spaces y usar la URL
+        const uploadResult = await campanasService.uploadArteFile(selectedFile);
+        archivo = uploadResult.url;
       } else if (uploadOption === 'existing') {
         archivo = existingArtUrl;
       } else if (uploadOption === 'link') {
@@ -3982,13 +3978,9 @@ function TaskDetailModal({
     try {
       let archivo = '';
       if (uploadOption === 'file' && selectedFile) {
-        // Convertir archivo a base64 (como en solicitudes)
-        archivo = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error('Error al leer el archivo'));
-          reader.readAsDataURL(selectedFile);
-        });
+        // Subir archivo a Spaces y usar la URL
+        const uploadResult = await campanasService.uploadArteFile(selectedFile);
+        archivo = uploadResult.url;
       } else if (uploadOption === 'existing') {
         archivo = existingArtUrl;
       } else if (uploadOption === 'link') {
@@ -13005,15 +12997,10 @@ export function TareaSeguimientoPage() {
           return;
         }
 
-        // Convertir archivo a base64 (como en solicitudes)
+        // Subir archivo a Spaces y usar la URL
         setUploadArtError(null);
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error('Error al leer el archivo'));
-          reader.readAsDataURL(data.value as File);
-        });
-        archivo = base64;
+        const uploadResult = await campanasService.uploadArteFile(data.value as File);
+        archivo = uploadResult.url;
       }
 
       if (archivo) {
@@ -13046,17 +13033,12 @@ export function TareaSeguimientoPage() {
     try {
       setUploadArtError(null);
 
-      // Convertir todos los archivos a base64 con su spot
-      const filesWithBase64 = await Promise.all(
+      // Subir todos los archivos a Spaces y obtener URLs
+      const filesWithUrls = await Promise.all(
         data.files.map(async ({ file, spot }) => {
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = () => reject(new Error(`Error al leer el archivo ${file.name}`));
-            reader.readAsDataURL(file);
-          });
+          const uploadResult = await campanasService.uploadArteFile(file);
           return {
-            archivo: base64,
+            archivo: uploadResult.url,
             spot,
             nombre: file.name,
             tipo: file.type.startsWith('video/') ? 'video' : 'image',
@@ -13065,7 +13047,7 @@ export function TareaSeguimientoPage() {
       );
 
       // Llamar al servicio para asignar arte digital
-      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithBase64);
+      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithUrls);
 
       // Invalidar queries y cerrar modal
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
@@ -16404,17 +16386,12 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
 
           // 2. Luego agregar los nuevos archivos (si hay)
           if (files.length > 0) {
-            // Convertir todos los archivos a base64 con su spot
-            const filesWithBase64 = await Promise.all(
+            // Subir todos los archivos a Spaces y obtener URLs
+            const filesWithUrls = await Promise.all(
               files.map(async ({ file, spot }) => {
-                const base64 = await new Promise<string>((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result as string);
-                  reader.onerror = () => reject(new Error(`Error al leer el archivo ${file.name}`));
-                  reader.readAsDataURL(file);
-                });
+                const uploadResult = await campanasService.uploadArteFile(file);
                 return {
-                  archivo: base64,
+                  archivo: uploadResult.url,
                   spot,
                   nombre: file.name,
                   tipo: file.type.startsWith('video/') ? 'video' : 'image',
@@ -16422,7 +16399,7 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
               })
             );
             // Llamar al servicio para agregar nuevos archivos digitales (sin eliminar los existentes)
-            await campanasService.addArteDigital(campanaId, reservaIds, filesWithBase64);
+            await campanasService.addArteDigital(campanaId, reservaIds, filesWithUrls);
           }
 
           // Invalidar queries

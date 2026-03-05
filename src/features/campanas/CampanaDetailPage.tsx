@@ -149,9 +149,9 @@ function TableSkeleton({ isDark = true }: { isDark?: boolean }) {
       <div className="space-y-2">
         {/* Header skeleton */}
         <div className="flex items-center gap-2 pb-2">
-          <div className="h-7 bg-purple-900/30 rounded-lg w-32"></div>
-          <div className="h-7 bg-purple-900/30 rounded-lg w-24"></div>
-          <div className="h-7 bg-purple-900/30 rounded-lg w-20"></div>
+          <div className={`h-7 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'} rounded-lg w-32`}></div>
+          <div className={`h-7 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'} rounded-lg w-24`}></div>
+          <div className={`h-7 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'} rounded-lg w-20`}></div>
         </div>
         {/* Table rows skeleton */}
         <div className="border border-border rounded-lg overflow-hidden">
@@ -1527,9 +1527,9 @@ export function CampanaDetailPage() {
             <Badge variant={statusVariants[campana.status] || 'secondary'} className="text-xs sm:text-sm">
               {campana.status}
             </Badge>
-            {campana.reservas_count != null && campana.total_caras && Number(campana.reservas_count) < Number(campana.total_caras) && (
+            {campana.caras_ultima_cat != null && Number(campana.caras_ultima_cat) > 0 && Number(campana.reservas_count_ultima_cat) < Number(campana.caras_ultima_cat) && (
               <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs border ${isDark ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
-                Incompleta ({campana.reservas_count}/{campana.total_caras} caras)
+                Incompleta ({campana.reservas_count_ultima_cat}/{campana.caras_ultima_cat} caras)
               </span>
             )}
           </div>

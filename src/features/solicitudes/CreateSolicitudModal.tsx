@@ -15,6 +15,7 @@ import { useSocketEquipos } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { useFormPersist } from '../../hooks/useFormPersist';
+import { uploadsService } from '../../services/uploads.service';
 
 // Tarifa publica lookup map based on ItemCode (full SAP codes with tarifa_publica values)
 const TARIFA_PUBLICA_MAP: Record<string, number> = {
@@ -775,6 +776,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // File
   const [archivo, setArchivo] = useState<string | null>(null);
+  const [archivoFile, setArchivoFile] = useState<File | null>(null);
   const [tipoArchivo, setTipoArchivo] = useState<string | null>(null);
 
   // IMU
@@ -1028,6 +1030,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setMesFin(undefined);
       setCaras([]);
       setArchivo(null);
+      setArchivoFile(null);
       setTipoArchivo(null);
       setImu(false);
       setExpandedCatorcenas(new Set());
@@ -1060,6 +1063,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setNotas('');
       setCaras([]);
       setArchivo(null);
+      setArchivoFile(null);
       setTipoArchivo(null);
       setImu(false);
     }
@@ -1461,12 +1465,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setArchivo(reader.result as string);
-        setTipoArchivo(file.type);
-      };
-      reader.readAsDataURL(file);
+      setArchivoFile(file);
+      setArchivo(file.name);
+      setTipoArchivo(file.type);
     }
   };
 
@@ -1530,15 +1531,28 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setMesFin(undefined);
     setCaras([]);
     setArchivo(null);
+    setArchivoFile(null);
     setTipoArchivo(null);
     setImu(false);
     setExpandedCatorcenas(new Set());
   };
 
   // Handle submit
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedCuic || caras.length === 0 || !fechaInicio || !fechaFin || selectedAsignados.length === 0) {
       return;
+    }
+
+    // Si hay archivo nuevo (File), subirlo primero a Spaces
+    let archivoUrl = archivo;
+    if (archivoFile) {
+      try {
+        const uploaded = await uploadsService.uploadFile(archivoFile, 'solicitudes');
+        archivoUrl = uploaded.url;
+      } catch (err) {
+        showToast('Error al subir el archivo', 'error');
+        return;
+      }
     }
 
     const data = {
@@ -1565,7 +1579,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       fecha_inicio: fechaInicio,
       fecha_fin: fechaFin,
       tipo_periodo: tipoPeriodo,
-      archivo: archivo || undefined,
+      archivo: archivoUrl || undefined,
       tipo_archivo: tipoArchivo || undefined,
       IMU: imu,
       caras: caras.map(c => ({
@@ -2078,14 +2092,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     {/* Años */}
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <label className="text-xs text-zinc-500">Año Inicio</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Año Inicio</label>
                         <select
                           value={yearInicio || ''}
                           onChange={(e) => {
                             setYearInicio(e.target.value ? parseInt(e.target.value) : undefined);
                             setCatorcenaInicio(undefined);
                           }}
-                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                         >
                           <option value="">Seleccionar</option>
                           {yearInicioOptions.map(y => (
@@ -2094,14 +2108,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         </select>
                       </div>
                       <div className="flex-1">
-                        <label className="text-xs text-zinc-500">Año Fin</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Año Fin</label>
                         <select
                           value={yearFin || ''}
                           onChange={(e) => {
                             setYearFin(e.target.value ? parseInt(e.target.value) : undefined);
                             setCatorcenaFin(undefined);
                           }}
-                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                         >
                           <option value="">Seleccionar</option>
                           {yearFinOptions.map(y => (
@@ -2113,12 +2127,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     {/* Catorcenas */}
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <label className="text-xs text-zinc-500">Cat. Inicio</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Cat. Inicio</label>
                         <select
                           value={catorcenaInicio || ''}
                           onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
                           disabled={!yearInicio}
-                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         >
                           <option value="">Seleccionar</option>
                           {catorcenasInicioOptions.map(c => (
@@ -2129,12 +2143,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         </select>
                       </div>
                       <div className="flex-1">
-                        <label className="text-xs text-zinc-500">Cat. Fin</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Cat. Fin</label>
                         <select
                           value={catorcenaFin || ''}
                           onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
                           disabled={!yearFin}
-                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         >
                           <option value="">Seleccionar</option>
                           {catorcenasFinOptions.map(c => (
@@ -2151,14 +2165,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     {/* Años */}
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <label className="text-xs text-zinc-500">Año Inicio</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Año Inicio</label>
                         <select
                           value={yearInicio || ''}
                           onChange={(e) => {
                             setYearInicio(e.target.value ? parseInt(e.target.value) : undefined);
                             setMesInicio(undefined);
                           }}
-                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                         >
                           <option value="">Seleccionar</option>
                           {yearInicioOptions.map(y => (
@@ -2167,14 +2181,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         </select>
                       </div>
                       <div className="flex-1">
-                        <label className="text-xs text-zinc-500">Año Fin</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Año Fin</label>
                         <select
                           value={yearFin || ''}
                           onChange={(e) => {
                             setYearFin(e.target.value ? parseInt(e.target.value) : undefined);
                             setMesFin(undefined);
                           }}
-                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                         >
                           <option value="">Seleccionar</option>
                           {yearFinOptions.map(y => (
@@ -2186,12 +2200,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     {/* Meses */}
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <label className="text-xs text-zinc-500">Mes Inicio</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Mes Inicio</label>
                         <select
                           value={mesInicio || ''}
                           onChange={(e) => setMesInicio(e.target.value ? parseInt(e.target.value) : undefined)}
                           disabled={!yearInicio}
-                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         >
                           <option value="">Seleccionar</option>
                           {mesInicioOptions.map(m => (
@@ -2200,12 +2214,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         </select>
                       </div>
                       <div className="flex-1">
-                        <label className="text-xs text-zinc-500">Mes Fin</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Mes Fin</label>
                         <select
                           value={mesFin || ''}
                           onChange={(e) => setMesFin(e.target.value ? parseInt(e.target.value) : undefined)}
                           disabled={!yearFin}
-                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         >
                           <option value="">Seleccionar</option>
                           {mesFinOptions.map(m => (
@@ -2220,25 +2234,25 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
               {/* Descripción */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Descripción Trafico</label>
+                <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Descripción Trafico</label>
                 <textarea
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
                   placeholder="Descripción detallada de la campaña..."
                   rows={4}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+                  className={`w-full px-4 py-3 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none`}
                 />
               </div>
 
               {/* Notas */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Notas Dirección</label>
+                <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Notas Dirección</label>
                 <textarea
                   value={notas}
                   onChange={(e) => setNotas(e.target.value)}
                   placeholder="Notas breves..."
                   rows={4}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+                  className={`w-full px-4 py-3 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none`}
                 />
               </div>
             </div>
@@ -2251,34 +2265,34 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/30">
                 <div className="grid grid-cols-4 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-white">{totals.totalRenta}</div>
-                    <div className="text-xs text-zinc-400">Renta</div>
+                    <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totals.totalRenta}</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Renta</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-emerald-400">{totals.totalBonificacion}</div>
-                    <div className="text-xs text-zinc-400">Bonificación</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Bonificación</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-400">{totals.totalRenta + totals.totalBonificacion}</div>
-                    <div className="text-xs text-zinc-400">Total Caras</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Total Caras</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-amber-400">{formatCurrency(totals.totalPrecio)}</div>
-                    <div className="text-xs text-zinc-400">Inversión</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Inversión</div>
                   </div>
                 </div>
               </div>
 
               {/* Add cara form */}
-              <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
-                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+              <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4 flex items-center gap-2`}>
                   <Plus className="h-4 w-4 text-purple-400" />
                   Agregar Cara
                 </h3>
 
                 {/* Row 1: Articulo SAP */}
                 <div className="mb-4">
-                  <label className="text-xs text-zinc-500 flex items-center gap-1">
+                  <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'} flex items-center gap-1`}>
                     <Package className="h-3 w-3" />
                     Artículo SAP
                   </label>
@@ -2318,14 +2332,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     loading={articulosLoading}
                     renderOption={(item) => (
                       <div>
-                        <div className="font-medium text-white">{item.ItemCode}</div>
-                        <div className="text-xs text-zinc-500">{item.ItemName}</div>
+                        <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.ItemCode}</div>
+                        <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.ItemName}</div>
                       </div>
                     )}
                     renderSelected={(item) => (
                       <div className="text-left">
                         <div className="font-medium text-sm">{item.ItemCode}</div>
-                        <div className="text-[10px] text-zinc-500">{item.ItemName}</div>
+                        <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.ItemName}</div>
                       </div>
                     )}
                   />
@@ -2335,11 +2349,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 <div className="grid grid-cols-4 gap-3 mb-4">
                   {/* Estado */}
                   <div>
-                    <label className="text-xs text-zinc-500">Estado</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Estado</label>
                     <select
                       value={newCara.estado}
                       onChange={(e) => setNewCara({ ...newCara, estado: e.target.value, ciudades: [] })}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                     >
                       <option value="">Seleccionar</option>
                       {inventarioFilters?.estados.map(e => (
@@ -2350,7 +2364,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                   {/* Ciudad (opcional) */}
                   <div>
-                    <label className="text-xs text-zinc-500">Ciudad (opcional)</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Ciudad (opcional)</label>
                     <MultiSelectTags
                       label="ciudad"
                       options={filteredCiudades.map(c => ({ ciudad: c }))}
@@ -2364,11 +2378,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                   {/* Formato */}
                   <div>
-                    <label className="text-xs text-zinc-500">Formato</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Formato</label>
                     <select
                       value={newCara.formato}
                       onChange={(e) => setNewCara({ ...newCara, formato: e.target.value })}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                     >
                       <option value="">Seleccionar</option>
                       {tipoPeriodo === 'mensual' ? (
@@ -2387,11 +2401,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                   {/* Tipo (selector con autocompletado) */}
                   <div>
-                    <label className="text-xs text-zinc-500">Tipo</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tipo</label>
                     <select
                       value={newCara.tipo}
                       onChange={(e) => setNewCara({ ...newCara, tipo: e.target.value as 'Tradicional' | 'Digital' | '' })}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                     >
                       <option value="">Seleccionar</option>
                       {filteredTipos.map(t => (
@@ -2407,12 +2421,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   {tipoPeriodo === 'mensual' ? (
                     <>
                       <div>
-                        <label className="text-xs text-zinc-500">Mes</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Mes</label>
                         <select
                           value={newCara.periodo}
                           onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value, periodoInicioCustom: '', periodoFinCustom: '' })}
                           disabled={availablePeriods.length === 0}
-                          className="w-full px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                          className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         >
                           <option value="">Seleccionar</option>
                           {availablePeriods.map(p => (
@@ -2423,7 +2437,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs text-zinc-500">Fecha Inicio</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Fecha Inicio</label>
                         <input
                           type="date"
                           value={newCara.periodoInicioCustom}
@@ -2431,11 +2445,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           disabled={!newCara.periodo}
                           min={availablePeriods.length > 0 ? availablePeriods[0].fecha_inicio : undefined}
                           max={newCara.periodoFinCustom || (availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined)}
-                          className="w-full px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                          className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-zinc-500">Fecha Fin</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Fecha Fin</label>
                         <input
                           type="date"
                           value={newCara.periodoFinCustom}
@@ -2443,18 +2457,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           disabled={!newCara.periodo}
                           min={newCara.periodoInicioCustom || (availablePeriods.length > 0 ? availablePeriods[0].fecha_inicio : undefined)}
                           max={availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined}
-                          className="w-full px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                          className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         />
                       </div>
                     </>
                   ) : (
                     <div>
-                      <label className="text-xs text-zinc-500">Periodo</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Periodo</label>
                       <select
                         value={newCara.periodo}
                         onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value })}
                         disabled={availablePeriods.length === 0}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                       >
                         <option value="">Seleccionar</option>
                         {availablePeriods.map(p => (
@@ -2468,7 +2482,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                   {/* Renta */}
                   <div>
-                    <label className="text-xs text-zinc-500">
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
                       Renta
                       {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && (
                         <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
@@ -2481,13 +2495,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       onChange={(e) => setNewCara({ ...newCara, renta: parseInt(e.target.value) || 0 })}
                       placeholder='0'
                       disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT')}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     />
                   </div>
 
                   {/* Bonificacion */}
                   <div>
-                    <label className="text-xs text-zinc-500">
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
                       {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                     </label>
                     <input
@@ -2497,27 +2511,27 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       value={newCara.bonificacion || ''}
                       onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
                       placeholder='0'
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                     />
                   </div>
 
                   {/* Tarifa Publica - Editable */}
                   <div>
-                    <label className="text-xs text-zinc-500">Tarifa Pública</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa Pública</label>
                     <input
                       type="number"
                       value={newCara.tarifaPublica || ''}
                       onChange={(e) => setNewCara({ ...newCara, tarifaPublica: parseFloat(e.target.value) || 0 })}
                       placeholder="0"
                       disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN')}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-emerald-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-100 border-gray-200'} border rounded-lg text-emerald-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     />
                   </div>
                 </div>
 
                 {/* Row 4: NSE */}
                 <div className="mb-4">
-                  <label className="text-xs text-zinc-500">Nivel Socioeconómico</label>
+                  <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Nivel Socioeconómico</label>
                   <div className="flex flex-wrap gap-2 mt-1">
                     {filteredNse.map(n => (
                       <button
@@ -2526,7 +2540,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         onClick={() => toggleNse(n)}
                         className={`px-3 py-1 rounded-full text-xs transition-all ${newCara.nse.includes(n)
                           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                          : 'bg-zinc-700/50 text-zinc-400 border border-zinc-600/50 hover:border-zinc-500'
+                          : isDark ? 'bg-zinc-700/50 text-zinc-400 border border-zinc-600/50 hover:border-zinc-500' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
                           }`}
                       >
                         {n}
@@ -2547,22 +2561,22 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                 {/* Preview calculation */}
                 {newCara.renta > 0 && newCara.tarifaPublica > 0 && (
-                  <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/30 space-y-2">
+                  <div className={`mt-4 p-3 ${isDark ? 'bg-zinc-800/50 border-zinc-700/30' : 'bg-gray-50 border-gray-200'} rounded-lg border space-y-2`}>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400">Inversión (Tarifa Cliente):</span>
-                      <span className="text-zinc-300">
+                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inversión (Tarifa Cliente):</span>
+                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
                         {newCara.renta} caras × {formatCurrency(newCara.tarifaPublica)} = <span className="text-emerald-400 font-medium">{formatCurrency(newCara.renta * newCara.tarifaPublica)}</span>
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400">Caras Totales:</span>
-                      <span className="text-zinc-300">
+                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras Totales:</span>
+                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
                         {newCara.renta} caras + {newCara.bonificacion} bonif. = <span className="text-blue-400 font-medium">{newCara.renta + newCara.bonificacion} caras totales</span>
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400">Tarifa Efectiva:</span>
-                      <span className="text-zinc-300">
+                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Tarifa Efectiva:</span>
+                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
                         {formatCurrency(newCara.renta * newCara.tarifaPublica)} ÷ {newCara.renta + newCara.bonificacion} = <span className="text-purple-400 font-medium">{formatCurrency((newCara.renta * newCara.tarifaPublica) / (newCara.renta + newCara.bonificacion))}</span>
                       </span>
                     </div>
@@ -2574,7 +2588,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     type="button"
                     onClick={handleAddCara}
                     disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom))}
-                    className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors`}
+                    className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg text-sm font-medium transition-colors`}
                   >
                     {editingCaraId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                     {editingCaraId ? 'Actualizar Cara' : 'Agregar Cara'}
@@ -2583,7 +2597,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <button
                       type="button"
                       onClick={handleCancelEdit}
-                      className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
+                      className={`flex items-center gap-2 px-4 py-2 ${isDark ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'} rounded-lg text-sm font-medium transition-colors`}
                     >
                       <X className="h-4 w-4" />
                       Cancelar Edición
@@ -2592,7 +2606,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <button
                       type="button"
                       onClick={handleClearNewCara}
-                      className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
+                      className={`flex items-center gap-2 px-4 py-2 ${isDark ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'} rounded-lg text-sm font-medium transition-colors`}
                     >
                       <RefreshCw className="h-4 w-4" />
                       Limpiar Campos
@@ -2602,9 +2616,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               </div>
 
               {/* Caras table - grouped by catorcena */}
-              <div className="rounded-xl border border-zinc-700/50 overflow-hidden">
+              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
                 {groupedCaras.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-zinc-500 text-sm">
+                  <div className={`px-4 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                     No hay caras agregadas
                   </div>
                 ) : (
@@ -2621,15 +2635,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           <button
                             type="button"
                             onClick={() => toggleCatorcena(key)}
-                            className="w-full flex items-center justify-between px-4 py-3 bg-zinc-800/50 hover:bg-zinc-800 transition-colors border-b border-zinc-700/50"
+                            className={`w-full flex items-center justify-between px-4 py-3 ${isDark ? 'bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700/50' : 'bg-gray-50 hover:bg-gray-100 border-gray-200'} transition-colors border-b`}
                           >
                             <div className="flex items-center gap-3">
-                              {isExpanded ? <ChevronDown className="h-4 w-4 text-zinc-400" /> : <ChevronRight className="h-4 w-4 text-zinc-400" />}
-                              <span className="font-medium text-white">{getPeriodLabel(key)}</span>
-                              <span className="text-xs text-zinc-500">({items.length} caras)</span>
+                              {isExpanded ? <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} /> : <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />}
+                              <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{getPeriodLabel(key)}</span>
+                              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({items.length} caras)</span>
                             </div>
                             <div className="flex items-center gap-4 text-sm">
-                              <span className="text-zinc-400">{groupRenta} renta</span>
+                              <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{groupRenta} renta</span>
                               <span className="text-emerald-400">{groupBonif} bonif.</span>
                               <span className="text-amber-400 font-medium">{formatCurrency(groupTotal)}</span>
                             </div>
@@ -2637,21 +2651,21 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                           {/* Expanded items */}
                           {isExpanded && (
-                            <div className="bg-zinc-900/50 overflow-x-auto">
+                            <div className={`${isDark ? 'bg-zinc-900/50' : 'bg-white'} overflow-x-auto`}>
                               <table className="w-full min-w-[1000px]">
                                 <thead>
-                                  <tr className="bg-zinc-800/30">
-                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Artículo</th>
-                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Ciudad</th>
-                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Tipo</th>
-                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Formato</th>
-                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Caras</th>
-                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Bonif.</th>
-                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Total</th>
-                                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Tarifa Púb.</th>
-                                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Precio Total</th>
-                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Estado</th>
-                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500"></th>
+                                  <tr className={isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}>
+                                    <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Artículo</th>
+                                    <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Ciudad</th>
+                                    <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tipo</th>
+                                    <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Formato</th>
+                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Caras</th>
+                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Bonif.</th>
+                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Total</th>
+                                    <th className={`px-2 py-2 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa Púb.</th>
+                                    <th className={`px-2 py-2 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Precio Total</th>
+                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Estado</th>
+                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}></th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -2662,12 +2676,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                     const descuento = totalCaras > 0 ? ((cara.bonificacion / totalCaras) * 100) : 0;
 
                                     return (
-                                      <tr key={cara.id} className="border-t border-zinc-800/50 hover:bg-zinc-800/20">
-                                        <td className="px-2 py-2 text-xs text-white max-w-[140px]" title={`${cara.articulo.ItemCode} - ${cara.articulo.ItemName}`}>
+                                      <tr key={cara.id} className={`border-t ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/20' : 'border-gray-100 hover:bg-gray-50'}`}>
+                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-white' : 'text-gray-900'} max-w-[140px]`} title={`${cara.articulo.ItemCode} - ${cara.articulo.ItemName}`}>
                                           <div className="truncate font-medium">{cara.articulo.ItemCode}</div>
-                                          <div className="truncate text-[10px] text-zinc-500">{cara.articulo.ItemName}</div>
+                                          <div className={`truncate text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{cara.articulo.ItemName}</div>
                                         </td>
-                                        <td className="px-2 py-2 text-xs text-zinc-300 max-w-[80px] truncate" title={`${cara.estado} - ${cara.ciudades.join(', ')}`}>
+                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={`${cara.estado} - ${cara.ciudades.join(', ')}`}>
                                           {cara.ciudades.join(', ')}
                                         </td>
                                         <td className="px-2 py-2">
@@ -2676,11 +2690,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             {cara.tipo}
                                           </span>
                                         </td>
-                                        <td className="px-2 py-2 text-xs text-zinc-300">{cara.formato}</td>
-                                        <td className="px-2 py-2 text-xs text-center text-white">{cara.renta}</td>
+                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.formato}</td>
+                                        <td className={`px-2 py-2 text-xs text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>{cara.renta}</td>
                                         <td className="px-2 py-2 text-xs text-center text-emerald-400">{cara.bonificacion}</td>
-                                        <td className="px-2 py-2 text-xs text-center text-white font-medium">{totalCaras}</td>
-                                        <td className="px-2 py-2 text-xs text-right text-zinc-300">{formatCurrency(cara.tarifaPublica)}</td>
+                                        <td className={`px-2 py-2 text-xs text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{totalCaras}</td>
+                                        <td className={`px-2 py-2 text-xs text-right ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{formatCurrency(cara.tarifaPublica)}</td>
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
                                           {(() => {
@@ -2710,7 +2724,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                                   </span>
                                                 )}
                                                 {!dgEfectivo && !dcmEfectivo && (
-                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-600/30 text-zinc-400">
+                                                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-zinc-600/30 text-zinc-400' : 'bg-gray-100 text-gray-500'}`}>
                                                     Por evaluar
                                                   </span>
                                                 )}
@@ -2750,11 +2764,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     })}
 
                     {/* Totals footer */}
-                    <div className="px-4 py-3 bg-zinc-800/30 border-t border-zinc-700/50">
+                    <div className={`px-4 py-3 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border-t`}>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-zinc-400">Totales:</span>
+                        <span className={`text-sm font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Totales:</span>
                         <div className="flex items-center gap-6 text-sm">
-                          <span className="text-white">{totals.totalRenta} renta</span>
+                          <span className={isDark ? 'text-white' : 'text-gray-900'}>{totals.totalRenta} renta</span>
                           <span className="text-emerald-400">{totals.totalBonificacion} bonif.</span>
                           <span className="text-amber-400 font-bold">{formatCurrency(totals.totalPrecio)}</span>
                         </div>
@@ -2777,38 +2791,38 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <div className="space-y-6">
               {/* Summary cards */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
-                  <h3 className="text-sm font-semibold text-zinc-400 mb-3">Cliente</h3>
+                <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-3`}>Cliente</h3>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">CUIC:</span>
-                      <span className="text-white text-sm">{selectedCuic?.CUIC || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>CUIC:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{selectedCuic?.CUIC || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Marca:</span>
-                      <span className="text-white text-sm">{selectedCuic?.T2_U_Marca || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Marca:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{selectedCuic?.T2_U_Marca || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Producto:</span>
-                      <span className="text-white text-sm">{selectedCuic?.T2_U_Producto || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Producto:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{selectedCuic?.T2_U_Producto || '-'}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
-                  <h3 className="text-sm font-semibold text-zinc-400 mb-3">Campaña</h3>
+                <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-3`}>Campaña</h3>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Nombre:</span>
-                      <span className="text-white text-sm">{nombreCampania || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Nombre:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{nombreCampania || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Caras:</span>
-                      <span className="text-white text-sm">{caras.length}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Caras:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{caras.length}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Fechas:</span>
-                      <span className="text-white text-sm">
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Fechas:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>
                         {fechaInicio && fechaFin ? `${new Date(fechaInicio).toLocaleDateString()} - ${new Date(fechaFin).toLocaleDateString()}` : '-'}
                       </span>
                     </div>
@@ -2820,38 +2834,38 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/30">
                 <div className="grid grid-cols-4 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-white">{totals.totalRenta}</div>
-                    <div className="text-xs text-zinc-400">Renta</div>
+                    <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totals.totalRenta}</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Renta</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-emerald-400">{totals.totalBonificacion}</div>
-                    <div className="text-xs text-zinc-400">Bonificación</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Bonificación</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-400">{totals.totalRenta + totals.totalBonificacion}</div>
-                    <div className="text-xs text-zinc-400">Total Caras</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Total Caras</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-amber-400">{formatCurrency(totals.totalPrecio)}</div>
-                    <div className="text-xs text-zinc-400">Inversión</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Inversión</div>
                   </div>
                 </div>
               </div>
 
               {/* Resumen de Catorcenas y Artículos */}
-              <div className="rounded-xl border border-zinc-700/50 overflow-hidden">
-                <div className="px-4 py-3 bg-zinc-800/50 border-b border-zinc-700/50">
-                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
+                <div className={`px-4 py-3 ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border-b`}>
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                     <Calendar className="h-4 w-4 text-purple-400" />
                     Desglose por Catorcenas
                   </h3>
                 </div>
                 {groupedCaras.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-zinc-500 text-sm">
+                  <div className={`px-4 py-6 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                     No hay caras agregadas
                   </div>
                 ) : (
-                  <div className="divide-y divide-zinc-700/50">
+                  <div className={`divide-y ${isDark ? 'divide-zinc-700/50' : 'divide-gray-200'}`}>
                     {groupedCaras.map(([key, items]) => {
                       const groupTotal = items.reduce((acc, c) => acc + c.precioTotal, 0);
                       const groupRenta = items.reduce((acc, c) => acc + c.renta, 0);
@@ -2877,15 +2891,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       }, {} as Record<string, { articulo: any; renta: number; bonificacion: number; precioTotal: number; items: any[] }>);
 
                       return (
-                        <div key={key} className="bg-zinc-900/30">
+                        <div key={key} className={isDark ? 'bg-zinc-900/30' : 'bg-white'}>
                           {/* Period header */}
-                          <div className="flex items-center justify-between px-4 py-3 bg-zinc-800/30">
+                          <div className={`flex items-center justify-between px-4 py-3 ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}`}>
                             <div className="flex items-center gap-2">
-                              <span className="font-medium text-white">{getPeriodLabel(key)}</span>
-                              <span className="text-xs text-zinc-500">({Object.keys(byArticulo).length} artículos)</span>
+                              <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{getPeriodLabel(key)}</span>
+                              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({Object.keys(byArticulo).length} artículos)</span>
                             </div>
                             <div className="flex items-center gap-4 text-sm">
-                              <span className="text-zinc-400">{groupRenta} renta</span>
+                              <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{groupRenta} renta</span>
                               <span className="text-emerald-400">{groupBonif} bonif.</span>
                               <span className="text-amber-400 font-medium">{formatCurrency(groupTotal)}</span>
                             </div>
@@ -2893,13 +2907,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           {/* Artículos dentro de esta catorcena */}
                           <div className="px-4 py-2 space-y-1">
                             {Object.entries(byArticulo).map(([artCode, data]) => (
-                              <div key={artCode} className="flex items-center justify-between py-1.5 px-3 bg-zinc-800/20 rounded-lg">
+                              <div key={artCode} className={`flex items-center justify-between py-1.5 px-3 ${isDark ? 'bg-zinc-800/20' : 'bg-gray-50'} rounded-lg`}>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-purple-400 font-medium">{data.articulo.ItemCode}</span>
-                                  <span className="text-xs text-zinc-400 truncate max-w-[200px]">{data.articulo.ItemName}</span>
+                                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate max-w-[200px]`}>{data.articulo.ItemName}</span>
                                 </div>
                                 <div className="flex items-center gap-3 text-xs">
-                                  <span className="text-white">{data.renta} renta</span>
+                                  <span className={isDark ? 'text-white' : 'text-gray-900'}>{data.renta} renta</span>
                                   <span className="text-emerald-400">{data.bonificacion} bonif.</span>
                                   <span className="text-amber-400">{formatCurrency(data.precioTotal)}</span>
                                 </div>
@@ -2914,11 +2928,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               </div>
 
               {/* Asignados */}
-              <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
-                <h3 className="text-sm font-semibold text-zinc-400 mb-3">Asignados</h3>
+              <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-3`}>Asignados</h3>
                 <div className="flex flex-wrap gap-2">
                   {selectedAsignados.map(u => (
-                    <span key={u.id} className="px-3 py-1 bg-zinc-700/50 text-white text-xs rounded-full">
+                    <span key={u.id} className={`px-3 py-1 ${isDark ? 'bg-zinc-700/50 text-white' : 'bg-gray-200 text-gray-700'} text-xs rounded-full`}>
                       {u.nombre}
                     </span>
                   ))}
@@ -2927,26 +2941,26 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
               {/* File upload */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
                   <Upload className="h-4 w-4 text-purple-400" />
                   Archivo (opcional)
                 </label>
                 {archivo ? (
-                  <div className="flex items-center gap-3 p-3 bg-zinc-800 border border-emerald-500/30 rounded-xl">
+                  <div className={`flex items-center gap-3 p-3 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border border-emerald-500/30 rounded-xl`}>
                     {tipoArchivo?.startsWith('image/') ? (
                       <img src={archivo} alt="Preview" className="w-16 h-16 object-cover rounded-lg" />
                     ) : (
-                      <div className="w-16 h-16 flex items-center justify-center bg-zinc-700 rounded-lg">
-                        <FileText className="h-6 w-6 text-zinc-400" />
+                      <div className={`w-16 h-16 flex items-center justify-center ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} rounded-lg`}>
+                        <FileText className={`h-6 w-6 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
                       </div>
                     )}
                     <div className="flex-1">
                       <div className="text-sm text-emerald-400 font-medium">Archivo cargado</div>
-                      <div className="text-xs text-zinc-500">{tipoArchivo}</div>
+                      <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{tipoArchivo}</div>
                     </div>
                     <button
                       type="button"
-                      onClick={() => { setArchivo(null); setTipoArchivo(null); }}
+                      onClick={() => { setArchivo(null); setArchivoFile(null); setTipoArchivo(null); }}
                       className="p-2 hover:bg-red-500/20 rounded-lg text-red-400"
                       title="Eliminar archivo"
                     >
@@ -2957,7 +2971,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <input
                     type="file"
                     onChange={handleFileChange}
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-500 file:text-white hover:file:bg-purple-600"
+                    className={`w-full px-4 py-3 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-xl file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-500 file:text-white hover:file:bg-purple-600`}
                   />
                 )}
               </div>
@@ -2970,18 +2984,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   onChange={(e) => setImu(e.target.checked)}
                   className="checkbox-purple w-5 h-5"
                 />
-                <span className="text-sm text-zinc-300">IMU (Impresión  IMU)</span>
+                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>IMU (Impresión  IMU)</span>
               </label>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800 bg-zinc-900/50">
+        <div className={`flex items-center justify-between px-6 py-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
           <button
             type="button"
             onClick={() => step > 1 ? setStep(step - 1) : onClose()}
-            className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-700 transition-colors"
+            className={`px-4 py-2 ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} rounded-lg text-sm font-medium transition-colors`}
           >
             {step === 1 ? 'Cancelar' : 'Anterior'}
           </button>
@@ -2999,7 +3013,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               type="button"
               onClick={handleSubmit}
               disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0}
-              className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:bg-zinc-700 disabled:text-zinc-500 transition-colors flex items-center gap-2"
+              className={`px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} transition-colors flex items-center gap-2`}
               title={selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
             >
               {(isEditMode ? updateMutation.isPending : createMutation.isPending) ? (

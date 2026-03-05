@@ -530,8 +530,8 @@ function GoogleMapsChart({
   if (!isLoaded) {
     return (
       <GlassCard className="h-full">
-        <div className="p-6"><div className="text-sm text-purple-500 uppercase tracking-wider flex items-center gap-2"><MapPin className="h-4 w-4" /> Mapa de Inventario</div></div>
-        <div className="h-[500px] flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" /></div>
+        <div className="p-6"><div className={`text-sm uppercase tracking-wider flex items-center gap-2 ${isDark ? 'text-purple-400' : 'text-purple-600'}`}><MapPin className="h-4 w-4" /> Mapa de Inventario</div></div>
+        <div className="h-[500px] flex items-center justify-center"><div className={`animate-spin rounded-full h-8 w-8 border-b-2 ${isDark ? 'border-purple-500' : 'border-purple-600'}`} /></div>
       </GlassCard>
     );
   }
@@ -552,12 +552,12 @@ function GoogleMapsChart({
         </div>
         <div className="flex items-center gap-2">
           {showPins && zoomLevel < MIN_ZOOM_FOR_PINS && (
-            <span className="px-3 py-1.5 rounded-xl bg-zinc-700/60 text-zinc-400 text-xs border border-zinc-600/40">
+            <span className={`px-3 py-1.5 rounded-xl text-xs border ${isDark ? 'bg-zinc-700/60 text-zinc-400 border-zinc-600/40' : 'bg-gray-100 text-gray-500 border-gray-300'}`}>
               Haz zoom para ver pines
             </span>
           )}
           {showPins && zoomLevel >= MIN_ZOOM_FOR_PINS && (
-            <span className="px-3 py-1.5 rounded-xl bg-pink-500/20 text-pink-300 text-xs font-medium border border-pink-500/30">
+            <span className={`px-3 py-1.5 rounded-xl text-xs font-medium border ${isDark ? 'bg-pink-500/20 text-pink-300 border-pink-500/30' : 'bg-pink-50 text-pink-600 border-pink-200'}`}>
               {visibleCoords.length} pines visibles
             </span>
           )}
@@ -771,7 +771,7 @@ function HorizontalBarChart({ data, color, title }: { data: ChartData[]; color: 
           <ResponsiveContainer width="100%" height={268}>
             <BarChart layout="vertical" data={sortedData} margin={{ top: 5, right: 30, left: 60, bottom: 5 }}>
               <XAxis type="number" hide />
-              <YAxis type="category" dataKey="nombre" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={80} />
+              <YAxis type="category" dataKey="nombre" tick={{ fill: isDark ? '#a1a1aa' : '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={80} />
               <RechartsTooltip cursor={{ fill: 'rgba(139, 92, 246, 0.05)' }} content={<CustomTooltip />} />
               <Bar dataKey="cantidad" fill={colorHex} radius={[0, 6, 6, 0]} barSize={20}>
                 {sortedData.map((_, index) => (<Cell key={index} fillOpacity={0.7 + (index % 2) * 0.3} />))}
@@ -797,7 +797,7 @@ function SimpleBarChart({ data, title }: { data: ChartData[]; title: string }) {
         ) : (
           <ResponsiveContainer width="100%" height={268}>
             <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-              <XAxis dataKey="nombre" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="nombre" tick={{ fill: isDark ? '#a1a1aa' : '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
               <RechartsTooltip cursor={{ fill: 'rgba(139, 92, 246, 0.05)' }} content={<CustomTooltip />} />
               <Bar dataKey="cantidad" radius={[6, 6, 0, 0]} barSize={40}>
                 {data.map((_, index) => (<Cell key={index} fill={index % 2 === 0 ? '#8b5cf6' : '#d946ef'} />))}
@@ -1117,11 +1117,11 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
             </div>
           )}
           {!isLoading && totalPages > 1 && (
-            <div className="flex items-center gap-2 text-xs text-purple-600">
+            <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>
               <span>Pagina {page} de {totalPages}</span>
             </div>
           )}
-          {expanded ? <ChevronUp className="h-5 w-5 text-purple-500" /> : <ChevronDown className="h-5 w-5 text-purple-500" />}
+          {expanded ? <ChevronUp className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} /> : <ChevronDown className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />}
         </div>
       </div>
 
@@ -1172,7 +1172,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                           <datalist id={`inv-datalist-${filter.id}`}>
                             {invUniqueValues[filter.field]?.map(val => <option key={val} value={val} />)}
                           </datalist>
-                          <button onClick={() => removeInvFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                          <button onClick={() => removeInvFilter(filter.id)} className={`p-0.5 ${isDark ? 'text-red-400 hover:text-red-300' : 'text-red-400 hover:text-red-600'}`}>
                             <Trash2 className="h-3 w-3" />
                           </button>
                         </div>
@@ -1186,12 +1186,12 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                         <Plus className="h-3 w-3" /> Anadir
                       </button>
                       <button onClick={clearInvFilters} disabled={invFilters.length === 0}
-                        className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        className={`px-2 py-1 text-xs font-medium border rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors ${isDark ? 'text-red-400 hover:text-red-300 hover:bg-red-900/30 border-red-500/30' : 'text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200'}`}>
                         Limpiar
                       </button>
                     </div>
                     {invFilters.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-purple-200">
+                      <div className={`mt-2 pt-2 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
                         <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{filteredData.length} de {data.length} registros</span>
                       </div>
                     )}
@@ -1229,8 +1229,8 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                           {invGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
                         </div>
                         {label}
-                        {invGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-500">1</span>}
-                        {invGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2</span>}
+                        {invGroupings.indexOf(field) === 0 && <span className={`ml-auto text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'}`}>1</span>}
+                        {invGroupings.indexOf(field) === 1 && <span className={`ml-auto text-[10px] ${isDark ? 'text-pink-400' : 'text-pink-500'}`}>2</span>}
                       </button>
                     ))}
                     <div className={`border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'} mt-2 pt-2`}>
@@ -1286,7 +1286,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                     {invSortField && (
                       <div className={`mt-3 pt-3 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
                         <button onClick={() => { setInvSortField(null); setInvSortDirection('asc'); }}
-                          className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors">
+                          className={`w-full px-2 py-1 text-xs font-medium border rounded transition-colors ${isDark ? 'text-red-400 hover:text-red-300 hover:bg-red-900/30 border-red-500/30' : 'text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200'}`}>
                           Quitar ordenamiento
                         </button>
                       </div>
@@ -1323,7 +1323,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
           </div>
 
           {isLoading ? (
-            <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" /></div>
+            <div className="p-8 flex justify-center"><div className={`animate-spin rounded-full h-8 w-8 border-b-2 ${isDark ? 'border-purple-500' : 'border-purple-600'}`} /></div>
           ) : (
             <>
               <div className="max-h-[400px] overflow-auto">
@@ -1446,7 +1446,7 @@ function CatorcenaIndicator({ catorcena, filteredCatorcena }: { catorcena: any; 
         <span className={`${isDark ? 'text-white' : 'text-gray-800'} text-sm font-semibold ml-2`}>Cat. {displayCatorcena.numero} / {displayCatorcena.ano}</span>
       </div>
       {displayCatorcena.fecha_inicio && (
-        <span className={`text-xs ${isFiltered ? 'text-purple-500/70' : 'text-emerald-400/70'}`}>
+        <span className={`text-xs ${isFiltered ? (isDark ? 'text-purple-500/70' : 'text-purple-400') : (isDark ? 'text-emerald-400/70' : 'text-emerald-500')}`}>
           {new Date(displayCatorcena.fecha_inicio).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} -
           {new Date(displayCatorcena.fecha_fin).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
         </span>
@@ -1521,7 +1521,7 @@ export function DashboardPage() {
               <h2 className={`text-lg font-light ${isDark ? 'text-white' : 'text-gray-800'}`}>Resumen de Inventario</h2>
               <CatorcenaIndicator catorcena={filterOptions?.catorcenaActual} filteredCatorcena={filteredCatorcena} />
               {activeEstatus !== 'total' && (
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border`} style={{ background: isDark ? 'linear-gradient(to right, rgba(236,72,153,0.1), rgba(168,85,247,0.1))' : 'linear-gradient(to right, #fdf2f8, #faf5ff)' }}>
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${isDark ? 'border-pink-500/30' : 'border-pink-200'}`} style={{ background: isDark ? 'linear-gradient(to right, rgba(236,72,153,0.1), rgba(168,85,247,0.1))' : 'linear-gradient(to right, #fdf2f8, #faf5ff)' }}>
                   <span className={`text-sm ${isDark ? 'text-pink-300' : 'text-pink-600'} font-medium`}>{activeEstatus}</span>
                   <button onClick={() => handleEstatusChange('total')} className={`${isDark ? 'text-pink-300 hover:text-pink-200' : 'text-pink-400 hover:text-pink-700'}`}><X className="h-4 w-4" /></button>
                 </div>
@@ -1529,7 +1529,7 @@ export function DashboardPage() {
             </div>
             <div className="flex items-center gap-2">
               {hasActiveFilters && (
-                <Button variant="ghost" size="sm" onClick={handleClearFilters} className="gap-2 text-purple-500 hover:text-purple-700">
+                <Button variant="ghost" size="sm" onClick={handleClearFilters} className={`gap-2 ${isDark ? 'text-purple-400 hover:text-purple-300' : 'text-purple-500 hover:text-purple-700'}`}>
                   <RotateCcw className="h-4 w-4" /> Limpiar
                 </Button>
               )}

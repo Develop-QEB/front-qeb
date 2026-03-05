@@ -2929,6 +2929,45 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Remove a reserva - IMMEDIATE DELETE
   const handleRemoveReserva = (reservaId: string) => {
+    // Handle "completo" grouped items (muebles completos)
+    if (reservaId.startsWith('completo-')) {
+      const grupoId = Number(reservaId.replace('completo-', ''));
+      const groupReservas = reservas.filter(r => r.grupo_completo_id === grupoId);
+      const backendIds = groupReservas.filter(r => r.reservaId).map(r => r.reservaId!);
+
+      if (backendIds.length === 0) {
+        setReservas(prev => prev.filter(r => r.grupo_completo_id !== grupoId));
+        return;
+      }
+
+      setConfirmModal({
+        isOpen: true,
+        title: 'Eliminar Mueble Completo',
+        message: `¿Seguro que quieres eliminar este mueble completo? (${groupReservas.length} reservas)`,
+        confirmText: 'Eliminar',
+        isDestructive: true,
+        onConfirm: async () => {
+          setIsSaving(true);
+          try {
+            await propuestasService.deleteReservas(propuesta.id, backendIds);
+            queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+            queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
+            handleRefetchDisponibles();
+
+            setReservas(prev => prev.filter(r => r.grupo_completo_id !== grupoId));
+            showToast('Mueble completo eliminado correctamente', 'success');
+          } catch (error) {
+            console.error('Error deleting grupo completo:', error);
+            showToast('Error al eliminar mueble completo', 'error');
+          } finally {
+            setIsSaving(false);
+            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          }
+        }
+      });
+      return;
+    }
+
     const reserva = reservas.find(r => r.id === reservaId);
     if (!reserva || !reserva.reservaId) {
       setReservas(prev => prev.filter(r => r.id !== reservaId));
@@ -2942,6 +2981,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
+        setIsSaving(true);
         try {
           await propuestasService.deleteReservas(propuesta.id, [reserva.reservaId!]);
           queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
@@ -2954,6 +2994,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           console.error('Error deleting reserva:', error);
           showToast('Error al eliminar reserva', 'error');
         } finally {
+          setIsSaving(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         }
       }
@@ -2986,8 +3027,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Bulk delete selected reservas
   const handleBulkDeleteReservas = () => {
+    // Expand "completo-" IDs to their individual reservas
+    const expandedIds = new Set<string>();
+    selectedReservados.forEach(id => {
+      if (id.startsWith('completo-')) {
+        const grupoId = Number(id.replace('completo-', ''));
+        reservas.filter(r => r.grupo_completo_id === grupoId).forEach(r => expandedIds.add(r.id));
+      } else {
+        expandedIds.add(id);
+      }
+    });
     // Get selected reservas
-    const selectedReservasList = reservas.filter(r => selectedReservados.has(r.id));
+    const selectedReservasList = reservas.filter(r => expandedIds.has(r.id));
     if (selectedReservasList.length === 0) return;
 
     // Separate reservas with backend IDs from those without
@@ -2997,7 +3048,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     // If all are local-only (not saved to DB yet), just remove from state
     if (backendIds.length === 0) {
-      setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
+      setReservas(prev => prev.filter(r => !expandedIds.has(r.id)));
       setSelectedReservados(new Set());
       showToast(`${selectedReservasList.length} reservas eliminadas`, 'success');
       return;
@@ -3011,6 +3062,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
+        setIsSaving(true);
         try {
           // Delete from backend if there are any with reservaId
           if (backendIds.length > 0) {
@@ -3021,13 +3073,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           }
 
           // Remove all selected from local state
-          setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
+          setReservas(prev => prev.filter(r => !expandedIds.has(r.id)));
           setSelectedReservados(new Set());
           showToast(`${selectedReservasList.length} reserva(s) eliminada(s) correctamente`, 'success');
         } catch (error) {
           console.error('Error deleting reservas:', error);
           showToast('Error al eliminar reservas', 'error');
         } finally {
+          setIsSaving(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         }
       }
