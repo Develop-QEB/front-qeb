@@ -710,6 +710,7 @@ export function CampanaDetailPage() {
   const [enviandoCodigo, setEnviandoCodigo] = useState(false);
   const [pinVerificado, setPinVerificado] = useState(false);
   const [errorPIN, setErrorPIN] = useState('');
+  const [showIncompleteDetail, setShowIncompleteDetail] = useState(false);
 
   // Estado para filtros (inventario reservado)
   const [filtersReservado, setFiltersReservado] = useState<FilterCondition[]>([]);
@@ -733,6 +734,8 @@ export function CampanaDetailPage() {
   const [showPostSAPModal, setShowPostSAPModal] = useState(false);
   const [postingToSAP, setPostingToSAP] = useState(false);
   const [postSAPResult, setPostSAPResult] = useState<{ success: boolean; message: string; data?: unknown } | null>(null);
+  const [alreadyPosted, setAlreadyPosted] = useState(false);
+  const [previewDeliveryNote, setPreviewDeliveryNote] = useState<any>(null);
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -742,6 +745,13 @@ export function CampanaDetailPage() {
     queryKey: ['campana', campanaId],
     queryFn: () => campanasService.getById(campanaId),
   });
+
+  // Inicializar alreadyPosted desde la DB
+  useEffect(() => {
+    if (campana?.posted_to_sap) {
+      setAlreadyPosted(true);
+    }
+  }, [campana?.posted_to_sap]);
 
   const { data: inventarioReservado = [], isLoading: isLoadingInventario, error: errorInventario, refetch: refetchInventario } = useQuery({
     queryKey: ['campana-inventario', campanaId],
@@ -1042,6 +1052,9 @@ export function CampanaDetailPage() {
           message: 'Delivery Note creado exitosamente en SAP',
           data: result.data,
         });
+        setAlreadyPosted(true);
+        // Guardar en DB que ya se posteó
+        try { await campanasService.markPostedToSAP(campana.id); } catch (e) { console.error('Error marcando posted_to_sap:', e); }
       } else {
         setPostSAPResult({
           success: false,
@@ -1533,11 +1546,43 @@ export function CampanaDetailPage() {
             <Badge variant={statusVariants[campana.status] || 'secondary'} className="text-xs sm:text-sm">
               {campana.status}
             </Badge>
-            {campana.caras_ultima_cat != null && Number(campana.caras_ultima_cat) > 0 && Number(campana.reservas_count_ultima_cat) < Number(campana.caras_ultima_cat) && (
-              <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs border ${isDark ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
-                Incompleta ({campana.reservas_count_ultima_cat}/{campana.caras_ultima_cat} caras)
-              </span>
-            )}
+            {campana.incompleteness_detail && campana.incompleteness_detail.length > 0 && (() => {
+              const totalEsperadas = campana.incompleteness_detail.reduce((sum: number, d: any) => sum + d.caras_esperadas, 0);
+              const totalReservas = campana.incompleteness_detail.reduce((sum: number, d: any) => sum + d.reservas_count, 0);
+              const isIncomplete = totalReservas < totalEsperadas;
+              if (!isIncomplete) return null;
+              return (
+              <div className="relative">
+                <button
+                  onClick={() => setShowIncompleteDetail(!showIncompleteDetail)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs border cursor-pointer hover:opacity-80 transition-opacity ${isDark ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}
+                >
+                  Incompleta ({totalReservas}/{totalEsperadas} caras) {showIncompleteDetail ? '▲' : '▼'}
+                </button>
+                {showIncompleteDetail && campana.incompleteness_detail && campana.incompleteness_detail.length > 0 && (
+                  <div className={`absolute top-full right-0 mt-2 z-50 rounded-lg border shadow-xl p-3 min-w-[220px] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                    <p className={`text-xs font-semibold mb-2 ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>Desglose por catorcena:</p>
+                    <div className="space-y-1.5">
+                      {campana.incompleteness_detail.map((d: any) => (
+                        <div key={`${d.anio}-${d.catorcena}`} className="flex items-center justify-between gap-4">
+                          <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                            Cat {String(d.catorcena).padStart(2, '0')}
+                          </span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            d.completa
+                              ? (isDark ? 'text-green-300 bg-green-500/20 border border-green-500/30' : 'text-green-700 bg-green-50 border border-green-200')
+                              : (isDark ? 'text-yellow-300 bg-yellow-500/20 border border-yellow-500/30' : 'text-yellow-700 bg-yellow-50 border border-yellow-200')
+                          }`}>
+                            {d.reservas_count}/{d.caras_esperadas} {d.completa ? '✓' : `— faltan ${d.caras_esperadas - d.reservas_count}`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -2329,7 +2374,7 @@ export function CampanaDetailPage() {
               <span className="text-[10px] sm:text-xs text-muted-foreground">
                 {filteredInventarioAPS.length} registros
               </span>
-              {permissions.canEditDetalleCampana && (
+              {permissions.canEditDetalleCampana && !alreadyPosted && (
                 <button
                   onClick={() => setShowRemoveAPSModal(true)}
                   disabled={selectedItemsAPS.size === 0}
@@ -2345,12 +2390,19 @@ export function CampanaDetailPage() {
               )}
               {permissions.canEditDetalleCampana && inventarioConAPS.length > 0 && (
                 <button
-                  onClick={() => setShowPostSAPModal(true)}
-                  className="flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border bg-cyan-900/30 border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40 transition-colors"
-                  title="Enviar a SAP"
+                  onClick={() => {
+                    if (campana) {
+                      const dn = buildDeliveryNote(campana, inventarioConAPS, campana.sap_database);
+                      setPreviewDeliveryNote(dn);
+                    }
+                    setShowPostSAPModal(true);
+                  }}
+                  disabled={alreadyPosted}
+                  className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${alreadyPosted ? 'bg-zinc-800/50 border-zinc-700 cursor-not-allowed opacity-50' : 'bg-cyan-900/30 border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40'}`}
+                  title={alreadyPosted ? 'Ya se envió a SAP' : 'Enviar a SAP'}
                 >
-                  <Upload className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-cyan-400 mr-1" />
-                  <span className="text-[10px] sm:text-xs font-medium text-cyan-300">POST</span>
+                  <Upload className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${alreadyPosted ? 'text-zinc-500' : 'text-cyan-400'}`} />
+                  <span className={`text-[10px] sm:text-xs font-medium ${alreadyPosted ? 'text-zinc-500' : 'text-cyan-300'}`}>{alreadyPosted ? 'ENVIADO' : 'POST'}</span>
                 </button>
               )}
             </div>
@@ -3276,8 +3328,8 @@ export function CampanaDetailPage() {
 
       {/* Modal POST a SAP */}
       {showPostSAPModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-[#1a1025] border border-purple-900/50 rounded-xl p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => !postingToSAP && !postSAPResult && setShowPostSAPModal(false)}>
+          <div className="bg-[#1a1025] border border-purple-900/50 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-purple-300">Enviar a SAP</h3>
               <button
@@ -3285,7 +3337,8 @@ export function CampanaDetailPage() {
                   setShowPostSAPModal(false);
                   setPostSAPResult(null);
                 }}
-                className="text-muted-foreground hover:text-foreground"
+                disabled={postingToSAP}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -3294,33 +3347,83 @@ export function CampanaDetailPage() {
             {!postSAPResult ? (
               <>
                 <div className="mb-6">
-                  <p className="text-sm text-zinc-400 mb-4">
-                    Se enviará un Delivery Note a SAP con los siguientes datos:
-                  </p>
-                  <div className="bg-purple-900/20 rounded-lg p-3 space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Campaña:</span>
-                      <span className="text-zinc-300">{campana?.nombre}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Items con APS:</span>
-                      <span className="text-zinc-300">{inventarioConAPS.length}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">APS únicos:</span>
-                      <span className="text-zinc-300">{new Set(inventarioConAPS.map(i => i.aps)).size}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Cliente:</span>
-                      <span className="text-zinc-300">{campana?.T0_U_Cliente || '-'}</span>
-                    </div>
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-yellow-300 font-medium">⚠️ Esta acción no se puede deshacer</p>
+                    <p className="text-xs text-yellow-400/70 mt-1">Se creará un Delivery Note en SAP. Verifica que los datos sean correctos antes de enviar.</p>
                   </div>
+                  {previewDeliveryNote && (
+                    <div className="bg-purple-900/20 rounded-lg p-3 space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Campaña:</span>
+                        <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Camp}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">CardCode:</span>
+                        <span className="text-zinc-300">{previewDeliveryNote.CardCode}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Razón Social:</span>
+                        <span className="text-zinc-300 text-right max-w-[200px]">{previewDeliveryNote.U_CRM_R_S || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Marca:</span>
+                        <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Marca || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Series:</span>
+                        <span className="text-zinc-300">{previewDeliveryNote.Series}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">APS:</span>
+                        <span className="text-zinc-300">{previewDeliveryNote.U_IMU_ART_APS}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Asesor:</span>
+                        <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Asesor || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Agencia:</span>
+                        <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Agencia || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Base SAP:</span>
+                        <span className="text-zinc-300">{campana?.sap_database || 'TEST'}</span>
+                      </div>
+                      <hr className="border-purple-800/40" />
+                      <p className="text-zinc-500 font-medium">Líneas ({previewDeliveryNote.DocumentLines.length}):</p>
+                      {previewDeliveryNote.DocumentLines.map((line: any, i: number) => (
+                        <div key={i} className="bg-purple-950/30 rounded p-2 space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Artículo:</span>
+                            <span className="text-zinc-300">{line.ItemCode}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Cantidad:</span>
+                            <span className="text-zinc-300">{line.Quantity}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Tarifa:</span>
+                            <span className="text-zinc-300">${Number(line.UnitPrice).toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Periodo:</span>
+                            <span className="text-zinc-300">{line.U_dscPeriod}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Estatus:</span>
+                            <span className="text-zinc-300">{line.U_dscTAsig}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-3">
                   <button
                     onClick={() => setShowPostSAPModal(false)}
-                    className="px-4 py-2 text-sm font-medium rounded-lg border border-zinc-700 hover:bg-zinc-800 transition-colors"
+                    disabled={postingToSAP}
+                    className="px-4 py-2 text-sm font-medium rounded-lg border border-zinc-700 hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     Cancelar
                   </button>
@@ -3350,13 +3453,6 @@ export function CampanaDetailPage() {
                     <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
                     <p className="text-lg font-medium text-green-400 mb-2">¡Éxito!</p>
                     <p className="text-sm text-zinc-400 mb-4">{postSAPResult.message}</p>
-                    {postSAPResult.data && (
-                      <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 text-left text-xs mb-4">
-                        <pre className="text-green-300 whitespace-pre-wrap overflow-auto max-h-40">
-                          {JSON.stringify(postSAPResult.data, null, 2)}
-                        </pre>
-                      </div>
-                    )}
                   </>
                 ) : (
                   <>

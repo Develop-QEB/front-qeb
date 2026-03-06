@@ -258,6 +258,24 @@ export const solicitudesService = {
     return response.data.data;
   },
 
+  async uploadGenericFile(file: File): Promise<{ url: string; filename: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post<ApiResponse<{ url: string; filename: string; originalName: string; size: number; mimetype: string }>>(
+      '/uploads/arte',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al subir archivo');
+    }
+    return response.data.data;
+  },
+
   async evaluarAutorizacion(data: {
     ciudad?: string;
     estado?: string;

@@ -622,6 +622,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [reservadosSearchTerm, setReservadosSearchTerm] = useState('');
   const [editingReserva, setEditingReserva] = useState<ReservaItem | null>(null);
   const [editingFormato, setEditingFormato] = useState('');
+  const [editingPlaza, setEditingPlaza] = useState('');
   const [reservadosTipoFilter, setReservadosTipoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo' | 'Bonificacion'>('Todos');
   const [showOnlyIslaReservados, setShowOnlyIslaReservados] = useState(false);
   const [showReservasFlatList, setShowReservasFlatList] = useState(false); // Toggle for flat list vs grouped
@@ -3005,24 +3006,27 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const handleEditReserva = (reserva: ReservaItem) => {
     setEditingReserva(reserva);
     setEditingFormato(reserva.formato || '');
+    setEditingPlaza(reserva.plaza || '');
   };
 
-  // Save edited formato
+  // Save edited formato and plaza
   const handleSaveFormato = () => {
     if (!editingReserva) return;
     setReservas(prev => prev.map(r =>
       r.id === editingReserva.id
-        ? { ...r, formato: editingFormato }
+        ? { ...r, formato: editingFormato, plaza: editingPlaza }
         : r
     ));
     setEditingReserva(null);
     setEditingFormato('');
+    setEditingPlaza('');
   };
 
   // Cancel edit
   const handleCancelEdit = () => {
     setEditingReserva(null);
     setEditingFormato('');
+    setEditingPlaza('');
   };
 
   // Bulk delete selected reservas
@@ -4563,8 +4567,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         </span>
                       </div>
                       <div>
-                        <label className="block text-xs text-zinc-500 mb-1">Plaza</label>
-                        <p className="text-sm text-zinc-300">{editingReserva.plaza || '-'}</p>
+                        <label className="block text-xs text-zinc-500 mb-1.5">Plaza</label>
+                        <input
+                          type="text"
+                          value={editingPlaza}
+                          onChange={(e) => setEditingPlaza(e.target.value)}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          placeholder="Ej: CDMX, GDL, MTY..."
+                        />
                       </div>
                       <div>
                         <label className="block text-xs text-zinc-500 mb-1">Ubicación</label>

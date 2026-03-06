@@ -354,10 +354,8 @@ export function buildDeliveryNote(
     const itemsWithThisAPS = inventarioAPS.filter(item => item.aps === apsValue);
     const firstItem = itemsWithThisAPS[0];
 
-    // Calcular UnitPrice sumando tarifa_publica de todos los items con este APS
-    const totalPrice = itemsWithThisAPS.reduce((total, item) => {
-      return total + (item.tarifa_publica || 0);
-    }, 0);
+    // UnitPrice = tarifa unitaria (no suma)
+    const totalPrice = Number(firstItem.tarifa_publica_sc) || Number(firstItem.tarifa_publica) || 0;
 
     // Construir U_dscPeriod desde numero_catorcena y anio_catorcena
     const dscPeriod = firstItem.numero_catorcena && firstItem.anio_catorcena
@@ -369,7 +367,7 @@ export function buildDeliveryNote(
       ItemCode: firstItem.articulo || '',
       Quantity: itemsWithThisAPS.length.toString(),
       TaxCode: 'A4',
-      UnitPrice: String(campana.precio || 0),
+      UnitPrice: String(totalPrice || 0),
       CostingCode: '02-03-04',
       CostingCode2: '1',
       U_Cod_Sitio: 11,
@@ -384,7 +382,7 @@ export function buildDeliveryNote(
   });
 
   // Construir el objeto DeliveryNote completo
-  const series = sapDatabase ? getSeriesForSapDatabase(sapDatabase as SapDatabase) : 4;
+  const series = sapDatabase ? getSeriesForSapDatabase(sapDatabase as SapDatabase) : 162;
   const deliveryNote: SAPDeliveryNote = {
     Series: series,
     CardCode: campana.card_code || 'IMU00351',
@@ -537,6 +535,10 @@ export const campanasService = {
       throw new Error(response.data.error || 'Error al obtener inventario reservado');
     }
     return response.data.data;
+  },
+
+  async markPostedToSAP(id: number): Promise<void> {
+    await api.post(`/campanas/${id}/mark-posted-sap`);
   },
 
   async getInventarioConAPS(id: number): Promise<InventarioConAPS[]> {

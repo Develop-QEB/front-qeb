@@ -3950,6 +3950,9 @@ function TaskDetailModal({
         // Subir archivo a Spaces y usar la URL
         const uploadResult = await campanasService.uploadArteFile(selectedFile);
         archivo = uploadResult.url;
+=======
+        const uploaded = await campanasService.uploadArteFile(selectedFile);
+        archivo = uploaded.url;
       } else if (uploadOption === 'existing') {
         archivo = existingArtUrl;
       } else if (uploadOption === 'link') {
@@ -3981,6 +3984,9 @@ function TaskDetailModal({
         // Subir archivo a Spaces y usar la URL
         const uploadResult = await campanasService.uploadArteFile(selectedFile);
         archivo = uploadResult.url;
+=======
+        const uploaded = await campanasService.uploadArteFile(selectedFile);
+        archivo = uploaded.url;
       } else if (uploadOption === 'existing') {
         archivo = existingArtUrl;
       } else if (uploadOption === 'link') {
@@ -13001,6 +13007,10 @@ export function TareaSeguimientoPage() {
         setUploadArtError(null);
         const uploadResult = await campanasService.uploadArteFile(data.value as File);
         archivo = uploadResult.url;
+=======
+        setUploadArtError(null);
+        const uploaded = await campanasService.uploadArteFile(data.value);
+        archivo = uploaded.url;
       }
 
       if (archivo) {
@@ -13039,6 +13049,13 @@ export function TareaSeguimientoPage() {
           const uploadResult = await campanasService.uploadArteFile(file);
           return {
             archivo: uploadResult.url,
+=======
+      // Subir todos los archivos y enviar solo URL + metadata
+      const filesWithUrls = await Promise.all(
+        data.files.map(async ({ file, spot }) => {
+          const uploaded = await campanasService.uploadArteFile(file);
+          return {
+            archivo: uploaded.url,
             spot,
             nombre: file.name,
             tipo: file.type.startsWith('video/') ? 'video' : 'image',
@@ -16392,6 +16409,13 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
                 const uploadResult = await campanasService.uploadArteFile(file);
                 return {
                   archivo: uploadResult.url,
+=======
+            // Subir todos los archivos y enviar solo URL + metadata
+            const filesWithUrls = await Promise.all(
+              files.map(async ({ file, spot }) => {
+                const uploaded = await campanasService.uploadArteFile(file);
+                return {
+                  archivo: uploaded.url,
                   spot,
                   nombre: file.name,
                   tipo: file.type.startsWith('video/') ? 'video' : 'image',

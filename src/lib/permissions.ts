@@ -981,14 +981,14 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
-    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
     canCompartirPropuesta: true, // Puede ver y usar botón compartir
     canBuscarInventarioEnModal: true,
 
-    // Campañas - pueden hacer todo excepto detalle
+    // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
-    canEditDetalleCampana: false, // Solo visualización en detalle
+    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
@@ -1046,14 +1046,14 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
-    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
     canCompartirPropuesta: true, // Puede ver y usar botón compartir
     canBuscarInventarioEnModal: true,
 
-    // Campañas - pueden hacer todo excepto detalle
+    // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
-    canEditDetalleCampana: false, // Solo visualización en detalle
+    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
@@ -1114,14 +1114,14 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
-    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
     canCompartirPropuesta: true, // Puede ver y usar botón compartir
     canBuscarInventarioEnModal: true,
 
-    // Campañas - pueden hacer todo excepto detalle
+    // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
-    canEditDetalleCampana: false, // Solo visualización en detalle
+    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
@@ -1182,14 +1182,14 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
-    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
     canCompartirPropuesta: true, // Puede ver y usar botón compartir
     canBuscarInventarioEnModal: true,
 
-    // Campañas - pueden hacer todo excepto detalle
+    // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
-    canEditDetalleCampana: false, // Solo visualización en detalle
+    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,

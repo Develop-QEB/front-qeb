@@ -1428,9 +1428,35 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
   );
 }
 
-// Catorcena Indicator
-function CatorcenaIndicator({ catorcena, filteredCatorcena }: { catorcena: any; filteredCatorcena: any }) {
+// Catorcena / rango de fechas Indicator
+function CatorcenaIndicator({
+  catorcena,
+  filteredCatorcena,
+  fechaInicio,
+  fechaFin,
+}: {
+  catorcena: any;
+  filteredCatorcena: any;
+  fechaInicio?: string;
+  fechaFin?: string;
+}) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+
+  // si hay un rango de fechas manual filtrado, muéstralo en lugar de la catorcena
+  if (fechaInicio || fechaFin) {
+    const start = fechaInicio ? new Date(fechaInicio).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '...';
+    const end = fechaFin ? new Date(fechaFin).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '...';
+    return (
+      <div className="flex items-center gap-3 px-4 py-2 rounded-xl border backdrop-blur-sm bg-purple-500/10 border-purple-500/30">
+        <Calendar className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
+        <div>
+          <span className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? 'text-purple-400' : 'text-purple-500'}`}>Periodo Filtrado</span>
+          <span className={`${isDark ? 'text-white' : 'text-gray-800'} text-sm font-semibold ml-2`}>{start} – {end}</span>
+        </div>
+      </div>
+    );
+  }
+
   const displayCatorcena = filteredCatorcena || catorcena;
   if (!displayCatorcena) return null;
 
@@ -1505,7 +1531,7 @@ export function DashboardPage() {
   }, [filters.catorcena_id, filterOptions]);
 
   const handleClearFilters = () => { setFilters({}); setActiveEstatus('total'); setInventoryPage(1); };
-  const hasActiveFilters = filters.estado || filters.ciudad || filters.formato || filters.nse || filters.catorcena_id;
+  const hasActiveFilters = filters.estado || filters.ciudad || filters.formato || filters.nse || filters.catorcena_id || filters.fecha_inicio || filters.fecha_fin;
 
   const handleEstatusChange = (estatus: EstatusType) => { setActiveEstatus(estatus); setInventoryPage(1); };
 
@@ -1519,7 +1545,12 @@ export function DashboardPage() {
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4 flex-wrap">
               <h2 className={`text-lg font-light ${isDark ? 'text-white' : 'text-gray-800'}`}>Resumen de Inventario</h2>
-              <CatorcenaIndicator catorcena={filterOptions?.catorcenaActual} filteredCatorcena={filteredCatorcena} />
+              <CatorcenaIndicator
+                catorcena={filterOptions?.catorcenaActual}
+                filteredCatorcena={filteredCatorcena}
+                fechaInicio={filters.fecha_inicio}
+                fechaFin={filters.fecha_fin}
+              />
               {activeEstatus !== 'total' && (
                 <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${isDark ? 'border-pink-500/30' : 'border-pink-200'}`} style={{ background: isDark ? 'linear-gradient(to right, rgba(236,72,153,0.1), rgba(168,85,247,0.1))' : 'linear-gradient(to right, #fdf2f8, #faf5ff)' }}>
                   <span className={`text-sm ${isDark ? 'text-pink-300' : 'text-pink-600'} font-medium`}>{activeEstatus}</span>
@@ -1557,20 +1588,40 @@ export function DashboardPage() {
                 <FilterSelect label="Ciudad" value={filters.ciudad || ''} onChange={(v) => { setFilters(p => ({ ...p, ciudad: v || undefined })); setInventoryPage(1); }} options={filterOptions?.ciudades || []} placeholder="Todas" />
                 <FilterSelect label="Formato" value={filters.formato || ''} onChange={(v) => { setFilters(p => ({ ...p, formato: v || undefined })); setInventoryPage(1); }} options={filterOptions?.formatos || []} />
                 <FilterSelect label="NSE" value={filters.nse || ''} onChange={(v) => { setFilters(p => ({ ...p, nse: v || undefined })); setInventoryPage(1); }} options={filterOptions?.nses || []} />
-                <div className="md:col-span-2">
-                  <label className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase tracking-wider mb-1 block font-medium`}>Periodo</label>
-                  <select
-                    value={filters.catorcena_id?.toString() || ''}
-                    onChange={(e) => { setFilters(p => ({ ...p, catorcena_id: e.target.value ? parseInt(e.target.value) : undefined })); setInventoryPage(1); }}
-                    className={`h-9 w-full rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white' : 'border-purple-200 bg-gray-50 text-gray-800'} px-3 text-sm focus:ring-2 focus:ring-purple-500/30`}
-                  >
-                    <option value="" className={isDark ? 'bg-zinc-800' : 'bg-white'}>Todas</option>
-                    {filterOptions?.catorcenaActual && (
-                      <option value={filterOptions.catorcenaActual.id.toString()} className={`${isDark ? 'bg-zinc-800' : 'bg-white'} text-pink-600`}>{filterOptions.catorcenaActual.label}</option>
-                    )}
-                    <option disabled className={isDark ? 'bg-zinc-800' : 'bg-white'}>──────────</option>
-                    {filterOptions?.catorcenas.map((cat) => (<option key={cat.id} value={cat.id.toString()} className={isDark ? 'bg-zinc-800' : 'bg-white'}>{cat.label}</option>))}
-                  </select>
+                <div className="md:col-span-2 grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase tracking-wider mb-1 block font-medium`}>Inicio</label>
+                    <input
+                      type="date"
+                      value={filters.fecha_inicio || ''}
+                      onChange={(e) => {
+                        setFilters(p => ({
+                          ...p,
+                          fecha_inicio: e.target.value || undefined,
+                          // clear catorcena if switching to manual dates
+                          catorcena_id: undefined,
+                        }));
+                        setInventoryPage(1);
+                      }}
+                      className={`h-9 w-full rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white' : 'border-purple-200 bg-gray-50 text-gray-800'} px-3 text-sm focus:ring-2 focus:ring-purple-500/30`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase tracking-wider mb-1 block font-medium`}>Fin</label>
+                    <input
+                      type="date"
+                      value={filters.fecha_fin || ''}
+                      onChange={(e) => {
+                        setFilters(p => ({
+                          ...p,
+                          fecha_fin: e.target.value || undefined,
+                          catorcena_id: undefined,
+                        }));
+                        setInventoryPage(1);
+                      }}
+                      className={`h-9 w-full rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white' : 'border-purple-200 bg-gray-50 text-gray-800'} px-3 text-sm focus:ring-2 focus:ring-purple-500/30`}
+                    />
+                  </div>
                 </div>
               </div>
             </GlassCard>

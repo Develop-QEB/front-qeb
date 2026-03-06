@@ -8,8 +8,8 @@ export const SAP_BASE_URL = 'https://binding-convinced-ride-foto.trycloudflare.c
 
 // Configuracion por BD SAP
 const ENDPOINT_CONFIG: Record<SapDatabase, { cuic: string; deliveryNotes: string; series: number }> = {
-  CIMU:  { cuic: `${SAP_BASE_URL}/cuic`,       deliveryNotes: `${SAP_BASE_URL}/delivery-notes`,       series: 162 },
-  TEST:  { cuic: `${SAP_BASE_URL}/cuic-test`,   deliveryNotes: `${SAP_BASE_URL}/delivery-notes-test`,  series: 4   },
+  CIMU:  { cuic: `${SAP_BASE_URL}/cuic`,       deliveryNotes: `${SAP_BASE_URL}/delivery-notes-test`,  series: 162 },
+  TEST:  { cuic: `${SAP_BASE_URL}/cuic-test`,   deliveryNotes: `${SAP_BASE_URL}/delivery-notes`,       series: 4   },
   TRADE: { cuic: `${SAP_BASE_URL}/cuic-trade`,  deliveryNotes: `${SAP_BASE_URL}/delivery-notes-trade`, series: 95  },
 };
 
