@@ -1478,13 +1478,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     if (file) {
       setArchivoFile(file);
       setArchivo(file.name);
-=======
-      if (archivo && archivo.startsWith('blob:')) {
-        URL.revokeObjectURL(archivo);
-      }
-      setArchivo(URL.createObjectURL(file));
-      setArchivoFile(file);
-      setTipoArchivo(file.type);
     }
   };
 
@@ -1573,16 +1566,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         showToast('Error al subir el archivo', 'error');
         return;
       }
-=======
-    let archivoUrl = archivo || undefined;
-    try {
-      if (archivoFile) {
-        const uploaded = await solicitudesService.uploadGenericFile(archivoFile);
-        archivoUrl = uploaded.url;
-      }
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Error al subir archivo', 'error');
-      return;
     }
 
     const data = {
@@ -1610,8 +1593,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       fecha_fin: fechaFin,
       tipo_periodo: tipoPeriodo,
       archivo: archivoUrl || undefined,
-=======
-      archivo: archivoUrl,
       tipo_archivo: tipoArchivo || undefined,
       IMU: imu,
       caras: caras.map(c => ({
@@ -2994,15 +2975,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <button
                       type="button"
                       onClick={() => { setArchivo(null); setArchivoFile(null); setTipoArchivo(null); }}
-=======
-                      onClick={() => {
-                        if (archivo && archivo.startsWith('blob:')) {
-                          URL.revokeObjectURL(archivo);
-                        }
-                        setArchivo(null);
-                        setArchivoFile(null);
-                        setTipoArchivo(null);
-                      }}
                       className="p-2 hover:bg-red-500/20 rounded-lg text-red-400"
                       title="Eliminar archivo"
                     >
