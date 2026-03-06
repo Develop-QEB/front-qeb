@@ -537,6 +537,10 @@ export const campanasService = {
     return response.data.data;
   },
 
+  async markPostedToSAP(id: number): Promise<void> {
+    await api.post(`/campanas/${id}/mark-posted-sap`);
+  },
+
   async getInventarioConAPS(id: number): Promise<InventarioConAPS[]> {
     const response = await api.get<ApiResponse<InventarioConAPS[]>>(`/campanas/${id}/inventario-aps`);
     if (!response.data.success || !response.data.data) {

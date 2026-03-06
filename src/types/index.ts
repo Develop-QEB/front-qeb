@@ -325,6 +325,7 @@ export interface Campana {
   card_code?: string | null;
   salesperson_code?: number | null;
   sap_database?: string | null;
+  posted_to_sap?: boolean;
 }
 
 export interface CampanaStats {
