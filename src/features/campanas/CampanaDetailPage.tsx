@@ -710,6 +710,7 @@ export function CampanaDetailPage() {
   const [enviandoCodigo, setEnviandoCodigo] = useState(false);
   const [pinVerificado, setPinVerificado] = useState(false);
   const [errorPIN, setErrorPIN] = useState('');
+  const [showIncompleteDetail, setShowIncompleteDetail] = useState(false);
 
   // Estado para filtros (inventario reservado)
   const [filtersReservado, setFiltersReservado] = useState<FilterCondition[]>([]);
@@ -1527,11 +1528,43 @@ export function CampanaDetailPage() {
             <Badge variant={statusVariants[campana.status] || 'secondary'} className="text-xs sm:text-sm">
               {campana.status}
             </Badge>
-            {campana.caras_ultima_cat != null && Number(campana.caras_ultima_cat) > 0 && Number(campana.reservas_count_ultima_cat) < Number(campana.caras_ultima_cat) && (
-              <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs border ${isDark ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
-                Incompleta ({campana.reservas_count_ultima_cat}/{campana.caras_ultima_cat} caras)
-              </span>
-            )}
+            {campana.incompleteness_detail && campana.incompleteness_detail.length > 0 && (() => {
+              const totalEsperadas = campana.incompleteness_detail.reduce((sum: number, d: any) => sum + d.caras_esperadas, 0);
+              const totalReservas = campana.incompleteness_detail.reduce((sum: number, d: any) => sum + d.reservas_count, 0);
+              const isIncomplete = totalReservas < totalEsperadas;
+              if (!isIncomplete) return null;
+              return (
+              <div className="relative">
+                <button
+                  onClick={() => setShowIncompleteDetail(!showIncompleteDetail)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs border cursor-pointer hover:opacity-80 transition-opacity ${isDark ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}
+                >
+                  Incompleta ({totalReservas}/{totalEsperadas} caras) {showIncompleteDetail ? '▲' : '▼'}
+                </button>
+                {showIncompleteDetail && campana.incompleteness_detail && campana.incompleteness_detail.length > 0 && (
+                  <div className={`absolute top-full right-0 mt-2 z-50 rounded-lg border shadow-xl p-3 min-w-[220px] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                    <p className={`text-xs font-semibold mb-2 ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>Desglose por catorcena:</p>
+                    <div className="space-y-1.5">
+                      {campana.incompleteness_detail.map((d: any) => (
+                        <div key={`${d.anio}-${d.catorcena}`} className="flex items-center justify-between gap-4">
+                          <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                            Cat {String(d.catorcena).padStart(2, '0')}
+                          </span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            d.completa
+                              ? (isDark ? 'text-green-300 bg-green-500/20 border border-green-500/30' : 'text-green-700 bg-green-50 border border-green-200')
+                              : (isDark ? 'text-yellow-300 bg-yellow-500/20 border border-yellow-500/30' : 'text-yellow-700 bg-yellow-50 border border-yellow-200')
+                          }`}>
+                            {d.reservas_count}/{d.caras_esperadas} {d.completa ? '✓' : `— faltan ${d.caras_esperadas - d.reservas_count}`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -3343,13 +3376,6 @@ export function CampanaDetailPage() {
                     <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
                     <p className="text-lg font-medium text-green-400 mb-2">¡Éxito!</p>
                     <p className="text-sm text-zinc-400 mb-4">{postSAPResult.message}</p>
-                    {postSAPResult.data && (
-                      <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 text-left text-xs mb-4">
-                        <pre className="text-green-300 whitespace-pre-wrap overflow-auto max-h-40">
-                          {JSON.stringify(postSAPResult.data, null, 2)}
-                        </pre>
-                      </div>
-                    )}
                   </>
                 ) : (
                   <>

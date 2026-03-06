@@ -319,6 +319,7 @@ export interface Campana {
   reservas_count?: number | null;
   reservas_count_ultima_cat?: number | null;
   caras_ultima_cat?: number | null;
+  incompleteness_detail?: { catorcena: number; anio: number; caras_esperadas: number; reservas_count: number; completa: boolean }[];
   propuesta_id: number | null;
   // SAP integration fields
   card_code?: string | null;
