@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check, Crown, Ticket, Send, Image, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
+import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check, Crown, Ticket, Send, Image, AlertTriangle, Clock, CheckCircle2, KeyRound } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Header } from '../../components/layout/Header';
 import { usuariosService, UsuarioAdmin, UpdateUsuarioInput, CreateUsuarioInput } from '../../services/usuarios.service';
@@ -506,6 +506,84 @@ function DeleteConfirmModal({
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal para restablecer contraseña (admin)
+function ResetPasswordModal({
+  usuario,
+  onClose,
+  onSubmit,
+  loading,
+}: {
+  usuario: UsuarioAdmin;
+  onClose: () => void;
+  onSubmit: (nuevaPassword: string) => void;
+  loading: boolean;
+}) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const inputClasses = getInputClasses(isDark);
+  const [nuevaPassword, setNuevaPassword] = useState('');
+  const [confirmar, setConfirmar] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (nuevaPassword.length < 6) return setError('Mínimo 6 caracteres');
+    if (nuevaPassword !== confirmar) return setError('Las contraseñas no coinciden');
+    setError(null);
+    onSubmit(nuevaPassword);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <div className={`relative z-50 w-full max-w-md ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
+        <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'}`}>
+          <div className="flex items-center gap-4">
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-purple-500/20">
+              <KeyRound className="h-5 w-5 text-purple-400" />
+            </div>
+            <div>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Restablecer contraseña</h2>
+              <p className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>{usuario.nombre}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-50'} rounded-xl transition-colors group`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-purple-300 group-hover:text-white' : 'text-gray-500 group-hover:text-gray-900'} transition-colors`} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className={`p-3 text-sm rounded-lg border ${isDark ? 'text-red-400 bg-red-500/10 border-red-500/30' : 'text-red-600 bg-red-50 border-red-200'}`}>
+              {error}
+            </div>
+          )}
+          <div>
+            <label className={getLabelClasses(isDark)}>Nueva contraseña</label>
+            <input type="password" value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)}
+              className={inputClasses} placeholder="Mínimo 6 caracteres" required />
+          </div>
+          <div>
+            <label className={getLabelClasses(isDark)}>Confirmar contraseña</label>
+            <input type="password" value={confirmar} onChange={(e) => setConfirmar(e.target.value)}
+              className={inputClasses} placeholder="Repite la contraseña" required />
+          </div>
+          <div className={`flex justify-end gap-3 pt-4 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
+            <button type="button" onClick={onClose}
+              className={`px-5 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'text-purple-300 bg-zinc-800 border-purple-500/20 hover:bg-purple-500/10' : 'text-gray-700 bg-gray-100 border-purple-200 hover:bg-purple-50'} border hover:border-purple-500/40 transition-all`}>
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading}
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-500/25 transition-all flex items-center gap-2">
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {loading ? 'Guardando...' : 'Restablecer'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -1070,6 +1148,7 @@ function UsuariosTab() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [resetPasswordUsuario, setResetPasswordUsuario] = useState<UsuarioAdmin | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1110,6 +1189,12 @@ function UsuariosTab() {
       setSelectedIds(new Set());
       setShowDeleteConfirm(false);
     },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ id, nuevaPassword }: { id: number; nuevaPassword: string }) =>
+      usuariosService.adminResetPassword(id, nuevaPassword),
+    onSuccess: () => setResetPasswordUsuario(null),
   });
 
   const handleCreate = (data: CreateUsuarioInput) => {
@@ -1344,13 +1429,22 @@ function UsuariosTab() {
                         )}
                       </td>
                       <td className="px-5 py-4">
-                        <button
-                          onClick={() => setEditingUsuario(usuario)}
-                          className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} text-purple-400 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} transition-all`}
-                          title="Editar usuario"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setEditingUsuario(usuario)}
+                            className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} text-purple-400 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} transition-all`}
+                            title="Editar usuario"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setResetPasswordUsuario(usuario)}
+                            className={`p-2 rounded-lg ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'} text-amber-400 ${isDark ? 'hover:bg-amber-500/20' : 'hover:bg-amber-100'} border ${isDark ? 'border-amber-500/20' : 'border-amber-200'} transition-all`}
+                            title="Restablecer contraseña"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1391,6 +1485,16 @@ function UsuariosTab() {
           onClose={() => setEditingUsuario(null)}
           onSubmit={handleUpdate}
           loading={updateMutation.isPending}
+        />
+      )}
+
+      {/* Reset Password Modal */}
+      {resetPasswordUsuario && (
+        <ResetPasswordModal
+          usuario={resetPasswordUsuario}
+          onClose={() => setResetPasswordUsuario(null)}
+          onSubmit={(nuevaPassword) => resetPasswordMutation.mutate({ id: resetPasswordUsuario.id, nuevaPassword })}
+          loading={resetPasswordMutation.isPending}
         />
       )}
 

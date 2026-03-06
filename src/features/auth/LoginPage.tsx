@@ -138,6 +138,17 @@ export function LoginPage() {
               )}
             </div>
 
+            <div className="flex justify-end">
+              <Link
+                to="/forgot-password"
+                className={`text-sm transition-colors ${
+                  isDark ? 'text-purple-300 hover:text-purple-200' : 'text-purple-600 hover:text-purple-500'
+                }`}
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
+
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-light tracking-wide py-5"

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioReservado, InventarioConAPS, buildDeliveryNote, postDeliveryNoteToSAP, HistorialItem } from '../../services/campanas.service';
+import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, HistorialItem } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import { Badge } from '../../components/ui/badge';
@@ -752,6 +752,12 @@ export function CampanaDetailPage() {
   const { data: inventarioConAPS = [], isLoading: isLoadingAPS, error: errorAPS, refetch: refetchAPS } = useQuery({
     queryKey: ['campana-inventario-aps', campanaId],
     queryFn: () => campanasService.getInventarioConAPS(campanaId),
+    enabled: !!campana,
+  });
+
+  const { data: solicitudCaras = [] } = useQuery({
+    queryKey: ['campana-caras', campanaId],
+    queryFn: () => campanasService.getCaras(campanaId),
     enabled: !!campana,
   });
 
@@ -1547,7 +1553,7 @@ export function CampanaDetailPage() {
           <div className="bg-card rounded-xl border border-border p-3 md:p-4">
             <h3 className="text-xs md:text-sm font-semibold mb-2 md:mb-3 text-purple-300 uppercase tracking-wide">Campaña</h3>
             <div className="space-y-0">
-              <InfoItem label="Articulo" value={campana.articulo} type="category" isDark={isDark} />
+              <InfoItem label="Plaza" value={[...new Set([...inventarioReservado, ...inventarioConAPS].map(i => i.plaza).filter(Boolean))].join(', ') || (campana as any).plazas || null} type="category" isDark={isDark} />
               {campana.fecha_inicio && (
                 <div className="flex justify-between items-center py-1.5 border-b border-border/50">
                   <span className="text-xs text-muted-foreground">Inicio</span>
@@ -1565,9 +1571,10 @@ export function CampanaDetailPage() {
                 </div>
               )}
               <InfoItem label="Total Caras" value={campana.total_caras} type="default" isDark={isDark} />
-              <InfoItem label="Frontal" value={campana.frontal} type="default" isDark={isDark} />
-              <InfoItem label="Cruzada" value={campana.cruzada} type="default" isDark={isDark} />
-              <InfoItem label="NSE" value={campana.nivel_socioeconomico ? [...new Set(campana.nivel_socioeconomico.split(",").map(s => s.trim()))].join(", ") : null} type="category" isDark={isDark} />
+              <InfoItem label="Caras Renta" value={solicitudCaras.reduce((s, c) => s + (c.caras ?? 0), 0) || null} type="default" isDark={isDark} />
+              {/*<InfoItem label="Frontal" value={campana.frontal} type="default" isDark={isDark} />*/}
+              {/*<InfoItem label="Cruzada" value={campana.cruzada} type="default" isDark={isDark} />*/}
+              {/*<InfoItem label="NSE" value={campana.nivel_socioeconomico ? [...new Set(campana.nivel_socioeconomico.split(",").map(s => s.trim()))].join(", ") : null} type="category" isDark={isDark} />*/}
               <InfoItem label="Bonificacion" value={campana.bonificacion} type="default" isDark={isDark} />
               <InfoItem label="Descuento" value={campana.descuento ? `${campana.descuento}%` : null} type="percent" isDark={isDark} />
               <InfoItem label="Inversion" value={typeof campana.inversion === "string" ? parseFloat(campana.inversion) : campana.inversion} type="amount" isDark={isDark} />
