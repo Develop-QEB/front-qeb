@@ -407,6 +407,17 @@ const MESES = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const STATIC_URL = API_URL.replace(/\/api$/, '');
+
+const getFilePreviewUrl = (url: string | null): string | null => {
+  if (!url) return null;
+  if (url.startsWith('blob:')) return url;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
+  if (url.startsWith('/uploads')) return `${STATIC_URL}${url}`;
+  return url;
+};
+
 interface SAPCuicItem {
   CUIC: number;
   T0_U_RazonSocial: string;
@@ -1467,6 +1478,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     if (file) {
       setArchivoFile(file);
       setArchivo(file.name);
+=======
+      if (archivo && archivo.startsWith('blob:')) {
+        URL.revokeObjectURL(archivo);
+      }
+      setArchivo(URL.createObjectURL(file));
+      setArchivoFile(file);
       setTipoArchivo(file.type);
     }
   };
@@ -1530,6 +1547,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setMesInicio(undefined);
     setMesFin(undefined);
     setCaras([]);
+    if (archivo && archivo.startsWith('blob:')) {
+      URL.revokeObjectURL(archivo);
+    }
     setArchivo(null);
     setArchivoFile(null);
     setTipoArchivo(null);
@@ -1553,6 +1573,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         showToast('Error al subir el archivo', 'error');
         return;
       }
+=======
+    let archivoUrl = archivo || undefined;
+    try {
+      if (archivoFile) {
+        const uploaded = await solicitudesService.uploadGenericFile(archivoFile);
+        archivoUrl = uploaded.url;
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Error al subir archivo', 'error');
+      return;
     }
 
     const data = {
@@ -1580,6 +1610,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       fecha_fin: fechaFin,
       tipo_periodo: tipoPeriodo,
       archivo: archivoUrl || undefined,
+=======
+      archivo: archivoUrl,
       tipo_archivo: tipoArchivo || undefined,
       IMU: imu,
       caras: caras.map(c => ({
@@ -1647,6 +1679,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // Load archivo from solicitud
       if (sol.archivo) {
         setArchivo(sol.archivo);
+        setArchivoFile(null);
         setTipoArchivo(sol.tipo_archivo || null);
       }
 
@@ -2948,7 +2981,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 {archivo ? (
                   <div className={`flex items-center gap-3 p-3 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border border-emerald-500/30 rounded-xl`}>
                     {tipoArchivo?.startsWith('image/') ? (
-                      <img src={archivo} alt="Preview" className="w-16 h-16 object-cover rounded-lg" />
+                      <img src={getFilePreviewUrl(archivo) || ''} alt="Preview" className="w-16 h-16 object-cover rounded-lg" />
                     ) : (
                       <div className={`w-16 h-16 flex items-center justify-center ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} rounded-lg`}>
                         <FileText className={`h-6 w-6 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
@@ -2961,6 +2994,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <button
                       type="button"
                       onClick={() => { setArchivo(null); setArchivoFile(null); setTipoArchivo(null); }}
+=======
+                      onClick={() => {
+                        if (archivo && archivo.startsWith('blob:')) {
+                          URL.revokeObjectURL(archivo);
+                        }
+                        setArchivo(null);
+                        setArchivoFile(null);
+                        setTipoArchivo(null);
+                      }}
                       className="p-2 hover:bg-red-500/20 rounded-lg text-red-400"
                       title="Eliminar archivo"
                     >

@@ -15,6 +15,7 @@ export function PerfilPage() {
   const { user: storeUser, setUser } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isDark = useThemeStore((s) => s.theme === 'dark');
+  const isAdmin = storeUser?.rol === 'Administrador';
 
   // Estados del formulario de perfil
   const [profileForm, setProfileForm] = useState({
@@ -300,7 +301,7 @@ export function PerfilPage() {
                     type="text"
                     value={profileForm.area}
                     onChange={(e) => setProfileForm({ ...profileForm, area: e.target.value })}
-                    disabled={!isEditingProfile}
+                    disabled={!isEditingProfile || !isAdmin}
                     className={inputCls}
                   />
                 </div>
@@ -313,7 +314,7 @@ export function PerfilPage() {
                     type="text"
                     value={profileForm.puesto}
                     onChange={(e) => setProfileForm({ ...profileForm, puesto: e.target.value })}
-                    disabled={!isEditingProfile}
+                    disabled={!isEditingProfile || !isAdmin}
                     className={inputCls}
                   />
                 </div>
