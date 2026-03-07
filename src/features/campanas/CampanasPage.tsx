@@ -663,6 +663,7 @@ export function CampanasPage() {
   // Estados para filtros expandibles
   const [showFilters, setShowFilters] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [comboboxOpen, setComboboxOpen] = useState<string | null>(null);
   const [selectedCatorcenaInicio, setSelectedCatorcenaInicio] = useState('');
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedCampana, setSelectedCampana] = useState<Campana | null>(null);
@@ -1695,7 +1696,7 @@ export function CampanasPage() {
                           <X className="h-4 w-4" />
                         </button>
                       </div>
-                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                      <div className="space-y-2 max-h-[300px] overflow-visible pr-1">
                         {advancedFilters.map((filter, index) => (
                           <div key={filter.id} className="flex items-center gap-2">
                             {index > 0 && (
@@ -1720,16 +1721,45 @@ export function CampanasPage() {
                                 <option key={op.value} value={op.value}>{op.label}</option>
                               ))}
                             </select>
-                            <select
-                              value={filter.value}
-                              onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-                              className={`flex-1 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
-                            >
-                              <option value="">Seleccionar...</option>
-                              {getUniqueFieldValues[filter.field]?.map((val) => (
-                                <option key={val} value={val}>{val}</option>
-                              ))}
-                            </select>
+                            <div className="flex-1 relative">
+                              <input
+                                type="text"
+                                value={filter.value}
+                                placeholder="Escribir o seleccionar..."
+                                onChange={(e) => {
+                                  updateFilter(filter.id, { value: e.target.value });
+                                  setComboboxOpen(filter.id);
+                                }}
+                                onClick={() => setComboboxOpen(filter.id)}
+                                onFocus={() => setComboboxOpen(filter.id)}
+                                onBlur={() => setTimeout(() => setComboboxOpen(null), 200)}
+                                className={`w-full text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded px-2 py-1.5`}
+                              />
+                              {comboboxOpen === filter.id && (() => {
+                                const allOptions = getUniqueFieldValues[filter.field] || [];
+                                const filtered = filter.value
+                                  ? allOptions.filter(val => val.toLowerCase().includes(filter.value.toLowerCase()))
+                                  : allOptions;
+                                return filtered.length > 0 ? (
+                                  <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] overflow-y-auto z-[300] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
+                                    {filtered.map((val) => (
+                                      <button
+                                        key={val}
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => {
+                                          updateFilter(filter.id, { value: val });
+                                          setComboboxOpen(null);
+                                        }}
+                                        className={`w-full text-left px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${isDark ? 'text-white hover:bg-purple-600/40' : 'text-gray-900 hover:bg-purple-50'} ${filter.value === val ? (isDark ? 'bg-purple-600/30 font-medium' : 'bg-purple-100 font-medium') : ''}`}
+                                      >
+                                        {val}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null;
+                              })()}
+                            </div>
                             <button
                               onClick={() => removeFilter(filter.id)}
                               className="text-red-400 hover:text-red-300 p-1"
