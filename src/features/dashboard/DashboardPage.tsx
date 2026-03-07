@@ -1,8 +1,9 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { GoogleMap, useLoadScript, Circle, InfoWindow } from '@react-google-maps/api';
 import { usePrefetch } from '../../hooks/usePrefetch';
-import { MarkerClusterer } from '@googlemaps/markerclusterer';
+import { useSocketDashboard } from '../../hooks/useSocket';
+import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer';
 import {
   Package,
   CheckCircle2,
@@ -12,9 +13,7 @@ import {
   Filter,
   X,
   TrendingUp,
-  Users,
   Calendar,
-  Activity,
   ChevronRight,
   ChevronLeft,
   RotateCcw,
@@ -23,6 +22,13 @@ import {
   ChevronDown,
   ChevronUp,
   MapPin,
+  Layers,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Plus,
+  Check,
+  Trash2,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { Skeleton } from '../../components/ui/skeleton';
@@ -189,7 +195,8 @@ function GoogleMapsChart({
   showPins,
   onTogglePins,
   selectedPlaza,
-  onSelectPlaza
+  onSelectPlaza,
+  selectedInventoryIds
 }: {
   plazaData: PlazaMapData[];
   allCoords: InventoryCoord[];
@@ -197,14 +204,21 @@ function GoogleMapsChart({
   onTogglePins: () => void;
   selectedPlaza: string | null;
   onSelectPlaza: (p: string | null) => void;
+  selectedInventoryIds: Set<number>;
 }) {
   const { isLoaded } = useLoadScript({ googleMapsApiKey: GOOGLE_MAPS_API_KEY });
   const center = useMemo(() => ({ lat: 23.6345, lng: -102.5528 }), []);
   const mapRef = useRef<google.maps.Map | null>(null);
   const clustererRef = useRef<MarkerClusterer | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const [mapReady, setMapReady] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(5);
 
-  const validPlazas = useMemo(() => plazaData.filter(d => d.lat && d.lng), [plazaData]);
+  // Umbral de zoom para ocultar círculos de densidad (cuando zoom > 7, ocultar círculos)
+  const ZOOM_THRESHOLD_HIDE_CIRCLES = 7;
+
+  // Filtrar plazas que tengan coordenadas válidas Y count > 0
+  const validPlazas = useMemo(() => plazaData.filter(d => d.lat && d.lng && d.count > 0), [plazaData]);
   const maxCount = Math.max(...validPlazas.map(d => d.count), 1);
 
   // Color para cada ciudad segun densidad
@@ -217,11 +231,11 @@ function GoogleMapsChart({
     return { fill: '#8b5cf6', stroke: '#7c3aed', opacity: 0.3 };
   }, [maxCount]);
 
-  // Radio del círculo según cantidad
+  // Radio del círculo según cantidad (reducido para mejor visualización)
   const getCircleRadius = useCallback((count: number) => {
-    const base = 15000; // 15km base
+    const base = 3000; // 3km base
     const scale = Math.sqrt(count / maxCount);
-    return base + (scale * 50000); // hasta 65km
+    return base + (scale * 8000); // hasta 11km máximo
   }, [maxCount]);
 
   const mapOptions = useMemo(() => ({
@@ -234,7 +248,110 @@ function GoogleMapsChart({
     gestureHandling: 'cooperative',
   }), []);
 
-  // Manejar pines con clustering
+  // Filter coords based on selection
+  const filteredCoords = useMemo(() => {
+    if (selectedInventoryIds.size === 0) {
+      return allCoords; // No selection, show all
+    }
+    return allCoords.filter(coord => selectedInventoryIds.has(coord.id));
+  }, [allCoords, selectedInventoryIds]);
+// Auto-fit bounds when data changes (allCoords viene filtrado del backend)
+  useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
+
+    // Delay para asegurar que el mapa está renderizado
+    const timeoutId = setTimeout(() => {
+      if (!mapRef.current) return;
+
+      const bounds = new google.maps.LatLngBounds();
+      let hasPoints = false;
+
+      // Usar allCoords (ya viene filtrado del backend por ciudad/estado)
+      if (allCoords.length > 0) {
+        // Limitar a primeros 1000 para calcular bounds más rápido
+        const coordsForBounds = allCoords.slice(0, 1000);
+        coordsForBounds.forEach(coord => {
+          bounds.extend({ lat: coord.lat, lng: coord.lng });
+          hasPoints = true;
+        });
+      }
+
+      if (hasPoints) {
+        // Ajustar el mapa a los bounds con padding
+        mapRef.current.fitBounds(bounds, {
+          top: 50,
+          right: 50,
+          bottom: 50,
+          left: 50,
+        });
+
+        // Limitar zoom
+        const listener = google.maps.event.addListenerOnce(mapRef.current, 'idle', () => {
+          const currentZoom = mapRef.current?.getZoom();
+          if (currentZoom) {
+            if (currentZoom > 14) {
+              mapRef.current?.setZoom(14);
+            } else if (currentZoom < 4) {
+              mapRef.current?.setZoom(4);
+            }
+          }
+        });
+
+        return () => {
+          google.maps.event.removeListener(listener);
+        };
+      }
+    }, 200);
+
+    return () => clearTimeout(timeoutId);
+  }, [allCoords, mapReady]);
+
+  // Auto-fit bounds when selection changes (checkboxes in table)
+  useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
+    if (selectedInventoryIds.size === 0) return; // No selection, don't adjust
+
+    // Get coordinates for selected items
+    const selectedCoords = allCoords.filter(coord => selectedInventoryIds.has(coord.id));
+    if (selectedCoords.length === 0) return;
+
+    const timeoutId = setTimeout(() => {
+      if (!mapRef.current) return;
+
+      const bounds = new google.maps.LatLngBounds();
+      selectedCoords.forEach(coord => {
+        bounds.extend({ lat: coord.lat, lng: coord.lng });
+      });
+
+      // Ajustar el mapa a los bounds de los items seleccionados
+      mapRef.current.fitBounds(bounds, {
+        top: 80,
+        right: 80,
+        bottom: 80,
+        left: 80,
+      });
+
+      // Limitar zoom - si hay pocos items, no hacer zoom extremo
+      const listener = google.maps.event.addListenerOnce(mapRef.current, 'idle', () => {
+        const currentZoom = mapRef.current?.getZoom();
+        if (currentZoom) {
+          if (currentZoom > 16) {
+            mapRef.current?.setZoom(16); // Más zoom permitido para selección
+          } else if (currentZoom < 4) {
+            mapRef.current?.setZoom(4);
+          }
+        }
+      });
+
+      return () => {
+        google.maps.event.removeListener(listener);
+      };
+    }, 150);
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedInventoryIds, allCoords, mapReady]);
+
+  // Manejar pines con clustering optimizado para rendimiento
   useEffect(() => {
     if (!mapRef.current || !isLoaded) return;
 
@@ -243,11 +360,12 @@ function GoogleMapsChart({
     markersRef.current = [];
     if (clustererRef.current) {
       clustererRef.current.clearMarkers();
+      clustererRef.current = null;
     }
 
-    if (showPins && allCoords.length > 0) {
-      // Crear marcadores para cada inventario
-      const markers = allCoords.map(coord => {
+    if (showPins && filteredCoords.length > 0) {
+      // Crear marcadores para cada inventario (sin límite)
+      const markers = filteredCoords.map(coord => {
         const marker = new google.maps.Marker({
           position: { lat: coord.lat, lng: coord.lng },
           icon: {
@@ -256,7 +374,7 @@ function GoogleMapsChart({
             fillColor: coord.estatus === 'Reservado' ? '#facc15' :
                        coord.estatus === 'Vendido' ? '#06b6d4' :
                        coord.estatus === 'Bloqueado' ? '#f43f5e' : '#22c55e',
-            fillOpacity: 0.8,
+            fillOpacity: 0.9,
             strokeColor: '#fff',
             strokeWeight: 1,
           },
@@ -267,27 +385,44 @@ function GoogleMapsChart({
 
       markersRef.current = markers;
 
-      // Crear clusterer
+      // Usar SuperClusterAlgorithm - radio 80 para balance entre agrupación y visibilidad
       clustererRef.current = new MarkerClusterer({
         map: mapRef.current,
         markers,
+        algorithm: new SuperClusterAlgorithm({
+          radius: 80,   // Radio moderado para ver más clusters
+          maxZoom: 15,  // Nivel máximo de zoom para clustering
+        }),
+        onClusterClick: (event, cluster, map) => {
+          // Al hacer click en un cluster, hacer zoom para ver los markers que contiene
+          const bounds = new google.maps.LatLngBounds();
+          cluster.markers?.forEach(marker => {
+            // Handle both legacy Marker (getPosition) and AdvancedMarkerElement (position)
+            const pos = 'getPosition' in marker && typeof marker.getPosition === 'function'
+              ? marker.getPosition()
+              : (marker as any).position;
+            if (pos) bounds.extend(pos);
+          });
+          map.fitBounds(bounds);
+        },
         renderer: {
           render: ({ count, position }) => {
             const color = count > 500 ? '#ec4899' : count > 100 ? '#d946ef' : '#8b5cf6';
+            const scale = count > 1000 ? 14 : count > 100 ? 12 : 10;
             return new google.maps.Marker({
               position,
               icon: {
                 path: google.maps.SymbolPath.CIRCLE,
-                scale: Math.min(20, 10 + Math.log(count) * 3),
+                scale,
                 fillColor: color,
-                fillOpacity: 0.9,
+                fillOpacity: 0.85,
                 strokeColor: '#fff',
                 strokeWeight: 2,
               },
               label: {
                 text: count > 999 ? `${(count/1000).toFixed(1)}k` : String(count),
                 color: '#fff',
-                fontSize: '10px',
+                fontSize: '9px',
                 fontWeight: 'bold',
               },
               zIndex: count,
@@ -301,12 +436,22 @@ function GoogleMapsChart({
       markersRef.current.forEach(marker => marker.setMap(null));
       if (clustererRef.current) {
         clustererRef.current.clearMarkers();
+        clustererRef.current = null;
       }
     };
-  }, [showPins, allCoords, isLoaded]);
+  }, [showPins, filteredCoords, isLoaded, allCoords.length]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
+    setMapReady(true);
+
+    // Listener para actualizar el nivel de zoom
+    map.addListener('zoom_changed', () => {
+      const currentZoom = map.getZoom();
+      if (currentZoom !== undefined) {
+        setZoomLevel(currentZoom);
+      }
+    });
   }, []);
 
   if (!isLoaded) {
@@ -332,16 +477,23 @@ function GoogleMapsChart({
             <p className="text-xs text-purple-400/60">{total.toLocaleString()} inventarios en {validPlazas.length} plazas</p>
           </div>
         </div>
-        <button
-          onClick={onTogglePins}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${showPins
-            ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40 shadow-lg shadow-pink-500/20'
-            : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
-          }`}
-        >
-          {showPins ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-          {showPins ? `Ocultar ${allCoords.length.toLocaleString()} Pines` : `Mostrar ${allCoords.length.toLocaleString()} Pines`}
-        </button>
+        <div className="flex items-center gap-2">
+          {selectedInventoryIds.size > 0 && (
+            <span className="px-3 py-1.5 rounded-xl bg-pink-500/20 text-pink-300 text-xs font-medium border border-pink-500/30">
+              {filteredCoords.length} de {allCoords.length.toLocaleString()} pines
+            </span>
+          )}
+          <button
+            onClick={onTogglePins}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${showPins
+              ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40 shadow-lg shadow-pink-500/20'
+              : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
+            }`}
+          >
+            {showPins ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            {showPins ? `Ocultar Pines` : `Mostrar Pines`}
+          </button>
+        </div>
       </div>
       <div className="h-[500px] relative">
         <GoogleMap
@@ -351,25 +503,7 @@ function GoogleMapsChart({
           options={mapOptions}
           onLoad={onMapLoad}
         >
-          {/* Círculos de densidad por ciudad - siempre visibles */}
-          {validPlazas.map((plaza) => {
-            const colors = getCircleColor(plaza.count);
-            return (
-              <Circle
-                key={plaza.plaza}
-                center={{ lat: plaza.lat!, lng: plaza.lng! }}
-                radius={getCircleRadius(plaza.count)}
-                options={{
-                  fillColor: colors.fill,
-                  fillOpacity: colors.opacity,
-                  strokeColor: colors.stroke,
-                  strokeWeight: 2,
-                  clickable: true,
-                }}
-                onClick={() => onSelectPlaza(plaza.plaza)}
-              />
-            );
-          })}
+          {/* Círculos de densidad removidos - solo se muestran los pines/clusters */}
 
           {/* InfoWindow para plaza seleccionada */}
           {selectedPlaza && validPlazas.find(d => d.plaza === selectedPlaza) && (
@@ -448,7 +582,7 @@ function MunicipioPieChart({ data, title }: { data: ChartData[]; title: string }
         ) : (
           <div className="w-full h-full flex items-center">
             <div className="h-full w-[160px]">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width={160} height={268}>
                 <PieChart>
                   <Pie data={chartData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={3} dataKey="value" stroke="none">
                     {chartData.map((entry, index) => (<Cell key={index} fill={entry.color} />))}
@@ -499,7 +633,7 @@ function TipoPieChart({ data, title }: { data: ChartData[]; title: string }) {
         ) : (
           <div className="w-full h-full flex items-center">
             <div className="h-full w-[160px] relative">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width={160} height={268}>
                 <PieChart>
                   <Pie data={chartData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={4} dataKey="value" stroke="none">
                     {chartData.map((entry, index) => (<Cell key={index} fill={entry.color} />))}
@@ -548,7 +682,7 @@ function HorizontalBarChart({ data, color, title }: { data: ChartData[]; color: 
         {sortedData.length === 0 ? (
           <div className="h-full flex items-center justify-center text-purple-300/40">Sin datos</div>
         ) : (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height={268}>
             <BarChart layout="vertical" data={sortedData} margin={{ top: 5, right: 30, left: 60, bottom: 5 }}>
               <XAxis type="number" hide />
               <YAxis type="category" dataKey="nombre" tick={{ fill: '#c4b5fd', fontSize: 11 }} tickLine={false} axisLine={false} width={80} />
@@ -571,25 +705,298 @@ function SimpleBarChart({ data, title }: { data: ChartData[]; title: string }) {
         <h3 className="text-sm font-medium text-white uppercase tracking-wider">{title}</h3>
       </div>
       <div className="p-4 h-[300px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-            <XAxis dataKey="nombre" tick={{ fill: '#c4b5fd', fontSize: 11 }} axisLine={false} tickLine={false} />
-            <RechartsTooltip cursor={{ fill: 'rgba(139, 92, 246, 0.1)' }} content={<CustomTooltip />} />
-            <Bar dataKey="cantidad" radius={[6, 6, 0, 0]} barSize={40}>
-              {data.map((_, index) => (<Cell key={index} fill={index % 2 === 0 ? '#8b5cf6' : '#d946ef'} />))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        {data.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-purple-300/40">Sin datos</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={268}>
+            <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+              <XAxis dataKey="nombre" tick={{ fill: '#c4b5fd', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <RechartsTooltip cursor={{ fill: 'rgba(139, 92, 246, 0.1)' }} content={<CustomTooltip />} />
+              <Bar dataKey="cantidad" radius={[6, 6, 0, 0]} barSize={40}>
+                {data.map((_, index) => (<Cell key={index} fill={index % 2 === 0 ? '#8b5cf6' : '#d946ef'} />))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </GlassCard>
   );
 }
 
-// Inventory Table with Pagination
-function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange }: {
+// Inventory Table with Pagination and Checkboxes
+// ============ TIPOS Y CONFIGURACIÓN DE FILTROS INVENTARIO ============
+type InvFilterOperator = '=' | '!=' | 'contains' | 'not_contains';
+
+interface InvFilterCondition {
+  id: string;
+  field: string;
+  operator: InvFilterOperator;
+  value: string;
+}
+
+interface InvFilterFieldConfig {
+  field: string;
+  label: string;
+  type: 'string' | 'number';
+}
+
+const INV_FILTER_FIELDS: InvFilterFieldConfig[] = [
+  { field: 'codigo_unico', label: 'ID', type: 'string' },
+  { field: 'plaza', label: 'Plaza', type: 'string' },
+  { field: 'municipio', label: 'Municipio', type: 'string' },
+  { field: 'mueble', label: 'Mueble', type: 'string' },
+  { field: 'tradicional_digital', label: 'Tipo', type: 'string' },
+  { field: 'estatus', label: 'Estatus', type: 'string' },
+  { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
+];
+
+type InvGroupByField = 'plaza' | 'municipio' | 'estatus' | 'tradicional_digital' | 'mueble';
+
+const INV_AVAILABLE_GROUPINGS: { field: InvGroupByField; label: string }[] = [
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'municipio', label: 'Municipio' },
+  { field: 'estatus', label: 'Estatus' },
+  { field: 'tradicional_digital', label: 'Tipo' },
+  { field: 'mueble', label: 'Mueble' },
+];
+
+const INV_OPERATORS: { value: InvFilterOperator; label: string }[] = [
+  { value: '=', label: 'Igual a' },
+  { value: '!=', label: 'Diferente de' },
+  { value: 'contains', label: 'Contiene' },
+  { value: 'not_contains', label: 'No contiene' },
+];
+
+function applyInventoryFilters(data: any[], filters: InvFilterCondition[]): any[] {
+  if (filters.length === 0) return data;
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = item[filter.field];
+      const filterValue = filter.value;
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+      switch (filter.operator) {
+        case '=': return strValue === strFilterValue;
+        case '!=': return strValue !== strFilterValue;
+        case 'contains': return strValue.includes(strFilterValue);
+        case 'not_contains': return !strValue.includes(strFilterValue);
+        default: return true;
+      }
+    });
+  });
+}
+
+function InvGroupHeader({ groupName, count, expanded, onToggle, level = 1 }: {
+  groupName: string; count: number; expanded: boolean; onToggle: () => void; level?: 1 | 2;
+}) {
+  const isLevel1 = level === 1;
+  return (
+    <tr
+      onClick={onToggle}
+      className={`border-b cursor-pointer transition-colors ${
+        isLevel1
+          ? 'bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20'
+          : 'bg-fuchsia-500/5 border-fuchsia-500/10 hover:bg-fuchsia-500/10'
+      }`}
+    >
+      <td colSpan={9} className={`px-5 py-3 ${isLevel1 ? '' : 'pl-10'}`}>
+        <div className="flex items-center gap-2">
+          {expanded ? (
+            <ChevronDown className={`h-4 w-4 ${isLevel1 ? 'text-purple-400' : 'text-fuchsia-400'}`} />
+          ) : (
+            <ChevronRight className={`h-4 w-4 ${isLevel1 ? 'text-purple-400' : 'text-fuchsia-400'}`} />
+          )}
+          <span className={`font-semibold ${isLevel1 ? 'text-white' : 'text-zinc-200 text-sm'}`}>
+            {groupName || 'Sin asignar'}
+          </span>
+          <span className={`px-2 py-0.5 rounded-full text-xs ${
+            isLevel1 ? 'bg-purple-500/20 text-purple-300' : 'bg-fuchsia-500/20 text-fuchsia-300'
+          }`}>
+            {count}
+          </span>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange, selectedIds, onSelectionChange }: {
   data: any[]; isLoading: boolean; page: number; totalPages: number; total: number; onPageChange: (p: number) => void;
+  selectedIds: Set<number>; onSelectionChange: (ids: Set<number>) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+
+  // Filter/Group/Sort state
+  const [invFilters, setInvFilters] = useState<InvFilterCondition[]>([]);
+  const [showInvFilterPopup, setShowInvFilterPopup] = useState(false);
+  const [invGroupings, setInvGroupings] = useState<InvGroupByField[]>([]);
+  const [showInvGroupPopup, setShowInvGroupPopup] = useState(false);
+  const [invSortField, setInvSortField] = useState<string | null>(null);
+  const [invSortDirection, setInvSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [showInvSortPopup, setShowInvSortPopup] = useState(false);
+  const [invExpandedGroups, setInvExpandedGroups] = useState<Set<string>>(new Set());
+
+  const handleToggleItem = (id: number) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id); else newSet.add(id);
+    onSelectionChange(newSet);
+  };
+
+  const handleClearSelection = () => onSelectionChange(new Set());
+
+  // Filter functions
+  const addInvFilter = useCallback(() => {
+    setInvFilters(prev => [...prev, { id: `filter-${Date.now()}`, field: INV_FILTER_FIELDS[0].field, operator: '=', value: '' }]);
+  }, []);
+  const updateInvFilter = useCallback((id: string, updates: Partial<InvFilterCondition>) => {
+    setInvFilters(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+  }, []);
+  const removeInvFilter = useCallback((id: string) => {
+    setInvFilters(prev => prev.filter(f => f.id !== id));
+  }, []);
+  const clearInvFilters = useCallback(() => setInvFilters([]), []);
+  const toggleInvGrouping = useCallback((field: InvGroupByField) => {
+    setInvGroupings(prev => {
+      if (prev.includes(field)) return prev.filter(f => f !== field);
+      if (prev.length >= 2) return [prev[1], field];
+      return [...prev, field];
+    });
+  }, []);
+  const toggleInvGroup = (groupName: string) => {
+    setInvExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupName)) next.delete(groupName); else next.add(groupName);
+      return next;
+    });
+  };
+  const hasInvActiveFilters = invFilters.length > 0 || invGroupings.length > 0 || invSortField !== null;
+  const clearAllInvFilters = () => {
+    setInvFilters([]); setInvGroupings([]); setInvSortField(null); setInvSortDirection('asc'); setInvExpandedGroups(new Set());
+  };
+
+  // Unique values for autocomplete
+  const invUniqueValues = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    INV_FILTER_FIELDS.forEach(fc => {
+      const values = new Set<string>();
+      data.forEach(item => {
+        const val = item[fc.field];
+        if (val !== null && val !== undefined && val !== '') values.add(String(val));
+      });
+      valuesMap[fc.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [data]);
+
+  // Filtered + sorted data
+  const filteredData = useMemo(() => {
+    let result = applyInventoryFilters(data, invFilters);
+    if (invSortField) {
+      result = [...result].sort((a, b) => {
+        const aVal = a[invSortField]; const bVal = b[invSortField];
+        if (aVal === null || aVal === undefined) return invSortDirection === 'asc' ? 1 : -1;
+        if (bVal === null || bVal === undefined) return invSortDirection === 'asc' ? -1 : 1;
+        const comparison = String(aVal).localeCompare(String(bVal));
+        return invSortDirection === 'asc' ? comparison : -comparison;
+      });
+    }
+    return result;
+  }, [data, invFilters, invSortField, invSortDirection]);
+
+  // Grouped data (up to 2 levels)
+  interface InvGroupedLevel1 { name: string; items: any[]; subgroups?: { name: string; items: any[] }[] }
+  const groupedData = useMemo((): InvGroupedLevel1[] | null => {
+    if (invGroupings.length === 0) return null;
+    const gk1 = invGroupings[0];
+    const gk2 = invGroupings.length > 1 ? invGroupings[1] : null;
+    const groups: Record<string, any[]> = {};
+    filteredData.forEach(item => {
+      const key = String(item[gk1] || 'Sin asignar');
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+    const sortGroups = (entries: [string, any[]][]) => {
+      if (invSortField) return entries.sort((a, b) => invSortDirection === 'asc' ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0]));
+      return entries.sort((a, b) => b[1].length - a[1].length);
+    };
+    return sortGroups(Object.entries(groups)).map(([name, items]) => {
+      if (gk2) {
+        const subMap: Record<string, any[]> = {};
+        items.forEach(item => {
+          const sk = String(item[gk2] || 'Sin asignar');
+          if (!subMap[sk]) subMap[sk] = [];
+          subMap[sk].push(item);
+        });
+        const subgroups = sortGroups(Object.entries(subMap)).map(([sn, si]) => ({ name: sn, items: si }));
+        return { name, items, subgroups };
+      }
+      return { name, items };
+    });
+  }, [filteredData, invGroupings, invSortField, invSortDirection]);
+
+  const handleToggleAll = () => {
+    const displayItems = filteredData;
+    if (displayItems.every(item => selectedIds.has(item.id))) {
+      const newSet = new Set(selectedIds);
+      displayItems.forEach(item => newSet.delete(item.id));
+      onSelectionChange(newSet);
+    } else {
+      const newSet = new Set(selectedIds);
+      displayItems.forEach(item => newSet.add(item.id));
+      onSelectionChange(newSet);
+    }
+  };
+  const allCurrentPageSelected = filteredData.length > 0 && filteredData.every(item => selectedIds.has(item.id));
+  const someCurrentPageSelected = filteredData.some(item => selectedIds.has(item.id));
+
+  // Row renderer
+  const renderRow = (item: any, idx: number) => {
+    const isSelected = selectedIds.has(item.id);
+    return (
+      <tr
+        key={item.id || idx}
+        className={`border-b border-purple-500/10 hover:bg-purple-500/5 transition-colors cursor-pointer ${isSelected ? 'bg-pink-500/10' : ''}`}
+        onClick={() => handleToggleItem(item.id)}
+      >
+        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+          <input type="checkbox" checked={isSelected} onChange={() => handleToggleItem(item.id)}
+            className="w-4 h-4 rounded border-purple-500/50 bg-transparent text-pink-500 focus:ring-pink-500/50 focus:ring-offset-0 cursor-pointer" />
+        </td>
+        <td className="px-4 py-3">
+          <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">{item.codigo_unico || item.id}</span>
+        </td>
+        <td className="px-4 py-3 text-sm text-white">{item.plaza || '-'}</td>
+        <td className="px-4 py-3 text-sm text-zinc-400">{item.municipio || '-'}</td>
+        <td className="px-4 py-3 text-sm text-zinc-300">{item.mueble || item.tipo_de_mueble || '-'}</td>
+        <td className="px-4 py-3">
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${item.tradicional_digital === 'Digital' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-pink-500/20 text-pink-300 border border-pink-500/30'}`}>
+            {item.tradicional_digital || 'Tradicional'}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+            item.estatus === 'Vendido' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' :
+            item.estatus === 'Reservado' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
+            item.estatus === 'Bloqueado' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+            'bg-green-500/20 text-green-300 border border-green-500/30'
+          }`}>
+            {item.estatus || 'Disponible'}
+          </span>
+        </td>
+        <td className="px-4 py-3 text-sm text-zinc-400 truncate max-w-[150px]">{item.cliente_nombre || '-'}</td>
+        <td className="px-4 py-3">
+          {item.APS ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">{item.APS}</span>
+          ) : (
+            <span className="text-zinc-500">-</span>
+          )}
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <GlassCard className="overflow-hidden">
@@ -607,6 +1014,20 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
           </div>
         </div>
         <div className="flex items-center gap-4">
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1 rounded-full bg-pink-500/20 text-pink-300 text-xs font-medium border border-pink-500/30">
+                {selectedIds.size} seleccionados
+              </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleClearSelection(); }}
+                className="p-1.5 rounded-lg bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+                title="Limpiar selección"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           {!isLoading && totalPages > 1 && (
             <div className="flex items-center gap-2 text-xs text-purple-300">
               <span>Página {page} de {totalPages}</span>
@@ -618,6 +1039,201 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
 
       {expanded && (
         <>
+          {/* Toolbar: Filtrar, Agrupar, Ordenar */}
+          <div className="px-4 py-2 border-b border-purple-500/20 flex items-center justify-between gap-2 relative z-[45]">
+            <div className="flex items-center gap-2">
+              {/* Filtros */}
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowInvFilterPopup(!showInvFilterPopup); }}
+                  className={`relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
+                    invFilters.length > 0 ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                  }`}
+                  title="Filtrar"
+                >
+                  <Filter className="h-3.5 w-3.5" />
+                  {invFilters.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 flex items-center justify-center rounded-full bg-pink-500 text-[9px] font-bold text-white px-0.5">
+                      {invFilters.length}
+                    </span>
+                  )}
+                </button>
+                {showInvFilterPopup && (
+                  <div className="absolute left-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+                      <button onClick={() => setShowInvFilterPopup(false)} className="text-zinc-400 hover:text-white"><X className="h-4 w-4" /></button>
+                    </div>
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                      {invFilters.map((filter, index) => (
+                        <div key={filter.id} className="flex items-center gap-2">
+                          {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
+                          {index === 0 && <span className="w-8"></span>}
+                          <select value={filter.field} onChange={(e) => updateInvFilter(filter.id, { field: e.target.value })}
+                            className="w-[130px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white">
+                            {INV_FILTER_FIELDS.map(f => <option key={f.field} value={f.field}>{f.label}</option>)}
+                          </select>
+                          <select value={filter.operator} onChange={(e) => updateInvFilter(filter.id, { operator: e.target.value as InvFilterOperator })}
+                            className="w-[110px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white">
+                            {INV_OPERATORS.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+                          </select>
+                          <input type="text" list={`inv-datalist-${filter.id}`} value={filter.value}
+                            onChange={(e) => updateInvFilter(filter.id, { value: e.target.value })}
+                            placeholder="Escribe o selecciona..."
+                            className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500" />
+                          <datalist id={`inv-datalist-${filter.id}`}>
+                            {invUniqueValues[filter.field]?.map(val => <option key={val} value={val} />)}
+                          </datalist>
+                          <button onClick={() => removeInvFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {invFilters.length === 0 && (
+                        <p className="text-[11px] text-zinc-500 text-center py-3">Sin filtros. Haz clic en "Añadir".</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-purple-900/30">
+                      <button onClick={addInvFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
+                        <Plus className="h-3 w-3" /> Añadir
+                      </button>
+                      <button onClick={clearInvFilters} disabled={invFilters.length === 0}
+                        className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        Limpiar
+                      </button>
+                    </div>
+                    {invFilters.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-purple-900/30">
+                        <span className="text-[10px] text-zinc-500">{filteredData.length} de {data.length} registros</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Agrupar */}
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowInvGroupPopup(!showInvGroupPopup); }}
+                  className={`relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
+                    invGroupings.length > 0 ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                  }`}
+                  title="Agrupar"
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  {invGroupings.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 flex items-center justify-center rounded-full bg-pink-500 text-[9px] font-bold text-white px-0.5">
+                      {invGroupings.length}
+                    </span>
+                  )}
+                </button>
+                {showInvGroupPopup && (
+                  <div className="absolute left-0 top-full mt-1 z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 2)</p>
+                    {INV_AVAILABLE_GROUPINGS.map(({ field, label }) => (
+                      <button key={field} onClick={() => toggleInvGrouping(field)}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
+                          invGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                        }`}>
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                          invGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
+                        }`}>
+                          {invGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
+                        </div>
+                        {label}
+                        {invGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
+                        {invGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+                      </button>
+                    ))}
+                    <div className="border-t border-purple-900/30 mt-2 pt-2">
+                      <button onClick={() => setInvGroupings([])} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                        Quitar agrupación
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Ordenar */}
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowInvSortPopup(!showInvSortPopup); }}
+                  className={`relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
+                    invSortField ? 'bg-purple-600 text-white' : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                  }`}
+                  title="Ordenar"
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                </button>
+                {showInvSortPopup && (
+                  <div className="absolute left-0 top-full mt-1 z-[60] w-[300px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-purple-300">Ordenar por</span>
+                      <button onClick={() => setShowInvSortPopup(false)} className="text-zinc-400 hover:text-white"><X className="h-4 w-4" /></button>
+                    </div>
+                    <div className="space-y-1">
+                      {INV_FILTER_FIELDS.map(field => (
+                        <div key={field.field}
+                          className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
+                            invSortField === field.field ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-purple-900/20'
+                          }`}>
+                          <span className={invSortField === field.field ? 'text-purple-300 font-medium' : 'text-zinc-300'}>{field.label}</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => { setInvSortField(field.field); setInvSortDirection('asc'); }}
+                              className={`p-1.5 rounded transition-colors ${
+                                invSortField === field.field && invSortDirection === 'asc' ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                              }`} title="Ascendente (A-Z)">
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button onClick={() => { setInvSortField(field.field); setInvSortDirection('desc'); }}
+                              className={`p-1.5 rounded transition-colors ${
+                                invSortField === field.field && invSortDirection === 'desc' ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                              }`} title="Descendente (Z-A)">
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {invSortField && (
+                      <div className="mt-3 pt-3 border-t border-purple-900/30">
+                        <button onClick={() => { setInvSortField(null); setInvSortDirection('asc'); }}
+                          className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors">
+                          Quitar ordenamiento
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Limpiar todo */}
+              {hasInvActiveFilters && (
+                <button onClick={(e) => { e.stopPropagation(); clearAllInvFilters(); }}
+                  className="flex items-center justify-center w-8 h-8 text-zinc-400 hover:text-white bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/50 transition-colors"
+                  title="Limpiar filtros">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Info badge */}
+            {hasInvActiveFilters && (
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[10px]">
+                <Filter className="h-3 w-3" />
+                {filteredData.length} resultados
+                {invGroupings.length > 0 && (
+                  <span className="text-zinc-500">
+                    | Agrupado por {invGroupings.map(g => INV_AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
+                  </span>
+                )}
+                {invSortField && (
+                  <span className="text-zinc-500">| Ordenado por {INV_FILTER_FIELDS.find(f => f.field === invSortField)?.label} ({invSortDirection === 'asc' ? '↑' : '↓'})</span>
+                )}
+              </div>
+            )}
+          </div>
+
           {isLoading ? (
             <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" /></div>
           ) : (
@@ -626,41 +1242,45 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                 <table className="w-full">
                   <thead className="sticky top-0 bg-[#1a1025]/98 backdrop-blur-sm z-10">
                     <tr className="border-b border-purple-500/20">
-                      {['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente'].map((h) => (
+                      <th className="px-4 py-3 text-left">
+                        <input
+                          type="checkbox"
+                          checked={allCurrentPageSelected}
+                          ref={(el) => { if (el) el.indeterminate = someCurrentPageSelected && !allCurrentPageSelected; }}
+                          onChange={handleToggleAll}
+                          className="w-4 h-4 rounded border-purple-500/50 bg-transparent text-pink-500 focus:ring-pink-500/50 focus:ring-offset-0 cursor-pointer"
+                        />
+                      </th>
+                      {['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'].map((h) => (
                         <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {data.length === 0 ? (
-                      <tr><td colSpan={7} className="px-4 py-8 text-center text-zinc-500">No hay inventarios</td></tr>
-                    ) : (
-                      data.map((item, idx) => (
-                        <tr key={item.id || idx} className="border-b border-purple-500/10 hover:bg-purple-500/5 transition-colors">
-                          <td className="px-4 py-3">
-                            <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">{item.codigo_unico || item.id}</span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-white">{item.plaza || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-zinc-400">{item.municipio || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-zinc-300">{item.mueble || item.tipo_de_mueble || '-'}</td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${item.tradicional_digital === 'Digital' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-pink-500/20 text-pink-300 border border-pink-500/30'}`}>
-                              {item.tradicional_digital || 'Tradicional'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                              item.estatus === 'Vendido' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' :
-                              item.estatus === 'Reservado' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
-                              item.estatus === 'Bloqueado' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
-                              'bg-green-500/20 text-green-300 border border-green-500/30'
-                            }`}>
-                              {item.estatus || 'Disponible'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-zinc-400 truncate max-w-[150px]">{item.cliente_nombre || '-'}</td>
-                        </tr>
+                    {filteredData.length === 0 ? (
+                      <tr><td colSpan={9} className="px-4 py-8 text-center text-zinc-500">No hay inventarios</td></tr>
+                    ) : groupedData ? (
+                      groupedData.map(group => (
+                        <React.Fragment key={`group-${group.name}`}>
+                          <InvGroupHeader groupName={group.name} count={group.items.length}
+                            expanded={invExpandedGroups.has(group.name)} onToggle={() => toggleInvGroup(group.name)} level={1} />
+                          {invExpandedGroups.has(group.name) && (
+                            group.subgroups ? (
+                              group.subgroups.map(subgroup => (
+                                <React.Fragment key={`sub-${group.name}-${subgroup.name}`}>
+                                  <InvGroupHeader groupName={subgroup.name} count={subgroup.items.length}
+                                    expanded={invExpandedGroups.has(`${group.name}|${subgroup.name}`)}
+                                    onToggle={() => toggleInvGroup(`${group.name}|${subgroup.name}`)} level={2} />
+                                  {invExpandedGroups.has(`${group.name}|${subgroup.name}`) &&
+                                    subgroup.items.map((item, idx) => renderRow(item, idx))}
+                                </React.Fragment>
+                              ))
+                            ) : group.items.map((item, idx) => renderRow(item, idx))
+                          )}
+                        </React.Fragment>
                       ))
+                    ) : (
+                      filteredData.map((item, idx) => renderRow(item, idx))
                     )}
                   </tbody>
                 </table>
@@ -751,9 +1371,13 @@ export function DashboardPage() {
   const [filters, setFilters] = useState<DashboardFilters>({});
   const [activeEstatus, setActiveEstatus] = useState<EstatusType>('total');
   const [showFilters, setShowFilters] = useState(false);
-  const [showPins, setShowPins] = useState(true);
+  const [showPins, setShowPins] = useState(false);
   const [selectedPlaza, setSelectedPlaza] = useState<string | null>(null);
   const [inventoryPage, setInventoryPage] = useState(1);
+  const [selectedInventoryIds, setSelectedInventoryIds] = useState<Set<number>>(new Set());
+
+  // WebSocket para actualizaciones en tiempo real
+  useSocketDashboard();
 
   // Prefetch todas las vistas al cargar el dashboard
   const { prefetchAll } = usePrefetch();
@@ -780,19 +1404,17 @@ export function DashboardPage() {
   });
 
   const { data: inventoryData, isLoading: loadingInventory } = useQuery({
-    queryKey: ['dashboard', 'inventory-detail', filters, activeEstatus, inventoryPage],
+    queryKey: ['dashboard', 'inventory-detail', filters, activeEstatus, inventoryPage, showPins],
     queryFn: () => dashboardService.getInventoryDetail({
       ...filters,
       estatus: activeEstatus !== 'total' ? activeEstatus : undefined,
       page: inventoryPage,
       limit: 50,
+      includeCoords: showPins,
     }),
   });
 
-  const { data: activity } = useQuery({ queryKey: ['dashboard', 'activity'], queryFn: () => dashboardService.getRecentActivity() });
-  const { data: proximasCatorcenas } = useQuery({ queryKey: ['dashboard', 'catorcenas'], queryFn: () => dashboardService.getUpcomingCatorcenas() });
-  const { data: topClientes } = useQuery({ queryKey: ['dashboard', 'top-clientes'], queryFn: () => dashboardService.getTopClientes() });
-
+  
   const graficas = useMemo(() => activeEstatus !== 'total' && estatusStats ? estatusStats.graficas : stats?.graficas, [activeEstatus, estatusStats, stats]);
 
   const filteredCatorcena = useMemo(() => {
@@ -902,6 +1524,7 @@ export function DashboardPage() {
           onTogglePins={() => setShowPins(!showPins)}
           selectedPlaza={selectedPlaza}
           onSelectPlaza={setSelectedPlaza}
+          selectedInventoryIds={selectedInventoryIds}
         />
 
         {/* Inventory Table */}
@@ -912,69 +1535,9 @@ export function DashboardPage() {
           totalPages={inventoryData?.pagination.totalPages || 1}
           total={inventoryData?.pagination.total || 0}
           onPageChange={setInventoryPage}
+          selectedIds={selectedInventoryIds}
+          onSelectionChange={setSelectedInventoryIds}
         />
-
-        {/* Widgets */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <GlassCard>
-            <div className="p-4 border-b border-purple-500/20 flex items-center gap-2">
-              <Activity className="h-4 w-4 text-pink-400" />
-              <h3 className="text-sm font-medium text-white uppercase tracking-wider">Actividad Reciente</h3>
-            </div>
-            <div className="p-4 space-y-2">
-              {activity?.solicitudes.slice(0, 4).map((sol) => (
-                <div key={sol.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-purple-500/10 transition-colors">
-                  <div className="h-2 w-2 rounded-full bg-pink-500 mt-1.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white truncate">{sol.descripcion}</p>
-                    <p className="text-xs text-purple-400/60">{sol.razon_social || 'Sin cliente'} - {sol.status}</p>
-                  </div>
-                </div>
-              ))}
-              {!activity?.solicitudes.length && <p className="text-center text-purple-400/60 py-4">Sin actividad</p>}
-            </div>
-          </GlassCard>
-
-          <GlassCard>
-            <div className="p-4 border-b border-purple-500/20 flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-cyan-400" />
-              <h3 className="text-sm font-medium text-white uppercase tracking-wider">Próximas Catorcenas</h3>
-            </div>
-            <div className="p-4 space-y-2">
-              {proximasCatorcenas?.slice(0, 5).map((cat) => (
-                <div key={cat.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-purple-500/10 transition-colors">
-                  <div>
-                    <p className="text-sm text-white">Cat {cat.numero} - {cat.ano}</p>
-                    <p className="text-xs text-purple-400/60">
-                      {new Date(cat.fecha_inicio).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} - {new Date(cat.fecha_fin).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
-                    </p>
-                  </div>
-                  <span className="text-xs text-cyan-400">{Math.ceil((new Date(cat.fecha_inicio).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} días</span>
-                </div>
-              ))}
-              {!proximasCatorcenas?.length && <p className="text-center text-purple-400/60 py-4">Sin catorcenas</p>}
-            </div>
-          </GlassCard>
-
-          <GlassCard>
-            <div className="p-4 border-b border-purple-500/20 flex items-center gap-2">
-              <Users className="h-4 w-4 text-yellow-400" />
-              <h3 className="text-sm font-medium text-white uppercase tracking-wider">Top Clientes</h3>
-            </div>
-            <div className="p-4 space-y-2">
-              {topClientes?.map((cliente, index) => (
-                <div key={cliente.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-purple-500/10 transition-colors">
-                  <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold ${index === 0 ? 'bg-yellow-500 text-black' : index === 1 ? 'bg-gray-300 text-black' : index === 2 ? 'bg-orange-600 text-white' : 'bg-purple-800 text-white'}`}>
-                    {index + 1}
-                  </div>
-                  <p className="text-sm text-white flex-1 truncate">{cliente.nombre}</p>
-                  <span className="text-sm text-purple-300">{cliente.totalReservas}</span>
-                </div>
-              ))}
-              {!topClientes?.length && <p className="text-center text-purple-400/60 py-4">Sin datos</p>}
-            </div>
-          </GlassCard>
-        </div>
       </div>
     </div>
   );

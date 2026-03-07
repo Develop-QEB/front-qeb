@@ -14,6 +14,9 @@ import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { CreateSolicitudModal } from './CreateSolicitudModal';
 import { ViewSolicitudModal, StatusModal, AtenderModal } from './SolicitudModals';
+import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
+import { useSocketSolicitudes } from '../../hooks/useSocket';
 
 // Filter Chip Component with Search - same as ClientesPage
 function FilterChip({
@@ -486,6 +489,12 @@ const CHART_COLORS = [
 export function SolicitudesPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  // WebSocket para actualizaciones en tiempo real
+  useSocketSolicitudes();
+
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -508,13 +517,23 @@ export function SolicitudesPage() {
 
   const [statusSolicitud, setStatusSolicitud] = useState<Solicitud | null>(null);
 
-  // Handle URL params: viewId opens view modal, commentsId opens comments modal
+  // Handle URL params: viewId opens view modal, commentsId opens comments modal, editId opens edit modal
   useEffect(() => {
     const viewIdParam = searchParams.get('viewId');
     const commentsIdParam = searchParams.get('commentsId');
+    const editIdParam = searchParams.get('editId');
     const searchParam = searchParams.get('search');
 
-    if (viewIdParam) {
+    if (editIdParam) {
+      const id = parseInt(editIdParam, 10);
+      if (!isNaN(id)) {
+        // Fetch solicitud and open edit modal
+        solicitudesService.getById(id).then((solicitud) => {
+          setEditSolicitud(solicitud);
+        }).catch(console.error);
+      }
+      setSearchParams({}, { replace: true });
+    } else if (viewIdParam) {
       const id = parseInt(viewIdParam, 10);
       if (!isNaN(id)) {
         setViewSolicitudId(id);
@@ -787,8 +806,8 @@ export function SolicitudesPage() {
     const canEdit = !isDesactivada && !isAprobada && !isAtendida;
     // Atender: solo activo si está Aprobada
     const canAtender = isAprobada;
-    // Estatus: siempre activo
-    const canChangeStatus = true;
+    // Estatus: bloqueado si está Atendida
+    const canChangeStatus = !isAtendida;
     // Eliminar: solo si no está Desactivada, Aprobada o Atendida
     const canDelete = !isDesactivada && !isAprobada && !isAtendida;
 
@@ -802,7 +821,16 @@ export function SolicitudesPage() {
         </td>
         <td className="px-4 py-3">
           <div>
-            <span className="font-semibold text-white">{item.razon_social || '-'}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-white">{item.razon_social || '-'}</span>
+              {item.sap_database && (
+                <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
+                  item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                  item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                  'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                }`}>{item.sap_database}</span>
+              )}
+            </div>
             {item.cuic && (
               <div className="text-xs text-zinc-500">CUIC: {item.cuic}</div>
             )}
@@ -822,8 +850,9 @@ export function SolicitudesPage() {
         </td>
         <td className="px-4 py-3">
           <button
-            onClick={(e) => { e.stopPropagation(); setStatusSolicitud(item); }}
-            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+            onClick={(e) => { e.stopPropagation(); if (canChangeStatus) setStatusSolicitud(item); }}
+            disabled={!canChangeStatus}
+            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} ${canChangeStatus ? 'hover:opacity-80 cursor-pointer' : 'opacity-60 cursor-not-allowed'} transition-opacity`}
           >
             {item.status}
           </button>
@@ -840,52 +869,62 @@ export function SolicitudesPage() {
             </button>
 
             {/* Editar */}
-            <button
-              onClick={(e) => { e.stopPropagation(); setEditSolicitud(item); }}
-              disabled={!canEdit}
-              className={`p-2 rounded-lg transition-all border ${canEdit
-                ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
-                : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                }`}
-              title={canEdit ? 'Editar solicitud' : 'No disponible'}
-            >
-              <Edit2 className="h-3.5 w-3.5" />
-            </button>
+            {permissions.canEditSolicitudes && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setEditSolicitud(item); }}
+                disabled={!canEdit}
+                className={`p-2 rounded-lg transition-all border ${canEdit
+                  ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
+                  : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                  }`}
+                title={canEdit ? 'Editar solicitud' : 'No disponible'}
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+              </button>
+            )}
 
             {/* Atender */}
-            <button
-              onClick={(e) => { e.stopPropagation(); setAtenderSolicitud(item); }}
-              disabled={!canAtender}
-              className={`p-2 rounded-lg transition-all border ${canAtender
-                ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
-                : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                }`}
-              title={canAtender ? 'Atender solicitud' : 'Solo disponible para solicitudes aprobadas'}
-            >
-              <PlayCircle className="h-3.5 w-3.5" />
-            </button>
+            {permissions.canAtenderSolicitudes && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setAtenderSolicitud(item); }}
+                disabled={!canAtender}
+                className={`p-2 rounded-lg transition-all border ${canAtender
+                  ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
+                  : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                  }`}
+                title={canAtender ? 'Atender solicitud' : 'Solo disponible para solicitudes aprobadas'}
+              >
+                <PlayCircle className="h-3.5 w-3.5" />
+              </button>
+            )}
 
             {/* Estatus/Comentarios */}
             <button
-              onClick={(e) => { e.stopPropagation(); setStatusSolicitud(item); }}
-              className="p-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/20 hover:border-amber-500/40 transition-all"
-              title="Ver/Cambiar estatus"
+              onClick={(e) => { e.stopPropagation(); if (canChangeStatus) setStatusSolicitud(item); }}
+              disabled={!canChangeStatus}
+              className={`p-2 rounded-lg transition-all border ${canChangeStatus
+                ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border-amber-500/20 hover:border-amber-500/40'
+                : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                }`}
+              title={!canChangeStatus ? 'No disponible' : permissions.canChangeEstadoSolicitud ? 'Ver/Cambiar estatus' : 'Ver estatus y comentarios'}
             >
               <MessageSquare className="h-3.5 w-3.5" />
             </button>
 
             {/* Eliminar */}
-            <button
-              onClick={(e) => { e.stopPropagation(); setDeleteId(item.id); }}
-              disabled={!canDelete}
-              className={`p-2 rounded-lg transition-all border ${canDelete
-                ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border-red-500/20 hover:border-red-500/40'
-                : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                }`}
-              title={canDelete ? 'Eliminar solicitud' : 'No disponible'}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            {permissions.canDeleteSolicitudes && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setDeleteId(item.id); }}
+                disabled={!canDelete}
+                className={`p-2 rounded-lg transition-all border ${canDelete
+                  ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border-red-500/20 hover:border-red-500/40'
+                  : 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                  }`}
+                title={canDelete ? 'Eliminar solicitud' : 'No disponible'}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </td>
       </tr>
@@ -1032,13 +1071,15 @@ export function SolicitudesPage() {
               </button>
 
               {/* Nueva Solicitud */}
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
-              >
-                <Plus className="h-4 w-4" />
-                Nueva Solicitud
-              </button>
+              {permissions.canCreateSolicitudes && (
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
+                >
+                  <Plus className="h-4 w-4" />
+                  Nueva Solicitud
+                </button>
+              )}
             </div>
 
             {/* Filters Row (Expandable) */}
@@ -1402,6 +1443,27 @@ export function SolicitudesPage() {
         isOpen={!!viewSolicitudId}
         onClose={() => setViewSolicitudId(null)}
         solicitudId={viewSolicitudId}
+        onEdit={permissions.canEditSolicitudes ? () => {
+          const sol = data?.data?.find((s: Solicitud) => s.id === viewSolicitudId);
+          if (sol) { setViewSolicitudId(null); setEditSolicitud(sol); }
+        } : undefined}
+        onAtender={permissions.canAtenderSolicitudes ? () => {
+          const sol = data?.data?.find((s: Solicitud) => s.id === viewSolicitudId);
+          if (sol) { setViewSolicitudId(null); setAtenderSolicitud(sol); }
+        } : undefined}
+        onStatus={() => {
+          const sol = data?.data?.find((s: Solicitud) => s.id === viewSolicitudId);
+          if (sol) { setViewSolicitudId(null); setStatusSolicitud(sol); }
+        }}
+        canEdit={(() => {
+          const sol = data?.data?.find((s: Solicitud) => s.id === viewSolicitudId);
+          if (!sol) return false;
+          return sol.status !== 'Desactivada' && sol.status !== 'Aprobada' && sol.status !== 'Atendida';
+        })()}
+        canAtender={(() => {
+          const sol = data?.data?.find((s: Solicitud) => s.id === viewSolicitudId);
+          return sol?.status === 'Aprobada';
+        })()}
       />
 
       {/* Status Modal */}
@@ -1414,6 +1476,7 @@ export function SolicitudesPage() {
           queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
           setStatusSolicitud(null);
         }}
+        statusReadOnly={!permissions.canChangeEstadoSolicitud}
       />
 
       {/* Atender Modal */}

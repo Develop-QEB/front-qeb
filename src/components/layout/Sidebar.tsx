@@ -10,9 +10,11 @@ import {
   LogOut,
   ChevronLeft,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import { usePrefetch } from '../../hooks/usePrefetch';
+import { getPermissions } from '../../lib/permissions';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -21,22 +23,27 @@ interface SidebarProps {
 
 type PrefetchKey = 'prefetchClientes' | 'prefetchProveedores' | 'prefetchSolicitudes' | 'prefetchPropuestas' | 'prefetchCampanas' | 'prefetchInventarios';
 
-const navigation: { name: string; href: string; icon: React.ElementType; prefetchKey?: PrefetchKey }[] = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Clientes', href: '/clientes', icon: Users, prefetchKey: 'prefetchClientes' },
-  { name: 'Proveedores', href: '/proveedores', icon: Building2, prefetchKey: 'prefetchProveedores' },
-  { name: 'Solicitudes', href: '/solicitudes', icon: FileText, prefetchKey: 'prefetchSolicitudes' },
-  { name: 'Propuestas', href: '/propuestas', icon: Send, prefetchKey: 'prefetchPropuestas' },
-  { name: 'Campañas', href: '/campanas', icon: Megaphone, prefetchKey: 'prefetchCampanas' },
-  { name: 'Inventarios', href: '/inventarios', icon: MapPin, prefetchKey: 'prefetchInventarios' },
+type PermissionKey = 'canSeeDashboard' | 'canSeeClientes' | 'canSeeProveedores' | 'canSeeSolicitudes' | 'canSeePropuestas' | 'canSeeCampanas' | 'canSeeInventarios';
+
+
+const navigation: { name: string; href: string; icon: React.ElementType; prefetchKey?: PrefetchKey; permissionKey: PermissionKey }[] = [
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard, permissionKey: 'canSeeDashboard' },
+  { name: 'Clientes', href: '/clientes', icon: Users, prefetchKey: 'prefetchClientes', permissionKey: 'canSeeClientes' },
+  { name: 'Proveedores', href: '/proveedores', icon: Building2, prefetchKey: 'prefetchProveedores', permissionKey: 'canSeeProveedores' },
+  { name: 'Solicitudes', href: '/solicitudes', icon: FileText, prefetchKey: 'prefetchSolicitudes', permissionKey: 'canSeeSolicitudes' },
+  { name: 'Propuestas', href: '/propuestas', icon: Send, prefetchKey: 'prefetchPropuestas', permissionKey: 'canSeePropuestas' },
+  { name: 'Campañas', href: '/campanas', icon: Megaphone, prefetchKey: 'prefetchCampanas', permissionKey: 'canSeeCampanas' },
+  { name: 'Inventarios', href: '/inventarios', icon: MapPin, prefetchKey: 'prefetchInventarios', permissionKey: 'canSeeInventarios' },
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const queryClient = useQueryClient();
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
   const prefetch = usePrefetch();
 
   const handleLogout = () => {
+    queryClient.clear();
     logout();
   };
 
@@ -46,6 +53,18 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       prefetch[prefetchKey]();
     }
   };
+
+  // Obtener permisos basados en el rol del usuario
+  const permissions = getPermissions(user?.rol);
+
+  // Filtrar navegación basado en permisos de usuario
+  const filteredNavigation = navigation.filter(item => {
+    // Verificar permiso por rol
+    if (!permissions[item.permissionKey]) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <aside
@@ -98,7 +117,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
           <ul className="space-y-1">
-            {navigation.map((item) => (
+            {filteredNavigation.map((item) => (
               <li key={item.name}>
                 <NavLink
                   to={item.href}

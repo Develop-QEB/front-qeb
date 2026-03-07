@@ -141,11 +141,12 @@ export function CorreosPage() {
   const [selectedCorreo, setSelectedCorreo] = useState<Correo | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  // Fetch stats
+  // Fetch stats - refetch cada 2 minutos para evitar exceder límite de conexiones BD
   const { data: stats } = useQuery({
     queryKey: ['correos-stats'],
     queryFn: () => correosService.getStats(),
-    refetchInterval: 30000,
+    refetchInterval: 120000, // 2 minutos
+    staleTime: 30000,
   });
 
   // Fetch correos

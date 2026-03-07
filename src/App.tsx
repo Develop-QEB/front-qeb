@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { LoginPage } from './features/auth/LoginPage';
+import { RegisterPage } from './features/auth/RegisterPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { MainLayout } from './components/layout/MainLayout';
 import { DashboardPage } from './features/dashboard/DashboardPage';
@@ -18,6 +19,81 @@ import { TareaSeguimientoPage } from './features/campanas/TareaSeguimientoPage';
 import { NotificacionesPage } from './features/notificaciones/NotificacionesPage';
 import { CorreosPage } from './features/correos/CorreosPage';
 import { PerfilPage } from './features/perfil/PerfilPage';
+import { UsuariosAdminPage } from './features/admin/UsuariosAdminPage';
+import { DevTicketsPage } from './features/tickets/DevTicketsPage';
+import { useAuthStore } from './store/authStore';
+import { getPermissions } from './lib/permissions';
+
+// IDs de usuarios programadores con acceso a /dev/tickets
+const DEV_USERS_IDS = [1057460, 1057462]; // Mario, Jos
+
+// Obtener la primera ruta disponible según permisos del usuario
+function getFirstAvailableRoute(permissions: ReturnType<typeof getPermissions>): string {
+  if (permissions.canSeeDashboard) return '/';
+  if (permissions.canSeeSolicitudes) return '/solicitudes';
+  if (permissions.canSeePropuestas) return '/propuestas';
+  if (permissions.canSeeCampanas) return '/campanas';
+  if (permissions.canSeeClientes) return '/clientes';
+  if (permissions.canSeeProveedores) return '/proveedores';
+  if (permissions.canSeeInventarios) return '/inventarios';
+  return '/solicitudes';
+}
+
+// Componente para la ruta principal - redirige según permisos
+function HomeRoute() {
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  // Si puede ver Dashboard, mostrarlo
+  if (permissions.canSeeDashboard) {
+    return <DashboardPage />;
+  }
+  // Si no, redirigir a la primera ruta disponible
+  return <Navigate to={getFirstAvailableRoute(permissions)} replace />;
+}
+
+// Componente para proteger ruta de Inventarios
+function InventariosRoute() {
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  if (!user || !permissions.canSeeInventarios) {
+    return <Navigate to={getFirstAvailableRoute(permissions)} replace />;
+  }
+  return <InventariosPage />;
+}
+
+// Componente para proteger ruta de Admin (solo Administrador)
+function AdminUsuariosRoute() {
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  if (!user || !permissions.canSeeAdminUsuarios) {
+    return <Navigate to={getFirstAvailableRoute(permissions)} replace />;
+  }
+  return <UsuariosAdminPage />;
+}
+
+// Componente para proteger ruta de Gestión de Artes
+function GestionArtesRoute() {
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  if (!user || !permissions.canSeeGestionArtes) {
+    return <Navigate to="/campanas" replace />;
+  }
+  return <TareaSeguimientoPage />;
+}
+
+// Componente para proteger ruta de Dev Tickets (solo programadores)
+function DevTicketsRoute() {
+  const user = useAuthStore((state) => state.user);
+
+  if (!user || !DEV_USERS_IDS.includes(user.id)) {
+    return <Navigate to="/" replace />;
+  }
+  return <DevTicketsPage />;
+}
  
 function App() {
   return (
@@ -25,6 +101,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
           <Route
             element={
@@ -33,19 +110,21 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<DashboardPage />} />
+            <Route path="/" element={<HomeRoute />} />
             <Route path="/clientes" element={<ClientesPage />} />
             <Route path="/proveedores" element={<ProveedoresPage />} />
-            <Route path="/inventarios" element={<InventariosPage />} />
+            <Route path="/inventarios" element={<InventariosRoute />} />
             <Route path="/solicitudes" element={<SolicitudesPage />} />
             <Route path="/propuestas" element={<PropuestasPage />} />
             <Route path="/propuestas/compartir/:id" element={<CompartirPropuestaPage />} />
             <Route path="/campanas" element={<CampanasPage />} />
             <Route path="/campanas/detail/:id" element={<CampanaDetailPage />} />
-            <Route path="/campanas/:id/tareas" element={<TareaSeguimientoPage />} />
+            <Route path="/campanas/:id/tareas" element={<GestionArtesRoute />} />
             <Route path="/notificaciones" element={<NotificacionesPage />} />
             <Route path="/correos" element={<CorreosPage />} />
             <Route path="/perfil" element={<PerfilPage />} />
+            <Route path="/admin/usuarios" element={<AdminUsuariosRoute />} />
+            <Route path="/dev/tickets" element={<DevTicketsRoute />} />
           </Route>
 
           {/* Public route for clients - no auth required */}

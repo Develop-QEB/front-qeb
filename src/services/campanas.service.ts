@@ -1,6 +1,8 @@
 import api from '../lib/api';
 import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea, CampanaWithComments } from '../types';
 
+import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase } from '../store/environmentStore';
+import type { SapDatabase } from '../store/environmentStore';
 export type { CampanaWithComments };
 
 // SAP Configuration
@@ -26,6 +28,7 @@ export interface SAPDocumentLine {
 }
 
 export interface SAPDeliveryNote {
+  Series?: number;
   CardCode: string;
   NumAtCard: string;
   Comments: string;
@@ -42,6 +45,8 @@ export interface SAPDeliveryNote {
   U_CRM_R_S: string;
   U_CRM_Camp: string;
   U_TIPO_VENTA: string;
+  U_IMU_ART_APS: string;
+  U_IMU_CotNum: string;
   DocumentLines: SAPDocumentLine[];
 }
 
@@ -53,6 +58,25 @@ export interface SAPPostResponse {
     [key: string]: unknown;
   };
   error?: string;
+}
+
+export interface ImagenDigital {
+  id: number;
+  idReserva: number;
+  archivo: string;
+  archivoData?: string; // URL de Cloudinary o Base64 data URL
+  comentario: string;
+  estado: string;
+  respuesta: string;
+  spot: number;
+  tipo: 'image' | 'video';
+}
+
+export interface DigitalFileSummary {
+  idReserva: number;
+  totalArchivos: number;
+  countImagenes: number;
+  countVideos: number;
 }
 
 export interface InventarioReservado {
@@ -81,6 +105,9 @@ export interface InventarioReservado {
 
 export interface InventarioConAPS extends InventarioReservado {
   aps: number;
+  arte_aprobado?: string | null;
+  instalado?: boolean | null;
+  estatus_arte?: 'Carga Artes' | 'Revision Artes' | 'Artes Aprobados' | 'En Impresion' | 'Artes Recibidos' | 'Instalado' | null;
 }
 
 export interface InventarioConArte {
@@ -147,6 +174,8 @@ export interface SolicitudCara {
   caras_contraflujo: number | null;
   articulo: string | null;
   descuento: number | null;
+  autorizacion_dg?: string | null;
+  autorizacion_dcm?: string | null;
 }
 
 export interface CampanaUpdateData {
@@ -192,6 +221,8 @@ export interface TareaCampana {
   listado_inventario: string | null;
   proveedores_id: number | null;
   nombre_proveedores: string | null;
+  num_impresiones: number | null;
+  archivo_testigo: string | null;
   // Campos adicionales de la query con JOINs
   inventario_id?: string | null;
   APS?: string | null;
@@ -211,6 +242,13 @@ export interface CreateTareaData {
   ids_reservas?: string;
   proveedores_id?: number;
   nombre_proveedores?: string;
+  evidencia?: string;
+  // Campos para Impresión y Revisión de artes
+  catorcena_entrega?: string;
+  contenido?: string;
+  listado_inventario?: string;
+  impresiones?: Record<number, number>;
+  num_impresiones?: number;
 }
 
 export interface ArteExistente {
@@ -230,6 +268,7 @@ export interface OrdenMontajeCAT {
   fecha_fin_periodo: string | null;
   cliente: string | null;
   marca: string | null;
+  unidad_negocio: string | null;
   campania: string | null;
   numero_articulo: string | null;
   negociacion: 'BONIFICACION' | 'RENTA';
@@ -239,6 +278,8 @@ export interface OrdenMontajeCAT {
   campania_id: number | null;
   grupo_id: number | null;
   tipo_fila: string | null;
+  catorcena_numero: number | null;
+  catorcena_year: number | null;
 }
 
 export interface OrdenMontajeINVIAN {
@@ -263,6 +304,8 @@ export interface OrdenMontajeINVIAN {
   fecha_inicio: string | null;
   fecha_fin: string | null;
   status_campania: string | null;
+  catorcena_numero: number | null;
+  catorcena_year: number | null;
 }
 
 export interface ComentarioRevisionArte {
@@ -277,7 +320,8 @@ export interface ComentarioRevisionArte {
 // Función para construir el payload de DeliveryNote para SAP
 export function buildDeliveryNote(
   campana: CampanaWithComments,
-  inventarioAPS: InventarioConAPS[]
+  inventarioAPS: InventarioConAPS[],
+  sapDatabase?: string | null
 ): SAPDeliveryNote {
   // Obtener valores únicos de APS
   const uniqueAPS = [...new Set(inventarioAPS.map(item => item.aps))];
@@ -303,7 +347,7 @@ export function buildDeliveryNote(
       ItemCode: firstItem.articulo || '',
       Quantity: itemsWithThisAPS.length.toString(),
       TaxCode: 'A4',
-      UnitPrice: totalPrice.toString(),
+      UnitPrice: String(campana.precio || 0),
       CostingCode: '02-03-04',
       CostingCode2: '1',
       U_Cod_Sitio: 11,
@@ -318,23 +362,27 @@ export function buildDeliveryNote(
   });
 
   // Construir el objeto DeliveryNote completo
+  const series = sapDatabase ? getSeriesForSapDatabase(sapDatabase as SapDatabase) : 4;
   const deliveryNote: SAPDeliveryNote = {
-    CardCode: campana.articulo || 'IMU00351',
+    Series: series,
+    CardCode: campana.card_code || 'IMU00351',
     NumAtCard: campana.id?.toString() || '',
     Comments: campana.comentario_cambio_status || '',
-    DocDueDate: campana.fecha_fin || new Date().toISOString().split('T')[0],
-    SalesPersonCode: campana.T0_U_IDAsesor || '',
-    U_CIC: campana.cuic || '',
+    DocDueDate: (campana.fecha_fin || new Date().toISOString()).split('T')[0],
+    SalesPersonCode: campana.salesperson_code || campana.T0_U_IDAsesor || '',
+    U_CIC: String(campana.cuic || ''),
     U_CRM_Asesor: campana.T0_U_Asesor || '',
     U_CRM_Producto: campana.T2_U_Producto || '',
     U_CRM_Marca: campana.T2_U_Marca || '',
     U_CRM_Categoria: campana.T2_U_Categoria || '',
     U_CRM_Cliente: campana.T0_U_Cliente || '',
     U_CRM_Agencia: campana.T0_U_Agencia || '',
-    U_CRM_SAP: campana.articulo || 'IMU00351',
+    U_CRM_SAP: campana.card_code || 'IMU00351',
     U_CRM_R_S: campana.T0_U_RazonSocial || '',
     U_CRM_Camp: campana.nombre || campana.nombre_campania || '',
     U_TIPO_VENTA: 'Comercial',
+    U_IMU_ART_APS: campana.id?.toString() || '',
+    U_IMU_CotNum: uniqueAPS.length > 0 ? String(uniqueAPS[0]) : '',
     DocumentLines: documentLines,
   };
 
@@ -342,9 +390,13 @@ export function buildDeliveryNote(
 }
 
 // Función para hacer POST a SAP
-export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote): Promise<SAPPostResponse> {
+export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote, sapDatabase?: string | null): Promise<SAPPostResponse> {
   try {
-    const response = await fetch(`${SAP_BASE_URL}/delivery-notes-test`, {
+    const endpoint = sapDatabase
+      ? getDeliveryNotesEndpoint(sapDatabase as SapDatabase)
+      : `${SAP_BASE_URL}/delivery-notes-test`;
+
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -353,11 +405,36 @@ export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote): Prom
     });
 
     const data = await response.json();
+    console.log('========== SAP RESPONSE ==========');
+    console.log('Status:', response.status);
+    console.log('Endpoint:', endpoint);
+    console.log('Series:', deliveryNote.Series);
+    console.log('Response data:', JSON.stringify(data, null, 2));
+    console.log('==================================');
 
-    if (!response.ok) {
+    const envLabel = sapDatabase || 'TEST';
+
+    // Extraer mensaje de error detallado de SAP
+    
+    const getDetailedError = () => {
+      if (data.details?.error?.message?.value) {
+        const sapError = data.details.error.message.value;
+        if (sapError.includes('Invalid BP code')) {
+          const cardCode = sapError.match(/'([^']+)'/)?.[1] || '';
+          return `El CardCode '${cardCode}' no existe en el ambiente ${envLabel} de SAP`;
+        }
+        if (sapError.includes('is inactive')) {
+          return `Error SAP: ${sapError}`;
+        }
+        return sapError;
+      }
+      return data.message || data.error || `Error ${response.status}: ${response.statusText}`;
+    };
+
+    if (!response.ok || data.success === false) {
       return {
         success: false,
-        error: data.message || data.error || `Error ${response.status}: ${response.statusText}`,
+        error: getDetailedError(),
       };
     }
 
@@ -501,20 +578,16 @@ export const campanasService = {
   // NUEVOS ENDPOINTS PARA GESTION DE ARTES
   // ============================================================================
 
-  async getInventarioSinArte(id: number, formato: string = 'Tradicional'): Promise<InventarioConArte[]> {
-    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`, {
-      params: { formato },
-    });
+  async getInventarioSinArte(id: number): Promise<InventarioConArte[]> {
+    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener inventario sin arte');
     }
     return response.data.data;
   },
 
-  async getInventarioTestigos(id: number, formato: string = 'Tradicional'): Promise<InventarioConArte[]> {
-    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-testigos`, {
-      params: { formato },
-    });
+  async getInventarioTestigos(id: number): Promise<InventarioConArte[]> {
+    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-testigos`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener inventario para testigos');
     }
@@ -528,6 +601,98 @@ export const campanasService = {
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar arte');
+    }
+    return response.data.data;
+  },
+
+  async assignArteDigital(
+    id: number,
+    reservaIds: number[],
+    archivos: { archivo: string; spot: number; nombre: string; tipo: string }[]
+  ): Promise<{ message: string; affected: number }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/assign-arte-digital`, {
+      reservaIds,
+      archivos,
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al asignar arte digital');
+    }
+    return response.data.data;
+  },
+
+  async getImagenesDigitales(campanaId: number, reservaId: number | string): Promise<ImagenDigital[]> {
+    const response = await api.get<ApiResponse<ImagenDigital[]>>(`/campanas/${campanaId}/imagenes-digitales/${reservaId}`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener imágenes digitales');
+    }
+    return response.data.data;
+  },
+
+  async getDigitalFileSummaries(campanaId: number): Promise<DigitalFileSummary[]> {
+    const response = await api.get<ApiResponse<DigitalFileSummary[]>>(`/campanas/${campanaId}/digital-file-summaries`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener resumen de archivos digitales');
+    }
+    return response.data.data;
+  },
+
+  /**
+   * Eliminar archivos digitales
+   * Modo 1: Por imageIds (elimina registros específicos)
+   * Modo 2: Por archivos + reservaIds (elimina de múltiples reservas a la vez)
+   */
+  async deleteImagenesDigitales(
+    campanaId: number,
+    imageIds?: number[],
+    archivos?: string[],
+    reservaIds?: number[]
+  ): Promise<void> {
+    const data: { imageIds?: number[]; archivos?: string[]; reservaIds?: number[] } = {};
+
+    if (archivos && archivos.length > 0 && reservaIds && reservaIds.length > 0) {
+      // Modo 2: Eliminar por archivos + reservaIds
+      data.archivos = archivos;
+      data.reservaIds = reservaIds;
+    } else if (imageIds && imageIds.length > 0) {
+      // Modo 1: Eliminar por imageIds
+      data.imageIds = imageIds;
+    } else {
+      throw new Error('Se requiere imageIds o (archivos + reservaIds)');
+    }
+
+    const response = await api.delete<ApiResponse<{ message: string }>>(`/campanas/${campanaId}/imagenes-digitales`, {
+      data,
+    });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar archivos digitales');
+    }
+  },
+
+  async addArteDigital(
+    campanaId: number,
+    reservaIds: number[],
+    archivos: Array<{ archivo: string; spot: number; nombre: string; tipo: string }>
+  ): Promise<{ message: string; affected: number; files: string[] }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number; files: string[] }>>(
+      `/campanas/${campanaId}/add-arte-digital`,
+      { reservaIds, archivos }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al agregar arte digital');
+    }
+    return response.data.data;
+  },
+
+  async checkReservasTareas(id: number, reservaIds: number[]): Promise<{
+    hasTareas: boolean;
+    tareas: Array<{ id: number; titulo: string | null; tipo: string | null; estatus: string | null; responsable: string | null }>;
+  }> {
+    const response = await api.post<ApiResponse<{
+      hasTareas: boolean;
+      tareas: Array<{ id: number; titulo: string | null; tipo: string | null; estatus: string | null; responsable: string | null }>;
+    }>>(`/campanas/${id}/check-reservas-tareas`, { reservaIds });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al verificar tareas');
     }
     return response.data.data;
   },
@@ -547,10 +712,25 @@ export const campanasService = {
     return response.data.data;
   },
 
+  async uploadTestigoFile(file: File): Promise<{ url: string; filename: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post<ApiResponse<{ url: string; filename: string; originalName: string; size: number; mimetype: string }>>('/uploads/testigo', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al subir archivo de testigo');
+    }
+    return response.data.data;
+  },
+
   async updateArteStatus(
     id: number,
     reservaIds: number[],
-    status: 'Aprobado' | 'Rechazado',
+    status: 'Aprobado' | 'Rechazado' | 'Pendiente',
     comentarioRechazo?: string
   ): Promise<{ message: string; affected: number }> {
     const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/arte-status`, {
@@ -615,6 +795,13 @@ export const campanasService = {
       throw new Error(response.data.error || 'Error al actualizar tarea');
     }
     return response.data.data;
+  },
+
+  async deleteTarea(id: number, tareaId: number): Promise<void> {
+    const response = await api.delete<ApiResponse<void>>(`/campanas/${id}/tareas/${tareaId}`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar tarea');
+    }
   },
 
   async getArtesExistentes(id: number): Promise<ArteExistente[]> {
@@ -699,4 +886,111 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
       throw new Error(response.data.error || 'Error al eliminar comentario');
     }
   },
+
+  // ============================================================================
+  // MÉTODOS PARA GESTIÓN DE RESERVAS (copiados de propuestas)
+  // ============================================================================
+
+  async getReservasForModal(campanaId: number): Promise<ReservaModalItem[]> {
+    const response = await api.get<ApiResponse<ReservaModalItem[]>>(`/campanas/${campanaId}/reservas-modal`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener reservas');
+    }
+    return response.data.data;
+  },
+
+  async createReservas(
+    campanaId: number,
+    data: {
+      reservas: Array<{
+        inventario_id: number;
+        tipo: string;
+        latitud: number;
+        longitud: number;
+      }>;
+      solicitudCaraId: number;
+      clienteId: number;
+      fechaInicio: string;
+      fechaFin: string;
+      agruparComoCompleto?: boolean;
+    }
+  ): Promise<{ calendarioId: number; reservasCreadas: number }> {
+    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number }>>(
+      `/campanas/${campanaId}/reservas`,
+      data
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear reservas');
+    }
+    return response.data.data;
+  },
+
+  async deleteReservas(campanaId: number, reservaIds: number[]): Promise<void> {
+    const response = await api.delete<ApiResponse<void>>(`/campanas/${campanaId}/reservas`, {
+      data: { reservaIds },
+    });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar reservas');
+    }
+  },
+
+  async updateCara(campanaId: number, caraId: number, data: CaraUpdateData): Promise<SolicitudCara> {
+    const response = await api.patch<ApiResponse<SolicitudCara>>(`/campanas/${campanaId}/caras/${caraId}`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar cara');
+    }
+    return response.data.data;
+  },
+
+  async createCara(campanaId: number, data: CaraUpdateData): Promise<SolicitudCara> {
+    const response = await api.post<ApiResponse<SolicitudCara>>(`/campanas/${campanaId}/caras`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear cara');
+    }
+    return response.data.data;
+  },
+
+  async deleteCara(campanaId: number, caraId: number): Promise<void> {
+    const response = await api.delete<ApiResponse<void>>(`/campanas/${campanaId}/caras/${caraId}`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar cara');
+    }
+  },
 };
+
+// Interfaces adicionales para reservas
+export interface ReservaModalItem {
+  reserva_id: number;
+  espacio_id: number;
+  inventario_id: number;
+  codigo_unico: string;
+  tipo_de_cara: string;
+  latitud: number;
+  longitud: number;
+  plaza: string;
+  formato: string;
+  ubicacion: string | null;
+  estatus: string;
+  grupo_completo_id: number | null;
+  solicitud_cara_id: number;
+  aps: number | null;
+}
+
+export interface CaraUpdateData {
+  ciudad?: string;
+  estados?: string;
+  tipo?: string;
+  flujo?: string;
+  bonificacion?: number;
+  caras?: number;
+  nivel_socioeconomico?: string;
+  formato?: string;
+  costo?: number;
+  tarifa_publica?: number;
+  inicio_periodo?: string;
+  fin_periodo?: string;
+  caras_flujo?: number;
+  caras_contraflujo?: number;
+  articulo?: string;
+  descuento?: number;
+}

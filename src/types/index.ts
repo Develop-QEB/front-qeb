@@ -1,3 +1,11 @@
+// Equipo del usuario
+export interface UserEquipo {
+  id: number;
+  nombre: string;
+  color: string | null;
+  rol_equipo: string | null;
+}
+
 // Usuario - basado en tabla 'usuario'
 export interface User {
   id: number;
@@ -7,6 +15,7 @@ export interface User {
   area: string;
   puesto: string;
   foto_perfil?: string | null;
+  equipos?: UserEquipo[];
 }
 
 export interface AuthResponse {
@@ -64,6 +73,12 @@ export interface Cliente {
   T2_U_Producto: string | null;
   T2_U_ValidFrom: string | null;
   T2_U_ValidTo: string | null;
+  // SAP database origin
+  sap_database?: string | null;
+  card_code?: string | null;
+  salesperson_code?: number | null;
+  ACA_U_SAPCode?: string | null;
+  ASESOR_U_SAPCode_Original?: string | null;
 }
 
 // Proveedor - basado en tabla 'proveedores'
@@ -175,6 +190,9 @@ export interface Solicitud {
   IMU: number;
   archivo: string | null;
   tipo_archivo: string | null;
+  card_code?: string | null;
+  salesperson_code?: number | null;
+  sap_database?: string | null;
 }
 
 export interface SolicitudStats {
@@ -290,6 +308,10 @@ export interface Campana {
   catorcena_fin_num: number | null;
   catorcena_fin_anio: number | null;
   has_aps: boolean | number | null;
+  // SAP integration fields
+  card_code?: string | null;
+  salesperson_code?: number | null;
+  sap_database?: string | null;
 }
 
 export interface CampanaStats {
@@ -365,6 +387,7 @@ export interface Notificacion {
   usuario_id: number;
   titulo: string;
   mensaje: string;
+  contenido?: string | null;
   tipo: string;
   leida: boolean;
   referencia_tipo: 'solicitud' | 'propuesta' | 'campana' | 'sistema' | null;
@@ -377,6 +400,9 @@ export interface Notificacion {
   asignado?: string;
   id_asignado?: number;
   estatus?: string;
+  id_solicitud?: string;
+  id_propuesta?: string;
+  campania_id?: number | null;
 }
 
 export interface NotificacionStats {

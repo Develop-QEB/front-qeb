@@ -5,7 +5,7 @@ import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
   ArrowUpDown, Calendar, DollarSign, FileText, Building2, MessageSquare,
   CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock,
-  Pencil, Trash2, Package, MapPin, Eye, Plus
+  Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -15,15 +15,19 @@ import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { AssignInventarioModal } from './AssignInventarioModal';
 import { UserAvatar } from '../../components/ui/user-avatar';
+import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
+import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 
 // Status badge colors
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Por aprobar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Compartir': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
   'Abierto': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
   'Ajuste Cto-Cliente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
   'Pase a ventas': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'Atendido': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+  // Legacy (datos históricos)
+  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+  'Por aprobar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
   'Activa': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
   'Aprobada': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
   'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
@@ -31,7 +35,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }
 
 const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
 
-const STATUS_OPTIONS = ['Por aprobar', 'Compartir', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas', 'Pendiente'];
+const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas'];
 
 // Chart colors for dynamic status
 const CHART_COLORS = [
@@ -503,20 +507,34 @@ interface StatusModalProps {
   onClose: () => void;
   propuesta: Propuesta | null;
   onStatusChange: () => void;
+  allowedStatuses?: string[] | null; // null = todos, array = solo esos
 }
 
-function StatusModal({ isOpen, onClose, propuesta, onStatusChange }: StatusModalProps) {
+function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatuses }: StatusModalProps) {
+  // Filtrar opciones de estatus según permisos
+  const availableStatuses = allowedStatuses ? STATUS_OPTIONS.filter(s => allowedStatuses.includes(s)) : STATUS_OPTIONS;
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
+  // Query para obtener las caras de la propuesta y verificar autorizaciones pendientes
+  const { data: caras } = useQuery({
+    queryKey: ['propuesta-caras', propuesta?.id],
+    queryFn: () => propuestasService.getCaras(propuesta!.id),
+    enabled: isOpen && !!propuesta,
+  });
+
+  // Verificar si hay caras pendientes de autorización
+  const pendientesDg = caras?.filter(c => c.autorizacion_dg === 'pendiente').length || 0;
+  const pendientesDcm = caras?.filter(c => c.autorizacion_dcm === 'pendiente').length || 0;
+  const tienePendientes = pendientesDg > 0 || pendientesDcm > 0;
+
   const { data: comments, refetch: refetchComments } = useQuery({
     queryKey: ['propuesta-comments', propuesta?.id],
     queryFn: () => propuestasService.getComments(propuesta!.id),
     enabled: isOpen && !!propuesta,
-    staleTime: 0,
-    gcTime: 0,
+    staleTime: 60000, // 1 minuto - evita refetches innecesarios
   });
 
   // Reset comments when propuesta changes
@@ -588,6 +606,21 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange }: StatusModal
 
         {/* Status Selector */}
         <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-800/30">
+          {/* Alerta de autorizaciones pendientes */}
+          {tienePendientes && (
+            <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-amber-200 font-medium">Autorización pendiente</p>
+                <p className="text-xs text-amber-300/70 mt-1">
+                  Esta propuesta tiene {pendientesDg + pendientesDcm} cara(s) pendientes de autorización.
+                  {pendientesDg > 0 && ` DG: ${pendientesDg}.`}
+                  {pendientesDcm > 0 && ` DCM: ${pendientesDcm}.`}
+                  {' '}No se puede cambiar a "Pase a ventas" o "Aprobada" hasta que todas las caras sean autorizadas.
+                </p>
+              </div>
+            </div>
+          )}
           <label className="block text-sm text-zinc-400 mb-2">Cambiar estado a:</label>
           <div className="flex items-center gap-3">
             <select
@@ -595,13 +628,26 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange }: StatusModal
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             >
-              {STATUS_OPTIONS.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
+              {/* Mostrar estado actual si no está en las opciones permitidas */}
+              {propuesta.status && !availableStatuses.includes(propuesta.status) && (
+                <option value={propuesta.status} disabled>{propuesta.status} (actual)</option>
+              )}
+              {availableStatuses.map(s => {
+                const isBlockedByAuth = tienePendientes && (s === 'Aprobada' || s === 'Pase a ventas');
+                return (
+                  <option
+                    key={s}
+                    value={s}
+                    disabled={isBlockedByAuth}
+                  >
+                    {s}{isBlockedByAuth ? ' (Requiere autorización)' : ''}
+                  </option>
+                );
+              })}
             </select>
             <button
               onClick={handleChangeStatus}
-              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending}
+              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || (tienePendientes && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas'))}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
             >
               {updateStatusMutation.isPending ? (
@@ -684,15 +730,34 @@ interface ApproveModalProps {
   onSuccess: () => void;
 }
 
+// Puestos permitidos en el modal de aprobar propuesta
+const ALLOWED_PUESTOS_APROBAR = [
+  'Analista de Servicio al Cliente',
+  'Coordinador de Diseño',
+  'Diseñadores',
+  'Diseñador',
+];
+
 function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalProps) {
   const queryClient = useQueryClient();
   const [precio, setPrecio] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<{ id: number; nombre: string }[]>([]);
   const [userSearch, setUserSearch] = useState('');
 
-  const { data: users } = useQuery({
-    queryKey: ['users-for-assign'],
-    queryFn: () => solicitudesService.getUsers(),
+  // WebSocket para actualizar usuarios en tiempo real
+  useSocketEquipos();
+
+  // Fetch all users to identify Tráfico users for exclusion from pre-selection
+  const { data: allUsers } = useQuery({
+    queryKey: ['solicitudes-users', 'all-users-approve'],
+    queryFn: () => solicitudesService.getUsers(undefined, false),
+    enabled: isOpen,
+  });
+
+  // Fetch team-filtered users for the selectable list
+  const { data: teamUsers } = useQuery({
+    queryKey: ['solicitudes-users', 'team-filtered-approve'],
+    queryFn: () => solicitudesService.getUsers(undefined, true),
     enabled: isOpen,
   });
 
@@ -711,29 +776,69 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
     },
   });
 
-  // Initialize with current assigned users
+  // Initialize with: 1) Original assignees (except Tráfico) + 2) All team users with allowed positions
   useEffect(() => {
-    if (propuesta && isOpen) {
+    if (propuesta && isOpen && allUsers && teamUsers) {
       setPrecio(propuesta.precio_simulado?.toString() || propuesta.precio?.toString() || '');
-      // Parse current assigned users
+
+      const combinedUsers: { id: number; nombre: string }[] = [];
+      const addedIds = new Set<number>();
+
+      // Get IDs of Tráfico area/puesto users to exclude them
+      const traficoUserIds = new Set(
+        allUsers
+          .filter(u => {
+            const area = u.area?.toLowerCase() || '';
+            const puesto = u.puesto?.toLowerCase() || '';
+            return area.includes('tráfico') || area.includes('trafico') ||
+                   puesto.includes('tráfico') || puesto.includes('trafico');
+          })
+          .map(u => u.id)
+      );
+
+      // 1. Add original assigned users, excluding Tráfico
       if (propuesta.asignado && propuesta.id_asignado) {
         const nombres = propuesta.asignado.split(',').map(n => n.trim());
         const ids = propuesta.id_asignado.split(',').map(id => parseInt(id.trim()));
-        const current = nombres.map((nombre, idx) => ({ id: ids[idx] || 0, nombre }));
-        setSelectedUsers(current);
-      } else {
-        setSelectedUsers([]);
+        ids.forEach((id, idx) => {
+          if (!traficoUserIds.has(id) && !addedIds.has(id) && nombres[idx]) {
+            combinedUsers.push({ id, nombre: nombres[idx] });
+            addedIds.add(id);
+          }
+        });
       }
+
+      // 2. Add all team users with allowed positions (if not already added)
+      teamUsers.forEach(u => {
+        const hasAllowedPuesto = ALLOWED_PUESTOS_APROBAR.some(
+          puesto => u.puesto?.toLowerCase() === puesto.toLowerCase()
+        );
+        if (hasAllowedPuesto && !addedIds.has(u.id)) {
+          combinedUsers.push({ id: u.id, nombre: u.nombre });
+          addedIds.add(u.id);
+        }
+      });
+
+      setSelectedUsers(combinedUsers);
     }
-  }, [propuesta, isOpen]);
+  }, [propuesta, isOpen, allUsers, teamUsers]);
 
   const filteredUsers = useMemo(() => {
-    if (!users) return [];
-    return users.filter((u: UserOption) =>
-      u.nombre.toLowerCase().includes(userSearch.toLowerCase()) ||
-      u.area.toLowerCase().includes(userSearch.toLowerCase())
-    );
-  }, [users, userSearch]);
+    if (!teamUsers) return [];
+    // Filter by allowed positions (from MY TEAM) and apply search filter
+    return teamUsers.filter((u: UserOption) => {
+      // Check if user has an allowed position
+      const hasAllowedPuesto = ALLOWED_PUESTOS_APROBAR.some(
+        puesto => u.puesto?.toLowerCase() === puesto.toLowerCase()
+      );
+      if (!hasAllowedPuesto) return false; // Only show users with allowed positions
+
+      // Apply search filter
+      return u.nombre.toLowerCase().includes(userSearch.toLowerCase()) ||
+        u.area?.toLowerCase().includes(userSearch.toLowerCase()) ||
+        u.puesto?.toLowerCase().includes(userSearch.toLowerCase());
+    });
+  }, [teamUsers, userSearch]);
 
   const toggleUser = (user: UserOption) => {
     setSelectedUsers(prev => {
@@ -871,6 +976,13 @@ export function PropuestasPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  // Socket para actualizar usuarios en tiempo real
+  useSocketEquipos();
+  // Socket para actualizar propuestas cuando cambian autorizaciones
+  useSocketPropuestas();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -946,6 +1058,7 @@ export function PropuestasPage() {
         yearFin,
         catorcenaInicio,
         catorcenaFin,
+        soloAtendidas: true,
       }),
   });
 
@@ -1111,6 +1224,13 @@ export function PropuestasPage() {
 
   const renderPropuestaRow = (item: Propuesta & any, index: number) => {
     const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
+    // Bloquear todas las acciones cuando el status es "Activa" o "Aprobada" (para todos los usuarios)
+    const isActiva = item.status === 'Activa';
+    const isAprobada = item.status === 'Aprobada';
+    // Roles comerciales: bloquear acciones cuando el status es "Abierto"
+    const rolesLockedByAbierto = ['Asesor Comercial', 'Director Comercial Aeropuerto', 'Asesor Comercial Aeropuerto'];
+    const isLockedByAbierto = rolesLockedByAbierto.includes(user?.rol || '') && item.status === 'Abierto';
+    const isLocked = isActiva || isLockedByAbierto || isAprobada;
 
     return (
       <tr key={`prop-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
@@ -1121,7 +1241,16 @@ export function PropuestasPage() {
           <span className="text-zinc-400 text-sm">{formatDate(item.fecha)}</span>
         </td>
         <td className="px-4 py-3">
-          <span className="text-white text-sm font-medium">{item.marca_nombre || item.articulo || '-'}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-white text-sm font-medium">{item.marca_nombre || item.articulo || '-'}</span>
+            {item.sap_database && (
+              <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
+                item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+              }`}>{item.sap_database}</span>
+            )}
+          </div>
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-1.5 align-middle">
@@ -1132,12 +1261,7 @@ export function PropuestasPage() {
           </div>
         </td>
         <td className="px-4 py-3">
-          <span
-            className="text-white text-sm block truncate cursor-default max-w-[250px]"
-            title={item.nombre_campania || item.descripcion || '-'}
-          >
-            {item.nombre_campania || item.descripcion || '-'}
-          </span>
+          <span className="text-white text-sm truncate max-w-[250px] block" title={item.nombre_campania || item.descripcion || '-'}>{item.nombre_campania || item.descripcion || '-'}</span>
         </td>
         <td className="px-4 py-3">
           <span className="text-zinc-300 text-xs">{item.asignado || 'Sin asignar'}</span>
@@ -1166,48 +1290,58 @@ export function PropuestasPage() {
           )}
         </td>
         <td className="px-4 py-3">
-          <button
-            onClick={() => setStatusPropuesta(item)}
-            className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
-          >
-            {item.status}
-          </button>
+          {permissions.canEditPropuestaStatus && !isLocked ? (
+            <button
+              onClick={() => setStatusPropuesta(item)}
+              className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+            >
+              {item.status}
+            </button>
+          ) : (
+            <span className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+              {item.status}
+            </span>
+          )}
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setApprovePropuesta(item)}
-              disabled={item.status === 'Activa'}
-              className={`p-2 rounded-lg border transition-all ${item.status === 'Activa'
-                ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
-                : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40'
-                }`}
-              title={item.status === 'Activa' ? 'Propuesta ya está activa' : 'Aprobar propuesta'}
-            >
-              <CheckCircle className="h-3.5 w-3.5" />
-            </button>
+            {permissions.canAprobarPropuesta && (
+              <button
+                onClick={() => setApprovePropuesta(item)}
+                disabled={item.status !== 'Pase a ventas' || isLocked}
+                className={`p-2 rounded-lg border transition-all ${item.status !== 'Pase a ventas' || isLocked
+                  ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+                  : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40'
+                  }`}
+                title={isLocked ? 'No disponible en este estatus' : (item.status !== 'Pase a ventas' ? 'Solo disponible con estatus Pase a ventas' : 'Aprobar propuesta')}
+              >
+                <CheckCircle className="h-3.5 w-3.5" />
+              </button>
+            )}
             <button
               onClick={() => { setSelectedPropuestaForAssign(item); setShowAssignModal(true); }}
-              disabled={item.status === 'Activa'}
-              className={`p-2 rounded-lg border transition-all ${item.status === 'Activa'
+              disabled={permissions.canAsignarInventario && (item.status === 'Aprobada' || isLocked)}
+              className={`p-2 rounded-lg border transition-all ${permissions.canAsignarInventario && (item.status === 'Aprobada' || isLocked)
                 ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
                 : 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
                 }`}
-              title={item.status === 'Activa' ? 'No disponible para propuestas activas' : 'Asignar a Inventario'}
+              title={permissions.canAsignarInventario ? (isLocked ? 'No disponible en este estatus' : (item.status === 'Aprobada' ? 'No disponible para propuestas aprobadas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : 'Asignar a Inventario'))) : 'Ver Propuesta'}
             >
-              <MapPinned className="h-3.5 w-3.5" />
+              {permissions.canAsignarInventario && item.status !== 'Pase a ventas' ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
-            <button
-              disabled={item.status !== 'Compartir'}
-              onClick={() => item.status === 'Compartir' && navigate(`/propuestas/compartir/${item.id}`)}
-              className={`p-2 rounded-lg border transition-all ${item.status === 'Compartir'
-                ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40'
-                : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
-                }`}
-              title={item.status === 'Compartir' ? 'Compartir propuesta' : 'Solo disponible en status Compartir'}
-            >
-              <Share2 className="h-3.5 w-3.5" />
-            </button>
+            {permissions.canCompartirPropuesta && (
+              <button
+                disabled={(item.status !== 'Aprobada' && item.status !== 'Atendido' && item.status !== 'Pase a ventas') || isLocked}
+                onClick={() => !isLocked && (item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas') && navigate(`/propuestas/compartir/${item.id}`)}
+                className={`p-2 rounded-lg border transition-all ${(item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas') && !isLocked
+                  ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40'
+                  : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50'
+                  }`}
+                title={isLocked ? 'No disponible en este estatus' : (item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas' ? 'Compartir propuesta' : 'Solo disponible en status Aprobada o Pase a ventas')}
+              >
+                <Share2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </td>
       </tr>
@@ -1292,10 +1426,10 @@ export function PropuestasPage() {
           <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl -mr-5 -mb-5 pointer-events-none group-hover:bg-amber-500/20 transition-all duration-500" />
             <div>
-              <p className="text-zinc-400 text-sm font-medium mb-1">Por Aprobar / Pendiente</p>
+              <p className="text-zinc-400 text-sm font-medium mb-1">Sin Aprobar</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-bold text-amber-400">
-                  {((stats?.byStatus['Por aprobar'] || 0) + (stats?.byStatus['Pendiente'] || 0)).toLocaleString()}
+                  {((stats?.total || 0) - (stats?.byStatus['Pase a ventas'] || 0)).toLocaleString()}
                 </h3>
                 <span className="text-xs text-amber-500/80 font-medium">Atención requerida</span>
               </div>
@@ -1305,7 +1439,7 @@ export function PropuestasPage() {
             <div className="mt-4 w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-amber-500 to-orange-500"
-                style={{ width: `${Math.min(100, (((stats?.byStatus['Por aprobar'] || 0) + (stats?.byStatus['Pendiente'] || 0)) / (stats?.total || 1)) * 100)}%` }}
+                style={{ width: `${Math.min(100, (((stats?.total || 0) - (stats?.byStatus['Pase a ventas'] || 0)) / (stats?.total || 1)) * 100)}%` }}
               />
             </div>
           </div>
@@ -1581,7 +1715,7 @@ export function PropuestasPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Inversión</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Inicio</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Fin</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
@@ -1664,6 +1798,7 @@ export function PropuestasPage() {
           queryClient.invalidateQueries({ queryKey: ['propuestas'] });
           queryClient.invalidateQueries({ queryKey: ['propuestas-stats'] });
         }}
+        allowedStatuses={permissions.allowedPropuestaStatuses}
       />
 
       <ApproveModal
@@ -1681,6 +1816,7 @@ export function PropuestasPage() {
           isOpen={showAssignModal}
           onClose={() => { setShowAssignModal(false); setSelectedPropuestaForAssign(null); }}
           propuesta={selectedPropuestaForAssign}
+          readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas'}
         />
       )}
     </div>

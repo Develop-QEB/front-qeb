@@ -1,23 +1,164 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  X, Download, Filter, ChevronDown, ChevronUp, Calendar, Loader2, FileSpreadsheet,
-  Building2, Users, ClipboardList
+  X, Download, Filter, ChevronDown, ChevronRight, Calendar, Loader2, FileSpreadsheet,
+  Monitor,
+  Building2, ClipboardList, Layers, ArrowUpDown, ArrowUp, ArrowDown, Plus, Trash2, Check
 } from 'lucide-react';
 import { campanasService, OrdenMontajeCAT, OrdenMontajeINVIAN } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import * as XLSX from 'xlsx';
 
+// URL base para archivos estáticos
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const STATIC_URL = API_URL.replace(/\/api$/, '');
+
+// Helper para normalizar URLs de archivos
+const getFileUrl = (url: string | undefined | null): string | null => {
+  if (!url) return null;
+
+  // Si ya es una URL completa (http/https), usarla tal cual
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    // Si es localhost, convertirla a la URL del entorno actual
+    if (url.includes('localhost')) {
+      try {
+        const urlObj = new URL(url);
+        return `${STATIC_URL}${urlObj.pathname}`;
+      } catch {
+        const match = url.match(/localhost:\d+(.+)/);
+        if (match) return `${STATIC_URL}${match[1]}`;
+      }
+    }
+    return url;
+  }
+
+  // Si es una ruta relativa, agregar la URL base
+  if (url.startsWith('/')) {
+    return `${STATIC_URL}${url}`;
+  }
+
+  // Si no tiene slash al inicio, agregarlo
+  return `${STATIC_URL}/${url}`;
+};
+
 interface OrdenesMontajeModalProps {
   isOpen: boolean;
   onClose: () => void;
+  canExport?: boolean;
 }
 
-type TabType = 'cat' | 'invian';
+type TabType = 'cat' | 'digital' | 'invian';
 
 // Status options for filter
-const STATUS_OPTIONS = ['activa', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
+const STATUS_OPTIONS = ['Aprobada', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
+
+// Advanced Filter Types
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
+
+interface AdvancedFilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: string;
+  label: string;
+}
+
+// CAT Filter Fields
+const CAT_FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'tipo', label: 'Tipo' },
+  { field: 'asesor', label: 'Asesor' },
+  { field: 'cliente', label: 'Cliente' },
+  { field: 'campania', label: 'Campaña' },
+  { field: 'numero_articulo', label: 'Artículo' },
+  { field: 'negociacion', label: 'Negociación' },
+];
+
+// INVIAN Filter Fields
+const INVIAN_FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'Campania', label: 'Campaña' },
+  { field: 'Anunciante', label: 'Anunciante' },
+  { field: 'Operacion', label: 'Operación' },
+  { field: 'Vendedor', label: 'Vendedor' },
+  { field: 'Ciudad', label: 'Ciudad' },
+  { field: 'Unidad', label: 'Unidad' },
+];
+
+const FILTER_OPERATORS: { value: FilterOperator; label: string }[] = [
+  { value: '=', label: 'Igual a' },
+  { value: '!=', label: 'Diferente de' },
+  { value: 'contains', label: 'Contiene' },
+  { value: 'not_contains', label: 'No contiene' },
+];
+
+// CAT Grouping options
+type CATGroupByField = 'plaza' | 'tipo' | 'cliente' | 'campania' | 'numero_articulo';
+
+const CAT_GROUPINGS: { field: CATGroupByField; label: string }[] = [
+  { field: 'tipo', label: 'Tipo' },
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'cliente', label: 'Cliente' },
+  { field: 'campania', label: 'Campaña' },
+  { field: 'numero_articulo', label: 'Artículo' },
+];
+
+// INVIAN Grouping options
+type INVIANGroupByField = 'Anunciante' | 'Operacion' | 'Vendedor' | 'Ciudad';
+
+const INVIAN_GROUPINGS: { field: INVIANGroupByField; label: string }[] = [
+  { field: 'Anunciante', label: 'Anunciante' },
+  { field: 'Operacion', label: 'Operación' },
+  { field: 'Vendedor', label: 'Vendedor' },
+  { field: 'Ciudad', label: 'Ciudad' },
+];
+
+// CAT Sort Fields
+const CAT_SORT_FIELDS = [
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'tipo', label: 'Tipo' },
+  { field: 'cliente', label: 'Cliente' },
+  { field: 'campania', label: 'Campaña' },
+  { field: 'monto_total', label: 'Monto Total' },
+  { field: 'caras', label: 'Caras' },
+];
+
+// INVIAN Sort Fields
+const INVIAN_SORT_FIELDS = [
+  { field: 'Campania', label: 'Campaña' },
+  { field: 'Anunciante', label: 'Anunciante' },
+  { field: 'Ciudad', label: 'Ciudad' },
+  { field: 'PrecioPorCara', label: 'Precio/Cara' },
+];
+
+// Apply advanced filters function
+function applyAdvancedFilters<T extends Record<string, unknown>>(data: T[], filters: AdvancedFilterCondition[]): T[] {
+  if (filters.length === 0) return data;
+
+  return data.filter(item => {
+    return filters.every(filter => {
+      const value = String(item[filter.field] || '').toLowerCase();
+      const filterValue = filter.value.toLowerCase();
+
+      switch (filter.operator) {
+        case '=':
+          return value === filterValue;
+        case '!=':
+          return value !== filterValue;
+        case 'contains':
+          return value.includes(filterValue);
+        case 'not_contains':
+          return !value.includes(filterValue);
+        default:
+          return true;
+      }
+    });
+  });
+}
 
 // Helper to get initials for avatar
 function getInitials(name: string | null): string {
@@ -43,20 +184,41 @@ function formatDate(dateStr: string | null): string {
   return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProps) {
+export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: OrdenesMontajeModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('cat');
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Filters
+  // Period filters (kept for API query)
   const [status, setStatus] = useState('');
   const [yearInicio, setYearInicio] = useState<number | undefined>(undefined);
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
-  const [showFilters, setShowFilters] = useState(false);
 
-  // Grouping for CAT
-  const [groupByCAT, setGroupByCAT] = useState<string>('');
+  // Multiselect catorcena filter
+  const [selectedCatorcenas, setSelectedCatorcenas] = useState<string[]>([]);
+  const [fechaInicio, setFechaInicio] = useState<string>('');
+  const [fechaFin, setFechaFin] = useState<string>('');
+  const [showCatorcenaPopup, setShowCatorcenaPopup] = useState(false);
+
+  // CAT filters/sort/group
+  const [catFilters, setCatFilters] = useState<AdvancedFilterCondition[]>([]);
+  const [catGroupings, setCatGroupings] = useState<CATGroupByField[]>([]);
+  const [catSortField, setCatSortField] = useState<string | null>(null);
+  const [catSortDirection, setCatSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [catExpandedGroups, setCatExpandedGroups] = useState<Set<string>>(new Set());
+
+  // INVIAN filters/sort/group
+  const [invianFilters, setInvianFilters] = useState<AdvancedFilterCondition[]>([]);
+  const [invianGroupings, setInvianGroupings] = useState<INVIANGroupByField[]>([]);
+  const [invianSortField, setInvianSortField] = useState<string | null>(null);
+  const [invianSortDirection, setInvianSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [invianExpandedGroups, setInvianExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Popup visibility
+  const [showFilterPopup, setShowFilterPopup] = useState(false);
+  const [showGroupPopup, setShowGroupPopup] = useState(false);
+  const [showSortPopup, setShowSortPopup] = useState(false);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -122,40 +284,256 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
     return catorcenas;
   }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
 
+  // Catorcena multiselect options - generated from actual data
+  const catorcenaOptions = useMemo(() => {
+    const catorcenasSet = new Map<string, { numero: number; year: number }>();
+
+    // Get catorcenas from CAT data
+    if (catData) {
+      catData.forEach(item => {
+        if (item.catorcena_numero && item.catorcena_year) {
+          const id = `${item.catorcena_numero}-${item.catorcena_year}`;
+          if (!catorcenasSet.has(id)) {
+            catorcenasSet.set(id, { numero: item.catorcena_numero, year: item.catorcena_year });
+          }
+        }
+      });
+    }
+
+    // Get catorcenas from INVIAN data
+    if (invianData) {
+      invianData.forEach(item => {
+        if (item.catorcena_numero && item.catorcena_year) {
+          const id = `${item.catorcena_numero}-${item.catorcena_year}`;
+          if (!catorcenasSet.has(id)) {
+            catorcenasSet.set(id, { numero: item.catorcena_numero, year: item.catorcena_year });
+          }
+        }
+      });
+    }
+
+    return Array.from(catorcenasSet.entries()).map(([id, data]) => ({
+      id,
+      label: `Catorcena ${data.numero} del ${data.year}`,
+      numero: data.numero,
+      year: data.year,
+    })).sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.numero - a.numero;
+    });
+  }, [catData, invianData]);
+
+    // Filtered and sorted CAT data
+  const filteredCATData = useMemo(() => {
+    if (!catData) return [];
+    let items = [...catData];
+
+    // Filter by date range if set
+    if (fechaInicio || fechaFin) {
+      const startDate = fechaInicio ? new Date(fechaInicio) : null;
+      const endDate = fechaFin ? new Date(fechaFin) : null;
+      // Ajustar endDate al final del día
+      if (endDate) endDate.setHours(23, 59, 59, 999);
+      items = items.filter(item => {
+        if (!item.fecha_inicio_periodo) return false;
+        const itemDate = new Date(item.fecha_inicio_periodo);
+        if (startDate && itemDate < startDate) return false;
+        if (endDate && itemDate > endDate) return false;
+        return true;
+      });
+    }
+
+    // Filter by selected catorcenas if any
+    if (selectedCatorcenas.length > 0) {
+      items = items.filter(item => {
+        if (!item.catorcena_numero || !item.catorcena_year) return false;
+        const catorcenaId = `${item.catorcena_numero}-${item.catorcena_year}`;
+        return selectedCatorcenas.includes(catorcenaId);
+      });
+    }
+
+    // Apply advanced filters
+    if (catFilters.length > 0) {
+      items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], catFilters) as unknown as OrdenMontajeCAT[];
+    }
+
+    // Apply sorting
+    if (catSortField && items.length > 0) {
+      items.sort((a, b) => {
+        const aVal = a[catSortField as keyof OrdenMontajeCAT];
+        const bVal = b[catSortField as keyof OrdenMontajeCAT];
+        const aStr = String(aVal || '').toLowerCase();
+        const bStr = String(bVal || '').toLowerCase();
+        if (aStr < bStr) return catSortDirection === 'asc' ? -1 : 1;
+        if (aStr > bStr) return catSortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return items;
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection]);
+
+  // Filter Digital data (CAT without VIA PUBLICA)
+  const filteredDigitalData = useMemo(() => {
+    if (!catData) return [];
+    let items = [...catData];
+
+    // Exclude VIA PUBLICA
+    items = items.filter(item => {
+      const unidad = (item.unidad_negocio || '').toUpperCase();
+      return !unidad.includes('VIA PUBLICA') && !unidad.includes('VÍA PÚBLICA');
+    });
+
+    // Filter by date range if set
+    if (fechaInicio || fechaFin) {
+      const startDate = fechaInicio ? new Date(fechaInicio) : null;
+      const endDate = fechaFin ? new Date(fechaFin) : null;
+      // Ajustar endDate al final del día
+      if (endDate) endDate.setHours(23, 59, 59, 999);
+      items = items.filter(item => {
+        if (!item.fecha_inicio_periodo) return false;
+        const itemDate = new Date(item.fecha_inicio_periodo);
+        if (startDate && itemDate < startDate) return false;
+        if (endDate && itemDate > endDate) return false;
+        return true;
+      });
+    }
+
+    // Filter by selected catorcenas if any
+    if (selectedCatorcenas.length > 0) {
+      items = items.filter(item => {
+        if (!item.catorcena_numero || !item.catorcena_year) return false;
+        const catorcenaId = `${item.catorcena_numero}-${item.catorcena_year}`;
+        return selectedCatorcenas.includes(catorcenaId);
+      });
+    }
+
+    // Apply advanced filters (reuse cat filters for digital)
+    if (catFilters.length > 0) {
+      items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], catFilters) as unknown as OrdenMontajeCAT[];
+    }
+
+    // Sort
+    if (catSortField) {
+      items.sort((a, b) => {
+        const aVal = a[catSortField as keyof OrdenMontajeCAT];
+        const bVal = b[catSortField as keyof OrdenMontajeCAT];
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return catSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        const strA = String(aVal).toLowerCase();
+        const strB = String(bVal).toLowerCase();
+        return catSortDirection === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+      });
+    }
+
+    return items;
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection]);
+
   // Group CAT data
+  const getCATGroupValue = (item: OrdenMontajeCAT, field: CATGroupByField): string => {
+    const val = item[field as keyof OrdenMontajeCAT];
+    return val ? String(val) : `Sin ${CAT_GROUPINGS.find(g => g.field === field)?.label || 'asignar'}`;
+  };
+
   const groupedCATData = useMemo(() => {
-    if (!catData || !groupByCAT) return null;
+    if (catGroupings.length === 0 || !filteredCATData.length) return null;
 
     const groups: Record<string, OrdenMontajeCAT[]> = {};
-    catData.forEach(item => {
-      let key = 'Sin asignar';
-      if (groupByCAT === 'plaza') key = item.plaza || 'Sin plaza';
-      else if (groupByCAT === 'tipo') key = item.tipo || 'Sin tipo';
-      else if (groupByCAT === 'cliente') key = item.cliente || 'Sin cliente';
-      else if (groupByCAT === 'campania') key = item.campania || 'Sin campaña';
-      else if (groupByCAT === 'articulo') key = item.numero_articulo || 'Sin artículo';
-
+    filteredCATData.forEach(item => {
+      const key = getCATGroupValue(item, catGroupings[0]);
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     });
 
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
-  }, [catData, groupByCAT]);
+  }, [filteredCATData, catGroupings]);
 
-  // Calculate totals - ensure numeric addition
+  // Filtered and sorted INVIAN data
+  const filteredINVIANData = useMemo(() => {
+    if (!invianData) return [];
+    let items = [...invianData];
+
+    // Filter by date range if set
+    if (fechaInicio || fechaFin) {
+      const startDate = fechaInicio ? new Date(fechaInicio) : null;
+      const endDate = fechaFin ? new Date(fechaFin) : null;
+      // Ajustar endDate al final del día
+      if (endDate) endDate.setHours(23, 59, 59, 999);
+      items = items.filter(item => {
+        if (!item.fecha_inicio) return false;
+        const itemDate = new Date(item.fecha_inicio);
+        if (startDate && itemDate < startDate) return false;
+        if (endDate && itemDate > endDate) return false;
+        return true;
+      });
+    }
+
+    // Filter by selected catorcenas if any
+    if (selectedCatorcenas.length > 0) {
+      items = items.filter(item => {
+        if (!item.catorcena_numero || !item.catorcena_year) return false;
+        const catorcenaId = `${item.catorcena_numero}-${item.catorcena_year}`;
+        return selectedCatorcenas.includes(catorcenaId);
+      });
+    }
+
+    // Apply advanced filters
+    if (invianFilters.length > 0) {
+      items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], invianFilters) as unknown as OrdenMontajeINVIAN[];
+    }
+
+    // Apply sorting
+    if (invianSortField && items.length > 0) {
+      items.sort((a, b) => {
+        const aVal = a[invianSortField as keyof OrdenMontajeINVIAN];
+        const bVal = b[invianSortField as keyof OrdenMontajeINVIAN];
+        const aStr = String(aVal || '').toLowerCase();
+        const bStr = String(bVal || '').toLowerCase();
+        if (aStr < bStr) return invianSortDirection === 'asc' ? -1 : 1;
+        if (aStr > bStr) return invianSortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return items;
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection]);
+
+  // Group INVIAN data
+  const getINVIANGroupValue = (item: OrdenMontajeINVIAN, field: INVIANGroupByField): string => {
+    const val = item[field as keyof OrdenMontajeINVIAN];
+    return val ? String(val) : `Sin ${INVIAN_GROUPINGS.find(g => g.field === field)?.label || 'asignar'}`;
+  };
+
+  const groupedINVIANData = useMemo(() => {
+    if (invianGroupings.length === 0 || !filteredINVIANData.length) return null;
+
+    const groups: Record<string, OrdenMontajeINVIAN[]> = {};
+    filteredINVIANData.forEach(item => {
+      const key = getINVIANGroupValue(item, invianGroupings[0]);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  }, [filteredINVIANData, invianGroupings]);
+
+  // Calculate totals - ensure numeric addition (based on filtered data)
   const catTotals = useMemo(() => {
-    if (!catData || catData.length === 0) return { caras: 0, tarifa: 0, monto: 0 };
+    if (!filteredCATData || filteredCATData.length === 0) return { caras: 0, tarifa: 0, monto: 0 };
     return {
-      caras: catData.reduce((sum, i) => sum + (Number(i.caras) || 0), 0),
-      tarifa: catData.reduce((sum, i) => sum + (Number(i.tarifa) || 0), 0),
-      monto: catData.reduce((sum, i) => sum + (Number(i.monto_total) || 0), 0),
+      caras: filteredCATData.reduce((sum, i) => sum + (Number(i.caras) || 0), 0),
+      tarifa: filteredCATData.reduce((sum, i) => sum + (Number(i.tarifa) || 0), 0),
+      monto: filteredCATData.reduce((sum, i) => sum + (Number(i.monto_total) || 0), 0),
     };
-  }, [catData]);
+  }, [filteredCATData]);
 
   // Export to XLSX
   const handleExportXLSX = () => {
-    if (activeTab === 'cat' && catData) {
-      const wsData = catData.map(item => ({
+    if (activeTab === 'cat' && filteredCATData.length > 0) {
+      const wsData = filteredCATData.map(item => ({
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
         'Asesor': item.asesor || '',
@@ -164,6 +542,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
         'Fecha Fin': item.fecha_fin_periodo ? formatDate(item.fecha_fin_periodo) : '',
         'Cliente': item.cliente || '',
         'Marca': item.marca || '',
+        'Unidad de Negocio': item.unidad_negocio || '',
         'Campaña': item.campania || '',
         'Artículo': item.numero_articulo || '',
         'Negociación': item.negociacion || '',
@@ -176,8 +555,30 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Orden Montaje CAT');
       XLSX.writeFile(wb, `orden_montaje_cat_${new Date().toISOString().split('T')[0]}.xlsx`);
-    } else if (activeTab === 'invian' && invianData) {
-      const wsData = invianData.map(item => ({
+    } else if (activeTab === 'digital' && filteredDigitalData.length > 0) {
+      const wsData = filteredDigitalData.map(item => ({
+        'Plaza': item.plaza || '',
+        'Tipo': item.tipo || '',
+        'Asesor': item.asesor || '',
+        'APS': item.aps_especifico || '',
+        'Fecha Inicio': item.fecha_inicio_periodo ? new Date(item.fecha_inicio_periodo).toLocaleDateString() : '',
+        'Fecha Fin': item.fecha_fin_periodo ? new Date(item.fecha_fin_periodo).toLocaleDateString() : '',
+        'Cliente': item.cliente || '',
+        'Marca': item.marca || '',
+        'Unidad de Negocio': item.unidad_negocio || '',
+        'Campaña': item.campania || '',
+        'No. Artículo': item.numero_articulo || '',
+        'Negociación': item.negociacion || '',
+        'Caras': item.caras || 0,
+        'Tarifa': Number(item.tarifa) || 0,
+        'Monto Total': Number(item.monto_total) || 0,
+      }));
+      const ws = XLSX.utils.json_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Digital');
+      XLSX.writeFile(wb, `orden_montaje_digital_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } else if (activeTab === 'invian' && filteredINVIANData.length > 0) {
+      const wsData = filteredINVIANData.map(item => ({
         'Campaña': item.Campania || '',
         'Anunciante': item.Anunciante || '',
         'Operación': item.Operacion || '',
@@ -189,7 +590,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
         'Fin o Segmento': item.FinSegmento || '',
         'Arte': item.Arte || '',
         'Código de arte (Opcional)': item.CodigoArte || '',
-        'Arte Url (Opcional)': item.ArteUrl || '',
+        'Arte Url (Opcional)': getFileUrl(item.ArteUrl) || '',
         'Origen del arte (Opcional)': item.OrigenArte || '',
         'Unidad': item.Unidad || '',
         'Cara': item.Cara || '',
@@ -205,19 +606,148 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
     }
   };
 
-  const clearFilters = () => {
+  // Get unique values for filter dropdowns
+  const getCATUniqueValues = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    if (!catData) return valuesMap;
+    CAT_FILTER_FIELDS.forEach(fieldConfig => {
+      const values = new Set<string>();
+      catData.forEach(item => {
+        const val = item[fieldConfig.field as keyof OrdenMontajeCAT];
+        if (val !== null && val !== undefined && val !== '') values.add(String(val));
+      });
+      valuesMap[fieldConfig.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [catData]);
+
+  const getINVIANUniqueValues = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    if (!invianData) return valuesMap;
+    INVIAN_FILTER_FIELDS.forEach(fieldConfig => {
+      const values = new Set<string>();
+      invianData.forEach(item => {
+        const val = item[fieldConfig.field as keyof OrdenMontajeINVIAN];
+        if (val !== null && val !== undefined && val !== '') values.add(String(val));
+      });
+      valuesMap[fieldConfig.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [invianData]);
+
+  // Filter management callbacks
+  const addFilter = useCallback(() => {
+    const fields = activeTab === 'cat' || activeTab === 'digital' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
+    const newFilter: AdvancedFilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: fields[0].field,
+      operator: '=',
+      value: '',
+    };
+    if (activeTab === 'cat' || activeTab === 'digital') {
+      setCatFilters(prev => [...prev, newFilter]);
+    } else {
+      setInvianFilters(prev => [...prev, newFilter]);
+    }
+  }, [activeTab]);
+
+  const updateFilter = useCallback((id: string, updates: Partial<AdvancedFilterCondition>) => {
+    if (activeTab === 'cat' || activeTab === 'digital') {
+      setCatFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+    } else {
+      setInvianFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+    }
+  }, [activeTab]);
+
+  const removeFilter = useCallback((id: string) => {
+    if (activeTab === 'cat' || activeTab === 'digital') {
+      setCatFilters(prev => prev.filter(f => f.id !== id));
+    } else {
+      setInvianFilters(prev => prev.filter(f => f.id !== id));
+    }
+  }, [activeTab]);
+
+  const clearCurrentFilters = useCallback(() => {
+    if (activeTab === 'cat' || activeTab === 'digital') {
+      setCatFilters([]);
+    } else {
+      setInvianFilters([]);
+    }
+  }, [activeTab]);
+
+  // Grouping toggle
+  const toggleGrouping = useCallback((field: string) => {
+    if (activeTab === 'cat' || activeTab === 'digital') {
+      setCatGroupings(prev => {
+        if (prev.includes(field as CATGroupByField)) {
+          return prev.filter(f => f !== field);
+        }
+        return [field as CATGroupByField];
+      });
+    } else {
+      setInvianGroupings(prev => {
+        if (prev.includes(field as INVIANGroupByField)) {
+          return prev.filter(f => f !== field);
+        }
+        return [field as INVIANGroupByField];
+      });
+    }
+  }, [activeTab]);
+
+  // Toggle expanded groups
+  const toggleGroup = useCallback((groupName: string) => {
+    if (activeTab === 'cat' || activeTab === 'digital') {
+      setCatExpandedGroups(prev => {
+        const next = new Set(prev);
+        if (next.has(groupName)) next.delete(groupName);
+        else next.add(groupName);
+        return next;
+      });
+    } else {
+      setInvianExpandedGroups(prev => {
+        const next = new Set(prev);
+        if (next.has(groupName)) next.delete(groupName);
+        else next.add(groupName);
+        return next;
+      });
+    }
+  }, [activeTab]);
+
+  // Clear all filters
+  const clearAllFilters = useCallback(() => {
     setStatus('');
     setYearInicio(undefined);
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
-    setGroupByCAT('');
-  };
+    setSelectedCatorcenas([]);
+    setFechaInicio('');
+    setFechaFin('');
+    setCatFilters([]);
+    setCatGroupings([]);
+    setCatSortField(null);
+    setInvianFilters([]);
+    setInvianGroupings([]);
+    setInvianSortField(null);
+  }, []);
+
+  // Current tab data
+  const currentFilters = activeTab === 'cat' || activeTab === 'digital' ? catFilters : invianFilters;
+  const currentGroupings = activeTab === 'cat' || activeTab === 'digital' ? catGroupings : invianGroupings;
+  const currentSortField = activeTab === 'cat' || activeTab === 'digital' ? catSortField : invianSortField;
+  const currentSortDirection = activeTab === 'cat' || activeTab === 'digital' ? catSortDirection : invianSortDirection;
+  const currentFilterFields = activeTab === 'cat' || activeTab === 'digital' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
+  const currentGroupOptions = activeTab === 'cat' || activeTab === 'digital' ? CAT_GROUPINGS : INVIAN_GROUPINGS;
+  const currentSortOptions = activeTab === 'cat' || activeTab === 'digital' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
+  const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' ? getCATUniqueValues : getINVIANUniqueValues;
+
+  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin;
 
   if (!isOpen) return null;
 
-  const isLoading = activeTab === 'cat' ? isLoadingCAT : isLoadingINVIAN;
-  const dataCount = activeTab === 'cat' ? (catData?.length || 0) : (invianData?.length || 0);
+  const isLoading = activeTab === 'cat' || activeTab === 'digital' ? isLoadingCAT : isLoadingINVIAN;
+  const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'digital' ? filteredDigitalData.length : filteredINVIANData.length;
+  const totalCount = activeTab === 'cat' ? (catData?.length || 0) : activeTab === 'digital' ? filteredDigitalData.length : (invianData?.length || 0);
 
   return (
     <div
@@ -248,8 +778,9 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
           </button>
         </div>
 
-        {/* Tabs - Redesigned */}
-        <div className="flex items-center gap-4 px-6 py-3 border-b border-zinc-800/50 bg-zinc-900/80">
+        {/* Tabs and Controls */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-800/50 bg-zinc-900/80">
+          {/* Tabs */}
           <div className="flex p-1 bg-zinc-800/80 rounded-xl border border-zinc-700/50">
             <button
               onClick={() => setActiveTab('cat')}
@@ -260,7 +791,18 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
               }`}
             >
               <Building2 className="h-4 w-4" />
-              CAT - Ocupación
+              CAT
+            </button>
+            <button
+              onClick={() => setActiveTab('digital')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'digital'
+                  ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/25'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Monitor className="h-4 w-4" />
+              Digital
             </button>
             <button
               onClick={() => setActiveTab('invian')}
@@ -271,167 +813,250 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
               }`}
             >
               <FileSpreadsheet className="h-4 w-4" />
-              INVIAN QEB
+              INVIAN
             </button>
           </div>
 
-          <div className="flex-1" />
-
-          {/* Filter toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-              showFilters
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:text-zinc-200'
-            }`}
-          >
-            <Filter className="h-4 w-4" />
-            Filtros
-            {showFilters ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
-
-          {/* Data count */}
-          <span className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 text-xs font-medium border border-purple-500/30">
-            {dataCount} registros
-          </span>
-
-          {/* Export button */}
-          <button
-            onClick={handleExportXLSX}
-            disabled={isLoading || dataCount === 0}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-green-500/20 text-green-300 border border-green-500/40 hover:bg-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
-            <Download className="h-4 w-4" />
-            Exportar XLSX
-          </button>
-        </div>
-
-        {/* Collapsible Filters */}
-        {showFilters && (
-          <div className="px-6 py-3 border-b border-zinc-800/50 bg-zinc-800/30 animate-in slide-in-from-top-2 duration-200">
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Status */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Status</span>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  className="px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 min-w-[140px]"
-                >
-                  <option value="">Todos</option>
-                  {STATUS_OPTIONS.map(s => (
-                    <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="h-8 w-px bg-zinc-700" />
-
-              {/* Year Inicio */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> Período Inicio
-                </span>
-                <div className="flex gap-2">
-                  <select
-                    value={yearInicio || ''}
-                    onChange={(e) => {
-                      const val = e.target.value ? parseInt(e.target.value) : undefined;
-                      setYearInicio(val);
-                      setCatorcenaInicio(undefined);
-                    }}
-                    className="px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                  >
-                    <option value="">Año</option>
-                    {years.map(y => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={catorcenaInicio || ''}
-                    onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                    disabled={!yearInicio}
-                    className="px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
-                  >
-                    <option value="">Cat.</option>
-                    {catorcenasInicioOptions.map((c: Catorcena) => (
-                      <option key={c.id} value={c.numero_catorcena}>{c.numero_catorcena}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <span className="text-zinc-600 text-lg">→</span>
-
-              {/* Year Fin */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> Período Fin
-                </span>
-                <div className="flex gap-2">
-                  <select
-                    value={yearFin || ''}
-                    onChange={(e) => {
-                      const val = e.target.value ? parseInt(e.target.value) : undefined;
-                      setYearFin(val);
-                      setCatorcenaFin(undefined);
-                    }}
-                    className="px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                  >
-                    <option value="">Año</option>
-                    {years.map(y => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={catorcenaFin || ''}
-                    onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                    disabled={!yearFin}
-                    className="px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
-                  >
-                    <option value="">Cat.</option>
-                    {catorcenasFinOptions.map((c: Catorcena) => (
-                      <option key={c.id} value={c.numero_catorcena}>{c.numero_catorcena}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Group by (only for CAT) */}
-              {activeTab === 'cat' && (
-                <>
-                  <div className="h-8 w-px bg-zinc-700" />
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Agrupar por</span>
-                    <select
-                      value={groupByCAT}
-                      onChange={(e) => setGroupByCAT(e.target.value)}
-                      className="px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 min-w-[120px]"
-                    >
-                      <option value="">Sin agrupar</option>
-                      <option value="tipo">Tipo</option>
-                      <option value="plaza">Plaza</option>
-                      <option value="cliente">Cliente</option>
-                      <option value="campania">Campaña</option>
-                      <option value="articulo">Artículo</option>
-                    </select>
-                  </div>
-                </>
-              )}
-
-              <div className="flex-1" />
-
-              {/* Clear filters */}
+          {/* Right side controls */}
+          <div className="flex items-center gap-3">
+            {/* Filters Button */}
+            <div className="relative">
               <button
-                onClick={clearFilters}
-                className="text-xs text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-zinc-800"
+                onClick={() => setShowFilterPopup(!showFilterPopup)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  hasActiveFilters
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700'
+                }`}
               >
-                Limpiar filtros
+                <Filter className="h-4 w-4" />
+                Filtros
+                {hasActiveFilters && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">
+                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
+                  </span>
+                )}
               </button>
+
+              {showFilterPopup && (
+                <div className="absolute right-0 top-full mt-2 z-[60] w-[480px] bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl">
+                  <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-white">Filtros y Opciones</span>
+                    <button onClick={() => setShowFilterPopup(false)} className="text-zinc-400 hover:text-white">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="p-4 space-y-4 max-h-[50vh] overflow-y-auto">
+                    {/* Date Range */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-medium text-zinc-400">Periodo de Fechas</label>
+                        {(fechaInicio || fechaFin) && (
+                          <button
+                            onClick={() => { setFechaInicio(''); setFechaFin(''); }}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Limpiar
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <label className="text-[10px] text-zinc-500 mb-1 block">Desde</label>
+                          <input
+                            type="date"
+                            value={fechaInicio}
+                            onChange={(e) => {
+                              setFechaInicio(e.target.value);
+                              // Clear catorcenas when using date range (mutually exclusive)
+                              if (e.target.value) setSelectedCatorcenas([]);
+                            }}
+                            className={`w-full px-3 py-2 rounded-lg text-sm border text-white focus:outline-none ${
+                              fechaInicio
+                                ? 'bg-purple-900/30 border-purple-500/50 focus:border-purple-400'
+                                : 'bg-zinc-800 border-zinc-700 focus:border-purple-500'
+                            }`}
+                          />
+                        </div>
+                        <div className="flex flex-col items-center justify-center pt-4">
+                          <div className="w-8 h-0.5 bg-gradient-to-r from-purple-500 to-purple-400 rounded"></div>
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[10px] text-zinc-500 mb-1 block">Hasta</label>
+                          <input
+                            type="date"
+                            value={fechaFin}
+                            onChange={(e) => {
+                              setFechaFin(e.target.value);
+                              // Clear catorcenas when using date range (mutually exclusive)
+                              if (e.target.value) setSelectedCatorcenas([]);
+                            }}
+                            className={`w-full px-3 py-2 rounded-lg text-sm border text-white focus:outline-none ${
+                              fechaFin
+                                ? 'bg-purple-900/30 border-purple-500/50 focus:border-purple-400'
+                                : 'bg-zinc-800 border-zinc-700 focus:border-purple-500'
+                            }`}
+                          />
+                        </div>
+                      </div>
+                      {(fechaInicio && fechaFin) && (
+                        <div className="mt-2 px-3 py-2 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-purple-300">Rango seleccionado:</span>
+                            <span className="text-white font-medium">
+                              {new Date(fechaInicio).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              {' → '}
+                              {new Date(fechaFin).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Catorcenas */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-medium text-zinc-400">Catorcenas ({selectedCatorcenas.length} seleccionadas)</label>
+                        {selectedCatorcenas.length > 0 && (
+                          <button
+                            onClick={() => setSelectedCatorcenas([])}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Limpiar
+                          </button>
+                        )}
+                      </div>
+                      {(fechaInicio || fechaFin) && (
+                        <div className="mb-2 px-2 py-1.5 bg-amber-900/20 border border-amber-500/30 rounded-lg">
+                          <span className="text-xs text-amber-400">Limpia el rango de fechas para seleccionar catorcenas</span>
+                        </div>
+                      )}
+                      <div className={`flex flex-wrap gap-1.5 max-h-[100px] overflow-y-auto p-2 bg-zinc-800/50 rounded-lg border border-zinc-700/50 ${(fechaInicio || fechaFin) ? 'opacity-50 pointer-events-none' : ''}`}>
+                        {catorcenaOptions.map((option) => (
+                          <button
+                            key={option.id}
+                            onClick={() => {
+                              // Clear date range when selecting catorcenas (mutually exclusive)
+                              setFechaInicio('');
+                              setFechaFin('');
+                              setSelectedCatorcenas(prev =>
+                                prev.includes(option.id)
+                                  ? prev.filter(id => id !== option.id)
+                                  : [...prev, option.id]
+                              );
+                            }}
+                            disabled={!!(fechaInicio || fechaFin)}
+                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                              selectedCatorcenas.includes(option.id)
+                                ? 'bg-purple-600 text-white'
+                                : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                        {catorcenaOptions.length === 0 && (
+                          <span className="text-xs text-zinc-500">No hay catorcenas</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Sort */}
+                    <div>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">Ordenar por</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={currentSortField || ''}
+                          onChange={(e) => {
+                            const val = e.target.value || null;
+                            if (activeTab === 'cat' || activeTab === 'digital') {
+                              setCatSortField(val);
+                            } else {
+                              setInvianSortField(val);
+                            }
+                          }}
+                          className="flex-1 px-3 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-white focus:border-purple-500 focus:outline-none"
+                        >
+                          <option value="">Sin ordenar</option>
+                          {currentSortOptions.map(opt => (
+                            <option key={opt.field} value={opt.field}>{opt.label}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => {
+                            if (activeTab === 'cat' || activeTab === 'digital') {
+                              setCatSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                            } else {
+                              setInvianSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                            }
+                          }}
+                          className="px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white hover:bg-zinc-700 text-sm"
+                        >
+                          {currentSortDirection === 'asc' ? '↑ Asc' : '↓ Desc'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Group */}
+                    <div>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">Agrupar por</label>
+                      <select
+                        value={currentGroupings[0] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (activeTab === 'cat' || activeTab === 'digital') {
+                            setCatGroupings(val ? [val as CATGroupByField] : []);
+                          } else {
+                            setInvianGroupings(val ? [val as INVIANGroupByField] : []);
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-white focus:border-purple-500 focus:outline-none"
+                      >
+                        <option value="">Sin agrupar</option>
+                        {currentGroupOptions.map(opt => (
+                          <option key={opt.field} value={opt.field}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="p-4 border-t border-zinc-800 flex justify-between">
+                    <button
+                      onClick={clearAllFilters}
+                      className="px-4 py-2 text-sm text-red-400 hover:text-red-300"
+                    >
+                      Limpiar todo
+                    </button>
+                    <button
+                      onClick={() => setShowFilterPopup(false)}
+                      className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-500"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Count */}
+            <span className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-700">
+              {dataCount}{dataCount !== totalCount && ` / ${totalCount}`}
+            </span>
+
+            {/* Export */}
+            {canExport && (
+              <button
+                onClick={handleExportXLSX}
+                disabled={isLoading || dataCount === 0}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-green-600 hover:bg-green-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="h-4 w-4" />
+                Exportar
+              </button>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Content */}
         <div
@@ -456,6 +1081,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Fin</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">U. Negocio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Artículo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Negociación</th>
@@ -468,33 +1094,43 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                   {groupedCATData ? (
                     groupedCATData.map(([groupName, items]) => (
                       <React.Fragment key={groupName}>
-                        <tr className="bg-purple-500/10 border-b border-purple-500/20">
-                          <td colSpan={14} className="px-4 py-2">
-                            <span className="font-semibold text-white text-sm">{groupName}</span>
-                            <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">
-                              {items.length} registros
-                            </span>
-                            <span className="ml-2 text-xs text-zinc-400">
-                              Caras: {items.reduce((sum, i) => sum + (Number(i.caras) || 0), 0).toLocaleString()}
-                            </span>
-                            <span className="ml-2 text-xs text-emerald-400">
-                              Total: ${items.reduce((sum, i) => sum + (Number(i.monto_total) || 0), 0).toLocaleString()}
-                            </span>
+                        <tr
+                          onClick={() => toggleGroup(groupName)}
+                          className="bg-purple-500/10 border-b border-purple-500/20 cursor-pointer hover:bg-purple-500/15 transition-colors"
+                        >
+                          <td colSpan={13} className="px-4 py-2">
+                            <div className="flex items-center gap-2">
+                              {catExpandedGroups.has(groupName) ? (
+                                <ChevronDown className="h-4 w-4 text-purple-400" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-purple-400" />
+                              )}
+                              <span className="font-semibold text-white text-sm">{groupName}</span>
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">
+                                {items.length} registros
+                              </span>
+                              <span className="text-xs text-zinc-400">
+                                Caras: {items.reduce((sum, i) => sum + (Number(i.caras) || 0), 0).toLocaleString()}
+                              </span>
+                              <span className="text-xs text-emerald-400">
+                                Total: ${items.reduce((sum, i) => sum + (Number(i.monto_total) || 0), 0).toLocaleString()}
+                              </span>
+                            </div>
                           </td>
                         </tr>
-                        {items.map((item, idx) => (
+                        {catExpandedGroups.has(groupName) && items.map((item, idx) => (
                           <CATRow key={`${groupName}-${idx}`} item={item} />
                         ))}
                       </React.Fragment>
                     ))
                   ) : (
-                    catData?.map((item, idx) => (
+                    filteredCATData.map((item, idx) => (
                       <CATRow key={idx} item={item} />
                     ))
                   )}
-                  {(!catData || catData.length === 0) && (
+                  {filteredCATData.length === 0 && (
                     <tr>
-                      <td colSpan={14} className="px-4 py-12 text-center">
+                      <td colSpan={13} className="px-4 py-12 text-center">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
                           <ClipboardList className="w-8 h-8 text-purple-400" />
                         </div>
@@ -503,7 +1139,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                     </tr>
                   )}
                 </tbody>
-                {catData && catData.length > 0 && (
+                {filteredCATData.length > 0 && (
                   <tfoot className="sticky bottom-0 bg-zinc-900/95 backdrop-blur-sm">
                     <tr className="border-t-2 border-purple-500/40">
                       <td colSpan={11} className="px-3 py-3 text-right text-sm font-semibold text-purple-300">
@@ -523,6 +1159,45 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                 )}
               </table>
             </div>
+          ) : activeTab === 'digital' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1400px]">
+                <thead className="sticky top-0 z-10">
+                  <tr className="border-b border-orange-500/20 bg-gradient-to-r from-orange-900/40 via-amber-900/30 to-orange-900/40 backdrop-blur-sm">
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Plaza</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Tipo</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Asesor</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">APS</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">F. Inicio</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">F. Fin</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Cliente</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Marca</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">U. Negocio</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Campaña</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Artículo</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Negociación</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Caras</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Tarifa</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Monto Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDigitalData.map((item, idx) => (
+                    <CATRow key={idx} item={item} />
+                  ))}
+                  {filteredDigitalData.length === 0 && (
+                    <tr>
+                      <td colSpan={15} className="px-4 py-12 text-center">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-orange-500/10 mb-4">
+                          <Monitor className="w-8 h-8 text-orange-400" />
+                        </div>
+                        <p className="text-zinc-500">No se encontraron registros digitales</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1600px]">
@@ -536,7 +1211,7 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Vendedor</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Inicio/Periodo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Fin/Segmento</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Arte</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Archivo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Unidad</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cara</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Ciudad</th>
@@ -544,10 +1219,38 @@ export function OrdenesMontajeModal({ isOpen, onClose }: OrdenesMontajeModalProp
                   </tr>
                 </thead>
                 <tbody>
-                  {invianData?.map((item, idx) => (
-                    <INVIANRow key={idx} item={item} />
-                  ))}
-                  {(!invianData || invianData.length === 0) && (
+                  {groupedINVIANData ? (
+                    groupedINVIANData.map(([groupName, items]) => (
+                      <React.Fragment key={groupName}>
+                        <tr
+                          onClick={() => toggleGroup(groupName)}
+                          className="bg-cyan-500/10 border-b border-cyan-500/20 cursor-pointer hover:bg-cyan-500/15 transition-colors"
+                        >
+                          <td colSpan={13} className="px-4 py-2">
+                            <div className="flex items-center gap-2">
+                              {invianExpandedGroups.has(groupName) ? (
+                                <ChevronDown className="h-4 w-4 text-cyan-400" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-cyan-400" />
+                              )}
+                              <span className="font-semibold text-white text-sm">{groupName}</span>
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-cyan-500/20 text-cyan-300">
+                                {items.length} registros
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {invianExpandedGroups.has(groupName) && items.map((item, idx) => (
+                          <INVIANRow key={`${groupName}-${idx}`} item={item} />
+                        ))}
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    filteredINVIANData.map((item, idx) => (
+                      <INVIANRow key={idx} item={item} />
+                    ))
+                  )}
+                  {filteredINVIANData.length === 0 && (
                     <tr>
                       <td colSpan={13} className="px-4 py-12 text-center">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
@@ -594,6 +1297,7 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
       <td className="px-3 py-2 text-xs text-zinc-400">{formatDate(item.fecha_fin_periodo)}</td>
       <td className="px-3 py-2 text-xs text-zinc-300 max-w-[120px] truncate" title={item.cliente || ''}>{item.cliente || '-'}</td>
       <td className="px-3 py-2 text-xs text-zinc-300">{item.marca || '-'}</td>
+      <td className="px-3 py-2 text-xs text-orange-300">{item.unidad_negocio || '-'}</td>
       <td className="px-3 py-2 text-xs text-white font-medium max-w-[150px] truncate" title={item.campania || ''}>{item.campania || '-'}</td>
       <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.numero_articulo || '-'}</td>
       <td className="px-3 py-2">
@@ -638,7 +1342,24 @@ function INVIANRow({ item }: { item: OrdenMontajeINVIAN }) {
       </td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.InicioPeriodo || '-'}</td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.FinSegmento || '-'}</td>
-      <td className="px-3 py-2 text-xs text-cyan-300">{item.Arte || '-'}</td>
+      <td className="px-3 py-2 text-xs">
+        {(() => {
+          const arteUrl = getFileUrl(item.ArteUrl);
+          return arteUrl ? (
+            <a
+              href={arteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:text-blue-300 hover:underline truncate max-w-[150px] block"
+              title={arteUrl}
+            >
+              {arteUrl.split('/').pop() || 'Ver archivo'}
+            </a>
+          ) : (
+            <span className="text-zinc-500">-</span>
+          );
+        })()}
+      </td>
       <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.Unidad || '-'}</td>
       <td className="px-3 py-2 text-xs text-zinc-300">{item.Cara || '-'}</td>
       <td className="px-3 py-2 text-xs text-zinc-300">{item.Ciudad || '-'}</td>

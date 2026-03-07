@@ -6,10 +6,11 @@ import {
   Calendar, User, FileText, X, List, LayoutGrid, CalendarDays,
   PanelRight, FolderOpen, Clock, CheckCircle, AlertCircle, Circle,
   MessageSquare, Send, Plus, Pencil, Trash2, StickyNote,
-  Users, Tag, Building2, Download, Table2, ExternalLink
+  Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList,
+  Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
-import { notificacionesService } from '../../services/notificaciones.service';
+import { notificacionesService, CaraAutorizacion, ResumenAutorizacion } from '../../services/notificaciones.service';
 import { notasService, NotaPersonal } from '../../services/notas.service';
 import { Notificacion, ComentarioTarea } from '../../types';
 import { formatDate } from '../../lib/utils';
@@ -17,19 +18,171 @@ import { STATUS_CONFIG, getTipoConfig, getStatusConfig } from '../../lib/taskCon
 import { useAuthStore } from '../../store/authStore';
 import { TableroView } from './KanbanView';
 import { UserAvatar } from '../../components/ui/user-avatar';
+import { useSocketNotificaciones } from '../../hooks/useSocket';
 
 // ============ TIPOS ============
+type ContentType = 'notificaciones' | 'tareas';
 type ViewType = 'tablero' | 'lista' | 'calendario' | 'notas';
 type GroupByType = 'estatus' | 'tipo' | 'fecha' | 'responsable' | 'asignado';
-type OrderByType = 'fecha_fin' | 'fecha_inicio' | 'titulo' | 'estatus';
+type OrderByType = 'fecha_fin' | 'fecha_inicio' | 'created_at' | 'titulo' | 'estatus';
 type DateFilterType = 'all' | 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month';
+type QuickFilter = 'all' | 'pendientes' | 'finalizadas' | 'leidas' | 'no_leidas' | null;
+
+
+// Tipos para filtros avanzados (estilo Proveedores)
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
+
+interface FilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: keyof Notificacion;
+  label: string;
+  type: 'string' | 'number' | 'date';
+}
+
+type QuickFilterKey =
+  | 'all'
+  | 'pendientes'
+  | 'finalizadas'
+  | 'leidas'      
+  | 'no_leidas';  
+
+const QUICK_FILTERS_NOTIFICACIONES: { key: QuickFilter; label: string }[] = [
+  { key: 'all', label: 'Todas' },
+  { key: 'leidas', label: 'Leídas' },
+  { key: 'no_leidas', label: 'No leídas' },
+];
+
+const QUICK_FILTERS_TAREAS: { key: QuickFilter; label: string }[] = [
+  { key: 'all', label: 'Todas' },
+  { key: 'pendientes', label: 'Sin finalizar' },
+  { key: 'finalizadas', label: 'Finalizadas' },
+];
+
+// Campos disponibles para filtrar/ordenar
+const FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'fecha_creacion', label: 'Fecha creación', type: 'date' },
+  { field: 'fecha_inicio', label: 'Fecha de inicio', type: 'date' },
+  { field: 'fecha_fin', label: 'Fecha de entrega', type: 'date' },
+  { field: 'titulo', label: 'Título', type: 'string' },
+  { field: 'tipo', label: 'Tipo', type: 'string' },
+  { field: 'estatus', label: 'Estado', type: 'string' },
+  { field: 'asignado', label: 'Asignado', type: 'string' },
+  { field: 'responsable', label: 'Responsable', type: 'string' },
+];
+
+const DATE_PRESET_OPTIONS = [
+  { value: 'antes_de_hoy', label: 'Antes de hoy' },
+  { value: 'hoy', label: 'Hoy' },
+  { value: 'manana', label: 'Mañana' },
+  { value: 'esta_semana', label: 'Esta semana' },
+  { value: 'proxima_semana', label: 'Próxima semana' },
+  { value: 'proximos_14_dias', label: 'Los próximos 14 días' },
+];
+
+// Campos disponibles para agrupar
+// test
+type GroupByField = 'estatus' | 'tipo' | 'asignado' | 'responsable' | 'fecha';
+
+interface GroupConfig {
+  field: GroupByField;
+  label: string;
+}
+
+const AVAILABLE_GROUPINGS: GroupConfig[] = [
+  { field: 'estatus', label: 'Estado' },
+  { field: 'tipo', label: 'Tipo' },
+  { field: 'asignado', label: 'Asignado' },
+  { field: 'responsable', label: 'Responsable' },
+  { field: 'fecha', label: 'Fecha' },
+];
+
+const OPERATORS: { value: FilterOperator; label: string }[] = [
+  { value: '=', label: 'Igual a' },
+  { value: '!=', label: 'Diferente de' },
+  { value: 'contains', label: 'Contiene' },
+  { value: 'not_contains', label: 'No contiene' },
+];
+
+// Resolver preset de fecha a un rango [inicio, fin)
+function resolveDatePreset(preset: string): [Date, Date] | null {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const dayOfWeek = today.getDay(); // 0=dom
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(today); monday.setDate(today.getDate() + mondayOffset);
+  const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7);
+  const nextNextMonday = new Date(monday); nextNextMonday.setDate(monday.getDate() + 14);
+  const in14Days = new Date(today); in14Days.setDate(today.getDate() + 14);
+
+  switch (preset) {
+    case 'antes_de_hoy': return [new Date(0), today];
+    case 'hoy': return [today, tomorrow];
+    case 'manana': { const d = new Date(tomorrow); d.setDate(d.getDate() + 1); return [tomorrow, d]; }
+    case 'esta_semana': return [monday, nextMonday];
+    case 'proxima_semana': return [nextMonday, nextNextMonday];
+    case 'proximos_14_dias': return [today, in14Days];
+    default: return null;
+  }
+}
+
+const DATE_FIELDS = ['fecha_creacion', 'fecha_inicio', 'fecha_fin'];
+
+// Función para aplicar filtros a los datos
+function applyFilters(data: Notificacion[], filters: FilterCondition[]): Notificacion[] {
+  if (filters.length === 0) return data;
+
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = item[filter.field as keyof Notificacion];
+      const filterValue = filter.value;
+
+      // Filtro de fecha con presets
+      if (DATE_FIELDS.includes(filter.field)) {
+        const range = resolveDatePreset(filterValue);
+        if (!range) return true;
+        if (fieldValue === null || fieldValue === undefined) return filter.operator === '!=';
+        const raw = new Date(String(fieldValue));
+        if (isNaN(raw.getTime())) return false;
+        const date = new Date(raw.getFullYear(), raw.getMonth(), raw.getDate());
+        const inRange = date >= range[0] && date < range[1];
+        return filter.operator === '=' ? inRange : !inRange;
+      }
+
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+
+      switch (filter.operator) {
+        case '=':
+          return strValue === strFilterValue;
+        case '!=':
+          return strValue !== strFilterValue;
+        case 'contains':
+          return strValue.includes(strFilterValue);
+        case 'not_contains':
+          return !strValue.includes(strFilterValue);
+        default:
+          return true;
+      }
+    });
+  });
+}
 
 interface NestedGroup {
   key: string;
   tareas: Notificacion[];
   subgroups?: NestedGroup[];
 }
-
 // ============ CONSTANTES ============
 
 const DATE_FILTER_OPTIONS: { value: DateFilterType; label: string }[] = [
@@ -150,171 +303,6 @@ function groupTareasRecursive(
 }
 
 // ============ COMPONENTES AUXILIARES ============
-
-// Botón de agrupación múltiple
-function MultiGroupButton({
-  selected,
-  onChange,
-}: {
-  selected: GroupByType[];
-  onChange: (groups: GroupByType[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const availableOptions = GROUP_BY_OPTIONS.filter(opt => !selected.includes(opt.value));
-
-  const addGroup = (value: GroupByType) => {
-    onChange([...selected, value]);
-  };
-
-  const removeGroup = (value: GroupByType) => {
-    onChange(selected.filter(g => g !== value));
-  };
-
-  const clearAll = () => {
-    onChange([]);
-    setOpen(false);
-  };
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-          selected.length > 0
-            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-            : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 hover:text-zinc-300'
-        }`}
-      >
-        <Users className="h-3 w-3" />
-        <span>Agrupar</span>
-        {selected.length > 0 && (
-          <span className="ml-1 px-1.5 py-0.5 rounded-full bg-purple-500 text-white text-[10px] font-bold">
-            {selected.length}
-          </span>
-        )}
-        <ChevronDown className="h-3 w-3" />
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 min-w-[220px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            {/* Agrupaciones activas */}
-            {selected.length > 0 && (
-              <div className="p-2 border-b border-zinc-800">
-                <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2 px-1">
-                  Agrupaciones activas
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {selected.map((value, index) => {
-                    const opt = GROUP_BY_OPTIONS.find(o => o.value === value);
-                    if (!opt) return null;
-                    return (
-                      <div
-                        key={value}
-                        className="flex items-center gap-1 px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 text-xs"
-                      >
-                        <span className="text-[10px] text-purple-400">{index + 1}.</span>
-                        <opt.icon className="h-3 w-3" />
-                        <span>{opt.label}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); removeGroup(value); }}
-                          className="ml-0.5 hover:text-white"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button
-                  onClick={clearAll}
-                  className="mt-2 text-[10px] text-red-400 hover:text-red-300 px-1"
-                >
-                  Quitar todas
-                </button>
-              </div>
-            )}
-
-            {/* Opciones disponibles */}
-            {availableOptions.length > 0 ? (
-              <div className="p-1">
-                <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 px-2 pt-1">
-                  {selected.length > 0 ? 'Agregar agrupación' : 'Agrupar por'}
-                </div>
-                {availableOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => addGroup(option.value)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
-                  >
-                    <option.icon className="h-3.5 w-3.5" />
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="p-3 text-xs text-zinc-500 text-center">
-                Todas las agrupaciones aplicadas
-              </div>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// Dropdown selector
-function Dropdown({
-  label,
-  options,
-  value,
-  onChange,
-  icon: Icon,
-}: {
-  label: string;
-  options: { value: string; label: string }[];
-  value: string;
-  onChange: (value: string) => void;
-  icon?: typeof Circle;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find(o => o.value === value);
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 hover:text-zinc-300 transition-all"
-      >
-        {Icon && <Icon className="h-3 w-3" />}
-        <span>{selected?.label || label}</span>
-        <ChevronDown className="h-3 w-3" />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 min-w-[160px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            {options.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => { onChange(option.value); setOpen(false); }}
-                className={`w-full px-3 py-2 text-left text-xs transition-colors ${
-                  value === option.value
-                    ? 'bg-purple-500/20 text-purple-300'
-                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 // Fila de tarea mejorada (solo lectura)
 function TareaRow({
@@ -490,7 +478,7 @@ function TareasTable({
       </div>
       {tareas.length === 0 && (
         <div className="p-8 text-center">
-          <p className="text-zinc-500">No hay tareas que mostrar</p>
+          <p className="text-zinc-500">No hay notificaciones que mostrar</p>
         </div>
       )}
     </div>
@@ -839,7 +827,7 @@ function CalendarView({
       {/* Resumen */}
       <div className="flex items-center justify-between text-sm text-zinc-500">
         <span>
-          {tareas.length} tarea{tareas.length !== 1 ? 's' : ''} en total
+          {tareas.length} notificación{tareas.length !== 1 ? 'es' : ''} en total
         </span>
         <span>
           {tareas.filter(t => {
@@ -1215,13 +1203,49 @@ function NestedTableSection({
   );
 }
 
+// Tipos de tarea del flujo de Gestión de Artes
+const GESTION_ARTES_TIPOS = ['Revisión de artes', 'Correccion', 'Corrección', 'Instalación', 'Impresión', 'Testigo', 'Programación', 'Recepción', 'Producción'];
+
+function isGestionArtesTarea(tipo?: string | null): boolean {
+  return !!tipo && GESTION_ARTES_TIPOS.includes(tipo);
+}
+
 // Función para verificar si hay navegación disponible
 function hasNavigationRoute(tarea: Notificacion): boolean {
-  return !!(tarea.referencia_tipo && tarea.referencia_id && tarea.referencia_tipo !== 'sistema');
+  // Si tiene referencia_tipo y referencia_id válidos
+  if (tarea.referencia_tipo && tarea.referencia_id && tarea.referencia_tipo !== 'sistema') {
+    return true;
+  }
+  // Tareas de Gestión de Artes con campania_id
+  if (isGestionArtesTarea(tarea.tipo) && tarea.campania_id) {
+    return true;
+  }
+  // Si es tarea de autorización o rechazo con id_solicitud, también puede navegar
+  if (tarea.id_solicitud && (tarea.tipo?.includes('Autorización') || tarea.tipo?.includes('Rechazo'))) {
+    return true;
+  }
+  return false;
 }
 
 // Función para obtener la etiqueta del botón
-function getNavigationLabel(tipo: string): string {
+function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: string | null): string {
+  // Tareas de Gestión de Artes → Ver Gestión de Artes
+  if (isGestionArtesTarea(tipoTarea)) {
+    return 'Ver Gestión de Artes';
+  }
+  if (tipoTarea?.toLowerCase().includes('solicitud')) {
+    return 'Ver Solicitud';
+  }
+  if (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId) {
+    return 'Ver Propuesta';
+  }
+  if (tipoTarea?.toLowerCase().includes('campaña')) {
+    return 'Ver Campaña';
+  }
+  // Si tiene campania_id, ir a campaña
+  if (campaniaId) {
+    return 'Ver Campaña';
+  }
   switch (tipo) {
     case 'propuesta':
       return 'Ver Propuesta';
@@ -1240,9 +1264,31 @@ function isCommentNotification(titulo: string): boolean {
   return lower.includes('comentario') || lower.includes('comment');
 }
 
+// Función para verificar si es una tarea de rechazo que requiere edición
+function isRejectionTask(titulo: string): boolean {
+  const lower = titulo.toLowerCase();
+  return lower.includes('rechazad') || lower.includes('rechazo') || lower.includes('requiere edición');
+}
+
 // Función para obtener la ruta de navegación directa al detalle
-function getDirectNavigationPath(tipo: string, id: number, titulo: string): string {
+function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: number | null, tareaId?: number): string {
   const isComment = isCommentNotification(titulo);
+  const isRejection = isRejectionTask(titulo);
+
+  // Tareas de Gestión de Artes → Gestión de Artes con auto-open del modal (prioridad sobre propuesta)
+  if (isGestionArtesTarea(tipoTarea) && campaniaId) {
+    return `/campanas/${campaniaId}/tareas?taskId=${tareaId || id}`;
+  }
+
+  // Si es tarea de propuesta (ajuste cto, etc.) o tiene id_propuesta, ir al detalle de propuesta
+  if (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId) {
+    return `/propuestas?viewId=${propuestaId || id}`;
+  }
+
+  // Si tiene campania_id, ir al detalle de campaña (excepto solicitud y propuesta)
+  if (campaniaId && !tipoTarea?.toLowerCase().includes('solicitud') && !tipoTarea?.toLowerCase().includes('propuesta')) {
+    return `/campanas/detail/${campaniaId}`;
+  }
 
   switch (tipo) {
     case 'propuesta':
@@ -1250,6 +1296,10 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string): stri
     case 'campana':
       return `/campanas/detail/${id}`;
     case 'solicitud':
+      // Si es tarea de rechazo, abrir modal de edición directamente
+      if (isRejection) {
+        return `/solicitudes?editId=${id}`;
+      }
       // Si es notificación de comentario, abrir modal de comentarios
       return isComment ? `/solicitudes?commentsId=${id}` : `/solicitudes?viewId=${id}`;
     default:
@@ -1262,21 +1312,156 @@ function TaskDrawer({
   tarea,
   onClose,
   onAddComment,
+  onUpdateFechaFin,
   onNavigate,
+  isClosing = false,
+  onAutorizacionAction,
+  contentType,
 }: {
   tarea: Notificacion & { comentarios?: ComentarioTarea[] };
   onClose: () => void;
   onAddComment: (contenido: string) => void;
+  onUpdateFechaFin?: (fecha_fin: string) => void;
   onNavigate?: (path: string) => void;
+  isClosing?: boolean;
+  onAutorizacionAction?: () => void;
+  contentType: ContentType;
 }) {
   const [comment, setComment] = useState('');
+  const [rechazoMotivo, setRechazoMotivo] = useState('');
+  const [showRechazoInput, setShowRechazoInput] = useState(false);
+  const [isEditingFecha, setIsEditingFecha] = useState(false);
+  const [fechaFinEdit, setFechaFinEdit] = useState(
+    tarea.fecha_fin ? new Date(tarea.fecha_fin).toISOString().split('T')[0] : ''
+  );
   const user = useAuthStore((state) => state.user);
   const canNavigate = hasNavigationRoute(tarea);
 
+  const queryClient = useQueryClient();
+  const marcarLeidaMutation = useMutation({
+    mutationFn: (estatus: string) => notificacionesService.update(tarea.id, { estatus }),
+    onSuccess: async () => {
+      const updated = await notificacionesService.getById(tarea.id);
+      // Llamar al callback onClose para refrescar
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+    },
+  });
+
+  // Detectar si es tarea de autorización
+  const isAutorizacionTask = tarea.tipo?.includes('Autorización');
+  const tipoAutorizacion = tarea.tipo?.includes('DG') ? 'dg' : tarea.tipo?.includes('DCM') ? 'dcm' : null;
+
+  // Obtener idquote de la propuesta (id_propuesta es el idquote en solicitudCaras)
+  // Si no hay id_propuesta, intentar obtenerlo desde la solicitud
+  const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
+
+  // Si no hay id_propuesta pero hay id_solicitud, buscar la propuesta
+  useEffect(() => {
+    if (!tarea.id_propuesta && tarea.id_solicitud && isAutorizacionTask) {
+      // Buscar propuesta por solicitud_id
+      const fetchPropuesta = async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/propuestas?solicitudId=${tarea.id_solicitud}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          const data = await response.json();
+          if (data.success && data.data && data.data.length > 0) {
+            setIdPropuestaState(data.data[0].id.toString());
+          }
+        } catch (error) {
+          console.error('Error buscando propuesta:', error);
+        }
+      };
+      fetchPropuesta();
+    } else if (tarea.id_propuesta) {
+      setIdPropuestaState(tarea.id_propuesta);
+    }
+  }, [tarea.id_propuesta, tarea.id_solicitud, isAutorizacionTask]);
+
+  const idPropuesta = idPropuestaState;
+
+  // Query para obtener caras pendientes si es tarea de autorización
+  const { data: carasData, refetch: refetchCaras } = useQuery({
+    queryKey: ['autorizacion-caras', idPropuesta],
+    queryFn: () => notificacionesService.getCarasAutorizacion(idPropuesta || ''),
+    enabled: isAutorizacionTask && !!idPropuesta,
+  });
+
+  // Query para resumen de autorización
+  const { data: resumenData, refetch: refetchResumen } = useQuery({
+    queryKey: ['autorizacion-resumen', idPropuesta],
+    queryFn: () => notificacionesService.getResumenAutorizacion(idPropuesta || ''),
+    enabled: isAutorizacionTask && !!idPropuesta,
+  });
+
+  // Mutation para aprobar
+  const aprobarMutation = useMutation({
+    mutationFn: () => notificacionesService.aprobarAutorizacion(idPropuesta || '', tipoAutorizacion as 'dg' | 'dcm'),
+    onSuccess: () => {
+      refetchCaras();
+      refetchResumen();
+      onAutorizacionAction?.();
+    },
+  });
+
+  // Mutation para rechazar
+  const rechazarMutation = useMutation({
+    mutationFn: (motivo: string) => notificacionesService.rechazarAutorizacion(idPropuesta || '', motivo),
+    onSuccess: () => {
+      refetchCaras();
+      refetchResumen();
+      setShowRechazoInput(false);
+      setRechazoMotivo('');
+      onAutorizacionAction?.();
+    },
+  });
+
+  const handleAprobar = () => {
+    if (!tipoAutorizacion) return;
+    aprobarMutation.mutate();
+  };
+
+  const handleRechazar = () => {
+    if (!rechazoMotivo.trim()) return;
+    rechazarMutation.mutate(rechazoMotivo);
+  };
+
+  // Filtrar caras según tipo de autorización (usando columnas separadas)
+  const carasPendientes = useMemo(() => {
+    if (!carasData || !tipoAutorizacion) return [];
+    // Filtrar por la columna correspondiente: autorizacion_dg o autorizacion_dcm
+    if (tipoAutorizacion === 'dg') {
+      return carasData.filter(c => c.autorizacion_dg === 'pendiente');
+    } else {
+      return carasData.filter(c => c.autorizacion_dcm === 'pendiente');
+    }
+  }, [carasData, tipoAutorizacion]);
+
   const handleNavigate = () => {
-    if (!tarea.referencia_tipo || !tarea.referencia_id || !onNavigate) return;
-    const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '');
-    onNavigate(path);
+    if (!onNavigate) return;
+    // Si tiene referencia_tipo y referencia_id, usar esos
+    if (tarea.referencia_tipo && tarea.referencia_id) {
+      const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
+      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id);
+      onNavigate(path);
+      return;
+    }
+    // Tareas de Gestión de Artes con campania_id → Gestión de Artes
+    if (isGestionArtesTarea(tarea.tipo) && tarea.campania_id) {
+      onNavigate(`/campanas/${tarea.campania_id}/tareas?taskId=${tarea.id}`);
+      return;
+    }
+    // Si es tarea de autorización/rechazo con id_solicitud, navegar a solicitud
+    if (tarea.id_solicitud && (tarea.tipo?.includes('Autorización') || tarea.tipo?.includes('Rechazo'))) {
+      const solicitudId = parseInt(tarea.id_solicitud);
+      if (!isNaN(solicitudId)) {
+        const path = getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '');
+        onNavigate(path);
+      }
+    }
   };
 
   const statusConfig = getStatusConfig(tarea.estatus);
@@ -1292,7 +1477,7 @@ function TaskDrawer({
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full max-w-md bg-zinc-900/95 backdrop-blur-xl border-l border-zinc-800 shadow-2xl z-50 flex flex-col">
+    <div className={`fixed inset-y-0 right-0 w-full max-w-md bg-zinc-900/95 backdrop-blur-xl border-l border-zinc-800 shadow-2xl z-50 flex flex-col ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`}>
       {/* Header con gradiente */}
       <div className="relative">
         <div className={`absolute inset-0 ${statusConfig.bg} opacity-30`} />
@@ -1332,6 +1517,39 @@ function TaskDrawer({
             )}
           </div>
 
+          {/* Botón marcar como leído */}
+          {contentType === 'notificaciones' && (
+            <div className="mt-3">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const nuevoEstatus = tarea.estatus === 'Atendido' ? 'Pendiente' : 'Atendido';
+                  marcarLeidaMutation.mutate(nuevoEstatus);
+                }}
+                disabled={marcarLeidaMutation.isPending}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                  tarea.estatus === 'Atendido'
+                    ? 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-700'
+                    : 'bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/40'
+                } disabled:opacity-50`}
+              >
+                {marcarLeidaMutation.isPending ? (
+                  'Actualizando...'
+                ) : tarea.estatus === 'Atendido' ? (
+                  <>
+                    <Circle className="h-4 w-4" />
+                    Marcar como no leída
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    Marcar como leída
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
           {/* Botón Ir a ver */}
           {canNavigate && onNavigate && (
             <button
@@ -1339,7 +1557,38 @@ function TaskDrawer({
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
             >
               <ExternalLink className="h-4 w-4" />
-              {getNavigationLabel(tarea.referencia_tipo || '')}
+              {getNavigationLabel(tarea.referencia_tipo || '', tarea.tipo || undefined, tarea.campania_id, tarea.id_propuesta)}
+            </button>
+          )}
+
+          {/* Botón finalizar tarea */}
+          {contentType === 'tareas' && (tarea.tipo?.toLowerCase().includes('ajuste') || (tarea.tipo?.toLowerCase().includes('seguimiento') && tarea.tipo?.toLowerCase().includes('campaña'))) && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const nuevoEstatus = tarea.estatus === 'Atendido' ? 'Pendiente' : 'Atendido';
+                marcarLeidaMutation.mutate(nuevoEstatus);
+              }}
+              disabled={marcarLeidaMutation.isPending}
+              className={`mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                tarea.estatus === 'Atendido'
+                  ? 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 border border-zinc-700'
+                  : 'bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/40'
+              } disabled:opacity-50`}
+            >
+              {marcarLeidaMutation.isPending ? (
+                'Actualizando...'
+              ) : tarea.estatus === 'Atendido' ? (
+                <>
+                  <Circle className="h-4 w-4" />
+                  Reabrir tarea
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4" />
+                  Finalizar tarea
+                </>
+              )}
             </button>
           )}
         </div>
@@ -1356,9 +1605,93 @@ function TaskDrawer({
           </div>
         )}
 
+        {/*Contenido de Seguimiento Campaña */}
+        {tarea.tipo === 'Seguimiento Campaña' && tarea.contenido && (
+          <div className="p-5 border-b border-zinc-800/50">
+            <h3 className="text-xs font-medium text-purple-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Building2 className="h-3.5 w-3.5" />
+              Información de la Campaña
+            </h3>
+            <div className="space-y-2 bg-purple-500/5 rounded-xl p-4 border border-purple-500/20">
+              {tarea.contenido.split('\n').map((linea, idx) => {
+                const lineaTrim = linea.trim();
+                if (!lineaTrim) return null;
+                
+                // Si es el título "CATORCENAS INCLUIDAS"
+                if (lineaTrim.includes('CATORCENAS INCLUIDAS')) {
+                  return (
+                    <h4 key={idx} className="font-semibold text-purple-300 mt-4 mb-2 text-sm">
+                      📅 {lineaTrim}
+                    </h4>
+                  );
+                }
+                
+                // línea de catorcena - formatos: "Cat 5 - 2026: ..." o "Cat 1, 5/1/2026, ..."
+                if (lineaTrim.match(/^Cat\s+\d+/)) {
+                  // Intentar parsear "Cat N, fecha_inicio, fecha_fin"
+                  const catMatch = lineaTrim.match(/^Cat\s+(\d+)[,\s]+(\S+)[,\s]+(\S+)/);
+                  if (catMatch) {
+                    return (
+                      <div key={idx} className="flex items-center gap-3 py-2.5 px-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                        <Calendar className="h-3.5 w-3.5 text-cyan-400 flex-shrink-0" />
+                        <span className="text-xs font-medium text-white">Cat {catMatch[1]}</span>
+                        <span className="text-[10px] text-zinc-500">|</span>
+                        <span className="text-xs text-zinc-400">{catMatch[2]}</span>
+                        <span className="text-xs text-zinc-500">→</span>
+                        <span className="text-xs text-zinc-400">{catMatch[3]}</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={idx} className="flex items-center gap-2 py-2.5 px-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                      <Calendar className="h-3.5 w-3.5 text-cyan-400 flex-shrink-0" />
+                      <span className="text-xs text-zinc-300">{lineaTrim}</span>
+                    </div>
+                  );
+                }
+                
+                // Ocultar el link a la campaña del contenido (ya hay botón "Ver Campaña" arriba)
+                if (lineaTrim.includes('https://') || lineaTrim.includes('Ver campaña:')) {
+                  return null;
+                }
+                
+                // Líneas normales (Cliente, Campaña)
+                const parts = lineaTrim.split(':');
+                if (parts.length >= 2) {
+                  const label = parts[0];
+                  const value = parts.slice(1).join(':').trim(); // Por si hay : en la fecha
+
+                  // Saltar: líneas vacías, sección de catorcenas, y "Fecha límite" (se muestra en la sección editable abajo)
+                  if (label === 'CATORCENAS INCLUIDAS' || label === 'Fecha límite' || !value) return null;
+
+                  return (
+                    <div key={idx} className="flex items-center justify-between py-1.5">
+                      <span className="text-xs text-zinc-500 font-medium">{label}:</span>
+                      <span className="text-sm text-white">{value}</span>
+                    </div>
+                  );
+                }
+                
+                return null;
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Detalles en cards */}
         <div className="p-5 space-y-3">
           <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Detalles</h3>
+
+          {/* Cliente (si es tarea de autorización) */}
+          {carasPendientes.length > 0 && carasPendientes[0].cliente && (
+            <div className="flex items-center justify-between p-3 rounded-xl bg-purple-500/10 border border-purple-500/30">
+              <div className="flex items-center gap-2 text-purple-400">
+                <Building2 className="h-4 w-4" />
+                <span className="text-xs">Cliente</span>
+              </div>
+              <span className="text-sm text-white font-medium">{carasPendientes[0].cliente}</span>
+            </div>
+          )}
 
           {/* Asignado */}
           <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
@@ -1383,17 +1716,7 @@ function TaskDrawer({
             </div>
           )}
 
-          {/* Fechas */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
-            <div className="flex items-center gap-2 text-zinc-500">
-              <Calendar className="h-4 w-4" />
-              <span className="text-xs">Fecha límite</span>
-            </div>
-            <span className={`text-sm font-medium ${tarea.fecha_fin ? 'text-white' : 'text-zinc-600'}`}>
-              {tarea.fecha_fin ? formatDate(tarea.fecha_fin) : 'Sin fecha'}
-            </span>
-          </div>
-
+          {/* Fecha inicio (no editable) */}
           {tarea.fecha_inicio && (
             <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
               <div className="flex items-center gap-2 text-zinc-500">
@@ -1403,7 +1726,214 @@ function TaskDrawer({
               <span className="text-sm text-zinc-300">{formatDate(tarea.fecha_inicio)}</span>
             </div>
           )}
+
+          {/* Fecha límite - Editable */}
+          <div className="p-3 rounded-xl bg-zinc-800/30 border border-zinc-800/50">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-zinc-500">
+                <Calendar className="h-4 w-4" />
+                <span className="text-xs">Fecha límite</span>
+              </div>
+              {!isEditingFecha && (
+                <span className="text-[10px] text-purple-400/60">click para editar</span>
+              )}
+            </div>
+            {isEditingFecha ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={fechaFinEdit}
+                  onChange={(e) => setFechaFinEdit(e.target.value)}
+                  className="flex-1 px-3 py-2 text-sm rounded-lg bg-zinc-900 border border-purple-500/50 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+                <button
+                  onClick={() => {
+                    if (fechaFinEdit && onUpdateFechaFin) {
+                      onUpdateFechaFin(fechaFinEdit);
+                    }
+                    setIsEditingFecha(false);
+                  }}
+                  className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    setFechaFinEdit(tarea.fecha_fin ? new Date(tarea.fecha_fin).toISOString().split('T')[0] : '');
+                    setIsEditingFecha(false);
+                  }}
+                  className="p-2 rounded-lg bg-zinc-700 text-zinc-400 hover:bg-zinc-600 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsEditingFecha(true)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 hover:border-purple-500/50 transition-all group"
+              >
+                <span className={`text-sm font-medium ${tarea.fecha_fin ? 'text-white' : 'text-zinc-500'}`}>
+                  {tarea.fecha_fin ? formatDate(tarea.fecha_fin) : 'Sin fecha asignada'}
+                </span>
+                <Pencil className="h-4 w-4 text-purple-400 group-hover:text-purple-300 transition-colors" />
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Panel de Autorización (solo si es tarea de autorización) */}
+        {isAutorizacionTask && carasPendientes.length > 0 && (
+          <div className="p-5 border-t border-zinc-800/50">
+            <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Caras Pendientes de Autorización ({carasPendientes.length})
+            </h3>
+
+            {/* Resumen */}
+            {resumenData && (
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
+                  <div className="text-lg font-bold text-emerald-400">{resumenData.aprobadas}</div>
+                  <div className="text-[10px] text-zinc-500">Aprobadas</div>
+                </div>
+                <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center">
+                  <div className="text-lg font-bold text-amber-400">{resumenData.pendientesDcm}</div>
+                  <div className="text-[10px] text-zinc-500">Pend. DCM</div>
+                </div>
+                <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
+                  <div className="text-lg font-bold text-red-400">{resumenData.pendientesDg}</div>
+                  <div className="text-[10px] text-zinc-500">Pend. DG</div>
+                </div>
+              </div>
+            )}
+
+            {/* Catorcena */}
+            {carasPendientes.length > 0 && carasPendientes[0].catorcena && (
+              <div className="mb-3 p-3 rounded-lg bg-zinc-800/30 border border-zinc-700/50">
+                <div className="flex items-center gap-2 text-xs">
+                  <Calendar className="h-3.5 w-3.5 text-cyan-400" />
+                  <span className="text-zinc-500">Catorcena:</span>
+                  <span className="text-cyan-300 font-medium">{carasPendientes[0].catorcena}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Tabla de caras estilo solicitudes */}
+            <div className="max-h-64 overflow-x-auto overflow-y-auto mb-4 scrollbar-purple rounded-lg border border-zinc-700/50">
+              <table className="w-full min-w-[500px]">
+                <thead className="sticky top-0 bg-zinc-800/90 backdrop-blur-sm">
+                  <tr>
+                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500 uppercase">Artículo</th>
+                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500 uppercase">Tipo</th>
+                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Caras</th>
+                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Bonif.</th>
+                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Total</th>
+                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500 uppercase">Tarifa Efect.</th>
+                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500 uppercase">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {carasPendientes.map((cara) => (
+                    <tr key={cara.id} className="hover:bg-zinc-800/30">
+                      <td className="px-2 py-2 max-w-[120px]">
+                        <div className="text-xs text-white font-medium truncate" title={cara.articulo || '-'}>
+                          {cara.articulo || '-'}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 truncate" title={cara.formato}>
+                          {cara.formato}
+                        </div>
+                      </td>
+                      <td className="px-2 py-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                          {cara.tipo}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-xs text-center text-white">{cara.caras}</td>
+                      <td className="px-2 py-2 text-xs text-center text-emerald-400">{cara.bonificacion}</td>
+                      <td className="px-2 py-2 text-xs text-center text-cyan-300 font-semibold">{cara.total_caras}</td>
+                      <td className="px-2 py-2 text-xs text-right text-purple-300 font-mono">
+                        ${cara.tarifa_efectiva?.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <div className="flex flex-col gap-0.5 items-center">
+                          {/* Mostrar OK si ambos están aprobados */}
+                          {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">OK</span>
+                          )}
+                          {/* Mostrar rechazado si cualquiera está rechazado */}
+                          {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rech.</span>
+                          )}
+                          {/* Mostrar DG si está pendiente (y ninguno rechazado) */}
+                          {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dcm !== 'rechazado' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">DG</span>
+                          )}
+                          {/* Mostrar DCM si está pendiente (y ninguno rechazado) */}
+                          {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">DCM</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Botones de acción */}
+            {!showRechazoInput ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleAprobar}
+                  disabled={aprobarMutation.isPending || carasPendientes.length === 0}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {aprobarMutation.isPending ? (
+                    <span className="animate-spin">⏳</span>
+                  ) : (
+                    <CheckCircle className="h-4 w-4" />
+                  )}
+                  Aprobar {carasPendientes.length} cara{carasPendientes.length !== 1 ? 's' : ''}
+                </button>
+                <button
+                  onClick={() => setShowRechazoInput(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 transition-all"
+                >
+                  <X className="h-4 w-4" />
+                  Rechazar
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <textarea
+                  value={rechazoMotivo}
+                  onChange={(e) => setRechazoMotivo(e.target.value)}
+                  placeholder="Escribe el motivo del rechazo..."
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-lg bg-zinc-800/50 border border-red-500/30 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-red-500/50 resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleRechazar}
+                    disabled={rechazarMutation.isPending || !rechazoMotivo.trim()}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {rechazarMutation.isPending ? 'Rechazando...' : 'Confirmar Rechazo'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowRechazoInput(false);
+                      setRechazoMotivo('');
+                    }}
+                    className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Comentarios */}
         <div className="p-5 border-t border-zinc-800/50">
@@ -1477,23 +2007,48 @@ export function NotificacionesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
+  // Suscribirse a WebSocket para actualizaciones en tiempo real
+  useSocketNotificaciones();
+
+  // Estado de contenido (notificaciones vs tareas)
+  const [contentType, setContentType] = useState<ContentType>('notificaciones');
+
   // Estado de vista y filtros
   const [view, setView] = useState<ViewType>('lista');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [groupBy, setGroupBy] = useState<GroupByType[]>([]);
-  const [orderBy, setOrderBy] = useState<OrderByType>('fecha_inicio');
+  const [orderBy, setOrderBy] = useState<OrderByType>('created_at');
   const [orderDir, setOrderDir] = useState<'asc' | 'desc'>('desc');
   const [filterEstatus, setFilterEstatus] = useState<string>('');
-  const [filterTipo, setFilterTipo] = useState<string>('');
   const [filterFecha, setFilterFecha] = useState<DateFilterType>('all');
-  const [filterParaMi, setFilterParaMi] = useState(false);
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+
+  // Estados para filtros avanzados (estilo Proveedores)
+  const [filters, setFilters] = useState<FilterCondition[]>([]);
+  const [showFilterPopup, setShowFilterPopup] = useState(false);
+  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
+  const [showGroupPopup, setShowGroupPopup] = useState(false);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [showSortPopup, setShowSortPopup] = useState(false);
 
   // Obtener usuario actual
   const user = useAuthStore((state) => state.user);
 
   // Estado de selección y drawer
   const [selectedTarea, setSelectedTarea] = useState<(Notificacion & { comentarios?: ComentarioTarea[] }) | null>(null);
+  const [isDrawerClosing, setIsDrawerClosing] = useState(false);
+
+  // Handler para cerrar el drawer con animación
+  const handleCloseDrawer = useCallback(() => {
+    setIsDrawerClosing(true);
+    setTimeout(() => {
+      setSelectedTarea(null);
+      setIsDrawerClosing(false);
+    }, 250); // Duración de la animación
+  }, []);
 
   // Debounce search
   useEffect(() => {
@@ -1501,21 +2056,21 @@ export function NotificacionesPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Fetch stats
+  // Fetch stats - sin polling, actualizaciones via WebSocket
   const { data: stats } = useQuery({
     queryKey: ['notificaciones-stats'],
     queryFn: () => notificacionesService.getStats(),
-    refetchInterval: 30000,
+    staleTime: 5 * 60 * 1000, // 5 minutos
   });
 
-  // Fetch tareas
+  // Fetch notificaciones o tareas según contentType
   const { data, isLoading } = useQuery({
-    queryKey: ['notificaciones', filterEstatus, filterTipo, debouncedSearch, orderBy, orderDir],
+    queryKey: ['notificaciones', contentType, filterEstatus, debouncedSearch, orderBy, orderDir],
     queryFn: () =>
       notificacionesService.getAll({
         limit: 200,
         estatus: filterEstatus || undefined,
-        tipo: filterTipo || undefined,
+        tipo: contentType === 'notificaciones' ? 'Notificación' : undefined, // Solo notificaciones o todas
         search: debouncedSearch || undefined,
         orderBy,
         orderDir,
@@ -1534,57 +2089,197 @@ export function NotificacionesPage() {
     },
   });
 
-  // Filtrar tareas por fecha y usuario
-  const filteredTareas = useMemo(() => {
-    if (!data?.data) return [];
-    let tareas = data.data;
+  // Mutation para actualizar tarea (fecha_fin)
+  const updateTareaMutation = useMutation({
+    mutationFn: ({ id, fecha_fin }: { id: number; fecha_fin: string }) =>
+      notificacionesService.update(id, { fecha_fin }),
+    onSuccess: async () => {
+      if (selectedTarea) {
+        const updated = await notificacionesService.getById(selectedTarea.id);
+        setSelectedTarea(updated);
+      }
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+    },
+  });
 
-    // Filtrar por fecha (solo si no es 'all')
-    if (filterFecha !== 'all') {
-      tareas = tareas.filter(tarea => {
-        // Si no tiene fecha, incluir solo en 'all'
-        if (!tarea.fecha_creacion && !tarea.fecha_inicio) return false;
-        // Usar fecha_inicio o fecha_creacion
-        const fechaToCheck = tarea.fecha_inicio || tarea.fecha_creacion;
-        return isDateInRange(fechaToCheck, filterFecha);
+  // Filtrar por fecha y usuario según el tipo de contenido
+  const baseTareas = useMemo(() => {
+    if (!data?.data || !user) return [];
+    let items = data.data;
+    const userId = String(user.id);
+
+    // Roles que ven tareas/notificaciones propias + de subordinados (backend ya las trae)
+    const isCoordinadorDiseno = user.rol === 'Coordinador de Diseño';
+    const isGerenteDigitalOps = user.rol === 'Gerente Digital (Operaciones)';
+    const canSeeAllFromBackend = isCoordinadorDiseno || isGerenteDigitalOps;
+
+    if (contentType === 'notificaciones') {
+      // Para notificaciones: filtrar donde soy el destinatario (id_responsable)
+      items = items.filter(item => {
+        if (canSeeAllFromBackend) return true; // Ve todas las que devuelve el backend
+        if (item.id_responsable !== undefined && item.id_responsable !== null) {
+          return String(item.id_responsable) === userId;
+        }
+        return false;
       });
-    }
-
-    // Filtrar por usuario actual (Para mí) - Solo donde soy ASIGNADO
-    if (filterParaMi && user) {
-      const userId = String(user.id);
-
-      tareas = tareas.filter(tarea => {
-        // Solo verificar por id_asignado (lista separada por comas)
-        if (tarea.id_asignado !== undefined && tarea.id_asignado !== null) {
-          const idAsignadoStr = String(tarea.id_asignado);
+    } else {
+      // Para tareas: excluir notificaciones y filtrar donde estoy asignado
+      items = items.filter(item => {
+        // Excluir notificaciones
+        if (item.tipo === 'Notificación') return false;
+        if (canSeeAllFromBackend) return true; // Ve todas las tareas que devuelve el backend
+        // Filtrar donde estoy asignado
+        if (item.id_asignado !== undefined && item.id_asignado !== null) {
+          const idAsignadoStr = String(item.id_asignado);
           const idsAsignados = idAsignadoStr.split(',').map(id => id.trim());
           return idsAsignados.includes(userId);
         }
-        // Si no hay id_asignado, no mostrar
+        // También incluir donde soy responsable
+        if (item.id_responsable !== undefined && item.id_responsable !== null) {
+          return String(item.id_responsable) === userId;
+        }
         return false;
       });
     }
 
-    return tareas;
-  }, [data?.data, filterFecha, filterParaMi, user?.nombre, user?.id]);
+    // Filtrar por fecha (solo si no es 'all')
+    if (filterFecha !== 'all') {
+      items = items.filter(item => {
+        if (!item.fecha_creacion && !item.fecha_inicio) return false;
+        const fechaToCheck = item.fecha_inicio || item.fecha_creacion;
+        return isDateInRange(fechaToCheck, filterFecha);
+      });
+    }
+
+    // Aplicar filtros avanzados
+    items = applyFilters(items, filters);
+
+    // Aplicar ordenamiento
+    if (sortField) {
+      items = [...items].sort((a, b) => {
+        const aVal = a[sortField as keyof Notificacion];
+        const bVal = b[sortField as keyof Notificacion];
+
+        if (aVal === null || aVal === undefined) return sortDirection === 'asc' ? 1 : -1;
+        if (bVal === null || bVal === undefined) return sortDirection === 'asc' ? -1 : 1;
+
+        // Comparar fechas cronológicamente
+        if (DATE_FIELDS.includes(sortField)) {
+          const comparison = new Date(String(aVal)).getTime() - new Date(String(bVal)).getTime();
+          return sortDirection === 'asc' ? comparison : -comparison;
+        }
+
+        const comparison = String(aVal).localeCompare(String(bVal));
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+    }
+
+    return items;
+  }, [data?.data, filterFecha, user?.id, contentType, filters, sortField, sortDirection]);
+    const tareasConQuickFilter = useMemo(() => {
+      if (quickFilter === 'all') return baseTareas;
+
+      return baseTareas.filter(item => {
+        if (quickFilter === 'pendientes') {
+          return item.estatus !== 'Atendido';
+        }
+
+        if (quickFilter === 'finalizadas') {
+          return item.estatus === 'Atendido';
+        }
+
+        if (quickFilter === 'leidas') {
+          return item.estatus === 'Atendido';
+        }
+
+        if (quickFilter === 'no_leidas') {
+          return item.estatus !== 'Atendido';
+        }
+
+        return true;
+      });
+    }, [baseTareas, quickFilter]);
+
+  const filteredTareas = tareasConQuickFilter;
 
   // Agrupar tareas (soporta múltiples agrupaciones anidadas)
   const nestedGroups = useMemo<NestedGroup[]>(() => {
     if (!filteredTareas.length) return [];
-    return groupTareasRecursive(filteredTareas, groupBy);
-  }, [filteredTareas, groupBy]);
+    return groupTareasRecursive(filteredTareas, activeGroupings);
+  }, [filteredTareas, activeGroupings]);
 
   // Obtener opciones de filtro desde stats
-  const tipoOptions = useMemo(() => {
-    if (!stats?.por_tipo) return [];
-    return Object.keys(stats.por_tipo).map(t => ({ value: t, label: t }));
-  }, [stats]);
-
   const estatusOptions = useMemo(() => {
     if (!stats?.por_estatus) return [];
     return Object.keys(stats.por_estatus).map(e => ({ value: e, label: e }));
   }, [stats]);
+
+  // Obtener valores únicos para autocompletado de filtros
+  const getUniqueValues = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    FILTER_FIELDS.forEach(fieldConfig => {
+      const values = new Set<string>();
+      (data?.data || []).forEach(item => {
+        const val = item[fieldConfig.field];
+        if (val !== null && val !== undefined && val !== '') {
+          values.add(String(val));
+        }
+      });
+      valuesMap[fieldConfig.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [data?.data]);
+
+  // Funciones para manejar filtros avanzados
+  const addFilter = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFilters(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilter = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilter = useCallback((id: string) => {
+    setFilters(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearAdvancedFilters = useCallback(() => {
+    setFilters([]);
+  }, []);
+
+  // Toggle de agrupación (max 2)
+  const toggleGrouping = useCallback((field: GroupByField) => {
+    setActiveGroupings(prev => {
+      if (prev.includes(field)) {
+        return prev.filter(f => f !== field);
+      }
+      if (prev.length >= 2) {
+        return [prev[1], field];
+      }
+      return [...prev, field];
+    });
+  }, []);
+
+  // Verificar si hay filtros activos
+  const hasActiveFilters = filters.length > 0 || activeGroupings.length > 0 || sortField !== null || filterFecha !== 'all' || search || (quickFilter !== null && quickFilter !== 'all');
+
+  // Limpiar todos los filtros
+  const clearAllFilters = useCallback(() => {
+    setQuickFilter(null);
+    setFilters([]);
+    setActiveGroupings([]);
+    setSortField(null);
+    setSortDirection('desc');
+    setFilterFecha('all');
+    setSearch('');
+    setFilterEstatus('');
+  }, []);
 
   // Handlers
   const handleSelectTarea = useCallback(async (tarea: Notificacion) => {
@@ -1592,31 +2287,51 @@ export function NotificacionesPage() {
     setSelectedTarea(full);
   }, []);
 
-  const clearFilters = () => {
-    setFilterEstatus('');
-    setFilterTipo('');
-    setFilterFecha('all');
-    setFilterParaMi(false);
-    setSearch('');
-    setGroupBy([]);
-  };
-
-  const hasActiveFilters = !!(filterEstatus || filterTipo || filterFecha !== 'all' || filterParaMi || search || groupBy.length > 0);
-
   // Vista de tabs
   const viewTabs = [
     { key: 'lista', label: 'Lista', icon: List },
-    { key: 'tablero', label: 'Tablero', icon: LayoutGrid },
+    //{ key: 'tablero', label: 'Tablero', icon: LayoutGrid },
     { key: 'calendario', label: 'Calendario', icon: CalendarDays },
     { key: 'notas', label: 'Notas', icon: StickyNote },
   ] as const;
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header title="Mis Tareas" />
+      <Header title={contentType === 'notificaciones' ? 'Notificaciones' : 'Mis Tareas'} />
 
       {/* Barra superior fija */}
       <div className="sticky top-16 z-20 bg-[#1a1025]/95 backdrop-blur-sm border-b border-zinc-800/80">
+        {/* Tabs: Notificaciones / Tareas */}
+        <div className="flex items-center gap-1 px-6 py-2 border-b border-zinc-800/50">
+          <button
+            onClick={() => setContentType('notificaciones')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              contentType === 'notificaciones'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+            }`}
+          >
+            <Bell className="h-4 w-4" />
+            Notificaciones
+            {stats?.total && contentType !== 'notificaciones' && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-purple-500/30 text-[10px]">
+                {stats.total}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setContentType('tareas')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              contentType === 'tareas'
+                ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
+                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+            }`}
+          >
+            <ClipboardList className="h-4 w-4" />
+            Mis Tareas
+          </button>
+        </div>
+
         {/* Navegación de vistas */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-800/50">
           <div className="flex items-center gap-1">
@@ -1685,54 +2400,277 @@ export function NotificacionesPage() {
               />
             </div>
 
-            {/* Filtros como chips */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Agrupar - solo en vista Lista */}
-              {view === 'lista' && (
-                <MultiGroupButton
-                  selected={groupBy}
-                  onChange={setGroupBy}
-                />
-              )}
-
-              {/* Botón Para mí */}
-              <button
-                onClick={() => setFilterParaMi(!filterParaMi)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  filterParaMi
-                    ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
-                    : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 hover:text-zinc-300'
-                }`}
-              >
-                <User className="h-3 w-3" />
-                <span>Para mí</span>
-              </button>
-
-              <Dropdown
-                label="Fecha"
-                icon={Calendar}
-                options={DATE_FILTER_OPTIONS}
-                value={filterFecha}
-                onChange={(v) => setFilterFecha(v as DateFilterType)}
-              />
-
-              {tipoOptions.length > 0 && (
-                <Dropdown
-                  label="Tipo"
-                  icon={Tag}
-                  options={[{ value: '', label: 'Todos' }, ...tipoOptions]}
-                  value={filterTipo}
-                  onChange={setFilterTipo}
-                />
-              )}
-
-              {(groupBy.length > 0 || filterTipo || filterFecha !== 'all' || filterParaMi || search) && (
+            {/* Filter/Group/Sort Buttons - Estilo Proveedores */}
+            <div className="flex items-center gap-2">
+              {/* Botón de Filtros */}
+              <div className="relative">
                 <button
-                  onClick={clearFilters}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+                  onClick={() => setShowFilterPopup(!showFilterPopup)}
+                  className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                    filters.length > 0
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                  }`}
+                  title="Filtrar"
                 >
-                  <X className="h-3 w-3" />
-                  Limpiar
+                  <Filter className="h-4 w-4" />
+                  {filters.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white px-1">
+                      {filters.length}
+                    </span>
+                  )}
+                </button>
+                {showFilterPopup && (
+                  <div className="absolute right-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                    {/* Filtros rápidos */}
+                    <div className="mb-3">
+                      <span className="text-[11px] font-medium text-purple-400 uppercase tracking-wide">
+                        Filtros rápidos
+                      </span>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(contentType === 'notificaciones' ? QUICK_FILTERS_NOTIFICACIONES : QUICK_FILTERS_TAREAS).map(f => (
+                          <button
+                            key={f.key}
+                            onClick={() => {
+                              setQuickFilter(f.key);
+                              setShowFilterPopup(false);
+                            }}
+                            className={`px-2 py-1 rounded-md text-[11px] border transition-colors ${
+                              quickFilter === f.key
+                                ? 'bg-purple-600 text-white border-purple-500'
+                                : 'bg-purple-900/40 text-purple-300 border-purple-700/40 hover:bg-purple-800/60'
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-purple-900/30 my-3" />
+
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+                      <button onClick={() => setShowFilterPopup(false)} className="text-zinc-400 hover:text-white">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                      {filters.map((filter, index) => (
+                        <div key={filter.id} className="flex items-center gap-2">
+                          {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
+                          {index === 0 && <span className="w-8"></span>}
+                          <select
+                            value={filter.field}
+                            onChange={(e) => updateFilter(filter.id, { field: e.target.value })}
+                            className="w-[130px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                          >
+                            {FILTER_FIELDS.map((f) => (
+                              <option key={f.field} value={f.field}>{f.label}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={filter.operator}
+                            onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
+                            className="w-[110px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                          >
+                            {DATE_FIELDS.includes(filter.field) ? (
+                              <>
+                                <option value="=">es</option>
+                                <option value="!=">no es</option>
+                              </>
+                            ) : (
+                              OPERATORS.map((op) => (
+                                <option key={op.value} value={op.value}>{op.label}</option>
+                              ))
+                            )}
+                          </select>
+                          {(filter.field === 'fecha_creacion' || filter.field === 'fecha_inicio' || filter.field === 'fecha_fin') ? (
+                          <select
+                            value={filter.value}
+                            onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                            className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-purple-500"
+                          >
+                            <option value="">Selecciona...</option>
+                            {DATE_PRESET_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              list={`datalist-${filter.id}`}
+                              value={filter.value}
+                              onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                              placeholder="Escribe o selecciona..."
+                              className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
+                            />
+                            <datalist id={`datalist-${filter.id}`}>
+                              {getUniqueValues[filter.field]?.map((val) => (
+                                <option key={val} value={val} />
+                              ))}
+                            </datalist>
+                          </>
+                        )}
+                          <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {filters.length === 0 && (
+                        <p className="text-[11px] text-zinc-500 text-center py-3">Sin filtros. Haz clic en "Añadir".</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-purple-900/30">
+                      <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
+                        <Plus className="h-3 w-3" /> Añadir
+                      </button>
+                      <button onClick={clearAdvancedFilters} disabled={filters.length === 0} className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        Limpiar
+                      </button>
+                    </div>
+                    {filters.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-purple-900/30">
+                        <span className="text-[10px] text-zinc-500">{filteredTareas.length} de {data?.data?.length || 0} registros</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Botón de Agrupar - solo en vista Lista */}
+              {view === 'lista' && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowGroupPopup(!showGroupPopup)}
+                    className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                      activeGroupings.length > 0
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                    }`}
+                    title="Agrupar"
+                  >
+                    <Layers className="h-4 w-4" />
+                    {activeGroupings.length > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white px-1">
+                        {activeGroupings.length}
+                      </span>
+                    )}
+                  </button>
+                  {showGroupPopup && (
+                    <div className="absolute right-0 top-full mt-1 z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 2)</p>
+                      {AVAILABLE_GROUPINGS.map(({ field, label }) => (
+                        <button
+                          key={field}
+                          onClick={() => toggleGrouping(field)}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
+                            activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                            activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
+                          }`}>
+                            {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
+                          </div>
+                          {label}
+                          {activeGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
+                          {activeGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+                        </button>
+                      ))}
+                      <div className="border-t border-purple-900/30 mt-2 pt-2">
+                        <button onClick={() => setActiveGroupings([])} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                          Quitar agrupación
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Botón de Ordenar */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowSortPopup(!showSortPopup)}
+                  className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                    sortField
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                  }`}
+                  title="Ordenar"
+                >
+                  <ArrowUpDown className="h-4 w-4" />
+                </button>
+                {showSortPopup && (
+                  <div className="absolute right-0 top-full mt-1 z-[60] w-[300px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-purple-300">Ordenar por</span>
+                      <button onClick={() => setShowSortPopup(false)} className="text-zinc-400 hover:text-white">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-1">
+                      {FILTER_FIELDS.map((field) => (
+                        <div
+                          key={field.field}
+                          className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
+                            sortField === field.field ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-purple-900/20'
+                          }`}
+                        >
+                          <span className={sortField === field.field ? 'text-purple-300 font-medium' : 'text-zinc-300'}>
+                            {field.label}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => { setSortField(field.field); setSortDirection('asc'); }}
+                              className={`p-1.5 rounded transition-colors ${
+                                sortField === field.field && sortDirection === 'asc'
+                                  ? 'bg-purple-600 text-white'
+                                  : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                              }`}
+                              title="Ascendente (A-Z)"
+                            >
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => { setSortField(field.field); setSortDirection('desc'); }}
+                              className={`p-1.5 rounded transition-colors ${
+                                sortField === field.field && sortDirection === 'desc'
+                                  ? 'bg-purple-600 text-white'
+                                  : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                              }`}
+                              title="Descendente (Z-A)"
+                            >
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {sortField && (
+                      <div className="mt-3 pt-3 border-t border-purple-900/30">
+                        <button
+                          onClick={() => { setSortField(null); setSortDirection('asc'); }}
+                          className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors"
+                        >
+                          Quitar ordenamiento
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Botón Limpiar Todo */}
+              {hasActiveFilters && (
+                <button
+                  onClick={clearAllFilters}
+                  className="flex items-center justify-center w-9 h-9 text-zinc-400 hover:text-white bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/50 transition-colors"
+                  title="Limpiar filtros"
+                >
+                  <X className="h-4 w-4" />
                 </button>
               )}
             </div>
@@ -1764,19 +2702,19 @@ export function NotificacionesPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-zinc-500">
-                {filteredTareas.length} tarea{filteredTareas.length !== 1 ? 's' : ''}
-                {groupBy.length > 0 && <span className="text-zinc-600"> · {groupBy.length} agrupación{groupBy.length > 1 ? 'es' : ''}</span>}
+                {filteredTareas.length} {contentType === 'notificaciones' ? 'notificación' : 'tarea'}{filteredTareas.length !== 1 ? (contentType === 'notificaciones' ? 'es' : 's') : ''}
+                {activeGroupings.length > 0 && <span className="text-zinc-600"> · {activeGroupings.length} agrupación{activeGroupings.length > 1 ? 'es' : ''}</span>}
               </span>
             </div>
 
-            {groupBy.length > 0 ? (
+            {activeGroupings.length > 0 ? (
               /* Vista con agrupaciones */
               <div className="space-y-3">
                 {nestedGroups.map((group) => (
                   <NestedSection
                     key={group.key}
                     group={group}
-                    groupByList={groupBy}
+                    groupByList={activeGroupings}
                     onSelectTarea={handleSelectTarea}
                   />
                 ))}
@@ -1875,17 +2813,34 @@ export function NotificacionesPage() {
 
                         {/* Acciones */}
                         <div className="flex items-center gap-1 flex-shrink-0 mt-1">
-                          {/* Botón Ir a ver - solo si tiene referencia */}
+                          {/* Botón Ir a ver - solo si tiene referencia o id_solicitud para tareas de autorización/rechazo */}
                           {hasNavigationRoute(tarea) && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (!tarea.referencia_tipo || !tarea.referencia_id) return;
-                                const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '');
-                                navigate(path);
+                                // Si tiene referencia_tipo y referencia_id, usar esos
+                                if (tarea.referencia_tipo && tarea.referencia_id) {
+                                  const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
+                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id);
+                                  navigate(path);
+                                  return;
+                                }
+                                // Tareas de Gestión de Artes con campania_id → Gestión de Artes
+                                if (isGestionArtesTarea(tarea.tipo) && tarea.campania_id) {
+                                  navigate(`/campanas/${tarea.campania_id}/tareas?taskId=${tarea.id}`);
+                                  return;
+                                }
+                                // Si es tarea de autorización/rechazo con id_solicitud, navegar a solicitud
+                                if (tarea.id_solicitud && (tarea.tipo?.includes('Autorización') || tarea.tipo?.includes('Rechazo'))) {
+                                  const solicitudId = parseInt(tarea.id_solicitud);
+                                  if (!isNaN(solicitudId)) {
+                                    const path = getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '');
+                                    navigate(path);
+                                  }
+                                }
                               }}
                               className="p-1.5 rounded-lg text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 transition-all opacity-0 group-hover:opacity-100"
-                              title={`Ir a ${tarea.referencia_tipo === 'propuesta' ? 'Propuesta' : tarea.referencia_tipo === 'campana' ? 'Campaña' : 'Solicitud'}`}
+                              title={`Ir a ${tarea.referencia_tipo === 'campana' && tarea.tipo === 'Correccion' ? 'Tarea' : tarea.referencia_tipo === 'propuesta' ? 'Propuesta' : tarea.referencia_tipo === 'campana' ? 'Campaña' : 'Solicitud'}`}
                             >
                               <ExternalLink className="h-4 w-4" />
                             </button>
@@ -1900,9 +2855,19 @@ export function NotificacionesPage() {
               </div>
             ) : (
               <div className="rounded-xl border border-zinc-800 p-12 text-center bg-zinc-900/30">
-                <Circle className="h-10 w-10 text-zinc-700 mx-auto mb-3" />
-                <p className="text-zinc-500">No hay tareas que mostrar</p>
-                <p className="text-xs text-zinc-600 mt-1">Ajusta los filtros o crea una nueva tarea</p>
+                {contentType === 'notificaciones' ? (
+                  <Bell className="h-10 w-10 text-zinc-700 mx-auto mb-3" />
+                ) : (
+                  <ClipboardList className="h-10 w-10 text-zinc-700 mx-auto mb-3" />
+                )}
+                <p className="text-zinc-500">
+                  {contentType === 'notificaciones' ? 'No tienes notificaciones' : 'No tienes tareas asignadas'}
+                </p>
+                <p className="text-xs text-zinc-600 mt-1">
+                  {contentType === 'notificaciones'
+                    ? 'Las notificaciones aparecerán aquí cuando haya actividad'
+                    : 'Las tareas aparecerán aquí cuando te asignen alguna'}
+                </p>
               </div>
             )}
           </div>
@@ -1917,17 +2882,24 @@ export function NotificacionesPage() {
       {selectedTarea && (
         <>
           <div
-            className="fixed inset-0 bg-black/50 z-40"
-            onClick={() => setSelectedTarea(null)}
+            className={`fixed inset-0 bg-black/50 z-40 ${isDrawerClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
+            onClick={handleCloseDrawer}
           />
           <TaskDrawer
             tarea={selectedTarea}
-            onClose={() => setSelectedTarea(null)}
+            onClose={handleCloseDrawer}
             onAddComment={(contenido) => addCommentMutation.mutate({ id: selectedTarea.id, contenido })}
+            onUpdateFechaFin={(fecha_fin) => updateTareaMutation.mutate({ id: selectedTarea.id, fecha_fin })}
             onNavigate={(path) => {
-              setSelectedTarea(null); // Cerrar drawer antes de navegar
-              navigate(path);
+              handleCloseDrawer();
+              setTimeout(() => navigate(path), 250);
             }}
+            isClosing={isDrawerClosing}
+            onAutorizacionAction={() => {
+              queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+              queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+            }}
+            contentType={contentType}
           />
         </>
       )}

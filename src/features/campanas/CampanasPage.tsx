@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Search, Download, Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
+  Search, Download, Filter, ChevronDown, ChevronRight, X, Layers,
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
-  List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2
+  List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
+  ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -17,6 +18,10 @@ type ViewType = 'tabla' | 'catorcena';
 import { formatDate } from '../../lib/utils';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { OrdenesMontajeModal } from './OrdenesMontajeModal';
+import { StatusCampanaModal } from './StatusCampanaModal';
+import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
+import { useSocketCampanas } from '../../hooks/useSocket';
 
 // Colors for dynamic tags
 const TAG_COLORS = [
@@ -42,7 +47,7 @@ function getTagColor(name: string) {
 
 // Status Colors - colores únicos por cada tipo de status
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'activa': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'Aprobada': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
   'inactiva': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
   'finalizada': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
   'por iniciar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
@@ -54,13 +59,28 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }
 
 const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
 
+// Colores para estatus de artes
+const ESTATUS_ARTE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  'Carga Artes': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
+  'Revision Artes': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+  'Artes Aprobados': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'En Impresion': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+  'Artes Recibidos': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
+  'Instalado': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
+};
+
+function getEstatusArteColor(estatus: string | null | undefined) {
+  if (!estatus) return DEFAULT_STATUS_COLOR;
+  return ESTATUS_ARTE_COLORS[estatus] || DEFAULT_STATUS_COLOR;
+}
+
 function getStatusColor(status: string | null | undefined) {
   if (!status) return DEFAULT_STATUS_COLOR;
-  const normalized = status.toLowerCase().trim();
-  // Si existe en nuestro mapa, usar ese color
-  if (STATUS_COLORS[normalized]) {
-    return STATUS_COLORS[normalized];
-  }
+  const trimmed = status.trim();
+  // Buscar match exacto primero, luego lowercase
+  if (STATUS_COLORS[trimmed]) return STATUS_COLORS[trimmed];
+  const normalized = trimmed.toLowerCase();
+  if (STATUS_COLORS[normalized]) return STATUS_COLORS[normalized];
   // Si no, generar un color dinámico basado en el nombre
   return getTagColor(status);
 }
@@ -75,7 +95,7 @@ const PERIOD_COLORS: Record<string, { bg: string; text: string; border: string }
 // Colores para gráficas
 const CHART_COLORS = {
   status: {
-    'activa': '#10b981',        // emerald
+    'Aprobada': '#10b981',       // emerald
     'finalizada': '#3b82f6',    // blue
     'por iniciar': '#f59e0b',   // amber
     'inactiva': '#6b7280',      // gray
@@ -114,6 +134,102 @@ function getPeriodStatus(fechaInicio: string, fechaFin: string): string {
   if (today > fin) return 'Pasada';
   if (today < inicio) return 'Futura';
   return 'En curso';
+}
+
+// Advanced Filter Types and Config
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
+
+interface AdvancedFilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: string;
+  label: string;
+  type: 'string' | 'number';
+}
+
+const CAMPANA_FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'id', label: 'ID', type: 'number' },
+  { field: 'nombre', label: 'Nombre', type: 'string' },
+  { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
+  { field: 'status', label: 'Estatus', type: 'string' },
+  { field: 'articulo', label: 'Artículo', type: 'string' },
+  { field: 'creador_nombre', label: 'Creador', type: 'string' },
+];
+
+const FILTER_OPERATORS: { value: FilterOperator; label: string }[] = [
+  { value: '=', label: 'Igual a' },
+  { value: '!=', label: 'Diferente de' },
+  { value: 'contains', label: 'Contiene' },
+  { value: 'not_contains', label: 'No contiene' },
+];
+
+// Campos disponibles para agrupar
+type GroupByField = 'status' | 'cliente_nombre' | 'catorcena_inicio';
+
+interface GroupConfig {
+  field: GroupByField;
+  label: string;
+}
+
+const AVAILABLE_GROUPINGS: GroupConfig[] = [
+  { field: 'status', label: 'Estatus' },
+  { field: 'cliente_nombre', label: 'Cliente' },
+  { field: 'catorcena_inicio', label: 'Catorcena Inicio' },
+];
+
+// Campos disponibles para ordenar
+const SORT_FIELDS = [
+  { field: 'fecha_inicio', label: 'Fecha Inicio' },
+  { field: 'nombre', label: 'Nombre' },
+  { field: 'cliente_nombre', label: 'Cliente' },
+  { field: 'status', label: 'Estatus' },
+];
+
+// Function to apply advanced filters to data
+function applyAdvancedFilters<T>(data: T[], filters: AdvancedFilterCondition[]): T[] {
+  if (filters.length === 0) return data;
+
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = (item as Record<string, unknown>)[filter.field];
+      const filterValue = filter.value;
+
+      if (!filterValue) return true;
+
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+
+      switch (filter.operator) {
+        case '=':
+          return strValue === strFilterValue;
+        case '!=':
+          return strValue !== strFilterValue;
+        case 'contains':
+          return strValue.includes(strFilterValue);
+        case 'not_contains':
+          return !strValue.includes(strFilterValue);
+        case '>':
+          return Number(fieldValue) > Number(filterValue);
+        case '<':
+          return Number(fieldValue) < Number(filterValue);
+        case '>=':
+          return Number(fieldValue) >= Number(filterValue);
+        case '<=':
+          return Number(fieldValue) <= Number(filterValue);
+        default:
+          return true;
+      }
+    });
+  });
 }
 
 // Filter Chip Component with Search
@@ -205,84 +321,6 @@ function FilterChip({
       )}
     </div>
   );
-}
-
-// Advanced Filter Types and Config
-type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
-
-interface AdvancedFilterCondition {
-  id: string;
-  field: string;
-  operator: FilterOperator;
-  value: string;
-}
-
-interface FilterFieldConfig {
-  field: string;
-  label: string;
-  type: 'string' | 'number';
-}
-
-const CAMPANA_FILTER_FIELDS: FilterFieldConfig[] = [
-  { field: 'id', label: 'ID', type: 'number' },
-  { field: 'nombre', label: 'Nombre', type: 'string' },
-  { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
-  { field: 'status', label: 'Status', type: 'string' },
-  { field: 'articulo', label: 'Artículo', type: 'string' },
-  { field: 'ciudad', label: 'Ciudad', type: 'string' },
-];
-
-const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
-  { value: '=', label: 'Igual a', forTypes: ['string', 'number'] },
-  { value: '!=', label: 'Diferente de', forTypes: ['string', 'number'] },
-  { value: 'contains', label: 'Contiene', forTypes: ['string'] },
-  { value: 'not_contains', label: 'No contiene', forTypes: ['string'] },
-  { value: '>', label: 'Mayor que', forTypes: ['number'] },
-  { value: '<', label: 'Menor que', forTypes: ['number'] },
-  { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
-  { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
-];
-
-// Function to apply advanced filters to data
-function applyAdvancedFilters<T>(data: T[], filters: AdvancedFilterCondition[]): T[] {
-  if (filters.length === 0) return data;
-
-  return data.filter(item => {
-    return filters.every(filter => {
-      const fieldValue = (item as Record<string, unknown>)[filter.field];
-      const filterValue = filter.value;
-
-      if (!filterValue) return true;
-
-      if (fieldValue === null || fieldValue === undefined) {
-        return filter.operator === '!=' || filter.operator === 'not_contains';
-      }
-
-      const strValue = String(fieldValue).toLowerCase();
-      const strFilterValue = filterValue.toLowerCase();
-
-      switch (filter.operator) {
-        case '=':
-          return strValue === strFilterValue;
-        case '!=':
-          return strValue !== strFilterValue;
-        case 'contains':
-          return strValue.includes(strFilterValue);
-        case 'not_contains':
-          return !strValue.includes(strFilterValue);
-        case '>':
-          return Number(fieldValue) > Number(filterValue);
-        case '<':
-          return Number(fieldValue) < Number(filterValue);
-        case '>=':
-          return Number(fieldValue) >= Number(filterValue);
-        case '<=':
-          return Number(fieldValue) <= Number(filterValue);
-        default:
-          return true;
-      }
-    });
-  });
 }
 
 // Period Filter Popover Component
@@ -553,11 +591,17 @@ function GroupHeader({
 }
 
 // Status options
-const STATUS_OPTIONS = ['activa', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
+const STATUS_OPTIONS = ['Aprobada', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
 
 export function CampanasPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  // WebSocket para actualizaciones en tiempo real
+  useSocketCampanas();
+
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -575,17 +619,22 @@ export function CampanasPage() {
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
-  const [groupBy, setGroupBy] = useState('');
-  const [sortBy, setSortBy] = useState('fecha_inicio');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [showFilters, setShowFilters] = useState(false);
+  // Estados para filtros/ordenamiento/agrupación con popups
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Estados para filtros expandibles
+  const [showFilters, setShowFilters] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selectedCatorcenaInicio, setSelectedCatorcenaInicio] = useState('');
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedCampana, setSelectedCampana] = useState<Campana | null>(null);
   const [ordenesMontajeModalOpen, setOrdenesMontajeModalOpen] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [statusCampana, setStatusCampana] = useState<Campana | null>(null);
   const limit = 20;
 
   // Estado para la vista activa (tabs)
@@ -689,12 +738,12 @@ export function CampanasPage() {
     }
 
     // Apply sorting
-    if (sortBy && items.length > 0) {
+    if (sortField && items.length > 0) {
       items = [...items].sort((a, b) => {
         let aVal: string | number | null = null;
         let bVal: string | number | null = null;
 
-        switch (sortBy) {
+        switch (sortField) {
           case 'fecha_inicio':
             aVal = a.fecha_inicio;
             bVal = b.fecha_inicio;
@@ -703,7 +752,7 @@ export function CampanasPage() {
             aVal = a.nombre?.toLowerCase() || '';
             bVal = b.nombre?.toLowerCase() || '';
             break;
-          case 'cliente':
+          case 'cliente_nombre':
             aVal = (a.cliente_nombre || a.cliente_razon_social || '').toLowerCase();
             bVal = (b.cliente_nombre || b.cliente_razon_social || '').toLowerCase();
             break;
@@ -714,38 +763,75 @@ export function CampanasPage() {
         }
 
         if (aVal === null || bVal === null) return 0;
-        if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
         return 0;
       });
     }
 
     return items;
-  }, [data?.data, debouncedSearch, selectedCatorcenaInicio, advancedFilters, sortBy, sortOrder]);
+  }, [data?.data, debouncedSearch, selectedCatorcenaInicio, advancedFilters, sortField, sortDirection]);
 
-  // Group data
-  const groupedData = useMemo(() => {
-    if (!groupBy || !filteredData.length) return null;
+  // Group data - supports up to 2 levels
+  interface GroupedLevel1 {
+    name: string;
+    items: Campana[];
+    subgroups?: { name: string; items: Campana[] }[];
+  }
+
+  const getGroupValue = (item: Campana, field: GroupByField): string => {
+    if (field === 'catorcena_inicio') {
+      return item.catorcena_inicio_num && item.catorcena_inicio_anio
+        ? `Catorcena ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
+        : 'Sin catorcena';
+    } else if (field === 'status') {
+      return item.status || 'Sin status';
+    } else if (field === 'cliente_nombre') {
+      return item.cliente_nombre || item.cliente_razon_social || 'Sin cliente';
+    }
+    return 'Sin asignar';
+  };
+
+  const groupedData = useMemo((): GroupedLevel1[] | null => {
+    if (activeGroupings.length === 0 || !filteredData.length) return null;
+
+    const groupKey1 = activeGroupings[0];
+    const groupKey2 = activeGroupings.length > 1 ? activeGroupings[1] : null;
 
     const groups: Record<string, Campana[]> = {};
 
+    // First level grouping
     filteredData.forEach(item => {
-      let key = 'Sin asignar';
-      if (groupBy === 'catorcena_inicio') {
-        key = item.catorcena_inicio_num && item.catorcena_inicio_anio
-          ? `Catorcena ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
-          : 'Sin catorcena';
-      } else if (groupBy === 'status') {
-        key = item.status || 'Sin status';
-      } else if (groupBy === 'cliente') {
-        key = item.cliente_nombre || item.cliente_razon_social || 'Sin cliente';
-      }
+      const key = getGroupValue(item, groupKey1);
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     });
 
-    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
-  }, [filteredData, groupBy]);
+    // Sort by count (descending)
+    const sortGroups = (entries: [string, Campana[]][]) => {
+      return entries.sort((a, b) => b[1].length - a[1].length);
+    };
+
+    // Convert to array and add second level if needed
+    const result: GroupedLevel1[] = sortGroups(Object.entries(groups))
+      .map(([name, items]) => {
+        if (groupKey2) {
+          // Second level grouping
+          const subgroupsMap: Record<string, Campana[]> = {};
+          items.forEach(item => {
+            const subKey = getGroupValue(item, groupKey2);
+            if (!subgroupsMap[subKey]) subgroupsMap[subKey] = [];
+            subgroupsMap[subKey].push(item);
+          });
+          const subgroups = sortGroups(Object.entries(subgroupsMap))
+            .map(([subName, subItems]) => ({ name: subName, items: subItems }));
+          return { name, items, subgroups };
+        }
+        return { name, items };
+      });
+
+    return result;
+  }, [filteredData, activeGroupings]);
 
   const toggleGroup = (groupName: string) => {
     setExpandedGroups(prev => {
@@ -758,6 +844,53 @@ export function CampanasPage() {
       return next;
     });
   };
+
+  // Funciones para manejar filtros
+  const addFilter = useCallback(() => {
+    const newFilter: AdvancedFilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: CAMPANA_FILTER_FIELDS[0].field,
+      operator: '=',
+      value: '',
+    };
+    setAdvancedFilters(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilter = useCallback((id: string, updates: Partial<AdvancedFilterCondition>) => {
+    setAdvancedFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilter = useCallback((id: string) => {
+    setAdvancedFilters(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setAdvancedFilters([]);
+  }, []);
+
+  // Función para toggle de agrupación
+  const toggleGrouping = useCallback((field: GroupByField) => {
+    setActiveGroupings(prev => {
+      // En vista catorcena, catorcena_inicio no puede ser removida
+      if (activeView === 'catorcena' && field === 'catorcena_inicio') {
+        return prev;
+      }
+      if (prev.includes(field)) {
+        return prev.filter(f => f !== field);
+      }
+      // En vista catorcena, catorcena_inicio siempre es primera, solo se puede agregar segunda
+      if (activeView === 'catorcena') {
+        if (prev.length >= 2) {
+          return ['catorcena_inicio', field] as GroupByField[];
+        }
+        return ['catorcena_inicio', field] as GroupByField[];
+      }
+      if (prev.length >= 2) {
+        return [prev[1], field];
+      }
+      return [...prev, field];
+    });
+  }, [activeView]);
 
   // Funciones para la vista de catorcena
   const toggleCatorcena = (catorcenaKey: string) => {
@@ -842,9 +975,13 @@ export function CampanasPage() {
     });
   };
 
-  // Agrupar campañas por catorcena para la vista alternativa
+  // Agrupar campañas por catorcena para la vista alternativa (con soporte para subagrupaciones)
   const campanasPorCatorcena = useMemo(() => {
-    const groups: Record<string, { catorcena: { num: number; anio: number }; campanas: Campana[] }> = {};
+    const groups: Record<string, {
+      catorcena: { num: number; anio: number };
+      campanas: Campana[];
+      subgroups?: { name: string; campanas: Campana[] }[];
+    }> = {};
 
     filteredData.forEach(item => {
       if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
@@ -859,11 +996,31 @@ export function CampanasPage() {
       }
     });
 
+    // Obtener segunda agrupación si existe y la primera es catorcena_inicio
+    const secondGrouping = activeGroupings[0] === 'catorcena_inicio' && activeGroupings.length > 1
+      ? activeGroupings[1]
+      : null;
+
     // Ordenar por año desc, luego por catorcena desc
     return Object.entries(groups)
       .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([key, value]) => ({ key, ...value }));
-  }, [filteredData]);
+      .map(([key, value]) => {
+        // Si hay segunda agrupación, crear subgrupos
+        if (secondGrouping) {
+          const subgroupsMap: Record<string, Campana[]> = {};
+          value.campanas.forEach(campana => {
+            const subKey = getGroupValue(campana, secondGrouping);
+            if (!subgroupsMap[subKey]) subgroupsMap[subKey] = [];
+            subgroupsMap[subKey].push(campana);
+          });
+          const subgroups = Object.entries(subgroupsMap)
+            .sort((a, b) => b[1].length - a[1].length)
+            .map(([name, campanas]) => ({ name, campanas }));
+          return { key, ...value, subgroups };
+        }
+        return { key, ...value };
+      });
+  }, [filteredData, activeGroupings]);
 
   // Estadísticas para gráfica de Status
   const statusChartData = useMemo(() => {
@@ -976,7 +1133,7 @@ export function CampanasPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || debouncedSearch || selectedCatorcenaInicio || advancedFilters.length > 0 || sortBy !== 'fecha_inicio');
+  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || debouncedSearch || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null);
 
   // Get unique values for each field (for advanced filter dropdowns)
   const getUniqueFieldValues = useMemo(() => {
@@ -996,30 +1153,15 @@ export function CampanasPage() {
     return valuesMap;
   }, [data?.data]);
 
-  // Advanced filter functions
-  const addAdvancedFilter = () => {
-    const newFilter: AdvancedFilterCondition = {
-      id: `filter-${Date.now()}`,
-      field: CAMPANA_FILTER_FIELDS[0].field,
-      operator: '=',
-      value: '',
-    };
-    setAdvancedFilters(prev => [...prev, newFilter]);
-  };
-
-  const updateAdvancedFilter = (id: string, updates: Partial<AdvancedFilterCondition>) => {
-    setAdvancedFilters(prev =>
-      prev.map(f => (f.id === id ? { ...f, ...updates } : f))
-    );
-  };
-
-  const removeAdvancedFilter = (id: string) => {
-    setAdvancedFilters(prev => prev.filter(f => f.id !== id));
-  };
-
-  const clearAdvancedFilters = () => {
-    setAdvancedFilters([]);
-  };
+  // Lista de estatus únicos para el FilterChip
+  const allStatuses = useMemo(() => {
+    if (!data?.data) return [];
+    const statusSet = new Set<string>();
+    data.data.forEach(c => {
+      if (c.status) statusSet.add(c.status);
+    });
+    return Array.from(statusSet).sort();
+  }, [data?.data]);
 
   const clearAllFilters = () => {
     setSearch('');
@@ -1029,9 +1171,9 @@ export function CampanasPage() {
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
     setSelectedCatorcenaInicio('');
-    setSortBy('fecha_inicio');
-    setSortOrder('desc');
-    setGroupBy('');
+    setSortField(null);
+    setSortDirection('desc');
+    setActiveGroupings([]);
     setExpandedGroups(new Set());
     setAdvancedFilters([]);
     setPage(1);
@@ -1042,7 +1184,7 @@ export function CampanasPage() {
     if (!filteredData.length) return;
 
     const headers = [
-      'Periodo', 'Creador', 'Campaña', 'Cliente', 'Estatus', 'Catorcena Inicio', 'Catorcena Fin', 'APS'
+      'Periodo', 'Creador', 'Campaña', 'Cliente', 'Estatus', 'Actividad', 'Catorcena Inicio', 'Catorcena Fin', 'APS'
     ];
     const rows = filteredData.map(c => {
       const periodStatus = getPeriodStatus(c.fecha_inicio, c.fecha_fin);
@@ -1058,6 +1200,7 @@ export function CampanasPage() {
         c.nombre || '',
         c.cliente_nombre || c.cliente_razon_social || '',
         c.status,
+        c.has_aps ? 'Activa' : 'Inactiva',
         catIni,
         catFin,
         c.has_aps ? 'Si' : 'No'
@@ -1133,17 +1276,44 @@ export function CampanasPage() {
         <td className="px-4 py-3">
           <span className="font-medium text-white text-sm">{item.nombre}</span>
         </td>
-        {/* Cliente - Simple text */}
+        {/* Cliente/Marca */}
         <td className="px-4 py-3">
-          <span className="text-zinc-300 text-sm max-w-[180px] truncate block" title={item.cliente_nombre || item.cliente_razon_social || '-'}>
-            {item.cliente_nombre || item.cliente_razon_social || '-'}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-zinc-300 text-sm max-w-[180px] truncate" title={item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}>
+              {item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}
+            </span>
+            {item.sap_database && (
+              <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
+                item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+              }`}>{item.sap_database}</span>
+            )}
+          </div>
         </td>
         {/* Status */}
         <td className="px-4 py-3">
-          <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+          <button
+            onClick={() => {
+              setStatusCampana(item);
+              setStatusModalOpen(true);
+            }}
+            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+          >
             {item.status}
-          </span>
+          </button>
+        </td>
+        {/* Actividad */}
+        <td className="px-4 py-3">
+          {item.has_aps ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              Activa
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-300 border border-zinc-500/30">
+              Inactiva
+            </span>
+          )}
         </td>
         {/* Cat. Inicio - Badge style */}
         <td className="px-4 py-3">
@@ -1189,18 +1359,20 @@ export function CampanasPage() {
             >
               <Eye className="h-3.5 w-3.5" />
             </button>
-            <button
-              onClick={() => handleEditCampana(item)}
-              disabled={isEditDisabled(item)}
-              className={`p-2 rounded-lg border transition-all ${
-                isEditDisabled(item)
-                  ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                  : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
-              }`}
-              title={isEditDisabled(item) ? 'No editable (tiene APS o status no permite edición)' : 'Editar campaña'}
-            >
-              <Edit2 className="h-3.5 w-3.5" />
-            </button>
+            {permissions.canEditCampanas && (
+              <button
+                onClick={() => handleEditCampana(item)}
+                disabled={isEditDisabled(item)}
+                className={`p-2 rounded-lg border transition-all ${
+                  isEditDisabled(item)
+                    ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                    : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
+                }`}
+                title={isEditDisabled(item) ? 'No editable (tiene APS o status no permite edición)' : 'Editar campaña'}
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </td>
       </tr>
@@ -1368,13 +1540,15 @@ export function CampanasPage() {
               </button>
 
               {/* Órdenes de Montaje */}
-              <button
-                onClick={() => setOrdenesMontajeModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30 transition-all"
-              >
-                <ClipboardList className="h-4 w-4" />
-                Órdenes de Montaje
-              </button>
+              {permissions.canSeeOrdenesMontajeButton && (
+                <button
+                  onClick={() => setOrdenesMontajeModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30 transition-all"
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  Órdenes de Montaje
+                </button>
+              )}
             </div>
 
             {/* Filters Row (Expandable) */}
@@ -1419,7 +1593,7 @@ export function CampanasPage() {
                             {index === 0 && <span className="w-8"></span>}
                             <select
                               value={filter.field}
-                              onChange={(e) => updateAdvancedFilter(filter.id, { field: e.target.value })}
+                              onChange={(e) => updateFilter(filter.id, { field: e.target.value })}
                               className="w-[120px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
                             >
                               {CAMPANA_FILTER_FIELDS.map((f) => (
@@ -1428,19 +1602,16 @@ export function CampanasPage() {
                             </select>
                             <select
                               value={filter.operator}
-                              onChange={(e) => updateAdvancedFilter(filter.id, { operator: e.target.value as FilterOperator })}
+                              onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
                               className="w-[100px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
                             >
-                              {FILTER_OPERATORS.filter(op => {
-                                const fieldConfig = CAMPANA_FILTER_FIELDS.find(f => f.field === filter.field);
-                                return fieldConfig && op.forTypes.includes(fieldConfig.type);
-                              }).map((op) => (
+                              {FILTER_OPERATORS.map((op) => (
                                 <option key={op.value} value={op.value}>{op.label}</option>
                               ))}
                             </select>
                             <select
                               value={filter.value}
-                              onChange={(e) => updateAdvancedFilter(filter.id, { value: e.target.value })}
+                              onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
                               className="flex-1 text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
                             >
                               <option value="">Seleccionar...</option>
@@ -1449,7 +1620,7 @@ export function CampanasPage() {
                               ))}
                             </select>
                             <button
-                              onClick={() => removeAdvancedFilter(filter.id)}
+                              onClick={() => removeFilter(filter.id)}
                               className="text-red-400 hover:text-red-300 p-1"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -1464,14 +1635,14 @@ export function CampanasPage() {
                       </div>
                       <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
                         <button
-                          onClick={addAdvancedFilter}
+                          onClick={addFilter}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
                         >
                           <Plus className="h-3 w-3" />
                           Añadir
                         </button>
                         <button
-                          onClick={clearAdvancedFilters}
+                          onClick={clearFilters}
                           disabled={advancedFilters.length === 0}
                           className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                         >
@@ -1492,14 +1663,16 @@ export function CampanasPage() {
                 <div className="h-4 w-px bg-zinc-700 mx-1" />
 
                 {/* Status Filter */}
-                <span className="text-xs text-zinc-500 mr-1">Estatus:</span>
+                <span className="text-xs text-zinc-500 mr-1">Status:</span>
                 <FilterChip
-                  label="Estatus"
-                  options={STATUS_OPTIONS}
+                  label="Status"
+                  options={allStatuses}
                   value={status}
                   onChange={(val) => { setStatus(val); setPage(1); }}
                   onClear={() => { setStatus(''); setPage(1); }}
                 />
+
+                <div className="h-4 w-px bg-zinc-700 mx-1" />
 
                 {/* Current Catorcena Indicator */}
                 {currentCatorcena && (
@@ -1535,52 +1708,50 @@ export function CampanasPage() {
                   }}
                 />
 
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
+                {/* Divider */}
+                <div className="h-4 w-px bg-zinc-700/50 mx-1" />
 
-                {/* Sort */}
+                {/* Sort Options */}
                 <span className="text-xs text-zinc-500 mr-1">
                   <ArrowUpDown className="h-3 w-3 inline mr-1" />
                   Ordenar:
                 </span>
                 <FilterChip
                   label="Campo"
-                  options={['fecha_inicio', 'nombre', 'cliente', 'status']}
-                  value={sortBy}
-                  onChange={(val) => { setSortBy(val); setPage(1); }}
-                  onClear={() => { setSortBy('fecha_inicio'); setPage(1); }}
+                  options={['fecha_inicio', 'nombre', 'cliente_nombre', 'status']}
+                  value={sortField || ''}
+                  onChange={(val) => { setSortField(val); setPage(1); }}
+                  onClear={() => { setSortField(null); setPage(1); }}
                 />
                 <button
-                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
                   className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 transition-all"
                 >
-                  {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
+                  {sortDirection === 'asc' ? '↑ Asc' : '↓ Desc'}
                 </button>
 
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
+                {/* Divider */}
+                <div className="h-4 w-px bg-zinc-700/50 mx-1" />
 
                 {/* Group By */}
-                <span className="text-xs text-zinc-500 mr-1">
-                  <Layers className="h-3 w-3 inline mr-1" />
-                  Agrupar:
-                </span>
                 <FilterChip
-                  label="Sin agrupar"
-                  options={['status', 'cliente', 'catorcena_inicio']}
-                  value={groupBy}
-                  onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); setPage(1); }}
-                  onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); setPage(1); }}
+                  label="Agrupar"
+                  options={['status', 'cliente_nombre', 'catorcena_inicio']}
+                  value={activeGroupings[0] || ''}
+                  onChange={(val) => { setActiveGroupings([val as GroupByField]); setExpandedGroups(new Set()); }}
+                  onClear={() => { setActiveGroupings([]); setExpandedGroups(new Set()); }}
                 />
 
-                {/* Clear All Filters Button */}
+                {/* Clear All */}
                 {hasActiveFilters && (
                   <>
-                    <div className="h-4 w-px bg-zinc-700 mx-1" />
+                    <div className="h-4 w-px bg-zinc-700/50 mx-1" />
                     <button
                       onClick={clearAllFilters}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                      className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
                     >
                       <X className="h-3 w-3" />
-                      Limpiar filtros
+                      Limpiar todo
                     </button>
                   </>
                 )}
@@ -1592,7 +1763,9 @@ export function CampanasPage() {
         {/* Tabs de vista */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setActiveView('tabla')}
+            onClick={() => {
+              setActiveView('tabla');
+            }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeView === 'tabla'
                 ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
@@ -1603,7 +1776,13 @@ export function CampanasPage() {
             Vista Tabla
           </button>
           <button
-            onClick={() => setActiveView('catorcena')}
+            onClick={() => {
+              setActiveView('catorcena');
+              // Al cambiar a vista catorcena, agregar catorcena_inicio como primera agrupación si no está
+              if (!activeGroupings.includes('catorcena_inicio')) {
+                setActiveGroupings(prev => ['catorcena_inicio', ...prev.filter(g => g !== 'catorcena_inicio')].slice(0, 2) as GroupByField[]);
+              }
+            }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeView === 'catorcena'
                 ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
@@ -1611,7 +1790,7 @@ export function CampanasPage() {
             }`}
           >
             <LayoutGrid className="h-4 w-4" />
-            Vista por Catorcena
+            Versionario
           </button>
         </div>
 
@@ -1621,7 +1800,14 @@ export function CampanasPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs">
               <Filter className="h-3.5 w-3.5" />
               {filteredData.length} resultados
-              {groupBy && <span className="text-zinc-500">| Agrupado por {groupBy}</span>}
+              {activeGroupings.length > 0 && (
+                <span className="text-zinc-500">
+                  | Agrupado por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
+                </span>
+              )}
+              {sortField && (
+                <span className="text-zinc-500">| Ordenado por {SORT_FIELDS.find(f => f.field === sortField)?.label} ({sortDirection === 'asc' ? '↑' : '↓'})</span>
+              )}
             </div>
           </div>
         )}
@@ -1643,8 +1829,9 @@ export function CampanasPage() {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Periodo</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Creador</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Actividad</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Inicio</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Fin</th>
                       <th className="px-4 py-3 text-center text-xs font-semibold text-purple-300 uppercase tracking-wider">APS</th>
@@ -1653,16 +1840,52 @@ export function CampanasPage() {
                   </thead>
                   <tbody>
                     {groupedData ? (
-                      groupedData.map(([groupName, items]) => (
-                        <React.Fragment key={`group-${groupName}`}>
+                      groupedData.map((group) => (
+                        <React.Fragment key={`group-${group.name}`}>
+                          {/* Level 1 Header */}
                           <GroupHeader
-                            groupName={groupName}
-                            count={items.length}
-                            expanded={expandedGroups.has(groupName)}
-                            onToggle={() => toggleGroup(groupName)}
-                            colSpan={10}
+                            groupName={group.name}
+                            count={group.items.length}
+                            expanded={expandedGroups.has(group.name)}
+                            onToggle={() => toggleGroup(group.name)}
+                            colSpan={11}
                           />
-                          {expandedGroups.has(groupName) && items.map((item, idx) => renderCampanaRow(item, idx))}
+                          {/* Level 1 Content */}
+                          {expandedGroups.has(group.name) && (
+                            group.subgroups ? (
+                              // Has subgroups (2 level grouping)
+                              group.subgroups.map((subgroup) => (
+                                <React.Fragment key={`subgroup-${group.name}-${subgroup.name}`}>
+                                  {/* Level 2 Header */}
+                                  <tr
+                                    onClick={() => toggleGroup(`${group.name}|${subgroup.name}`)}
+                                    className="bg-fuchsia-500/5 border-b border-fuchsia-500/10 cursor-pointer hover:bg-fuchsia-500/10 transition-colors"
+                                  >
+                                    <td colSpan={11} className="px-4 py-2.5 pl-10">
+                                      <div className="flex items-center gap-2">
+                                        {expandedGroups.has(`${group.name}|${subgroup.name}`) ? (
+                                          <ChevronDown className="h-4 w-4 text-fuchsia-400" />
+                                        ) : (
+                                          <ChevronRight className="h-4 w-4 text-fuchsia-400" />
+                                        )}
+                                        <span className="font-semibold text-zinc-200 text-sm">{subgroup.name || 'Sin asignar'}</span>
+                                        <span className="px-2 py-0.5 rounded-full text-xs bg-fuchsia-500/20 text-fuchsia-300">
+                                          {subgroup.items.length} campañas
+                                        </span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {/* Level 2 Content */}
+                                  {expandedGroups.has(`${group.name}|${subgroup.name}`) &&
+                                    subgroup.items.map((item, idx) => renderCampanaRow(item, idx))
+                                  }
+                                </React.Fragment>
+                              ))
+                            ) : (
+                              // No subgroups (1 level grouping)
+                              group.items.map((item, idx) => renderCampanaRow(item, idx))
+                            )
+                          )}
                         </React.Fragment>
                       ))
                     ) : (
@@ -1670,7 +1893,7 @@ export function CampanasPage() {
                     )}
                     {filteredData.length === 0 && !groupedData && (
                       <tr>
-                        <td colSpan={10} className="px-4 py-12 text-center">
+                        <td colSpan={11} className="px-4 py-12 text-center">
                           <div className="flex flex-col items-center gap-3">
                             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-purple-500/10">
                               <Megaphone className="w-6 h-6 text-purple-400" />
@@ -1685,7 +1908,7 @@ export function CampanasPage() {
               </div>
 
               {/* Pagination */}
-              {!groupBy && data?.pagination && totalPages > 1 && (
+              {activeGroupings.length === 0 && data?.pagination && totalPages > 1 && (
                 <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
                   <span className="text-sm text-purple-300/70">
                     Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{totalPages}</span>
@@ -1711,10 +1934,10 @@ export function CampanasPage() {
               )}
 
               {/* Grouped data info */}
-              {groupBy && (
+              {activeGroupings.length > 0 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
                   <span className="text-xs text-zinc-500">
-                    Mostrando {filteredData.length} campañas agrupadas por {groupBy}
+                    Mostrando {filteredData.length} campañas agrupadas por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
                   </span>
                 </div>
               )}
@@ -1765,10 +1988,212 @@ export function CampanasPage() {
               </div>
             ) : (
               <div className="divide-y divide-zinc-800/30">
-                {campanasPorCatorcena.map(({ key, catorcena, campanas }) => {
+                {campanasPorCatorcena.map(({ key, catorcena, campanas, subgroups }) => {
                   const isCurrentCatorcena = currentCatorcena &&
                     currentCatorcena.numero_catorcena === catorcena.num &&
                     currentCatorcena.a_o === catorcena.anio;
+                  const secondGroupingLabel = activeGroupings[0] === 'catorcena_inicio' && activeGroupings.length > 1
+                    ? AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label
+                    : null;
+
+                  // Función para renderizar una campaña
+                  const renderCampana = (campana: Campana, indent: number = 0) => {
+                    const statusColor = getStatusColor(campana.status);
+                    const periodStatus = getPeriodStatus(campana.fecha_inicio, campana.fecha_fin);
+                    const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
+                    const isExpanded = expandedCampanas.has(campana.id);
+                    const inventarios = campanaInventarios[campana.id] || [];
+                    const isLoadingInv = loadingInventarios.has(campana.id);
+                    const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
+
+                    return (
+                      <div key={campana.id} className="border-t border-zinc-800/30">
+                        <button
+                          onClick={() => toggleCampana(campana.id)}
+                          className="w-full flex items-center gap-3 px-6 py-3 hover:bg-zinc-800/30 transition-all"
+                          style={{ paddingLeft: `${24 + indent * 16}px` }}
+                        >
+                          {isLoadingInv ? (
+                            <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
+                          ) : isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-zinc-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-zinc-400" />
+                          )}
+                          <Megaphone className="h-4 w-4 text-zinc-500" />
+                          <span className="font-medium text-white text-sm flex-1 text-left truncate">
+                            {campana.nombre}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
+                            {periodStatus}
+                          </span>
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStatusCampana(campana);
+                              setStatusModalOpen(true);
+                            }}
+                            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+                          >
+                            {campana.status}
+                          </span>
+                          {campana.has_aps ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                              <Check className="h-3 w-3" /> APS
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-400 border border-zinc-500/30 flex items-center gap-1">
+                              <Minus className="h-3 w-3" /> Sin APS
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => handleOpenCampana(campana.id)}
+                              className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all"
+                              title="Ver campaña"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </button>
+                            {permissions.canEditCampanas && (
+                              <button
+                                onClick={() => handleEditCampana(campana)}
+                                disabled={isEditDisabled(campana)}
+                                className={`p-1.5 rounded-lg border transition-all ${
+                                  isEditDisabled(campana)
+                                    ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                                    : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20'
+                                }`}
+                                title={isEditDisabled(campana) ? 'No editable' : 'Editar campaña'}
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        </button>
+                        {/* Contenido expandible - inventario */}
+                        {isExpanded && (
+                          <div className="bg-zinc-950/50 px-8 py-3" style={{ marginLeft: `${indent * 16}px` }}>
+                            {isLoadingInv ? (
+                              <div className="flex items-center gap-2 text-zinc-500 text-sm">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Cargando inventario...
+                              </div>
+                            ) : inventarios.length === 0 ? (
+                              <p className="text-sm text-zinc-500">No hay inventario con APS</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {apsAgrupados.map(apsGroup => {
+                                  const apsKey = `${campana.id}-${apsGroup.aps ?? 'sin-aps'}`;
+                                  const isAPSExpanded = expandedAPS.has(apsKey);
+                                  return (
+                                    <div key={apsGroup.aps ?? 'sin-aps'} className="border border-zinc-800/50 rounded-lg overflow-hidden">
+                                      <button
+                                        onClick={() => toggleAPS(campana.id, apsGroup.aps)}
+                                        className="w-full flex items-center gap-2 px-3 py-2 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all"
+                                      >
+                                        {isAPSExpanded ? <ChevronDown className="h-3 w-3 text-zinc-400" /> : <ChevronRight className="h-3 w-3 text-zinc-400" />}
+                                        <Package className="h-3 w-3 text-emerald-400" />
+                                        <span className="text-xs text-white font-medium">{apsGroup.aps ? `APS ${apsGroup.aps}` : 'Sin APS'}</span>
+                                        <span className="text-[10px] text-zinc-500">{apsGroup.totalItems} ubicaciones</span>
+                                      </button>
+                                      {isAPSExpanded && (
+                                        <div className="px-3 py-2 space-y-1 bg-zinc-900/50">
+                                          {apsGroup.grupos.map(grupo => {
+                                            const grupoKey = `${apsKey}-${grupo.key}`;
+                                            const isGrupoExpanded = expandedGrupos.has(grupoKey);
+                                            // Calcular estatus de arte predominante del grupo
+                                            const estatusCount: Record<string, number> = {};
+                                            grupo.items.forEach(inv => {
+                                              const estatus = (inv as any).estatus_arte || 'Sin estatus';
+                                              estatusCount[estatus] = (estatusCount[estatus] || 0) + 1;
+                                            });
+                                            const estatusPredominante = Object.entries(estatusCount).sort((a, b) => b[1] - a[1])[0];
+                                            const estatusGrupoColor = estatusPredominante ? getEstatusArteColor(estatusPredominante[0]) : DEFAULT_STATUS_COLOR;
+                                            return (
+                                              <div key={grupo.key} className="border-l-2 border-zinc-700 pl-2">
+                                                <button
+                                                  onClick={() => toggleGrupo(campana.id, apsGroup.aps, grupo.key)}
+                                                  className="w-full flex items-center gap-2 py-1 text-left hover:bg-zinc-800/30 rounded px-1"
+                                                >
+                                                  {isGrupoExpanded ? <ChevronDown className="h-3 w-3 text-zinc-500" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
+                                                  <ClipboardList className="h-3 w-3 text-purple-400" />
+                                                  <span className="text-[11px] text-zinc-300">{grupo.key}</span>
+                                                  <span className="text-[10px] text-zinc-600">({grupo.items.length})</span>
+                                                  {/* 5 iconos de etapas de Gestión de Artes */}
+                                                  {(() => {
+                                                    const total = grupo.items.length;
+                                                    const flujoOrder = ['Carga Artes', 'Revision Artes', 'Artes Aprobados', 'En Impresion', 'Artes Recibidos', 'Instalado'];
+                                                    const getStageIndex = (estatus: string | null | undefined) => {
+                                                      const idx = flujoOrder.indexOf(estatus || 'Carga Artes');
+                                                      return idx >= 0 ? idx : 0;
+                                                    };
+                                                    const countAtOrPast = (minStage: number) => grupo.items.filter(i => getStageIndex((i as any).estatus_arte) >= minStage).length;
+                                                    // Determinar tipo del grupo (siempre homogéneo)
+                                                    const isDigital = grupo.items[0]?.tradicional_digital === 'Digital';
+                                                    const tabs = [
+                                                      { icon: Upload, label: 'Subir Artes', done: countAtOrPast(1) },
+                                                      { icon: Eye, label: 'Revisar y Aprobar', done: countAtOrPast(2) },
+                                                      // Tradicional → Impresiones, Digital → Programación
+                                                      ...(isDigital
+                                                        ? [{ icon: Monitor, label: 'Programación', done: countAtOrPast(3) }]
+                                                        : [{ icon: Printer, label: 'Impresiones', done: countAtOrPast(4) }]
+                                                      ),
+                                                      { icon: Camera, label: 'Validar Instalación', done: countAtOrPast(5) },
+                                                    ];
+                                                    return (
+                                                      <span className="inline-flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full bg-zinc-800/60 border border-zinc-700/40">
+                                                        {tabs.map(({ icon: Icon, label, done }, idx) => (
+                                                          <React.Fragment key={label}>
+                                                            {idx > 0 && <span className="w-px h-3 bg-zinc-700/60" />}
+                                                            <span title={`${label}: ${done}/${total}`}>
+                                                              <Icon className={`h-3.5 w-3.5 ${done === total ? 'text-green-400' : 'text-red-400/60'}`} />
+                                                            </span>
+                                                          </React.Fragment>
+                                                        ))}
+                                                      </span>
+                                                    );
+                                                  })()}
+                                                  {estatusPredominante && estatusPredominante[0] !== 'Sin estatus' && (
+                                                    <span className={`px-1.5 py-0.5 rounded text-[9px] ${estatusGrupoColor.bg} ${estatusGrupoColor.text} border ${estatusGrupoColor.border}`}>
+                                                      {estatusPredominante[0]}
+                                                    </span>
+                                                  )}
+                                                </button>
+                                                {isGrupoExpanded && (
+                                                  <div className="pl-5 py-1 space-y-0.5">
+                                                    {grupo.items.map(inv => {
+                                                      const estatusArteColor = getEstatusArteColor((inv as any).estatus_arte);
+                                                      return (
+                                                        <div key={inv.id} className="flex items-center gap-2 text-[10px] text-zinc-500 py-0.5">
+                                                          <MapPin className="h-2.5 w-2.5 text-zinc-600" />
+                                                          <span className="text-zinc-400 font-mono">{inv.codigo_unico}</span>
+                                                          {(inv as any).estatus_arte && (
+                                                            <span className={`px-1.5 py-0.5 rounded text-[9px] ${estatusArteColor.bg} ${estatusArteColor.text} border ${estatusArteColor.border}`}>
+                                                              {(inv as any).estatus_arte}
+                                                            </span>
+                                                          )}
+                                                          <span className="text-zinc-600">•</span>
+                                                          <span>{inv.plaza || 'Sin plaza'}</span>
+                                                        </div>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
 
                   return (
                   <div key={key} className="group">
@@ -1793,6 +2218,11 @@ export function CampanasPage() {
                       <span className="px-2.5 py-1 rounded-full text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30">
                         {campanas.length} campañas
                       </span>
+                      {secondGroupingLabel && subgroups && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">
+                          {subgroups.length} {secondGroupingLabel}
+                        </span>
+                      )}
                       {/* Badge de catorcena actual */}
                       {currentCatorcena &&
                        currentCatorcena.numero_catorcena === catorcena.num &&
@@ -1806,226 +2236,43 @@ export function CampanasPage() {
                     {/* Contenido expandible de catorcena */}
                     {expandedCatorcenas.has(key) && (
                       <div className="bg-zinc-900/50">
-                        {campanas.map((campana) => {
-                          const statusColor = getStatusColor(campana.status);
-                          const periodStatus = getPeriodStatus(campana.fecha_inicio, campana.fecha_fin);
-                          const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
-                          const isExpanded = expandedCampanas.has(campana.id);
-                          const inventarios = campanaInventarios[campana.id] || [];
-                          const isLoadingInv = loadingInventarios.has(campana.id);
-                          const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
-
-                          return (
-                            <div key={campana.id} className="border-t border-zinc-800/30">
-                              {/* Header de Campaña */}
-                              <button
-                                onClick={() => toggleCampana(campana.id)}
-                                className="w-full flex items-center gap-3 px-6 py-3 hover:bg-zinc-800/30 transition-all"
-                              >
-                                {isLoadingInv ? (
-                                  <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
-                                ) : isExpanded ? (
-                                  <ChevronDown className="h-4 w-4 text-zinc-400" />
-                                ) : (
-                                  <ChevronRight className="h-4 w-4 text-zinc-400" />
-                                )}
-                                <Megaphone className="h-4 w-4 text-zinc-500" />
-                                <span className="font-medium text-white text-sm flex-1 text-left truncate">
-                                  {campana.nombre}
-                                </span>
-
-                                {/* Badges de info */}
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
-                                  {periodStatus}
-                                </span>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
-                                  {campana.status}
-                                </span>
-                                {campana.has_aps ? (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                                    <Check className="h-3 w-3" /> APS
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-400 border border-zinc-500/30 flex items-center gap-1">
-                                    <Minus className="h-3 w-3" /> Sin APS
-                                  </span>
-                                )}
-
-                                {/* Acciones */}
-                                <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
-                                  <button
-                                    onClick={() => handleOpenCampana(campana.id)}
-                                    className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all"
-                                    title="Ver campaña"
-                                  >
-                                    <Eye className="h-3 w-3" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleEditCampana(campana)}
-                                    disabled={isEditDisabled(campana)}
-                                    className={`p-1.5 rounded-lg border transition-all ${
-                                      isEditDisabled(campana)
-                                        ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                                        : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20'
-                                    }`}
-                                    title={isEditDisabled(campana) ? 'No editable' : 'Editar campaña'}
-                                  >
-                                    <Edit2 className="h-3 w-3" />
-                                  </button>
-                                </div>
-                              </button>
-
-                              {/* Contenido expandible de Campaña - APS → Grupos → Inventarios */}
-                              {isExpanded && (
-                                <div className="bg-zinc-900/30 px-8 py-3">
-                                  {isLoadingInv ? (
-                                    <div className="flex items-center gap-2 text-zinc-500 text-sm py-2">
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                      Cargando grupos e inventarios...
-                                    </div>
-                                  ) : inventarios.length === 0 ? (
-                                    <div className="flex items-center gap-2 text-zinc-500 text-sm py-2">
-                                      <Package className="h-4 w-4" />
-                                      No hay inventarios reservados con APS
-                                    </div>
+                        {/* Si hay subgrupos, mostrar agrupado por la segunda columna */}
+                        {subgroups && subgroups.length > 0 ? (
+                          subgroups.map(subgroup => {
+                            const subgroupKey = `${key}-${subgroup.name}`;
+                            const isSubgroupExpanded = expandedGroups.has(subgroupKey);
+                            const subgroupColor = getTagColor(subgroup.name);
+                            return (
+                              <div key={subgroupKey} className="border-t border-zinc-800/30">
+                                <button
+                                  onClick={() => toggleGroup(subgroupKey)}
+                                  className="w-full flex items-center gap-3 px-6 py-2.5 hover:bg-zinc-800/30 transition-all bg-zinc-800/20"
+                                >
+                                  {isSubgroupExpanded ? (
+                                    <ChevronDown className="h-4 w-4 text-fuchsia-400" />
                                   ) : (
-                                    <div className="space-y-4">
-                                      <div className="text-xs text-zinc-400">
-                                        {inventarios.length} inventarios · {apsAgrupados.length} APS asignados
-                                      </div>
-                                      {apsAgrupados.map((apsGroup) => {
-                                        const apsKey = `${campana.id}-${apsGroup.aps ?? 'sin-aps'}`;
-                                        const isAPSExpanded = expandedAPS.has(apsKey);
-                                        const tieneAPS = apsGroup.aps !== null;
-
-                                        return (
-                                          <div
-                                            key={`aps-${apsGroup.aps ?? 'sin-aps'}`}
-                                            className={`rounded-xl border overflow-hidden ${
-                                              tieneAPS
-                                                ? 'border-emerald-500/30 bg-emerald-500/5'
-                                                : 'border-amber-500/30 bg-amber-500/5'
-                                            }`}
-                                          >
-                                            {/* Header de APS - Clickeable */}
-                                            <button
-                                              onClick={() => toggleAPS(campana.id, apsGroup.aps)}
-                                              className={`w-full flex items-center gap-3 px-4 py-2.5 transition-all ${
-                                                tieneAPS
-                                                  ? 'bg-emerald-500/10 hover:bg-emerald-500/15'
-                                                  : 'bg-amber-500/10 hover:bg-amber-500/15'
-                                              }`}
-                                            >
-                                              {isAPSExpanded ? (
-                                                <ChevronDown className={`h-4 w-4 ${tieneAPS ? 'text-emerald-400' : 'text-amber-400'}`} />
-                                              ) : (
-                                                <ChevronRight className={`h-4 w-4 ${tieneAPS ? 'text-emerald-400' : 'text-amber-400'}`} />
-                                              )}
-                                              {tieneAPS ? (
-                                                <>
-                                                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                                                    <span className="text-emerald-300 font-bold text-xs">{apsGroup.aps}</span>
-                                                  </div>
-                                                  <span className="text-sm font-semibold text-emerald-200">
-                                                    APS {apsGroup.aps}
-                                                  </span>
-                                                </>
-                                              ) : (
-                                                <>
-                                                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                                                    <Minus className="h-4 w-4 text-amber-300" />
-                                                  </div>
-                                                  <span className="text-sm font-semibold text-amber-200">
-                                                    Sin APS asignado
-                                                  </span>
-                                                </>
-                                              )}
-                                              <span className={`px-2 py-0.5 rounded-full text-[10px] border ${
-                                                tieneAPS
-                                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                                                  : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                                              }`}>
-                                                {apsGroup.totalItems} sitios
-                                              </span>
-                                              <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-300 border border-zinc-500/30">
-                                                {apsGroup.grupos.length} grupos
-                                              </span>
-                                            </button>
-
-                                            {/* Grupos dentro de este APS - Colapsable */}
-                                            {isAPSExpanded && (
-                                              <div className={`p-3 space-y-2 border-t ${tieneAPS ? 'border-emerald-500/20' : 'border-amber-500/20'}`}>
-                                                {apsGroup.grupos.map((grupo) => {
-                                                  const grupoExpandKey = `${campana.id}-${apsGroup.aps ?? 'sin-aps'}-${grupo.key}`;
-                                                  const isGrupoExpanded = expandedGrupos.has(grupoExpandKey);
-
-                                                  return (
-                                                    <div
-                                                      key={grupo.key}
-                                                      className="rounded-lg border border-zinc-700/50 bg-zinc-800/40 overflow-hidden"
-                                                    >
-                                                      <button
-                                                        onClick={() => toggleGrupo(campana.id, apsGroup.aps, grupo.key)}
-                                                        className="w-full flex items-center gap-3 px-3 py-2 bg-zinc-800/60 hover:bg-zinc-800/80 transition-colors"
-                                                      >
-                                                        {isGrupoExpanded ? (
-                                                          <ChevronDown className="h-4 w-4 text-cyan-400" />
-                                                        ) : (
-                                                          <ChevronRight className="h-4 w-4 text-cyan-400" />
-                                                        )}
-                                                        <Building2 className="h-4 w-4 text-cyan-400" />
-                                                        <span className="text-sm font-medium text-zinc-200">
-                                                          Grupo #{grupo.grupoId || '?'}
-                                                        </span>
-                                                        {grupo.articulo && (
-                                                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                                                            {grupo.articulo}
-                                                          </span>
-                                                        )}
-                                                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                                                          {grupo.items.length} sitios
-                                                        </span>
-                                                      </button>
-                                                      {isGrupoExpanded && (
-                                                        <div className="divide-y divide-zinc-700/30">
-                                                          {grupo.items.map((inv) => (
-                                                            <div
-                                                              key={inv.id}
-                                                              className="flex items-center gap-3 px-4 py-2 text-xs hover:bg-zinc-800/30 transition-colors"
-                                                            >
-                                                              <MapPin className="h-3 w-3 text-zinc-500" />
-                                                              <span className="text-zinc-300 font-mono">{inv.codigo_unico}</span>
-                                                              <span className="text-zinc-500">{inv.mueble || '-'}</span>
-                                                              <span className="text-zinc-500">{inv.plaza || '-'}</span>
-                                                              {inv.estado && (
-                                                                <span className="px-1.5 py-0.5 rounded text-[9px] bg-zinc-700/50 text-zinc-400">
-                                                                  {inv.estado}
-                                                                </span>
-                                                              )}
-                                                              {inv.tipo_medio && (
-                                                                <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-500/20 text-violet-300">
-                                                                  {inv.tipo_medio}
-                                                                </span>
-                                                              )}
-                                                            </div>
-                                                          ))}
-                                                        </div>
-                                                      )}
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
+                                    <ChevronRight className="h-4 w-4 text-fuchsia-400" />
                                   )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                                  <Layers className="h-4 w-4 text-fuchsia-400" />
+                                  <span className={`px-2 py-0.5 rounded text-xs ${subgroupColor.bg} ${subgroupColor.text} border ${subgroupColor.border}`}>
+                                    {subgroup.name}
+                                  </span>
+                                  <span className="text-xs text-zinc-500">
+                                    {subgroup.campanas.length} campañas
+                                  </span>
+                                </button>
+                                {isSubgroupExpanded && (
+                                  <div className="bg-zinc-900/30">
+                                    {subgroup.campanas.map(campana => renderCampana(campana, 1))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          /* Sin subgrupos - mostrar campañas directamente */
+                          campanas.map(campana => renderCampana(campana, 0))
+                        )}
                       </div>
                     )}
                   </div>
@@ -2033,21 +2280,29 @@ export function CampanasPage() {
                 })}
               </div>
             )}
-
-            {/* Footer info */}
-            <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-800/50 bg-zinc-800/30">
-              <span className="text-xs text-zinc-500">
-                {campanasPorCatorcena.length} catorcenas · {filteredData.length} campañas
-              </span>
-              {currentCatorcena && (
-                <span className="text-xs text-emerald-400 flex items-center gap-1.5">
-                  <Clock className="h-3 w-3" />
-                  Catorcena actual: {currentCatorcena.numero_catorcena}/{currentCatorcena.a_o}
-                </span>
-              )}
-            </div>
           </div>
         )}
+
+        {/* Footer de vista catorcena - información */}
+        {activeView === 'catorcena' && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-800/50 bg-zinc-900/30 text-xs text-zinc-500">
+            <span>
+              {campanasPorCatorcena.length} catorcenas · {filteredData.length} campañas
+              {activeGroupings.length > 1 && (
+                <span className="text-fuchsia-400 ml-2">
+                  · Subagrupado por {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}
+                </span>
+              )}
+            </span>
+            {currentCatorcena && (
+              <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Catorcena actual: {currentCatorcena.numero_catorcena}/{currentCatorcena.a_o}
+              </span>
+            )}
+          </div>
+        )}
+
       </div>
 
       {/* Edit Modal */}
@@ -2066,7 +2321,21 @@ export function CampanasPage() {
       <OrdenesMontajeModal
         isOpen={ordenesMontajeModalOpen}
         onClose={() => setOrdenesMontajeModalOpen(false)}
+        canExport={permissions.canExportOrdenesMontaje}
       />
+
+      {/* Status Campana Modal */}
+      {statusCampana && (
+        <StatusCampanaModal
+          isOpen={statusModalOpen}
+          onClose={() => {
+            setStatusModalOpen(false);
+            setStatusCampana(null);
+          }}
+          campana={statusCampana}
+          statusReadOnly={!permissions.canEditCampanaStatus}
+        />
+      )}
     </div>
   );
 }

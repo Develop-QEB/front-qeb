@@ -140,9 +140,12 @@ export const solicitudesService = {
     return response.data.data;
   },
 
-  async getUsers(area?: string): Promise<UserOption[]> {
+  async getUsers(area?: string, filterByTeam: boolean = true): Promise<UserOption[]> {
     const response = await api.get<ApiResponse<UserOption[]>>('/solicitudes/users', {
-      params: area ? { area } : {},
+      params: {
+        ...(area && { area }),
+        filterByTeam: filterByTeam.toString(),
+      },
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener usuarios');
@@ -200,8 +203,8 @@ export const solicitudesService = {
     return response.data.data;
   },
 
-  async atender(id: number): Promise<void> {
-    const response = await api.post<ApiResponse<void>>(`/solicitudes/${id}/atender`);
+  async atender(id: number, asignados?: { id: number; nombre: string }[]): Promise<void> {
+    const response = await api.post<ApiResponse<void>>(`/solicitudes/${id}/atender`, { asignados });
     if (!response.data.success) {
       throw new Error(response.data.error || 'Error al atender solicitud');
     }
@@ -219,6 +222,51 @@ export const solicitudesService = {
     const response = await api.post<ApiResponse<Comentario>>(`/solicitudes/${id}/comments`, { comentario });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al agregar comentario');
+    }
+    return response.data.data;
+  },
+
+  async uploadArchivo(id: number, file: File): Promise<{ url: string }> {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    const response = await api.post<ApiResponse<{ url: string }>>(`/solicitudes/${id}/archivo`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al subir archivo');
+    }
+    return response.data.data;
+  },
+
+  async evaluarAutorizacion(data: {
+    ciudad?: string;
+    estado?: string;
+    formato: string;
+    tipo?: string;
+    caras: number;
+    bonificacion?: number;
+    costo: number;
+    tarifa_publica?: number;
+  }): Promise<{
+    estado: 'aprobado' | 'pendiente_dcm' | 'pendiente_dg';
+    autorizacion_dg: 'aprobado' | 'pendiente' | 'rechazado';
+    autorizacion_dcm: 'aprobado' | 'pendiente' | 'rechazado';
+    motivo?: string;
+    tarifa_efectiva?: number;
+    total_caras?: number;
+  }> {
+    const response = await api.post<ApiResponse<{
+      estado: 'aprobado' | 'pendiente_dcm' | 'pendiente_dg';
+      autorizacion_dg: 'aprobado' | 'pendiente' | 'rechazado';
+      autorizacion_dcm: 'aprobado' | 'pendiente' | 'rechazado';
+      motivo?: string;
+      tarifa_efectiva?: number;
+      total_caras?: number;
+    }>>('/solicitudes/evaluar-autorizacion', data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al evaluar autorización');
     }
     return response.data.data;
   },
@@ -244,6 +292,8 @@ export interface SolicitudCara {
   caras_contraflujo: number;
   articulo: string;
   descuento: number;
+  autorizacion_dg?: string;
+  autorizacion_dcm?: string;
 }
 
 export interface Comentario {

@@ -2,8 +2,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef } from 'react';
 import {
-  ArrowLeft, Share2, Download, FileText, Map, Copy, Check, Loader2,
-  ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink
+  ArrowLeft, Share2, Download, FileText, Map as MapIcon, Copy, Check, Loader2,
+  ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink, X
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -29,8 +29,6 @@ const DARK_MAP_STYLES = [
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f0f1a' }] },
 ];
 
-type GroupByField = 'numero_catorcena' | 'articulo' | 'plaza' | 'tipo_de_cara' | 'estatus_reserva';
-
 interface POIMarker {
   id: string;
   position: { lat: number; lng: number };
@@ -46,9 +44,85 @@ function formatInicioPeriodo(item: InventarioReservado): string {
   return 'Sin asignar';
 }
 
-function getGroupValue(item: InventarioReservado, field: GroupByField): string {
-  if (field === 'numero_catorcena') return formatInicioPeriodo(item);
-  return String(item[field] || 'Sin asignar');
+// Filter types (from CampanaDetailPage)
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
+
+interface FilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: string;
+  label: string;
+  type: 'string' | 'number';
+}
+
+const FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'codigo_unico', label: 'Codigo', type: 'string' },
+  { field: 'plaza', label: 'Plaza', type: 'string' },
+  { field: 'tipo_de_cara', label: 'Tipo', type: 'string' },
+  { field: 'tipo_de_mueble', label: 'Formato', type: 'string' },
+  { field: 'articulo', label: 'Articulo', type: 'string' },
+  { field: 'caras_totales', label: 'Caras', type: 'number' },
+  { field: 'tarifa_publica', label: 'Tarifa', type: 'number' },
+];
+
+const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
+  { value: '=', label: 'Igual a', forTypes: ['string', 'number'] },
+  { value: '!=', label: 'Diferente de', forTypes: ['string', 'number'] },
+  { value: 'contains', label: 'Contiene', forTypes: ['string'] },
+  { value: 'not_contains', label: 'No contiene', forTypes: ['string'] },
+  { value: '>', label: 'Mayor que', forTypes: ['number'] },
+  { value: '<', label: 'Menor que', forTypes: ['number'] },
+  { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
+  { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
+];
+
+// Resumen types
+interface ResumenArticuloGroup {
+  articulo: string;
+  items: InventarioReservado[];
+  totalCaras: number;
+  totalInversion: number;
+  formatos: string[];
+  tipos: string[];
+  plazas: string[];
+}
+
+interface ResumenCatorcenaGroup {
+  catorcena: string;
+  articulos: ResumenArticuloGroup[];
+  totalCaras: number;
+  totalInversion: number;
+}
+
+function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
+  if (filters.length === 0) return data;
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = (item as Record<string, unknown>)[filter.field];
+      const filterValue = filter.value;
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+      switch (filter.operator) {
+        case '=': return strValue === strFilterValue;
+        case '!=': return strValue !== strFilterValue;
+        case 'contains': return strValue.includes(strFilterValue);
+        case 'not_contains': return !strValue.includes(strFilterValue);
+        case '>': return Number(fieldValue) > Number(filterValue);
+        case '<': return Number(fieldValue) < Number(filterValue);
+        case '>=': return Number(fieldValue) >= Number(filterValue);
+        case '<=': return Number(fieldValue) <= Number(filterValue);
+        default: return true;
+      }
+    });
+  });
 }
 
 export function CompartirPropuestaPage() {
@@ -60,12 +134,15 @@ export function CompartirPropuestaPage() {
 
   // States
   const [copied, setCopied] = useState(false);
-  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>(['numero_catorcena', 'articulo']);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [expandedResumen, setExpandedResumen] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState('');
   const [sortField, setSortField] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+
+  // Filter states
+  const [filters, setFilters] = useState<FilterCondition[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
 
   // POI states
   const [poiMarkers, setPoiMarkers] = useState<POIMarker[]>([]);
@@ -94,19 +171,17 @@ export function CompartirPropuestaPage() {
 
   // Computed data
   const kpis = useMemo(() => {
-    if (!inventario) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
+    if (!details?.caras) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
 
-    // Ensure numbers to prevent string concatenation ("05040")
-    const total = inventario.reduce((sum, i) => sum + Number(i.caras_totales || 0), 0);
-    const inversion = inventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_totales || 1)), 0);
+    // Calculate from propuesta caras (the source of truth)
+    const renta = details.caras.reduce((sum, c) => sum + Number(c.caras || 0), 0);
+    const bonificadas = details.caras.reduce((sum, c) => sum + Number(c.bonificacion || 0), 0);
+    const total = renta + bonificadas;
 
-    // Sum bonifications
-    const bonificadas = details?.caras?.reduce((sum, c) => sum + Number(c.bonificacion || 0), 0) || 0;
+    // Inversion from inventario tarifa_publica
+    const inversion = inventario?.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_totales || 1)), 0) || 0;
 
-    // Renta is the count from inventory (allocated)
-    const renta = total;
-
-    return { total: total + bonificadas, renta, bonificadas, inversion };
+    return { total, renta, bonificadas, inversion };
   }, [inventario, details]);
 
   // Charts data
@@ -140,20 +215,23 @@ export function CompartirPropuestaPage() {
     return { lat: avgLat, lng: avgLng };
   }, [inventario]);
 
-  // Grouped data
-  const groupedData = useMemo(() => {
-    if (!inventario) return {};
-    let filtered = inventario;
-
+  // Filtered inventario (used by resumen)
+  const filteredInventario = useMemo(() => {
+    if (!inventario) return [];
+    let filtered = inventario as InventarioReservado[];
+    if (filters.length > 0) {
+      filtered = applyFilters(filtered, filters);
+    }
     if (filterText) {
       const search = filterText.toLowerCase();
-      filtered = inventario.filter(i =>
+      filtered = filtered.filter(i =>
         i.codigo_unico?.toLowerCase().includes(search) ||
         i.plaza?.toLowerCase().includes(search) ||
-        i.ubicacion?.toLowerCase().includes(search)
+        i.ubicacion?.toLowerCase().includes(search) ||
+        i.tipo_de_mueble?.toLowerCase().includes(search) ||
+        i.articulo?.toLowerCase().includes(search)
       );
     }
-
     if (sortField) {
       filtered = [...filtered].sort((a, b) => {
         const aVal = String(a[sortField as keyof InventarioReservado] || '');
@@ -161,16 +239,74 @@ export function CompartirPropuestaPage() {
         return sortOrder === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       });
     }
+    return filtered;
+  }, [inventario, filters, filterText, sortField, sortOrder]);
 
-    const grouped: Record<string, InventarioReservado[]> = {};
-    filtered.forEach(item => {
-      const keys = activeGroupings.map(g => getGroupValue(item, g));
-      const key = keys.join(' | ');
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(item);
+  // Resumen de Caras (grouped by catorcena > articulo from filtered data)
+  const resumenCaras = useMemo((): ResumenCatorcenaGroup[] => {
+    if (filteredInventario.length === 0) return [];
+
+    const catorcenaMap = new Map<string, Map<string, InventarioReservado[]>>();
+
+    filteredInventario.forEach(item => {
+      const catKey = formatInicioPeriodo(item);
+      const artKey = item.articulo || 'Sin articulo';
+      if (!catorcenaMap.has(catKey)) catorcenaMap.set(catKey, new Map());
+      const artMap = catorcenaMap.get(catKey)!;
+      if (!artMap.has(artKey)) artMap.set(artKey, []);
+      artMap.get(artKey)!.push(item);
     });
-    return grouped;
-  }, [inventario, activeGroupings, filterText, sortField, sortOrder]);
+
+    return Array.from(catorcenaMap.entries()).map(([catorcena, artMap]) => {
+      const articulos: ResumenArticuloGroup[] = Array.from(artMap.entries()).map(([articulo, items]) => ({
+        articulo,
+        items,
+        totalCaras: items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0),
+        totalInversion: items.reduce((sum, i) => sum + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 1)), 0),
+        formatos: [...new Set(items.map(i => i.tipo_de_mueble || 'N/A'))],
+        tipos: [...new Set(items.map(i => i.tipo_de_cara || 'N/A'))],
+        plazas: [...new Set(items.map(i => i.plaza || 'N/A'))],
+      }));
+      return {
+        catorcena,
+        articulos,
+        totalCaras: articulos.reduce((sum, a) => sum + a.totalCaras, 0),
+        totalInversion: articulos.reduce((sum, a) => sum + a.totalInversion, 0),
+      };
+    });
+  }, [filteredInventario]);
+
+  // Catorcena period display
+  const periodoInicio = useMemo(() => {
+    if (details?.propuesta?.catorcena_inicio && details?.propuesta?.anio_inicio) {
+      return `Catorcena ${details.propuesta.catorcena_inicio}, ${details.propuesta.anio_inicio}`;
+    }
+    if (!inventario) return 'N/A';
+    const catorcenas = inventario
+      .filter(i => i.numero_catorcena && i.anio_catorcena)
+      .map(i => ({ num: i.numero_catorcena!, year: i.anio_catorcena! }));
+    if (catorcenas.length > 0) {
+      const sorted = catorcenas.sort((a, b) => a.year !== b.year ? a.year - b.year : a.num - b.num);
+      return `Catorcena ${sorted[0].num}, ${sorted[0].year}`;
+    }
+    return 'N/A';
+  }, [details, inventario]);
+
+  const periodoFin = useMemo(() => {
+    if (details?.propuesta?.catorcena_fin && details?.propuesta?.anio_fin) {
+      return `Catorcena ${details.propuesta.catorcena_fin}, ${details.propuesta.anio_fin}`;
+    }
+    if (!inventario) return 'N/A';
+    const catorcenas = inventario
+      .filter(i => i.numero_catorcena && i.anio_catorcena)
+      .map(i => ({ num: i.numero_catorcena!, year: i.anio_catorcena! }));
+    if (catorcenas.length > 0) {
+      const sorted = catorcenas.sort((a, b) => a.year !== b.year ? a.year - b.year : a.num - b.num);
+      const last = sorted[sorted.length - 1];
+      return `Catorcena ${last.num}, ${last.year}`;
+    }
+    return 'N/A';
+  }, [details, inventario]);
 
   // Handlers
   const handleCopyLink = () => {
@@ -459,7 +595,6 @@ export function CompartirPropuestaPage() {
     y += 12;
 
     const clientFields = [
-      ['CUIC', details?.solicitud?.cuic || 'N/A'],
       ['Cliente', details?.solicitud?.cliente || 'N/A'],
       ['Razón Social', details?.solicitud?.razon_social || 'N/A'],
       ['Marca', details?.solicitud?.marca_nombre || 'N/A'],
@@ -602,16 +737,15 @@ export function CompartirPropuestaPage() {
 
           // === TABLE FOR THIS ARTICULO ===
           const tableData = items.map(i => [
-            i.codigo_unico || '',
-            i.plaza || '',
+            String(i.id),
+            (i.ubicacion || '').substring(0, 50),
             i.tipo_de_cara || '',
-            i.tipo_de_mueble || '',
-            String(i.caras_totales),
-            (i.ubicacion || '').substring(0, 40),
+            i.tipo_de_mueble || i.mueble || '',
+            i.municipio || '',
           ]);
 
           autoTable(doc, {
-            head: [['Código', 'Plaza', 'Tipo', 'Formato', 'Caras', 'Ubicación']],
+            head: [['ID', 'Ubicación', 'Tipo Cara', 'Mueble', 'Municipio']],
             body: tableData,
             startY: y,
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -619,8 +753,11 @@ export function CompartirPropuestaPage() {
             headStyles: { fillColor: [230, 240, 250], textColor: IMU_BLUE, fontStyle: 'bold', fontSize: 7 },
             alternateRowStyles: { fillColor: [250, 252, 255] },
             columnStyles: {
-              0: { cellWidth: 32 },
-              4: { halign: 'center', cellWidth: 14 },
+              0: { cellWidth: 18 },
+              1: { cellWidth: 80 },
+              2: { cellWidth: 25 },
+              3: { cellWidth: 40 },
+              4: { cellWidth: 40 },
             },
           });
 
@@ -671,19 +808,11 @@ export function CompartirPropuestaPage() {
     }
   };
 
-  const toggleGrouping = (field: GroupByField) => {
-    if (activeGroupings.includes(field)) {
-      setActiveGroupings(activeGroupings.filter(g => g !== field));
-    } else {
-      setActiveGroupings([...activeGroupings, field]);
-    }
-  };
-
-  const toggleGroup = (key: string) => {
-    const next = new Set(expandedGroups);
+  const toggleResumen = (key: string) => {
+    const next = new Set(expandedResumen);
     if (next.has(key)) next.delete(key);
     else next.add(key);
-    setExpandedGroups(next);
+    setExpandedResumen(next);
   };
 
   const isLoading = loadingDetails || loadingInventario;
@@ -737,7 +866,7 @@ export function CompartirPropuestaPage() {
               className="flex items-center gap-2 px-4 py-2 bg-zinc-800/80 hover:bg-purple-500/20 text-white rounded-lg text-sm font-medium transition-colors border border-purple-500/30"
               title="Descargar KML de todos los inventarios"
             >
-              <Map className="h-4 w-4" />
+              <MapIcon className="h-4 w-4" />
               KML Todo
             </button>
             <button
@@ -763,10 +892,10 @@ export function CompartirPropuestaPage() {
           )}
           <div className="flex gap-4 mt-4 text-sm">
             <span className="text-purple-300">
-              Inicio: {details?.cotizacion?.fecha_inicio ? formatDate(details.cotizacion.fecha_inicio) : 'N/A'}
+              Inicio: <span className="text-white font-medium">{periodoInicio}</span>
             </span>
             <span className="text-purple-300">
-              Fin: {details?.cotizacion?.fecha_fin ? formatDate(details.cotizacion.fecha_fin) : 'N/A'}
+              Fin: <span className="text-white font-medium">{periodoFin}</span>
             </span>
           </div>
         </div>
@@ -860,180 +989,306 @@ export function CompartirPropuestaPage() {
           ))}
         </div>
 
-        {/* Table Controls */}
-        <div className="bg-gradient-to-br from-zinc-900 to-purple-900/5 rounded-2xl border border-purple-500/20 overflow-hidden">
-          <div className="p-4 border-b border-purple-500/10 flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-purple-500" />
-              <input
-                type="text"
-                placeholder="Buscar..."
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                className="px-3 py-1.5 bg-zinc-800/80 border border-purple-500/20 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-purple-500" />
-              <span className="text-xs text-zinc-500">Agrupar:</span>
-              {(['numero_catorcena', 'articulo', 'plaza', 'tipo_de_cara'] as GroupByField[]).map(field => (
-                <button
-                  key={field}
-                  onClick={() => toggleGrouping(field)}
-                  className={`px-2 py-1 rounded text-xs transition-all ${activeGroupings.includes(field)
-                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-lg shadow-purple-500/20'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-purple-500/20'
-                    }`}
-                >
-                  {field === 'numero_catorcena' ? 'Catorcena' : field.replace('_', ' ')}
+        {/* Resumen de Caras - Tabla principal */}
+        <div className="bg-gradient-to-br from-zinc-900 to-purple-900/10 rounded-2xl border border-purple-500/20 overflow-hidden">
+          {/* Toolbar */}
+          <div className="px-5 py-4 border-b border-purple-500/20 bg-gradient-to-r from-purple-600/10 to-violet-600/10">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-purple-300 flex items-center gap-2">
+                <Layers className="h-4 w-4" />
+                Resumen de Caras
+                <span className="text-xs text-zinc-500 font-normal">({filteredInventario.length} inventarios)</span>
+              </h3>
+              <div className="flex items-center gap-2">
+                <button onClick={handleDownloadCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> CSV
                 </button>
-              ))}
+                {selectedItems.size > 0 && (
+                  <button onClick={handleDownloadKMLSelected} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-lg text-xs font-medium shadow-sm transition-colors" title={`Descargar KML de ${selectedItems.size} seleccionados`}>
+                    <MapIcon className="h-3.5 w-3.5" /> KML ({selectedItems.size})
+                  </button>
+                )}
+              </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <ArrowUpDown className="h-4 w-4 text-purple-500" />
-              <select
-                value={sortField}
-                onChange={(e) => setSortField(e.target.value)}
-                className="px-2 py-1 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white focus:ring-1 focus:ring-purple-500"
-              >
-                <option value="">Sin ordenar</option>
-                <option value="codigo_unico">Código</option>
-                <option value="plaza">Plaza</option>
-                <option value="tipo_de_cara">Tipo</option>
-              </select>
-              <button
-                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="px-2 py-1 bg-zinc-800 hover:bg-purple-500/20 rounded text-xs text-zinc-400"
-              >
-                {sortOrder === 'asc' ? '↑' : '↓'}
-              </button>
-            </div>
-
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                onClick={handleDownloadCSV}
-                className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg text-sm shadow-lg shadow-emerald-500/20"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                CSV
-              </button>
-              {selectedItems.size > 0 && (
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={inventario ? selectedItems.size === inventario.length && inventario.length > 0 : false}
+                  onChange={toggleSelectAll}
+                  className="checkbox-purple"
+                  title="Seleccionar todo"
+                />
+                <Filter className="h-3.5 w-3.5 text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={filterText}
+                  onChange={(e) => setFilterText(e.target.value)}
+                  className="px-3 py-1.5 bg-zinc-800/80 border border-purple-500/20 rounded-lg text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500 w-44"
+                />
                 <button
-                  onClick={handleDownloadKMLSelected}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-lg text-sm shadow-lg shadow-blue-500/20"
-                  title={`Descargar KML de ${selectedItems.size} seleccionados`}
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1 ${showFilters || filters.length > 0
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-purple-500/20'
+                  }`}
                 >
-                  <Map className="h-4 w-4" />
-                  KML ({selectedItems.size})
+                  <Filter className="h-3 w-3" />
+                  Filtros {filters.length > 0 && `(${filters.length})`}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="h-3.5 w-3.5 text-zinc-500" />
+                <select value={sortField} onChange={(e) => setSortField(e.target.value)} className="px-2 py-1.5 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white focus:ring-1 focus:ring-purple-500">
+                  <option value="">Sin ordenar</option>
+                  <option value="codigo_unico">Codigo</option>
+                  <option value="plaza">Plaza</option>
+                  <option value="tipo_de_cara">Tipo</option>
+                  <option value="tarifa_publica">Tarifa</option>
+                </select>
+                <button
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="px-2 py-1.5 bg-zinc-800 hover:bg-purple-500/20 rounded text-xs text-zinc-400"
+                >
+                  {sortOrder === 'asc' ? '↑' : '↓'}
+                </button>
+              </div>
+              {(filterText || filters.length > 0 || selectedItems.size > 0) && (
+                <button
+                  onClick={() => { setFilterText(''); setFilters([]); setSelectedItems(new Set()); }}
+                  className="px-2.5 py-1.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30"
+                >
+                  Limpiar
                 </button>
               )}
             </div>
           </div>
 
-          {/* Selection info and actions */}
-          {selectedItems.size > 0 && (
-            <div className="flex items-center gap-3 px-4 py-2 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-              <span className="text-sm text-purple-300">{selectedItems.size} seleccionados</span>
-              <button
-                onClick={() => setSelectedItems(new Set())}
-                className="text-xs text-purple-400 hover:text-purple-300"
-              >
-                Limpiar selección
-              </button>
+          {/* Advanced Filters Panel */}
+          {showFilters && (
+            <div className="p-4 border-b border-purple-500/10 bg-zinc-800/30">
+              <div className="flex flex-wrap gap-2 mb-3">
+                {filters.map(filter => {
+                  const fieldConfig = FILTER_FIELDS.find(f => f.field === filter.field);
+                  const operatorConfig = FILTER_OPERATORS.find(o => o.value === filter.operator);
+                  return (
+                    <div key={filter.id} className="flex items-center gap-1 px-2 py-1 bg-purple-500/20 rounded-lg text-xs">
+                      <span className="text-purple-300">{fieldConfig?.label || filter.field}</span>
+                      <span className="text-zinc-500">{operatorConfig?.label || filter.operator}</span>
+                      <span className="text-white font-medium">{filter.value}</span>
+                      <button onClick={() => setFilters(filters.filter(f => f.id !== filter.id))} className="ml-1 text-zinc-400 hover:text-red-400">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2">
+                <select id="filter-field" className="px-2 py-1 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white" defaultValue="">
+                  <option value="" disabled>Campo</option>
+                  {FILTER_FIELDS.map(f => (<option key={f.field} value={f.field}>{f.label}</option>))}
+                </select>
+                <select id="filter-operator" className="px-2 py-1 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white" defaultValue="=">
+                  {FILTER_OPERATORS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                </select>
+                <input id="filter-value" type="text" placeholder="Valor" className="px-2 py-1 bg-zinc-800 border border-purple-500/20 rounded text-xs text-white w-32" />
+                <button
+                  onClick={() => {
+                    const field = (document.getElementById('filter-field') as HTMLSelectElement).value;
+                    const operator = (document.getElementById('filter-operator') as HTMLSelectElement).value as FilterOperator;
+                    const value = (document.getElementById('filter-value') as HTMLInputElement).value;
+                    if (field && value) {
+                      setFilters([...filters, { id: `filter-${Date.now()}`, field, operator, value }]);
+                      (document.getElementById('filter-value') as HTMLInputElement).value = '';
+                    }
+                  }}
+                  className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs"
+                >Agregar</button>
+                {filters.length > 0 && (
+                  <button onClick={() => setFilters([])} className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded text-xs">Limpiar</button>
+                )}
+              </div>
             </div>
           )}
 
-          {/* Grouped Table */}
-          <div className="max-h-[500px] overflow-auto">
-            {Object.entries(groupedData).map(([groupKey, items]) => {
-              const groupItemIds = items.map(i => i.id);
-              const allGroupSelected = groupItemIds.every(id => selectedItems.has(id));
-              const someGroupSelected = groupItemIds.some(id => selectedItems.has(id));
+          {/* Selection info */}
+          {selectedItems.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-purple-500/10 border-b border-purple-500/20">
+              <span className="text-sm text-purple-300">{selectedItems.size} seleccionados</span>
+              <button onClick={() => setSelectedItems(new Set())} className="text-xs text-purple-400 hover:text-purple-300">Limpiar seleccion</button>
+            </div>
+          )}
+
+          {/* Resumen Tree */}
+          <div className="divide-y divide-purple-500/10">
+            {resumenCaras.map((catGroup) => {
+              const catItems = catGroup.articulos.flatMap(a => a.items);
+              const catIds = catItems.map(i => i.id);
+              const allCatSelected = catIds.length > 0 && catIds.every(id => selectedItems.has(id));
+              const someCatSelected = catIds.some(id => selectedItems.has(id));
 
               return (
-                <div key={groupKey} className="border-b border-zinc-800">
-                  <div className="flex items-center gap-2 px-4 py-3 bg-zinc-800/50 hover:bg-zinc-800">
+                <div key={catGroup.catorcena}>
+                  {/* Catorcena Header */}
+                  <div className="w-full px-5 py-3 flex items-center gap-3 hover:bg-purple-600/10 transition-colors bg-purple-600/5">
                     <input
                       type="checkbox"
-                      checked={allGroupSelected}
-                      ref={(el) => { if (el) el.indeterminate = someGroupSelected && !allGroupSelected; }}
-                      onChange={() => toggleGroupSelection(items)}
+                      checked={allCatSelected}
+                      ref={(el) => { if (el) el.indeterminate = someCatSelected && !allCatSelected; }}
+                      onChange={() => toggleGroupSelection(catItems)}
                       className="checkbox-purple"
                       onClick={(e) => e.stopPropagation()}
                     />
-                    <button
-                      onClick={() => toggleGroup(groupKey)}
-                      className="flex-1 flex items-center gap-2 text-left"
-                    >
-                      {expandedGroups.has(groupKey) ? (
-                        <ChevronDown className="h-4 w-4 text-blue-400" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4 text-blue-400" />
-                      )}
-                      <span className="text-sm font-medium text-white">{groupKey}</span>
-                      <span className="text-xs text-zinc-500">({items.length} items)</span>
+                    <button onClick={() => toggleResumen(catGroup.catorcena)} className="flex-1 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {expandedResumen.has(catGroup.catorcena) ? (
+                          <ChevronDown className="h-4 w-4 text-purple-400" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-purple-500/50" />
+                        )}
+                        <span className="px-3 py-1 rounded-lg bg-purple-500/30 text-purple-200 text-xs font-medium border border-purple-400/30">
+                          {catGroup.catorcena}
+                        </span>
+                        <span className="text-zinc-500 text-xs">
+                          ({catGroup.articulos.length} articulo{catGroup.articulos.length > 1 ? 's' : ''})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-zinc-400 text-xs">Caras:</span>
+                          <span className="text-white text-sm font-semibold">{catGroup.totalCaras}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 pl-2 border-l border-purple-500/30">
+                          <span className="text-emerald-400 text-xs">Inversion:</span>
+                          <span className="text-emerald-300 text-sm font-semibold">{formatCurrency(catGroup.totalInversion)}</span>
+                        </div>
+                      </div>
                     </button>
-                    {/* Group action buttons */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-blue-400">
-                        {items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0)} caras
-                      </span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleShowGroupOnMap(items); }}
-                        className="p-1.5 hover:bg-purple-500/20 rounded text-purple-400 transition-colors"
-                        title="Ver en mapa"
-                      >
-                        <Map className="h-3.5 w-3.5" />
+                    <div className="flex items-center gap-1 ml-2">
+                      <button onClick={() => handleShowGroupOnMap(catItems)} className="p-1.5 hover:bg-purple-500/20 rounded text-purple-400 transition-colors" title="Ver en mapa">
+                        <MapIcon className="h-3.5 w-3.5" />
                       </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDownloadGroupKML(groupKey, items); }}
-                        className="p-1.5 hover:bg-blue-500/20 rounded text-blue-400 transition-colors"
-                        title="Descargar KML del grupo"
-                      >
+                      <button onClick={() => handleDownloadGroupKML(catGroup.catorcena, catItems)} className="p-1.5 hover:bg-blue-500/20 rounded text-blue-400 transition-colors" title="Descargar KML">
                         <Download className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
-                  {expandedGroups.has(groupKey) && (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-zinc-900/50 text-xs text-zinc-500">
-                          <th className="px-3 py-2 w-10"></th>
-                          <th className="px-4 py-2 text-left">Código</th>
-                          <th className="px-4 py-2 text-left">Plaza</th>
-                          <th className="px-4 py-2 text-left">Ubicación</th>
-                          <th className="px-4 py-2 text-left">Tipo</th>
-                          <th className="px-4 py-2 text-left">Formato</th>
-                          <th className="px-4 py-2 text-center">Caras</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item, idx) => (
-                          <tr
-                            key={idx}
-                            onClick={() => toggleItemSelection(item.id)}
-                            className={`border-t border-zinc-800/50 cursor-pointer transition-colors ${selectedItems.has(item.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'}`}
-                          >
-                            <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+
+                  {/* Articulo Groups */}
+                  {expandedResumen.has(catGroup.catorcena) && (
+                    <div className="pl-6 border-l-2 border-purple-500/20 ml-5">
+                      {catGroup.articulos.map((artGroup) => {
+                        const artKey = `${catGroup.catorcena}|${artGroup.articulo}`;
+                        const artIds = artGroup.items.map(i => i.id);
+                        const allArtSelected = artIds.length > 0 && artIds.every(id => selectedItems.has(id));
+                        const someArtSelected = artIds.some(id => selectedItems.has(id));
+
+                        return (
+                          <div key={artKey} className="border-b border-purple-500/10 last:border-b-0">
+                            <div className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-violet-600/10 transition-colors">
                               <input
                                 type="checkbox"
-                                checked={selectedItems.has(item.id)}
-                                onChange={() => toggleItemSelection(item.id)}
+                                checked={allArtSelected}
+                                ref={(el) => { if (el) el.indeterminate = someArtSelected && !allArtSelected; }}
+                                onChange={() => toggleGroupSelection(artGroup.items)}
                                 className="checkbox-purple"
+                                onClick={(e) => e.stopPropagation()}
                               />
-                            </td>
-                            <td className="px-4 py-2 text-blue-300 font-mono text-xs">{item.codigo_unico}</td>
-                            <td className="px-4 py-2 text-zinc-300">{item.plaza}</td>
-                            <td className="px-4 py-2 text-zinc-400 text-xs truncate max-w-[200px]">{item.ubicacion}</td>
-                            <td className="px-4 py-2 text-zinc-300">{item.tipo_de_cara}</td>
-                            <td className="px-4 py-2 text-zinc-400">{item.tipo_de_mueble}</td>
-                            <td className="px-4 py-2 text-center text-white">{item.caras_totales}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                              <button onClick={() => toggleResumen(artKey)} className="flex-1 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  {expandedResumen.has(artKey) ? (
+                                    <ChevronDown className="h-3.5 w-3.5 text-violet-400" />
+                                  ) : (
+                                    <ChevronRight className="h-3.5 w-3.5 text-violet-500/50" />
+                                  )}
+                                  <span className="px-2.5 py-0.5 rounded-md bg-violet-500/20 text-violet-200 text-xs font-medium border border-violet-400/20">
+                                    {artGroup.articulo}
+                                  </span>
+                                  <span className="text-zinc-500 text-xs">
+                                    ({artGroup.items.length} inventario{artGroup.items.length > 1 ? 's' : ''})
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3 text-xs">
+                                  <span className="text-zinc-400">Caras: <span className="text-white font-medium">{artGroup.totalCaras}</span></span>
+                                  <span className="text-emerald-400">{formatCurrency(artGroup.totalInversion)}</span>
+                                </div>
+                              </button>
+                              <div className="flex items-center gap-1 ml-2">
+                                <button onClick={() => handleShowGroupOnMap(artGroup.items)} className="p-1.5 hover:bg-purple-500/20 rounded text-purple-400 transition-colors" title="Ver en mapa">
+                                  <MapIcon className="h-3 w-3" />
+                                </button>
+                                <button onClick={() => handleDownloadGroupKML(artGroup.articulo, artGroup.items)} className="p-1.5 hover:bg-blue-500/20 rounded text-blue-400 transition-colors" title="Descargar KML">
+                                  <Download className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {expandedResumen.has(artKey) && (
+                              <div className="px-4 pb-3">
+                                {/* Summary badges */}
+                                <div className="flex flex-wrap gap-2 mb-3 px-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs text-zinc-500">Formatos:</span>
+                                    {artGroup.formatos.map(f => (
+                                      <span key={f} className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px] font-medium border border-purple-400/20">{f}</span>
+                                    ))}
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs text-zinc-500">Tipos:</span>
+                                    {artGroup.tipos.map(t => (
+                                      <span key={t} className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded text-[10px] font-medium border border-violet-400/20">{t}</span>
+                                    ))}
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs text-zinc-500">Plazas:</span>
+                                    {artGroup.plazas.map(p => (
+                                      <span key={p} className="px-2 py-0.5 bg-zinc-700 text-zinc-300 rounded text-[10px] font-medium">{p}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                                {/* Detail table with checkboxes */}
+                                <div className="overflow-x-auto rounded-xl border border-purple-500/20 bg-zinc-900/50">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="bg-purple-600/20">
+                                        <th className="px-3 py-2 w-8"></th>
+                                        <th className="px-3 py-2 text-left text-xs font-semibold text-purple-200">Codigo</th>
+                                        <th className="px-3 py-2 text-left text-xs font-semibold text-purple-200">Plaza</th>
+                                        <th className="px-3 py-2 text-left text-xs font-semibold text-purple-200">Formato</th>
+                                        <th className="px-3 py-2 text-left text-xs font-semibold text-purple-200">Tipo</th>
+                                        <th className="px-3 py-2 text-center text-xs font-semibold text-purple-200">Caras</th>
+                                        <th className="px-3 py-2 text-right text-xs font-semibold text-amber-300">Tarifa</th>
+                                        <th className="px-3 py-2 text-right text-xs font-semibold text-emerald-300">Inversion</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-purple-500/10">
+                                      {artGroup.items.map((item, idx) => {
+                                        const inv = (Number(item.tarifa_publica) || 0) * (Number(item.caras_totales) || 0);
+                                        return (
+                                          <tr key={idx} onClick={() => toggleItemSelection(item.id)} className={`cursor-pointer transition-colors ${selectedItems.has(item.id) ? 'bg-purple-500/10' : 'hover:bg-purple-500/5'}`}>
+                                            <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                                              <input type="checkbox" checked={selectedItems.has(item.id)} onChange={() => toggleItemSelection(item.id)} className="checkbox-purple" />
+                                            </td>
+                                            <td className="px-3 py-2 text-blue-300 font-mono text-xs">{item.codigo_unico}</td>
+                                            <td className="px-3 py-2 text-zinc-300 text-xs">{item.plaza || '-'}</td>
+                                            <td className="px-3 py-2 text-zinc-400 text-xs">{item.tipo_de_mueble || '-'}</td>
+                                            <td className="px-3 py-2 text-zinc-400 text-xs">{item.tipo_de_cara || '-'}</td>
+                                            <td className="px-3 py-2 text-center font-semibold text-white text-xs">{item.caras_totales}</td>
+                                            <td className="px-3 py-2 text-right text-amber-300 text-xs">{formatCurrency(item.tarifa_publica || 0)}</td>
+                                            <td className="px-3 py-2 text-right text-emerald-300 font-medium text-xs">{formatCurrency(inv)}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               );
@@ -1044,7 +1299,7 @@ export function CompartirPropuestaPage() {
         {/* Map */}
         <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
           <div className="p-4 border-b border-zinc-800 flex items-center gap-4">
-            <Map className="h-5 w-5 text-blue-500" />
+            <MapIcon className="h-5 w-5 text-blue-500" />
             <h3 className="text-lg font-semibold text-white">Mapa de Reservas</h3>
 
             <div className="flex items-center gap-2 ml-auto">
@@ -1094,7 +1349,21 @@ export function CompartirPropuestaPage() {
                 center={mapCenter}
                 zoom={12}
                 options={{ styles: DARK_MAP_STYLES, disableDefaultUI: true, zoomControl: true }}
-                onLoad={(map) => { mapRef.current = map; }}
+                onLoad={(map) => {
+                  mapRef.current = map;
+                  // Fit bounds to all inventory items on load
+                  if (inventario && inventario.length > 0) {
+                    const bounds = new google.maps.LatLngBounds();
+                    inventario.forEach(item => {
+                      if (item.latitud && item.longitud) {
+                        bounds.extend({ lat: item.latitud, lng: item.longitud });
+                      }
+                    });
+                    if (!bounds.isEmpty()) {
+                      map.fitBounds(bounds, 50);
+                    }
+                  }
+                }}
               >
                 {inventario?.map((item) => (
                   item.latitud && item.longitud && (

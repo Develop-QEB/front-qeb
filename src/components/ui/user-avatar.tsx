@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { cn } from '../../lib/utils';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -21,10 +22,11 @@ interface UserAvatarProps {
 }
 
 export function UserAvatar({ nombre, foto_perfil, size = 'md', className }: UserAvatarProps) {
+  const [imageError, setImageError] = useState(false);
   const initial = nombre?.charAt(0)?.toUpperCase() || 'U';
   const sizeClass = sizeClasses[size];
 
-  if (foto_perfil) {
+  if (foto_perfil && !imageError) {
     return (
       <img
         src={`${STATIC_URL}${foto_perfil}`}
@@ -34,6 +36,7 @@ export function UserAvatar({ nombre, foto_perfil, size = 'md', className }: User
           sizeClass,
           className
         )}
+        onError={() => setImageError(true)}
       />
     );
   }

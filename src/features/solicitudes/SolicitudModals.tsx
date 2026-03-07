@@ -4,9 +4,11 @@ import {
   X, Eye, Edit2, PlayCircle, MessageSquare, Download, FileText,
   Calendar, User, Building2, Package, DollarSign, MapPin, Hash,
   Clock, Send, AlertTriangle, CheckCircle2, XCircle, Loader2,
-  ChevronDown, ChevronRight, Layers, Tag, TrendingUp, BarChart3
+  ChevronDown, ChevronRight, Layers, Tag, TrendingUp, BarChart3, Users
 } from 'lucide-react';
-import { solicitudesService, SolicitudFullDetails, Comentario, SolicitudCara } from '../../services/solicitudes.service';
+import { solicitudesService, SolicitudFullDetails, Comentario, SolicitudCara, UserOption } from '../../services/solicitudes.service';
+import { useSocketEquipos, useSocketSolicitud } from '../../hooks/useSocket';
+import { notificacionesService, ResumenAutorizacion } from '../../services/notificaciones.service';
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { UserAvatar } from '../../components/ui/user-avatar';
@@ -167,10 +169,18 @@ interface ViewSolicitudModalProps {
   isOpen: boolean;
   onClose: () => void;
   solicitudId: number | null;
+  onEdit?: () => void;
+  onAtender?: () => void;
+  onStatus?: () => void;
+  canEdit?: boolean;
+  canAtender?: boolean;
 }
 
-export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicitudModalProps) {
+export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAtender, onStatus, canEdit = true, canAtender = false }: ViewSolicitudModalProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // WebSocket para actualizaciones en tiempo real
+  useSocketSolicitud(isOpen ? solicitudId : null);
 
   // Bloquear scroll del body cuando el modal está abierto
   useEffect(() => {
@@ -484,7 +494,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
             const inversionCara = (Number(c.tarifa_publica) || 0) * (Number(c.caras) || 0);
             return [
               rowNum.toString(),
-              `${c.ciudad || c.estados || '-'}`,
+              c.estados || '-',
+              c.ciudad || '-',
               c.formato || '-',
               (Number(c.caras) || 0).toString(),
               (Number(c.bonificacion) || 0).toString(),
@@ -494,7 +505,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
 
           autoTable(doc, {
             startY: yPos,
-            head: [['#', 'Plaza', 'Formato', 'Caras', 'Bonif.', 'Inversión']],
+            head: [['#', 'Estado', 'Ciudad', 'Formato', 'Caras', 'Bonif.', 'Inversión']],
             body: tableData,
             theme: 'plain',
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -514,12 +525,13 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
             },
             alternateRowStyles: { fillColor: [252, 253, 255] },
             columnStyles: {
-              0: { cellWidth: 10, halign: 'center' },  // #
-              1: { cellWidth: 45 },                     // Plaza
-              2: { cellWidth: 40 },                     // Formato
-              3: { cellWidth: 18, halign: 'center' },  // Caras
-              4: { cellWidth: 18, halign: 'center' },  // Bonif.
-              5: { cellWidth: 28, halign: 'right' },   // Inversión
+              0: { cellWidth: 8, halign: 'center' },   // #
+              1: { cellWidth: 30 },                     // Estado
+              2: { cellWidth: 30 },                     // Ciudad
+              3: { cellWidth: 35 },                     // Formato
+              4: { cellWidth: 15, halign: 'center' },  // Caras
+              5: { cellWidth: 15, halign: 'center' },  // Bonif.
+              6: { cellWidth: 25, halign: 'right' },   // Inversión
             },
           });
 
@@ -583,6 +595,38 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {onEdit && (
+                <button
+                  onClick={() => { onClose(); onEdit(); }}
+                  disabled={!canEdit}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 text-zinc-300 text-xs font-medium hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-zinc-700"
+                  title={canEdit ? 'Editar solicitud' : 'No editable en este estatus'}
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                  Editar
+                </button>
+              )}
+              {onAtender && (
+                <button
+                  onClick={() => { onClose(); onAtender(); }}
+                  disabled={!canAtender}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-medium hover:bg-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-emerald-500/30"
+                  title={canAtender ? 'Atender solicitud' : 'Solo disponible para solicitudes aprobadas'}
+                >
+                  <PlayCircle className="h-3.5 w-3.5" />
+                  Atender
+                </button>
+              )}
+              {onStatus && (
+                <button
+                  onClick={() => { onClose(); onStatus(); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 text-xs font-medium hover:bg-amber-500/30 transition-all border border-amber-500/30"
+                  title="Ver estatus y comentarios"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Bitácora
+                </button>
+              )}
               <button
                 onClick={generatePDF}
                 disabled={isLoading || !data}
@@ -651,12 +695,12 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Inicio</span>
-                      <span className="text-white text-sm">{data.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : '-'}</span>
+                      <span className="text-zinc-500 text-sm">Catorcena Inicio</span>
+                      <span className="text-white text-sm">{data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas) : '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Fin</span>
-                      <span className="text-white text-sm">{data.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : '-'}</span>
+                      <span className="text-zinc-500 text-sm">Catorcena Fin</span>
+                      <span className="text-white text-sm">{data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas) : '-'}</span>
                     </div>
                     {data.solicitud.descripcion && (
                       <div className="pt-2 border-t border-zinc-700/50">
@@ -832,11 +876,44 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                                               <th className="px-3 py-2 text-center text-xs font-semibold text-white">Total</th>
                                               <th className="px-3 py-2 text-right text-xs font-semibold text-amber-300">Tarifa</th>
                                               <th className="px-3 py-2 text-right text-xs font-semibold text-emerald-300">Inversión</th>
+                                              <th className="px-3 py-2 text-center text-xs font-semibold text-violet-200">Autorización</th>
                                             </tr>
                                           </thead>
                                           <tbody className="divide-y divide-violet-500/10">
                                             {articuloGroup.caras.map((cara, idx) => {
                                               const inversion = (cara.tarifa_publica || 0) * (Number(cara.caras) || 0);
+                                              // Compute combined authorization state from both columns
+                                              const authDg = cara.autorizacion_dg || 'aprobado';
+                                              const authDcm = cara.autorizacion_dcm || 'aprobado';
+
+                                              // Build authorization badges array
+                                              const authBadges: { label: string; color: { bg: string; text: string; border: string } }[] = [];
+
+                                              if (authDg === 'rechazado' || authDcm === 'rechazado') {
+                                                authBadges.push({
+                                                  label: 'Rechazado',
+                                                  color: { bg: 'bg-zinc-500/20', text: 'text-zinc-400', border: 'border-zinc-500/30' }
+                                                });
+                                              } else if (authDg === 'aprobado' && authDcm === 'aprobado') {
+                                                authBadges.push({
+                                                  label: 'Aprobado',
+                                                  color: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' }
+                                                });
+                                              } else {
+                                                if (authDg === 'pendiente') {
+                                                  authBadges.push({
+                                                    label: 'Pend. DG',
+                                                    color: { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' }
+                                                  });
+                                                }
+                                                if (authDcm === 'pendiente') {
+                                                  authBadges.push({
+                                                    label: 'Pend. DCM',
+                                                    color: { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' }
+                                                  });
+                                                }
+                                              }
+
                                               return (
                                                 <tr key={idx} className="hover:bg-violet-600/10 transition-colors">
                                                   <td className="px-3 py-2 text-zinc-200">{cara.ciudad || '-'}</td>
@@ -848,6 +925,15 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId }: ViewSolicit
                                                   <td className="px-3 py-2 text-center text-white font-bold">{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
                                                   <td className="px-3 py-2 text-right text-amber-300 font-medium">{formatCurrency(cara.tarifa_publica || 0)}</td>
                                                   <td className="px-3 py-2 text-right text-emerald-300 font-medium">{formatCurrency(inversion)}</td>
+                                                  <td className="px-3 py-2 text-center">
+                                                    <div className="flex flex-col gap-0.5 items-center">
+                                                      {authBadges.map((badge, badgeIdx) => (
+                                                        <span key={badgeIdx} className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${badge.color.bg} ${badge.color.text} border ${badge.color.border}`}>
+                                                          {badge.label}
+                                                        </span>
+                                                      ))}
+                                                    </div>
+                                                  </td>
                                                 </tr>
                                               );
                                             })}
@@ -978,19 +1064,58 @@ interface StatusModalProps {
   onClose: () => void;
   solicitud: Solicitud | null;
   onStatusChange: () => void;
+  statusReadOnly?: boolean; // Si es true, solo puede ver y comentar, no cambiar estado
 }
 
-export function StatusModal({ isOpen, onClose, solicitud, onStatusChange }: StatusModalProps) {
+export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, statusReadOnly = false }: StatusModalProps) {
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
+  // Block body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  // Query para obtener detalles completos (incluye caras con idquote)
+  const { data: solicitudDetails } = useQuery({
+    queryKey: ['solicitud-details', solicitud?.id],
+    queryFn: () => solicitudesService.getFullDetails(solicitud!.id),
+    enabled: isOpen && !!solicitud?.id,
+  });
+
+  // Obtener idquote de las caras (todas las caras de una solicitud tienen el mismo idquote)
+  const idquote = solicitudDetails?.caras?.[0]?.idquote;
+
+  // Query para verificar autorización pendiente
+  const { data: autorizacionResumen } = useQuery({
+    queryKey: ['autorizacion-resumen', idquote],
+    queryFn: () => notificacionesService.getResumenAutorizacion(idquote!),
+    enabled: isOpen && !!idquote,
+  });
+
+  // Verificar si hay caras pendientes de autorización
+  const tienePendientes = autorizacionResumen && (autorizacionResumen.pendientesDg > 0 || autorizacionResumen.pendientesDcm > 0);
+
   const { data: comments, refetch: refetchComments } = useQuery({
     queryKey: ['solicitud-comments', solicitud?.id],
     queryFn: () => solicitudesService.getComments(solicitud!.id),
     enabled: isOpen && !!solicitud,
+    staleTime: 60000, // 1 minuto - evita refetches innecesarios
   });
+
+  // Refetch comments when modal opens
+  useEffect(() => {
+    if (isOpen && solicitud) {
+      refetchComments();
+    }
+  }, [isOpen, solicitud, refetchComments]);
 
   const addCommentMutation = useMutation({
     mutationFn: ({ id, comentario }: { id: number; comentario: string }) =>
@@ -1055,32 +1180,64 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange }: Stat
 
         {/* Status Selector */}
         <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-800/30">
-          <label className="block text-sm text-zinc-400 mb-2">Cambiar estado a:</label>
-          <div className="flex items-center gap-3">
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-            >
-              {statusOptions.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-            <button
-              onClick={handleChangeStatus}
-              disabled={selectedStatus === solicitud.status || updateStatusMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
-            >
-              {updateStatusMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Actualizando...
-                </>
-              ) : (
-                'Actualizar'
-              )}
-            </button>
-          </div>
+          {/* Alerta de autorización pendiente */}
+          {tienePendientes && (
+            <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-amber-200 font-medium">Autorización pendiente</p>
+                <p className="text-xs text-amber-300/70 mt-1">
+                  Esta solicitud tiene {(autorizacionResumen?.pendientesDg || 0) + (autorizacionResumen?.pendientesDcm || 0)} cara(s) pendientes de autorización.
+                  {autorizacionResumen?.pendientesDg ? ` DG: ${autorizacionResumen.pendientesDg}.` : ''}
+                  {autorizacionResumen?.pendientesDcm ? ` DCM: ${autorizacionResumen.pendientesDcm}.` : ''}
+                  {' '}No se puede aprobar hasta que todas las caras sean autorizadas.
+                </p>
+              </div>
+            </div>
+          )}
+          {statusReadOnly ? (
+            <>
+              <label className="block text-sm text-zinc-400 mb-2">Estado actual:</label>
+              <div className="px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700 text-white text-sm">
+                {solicitud.status}
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="block text-sm text-zinc-400 mb-2">Cambiar estado a:</label>
+              <div className="flex items-center gap-3">
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                >
+                  {statusOptions.map(s => (
+                    <option
+                      key={s}
+                      value={s}
+                      disabled={s === 'Aprobada' && tienePendientes}
+                    >
+                      {s}{s === 'Aprobada' && tienePendientes ? ' (Requiere autorización)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleChangeStatus}
+                  disabled={selectedStatus === solicitud.status || updateStatusMutation.isPending || (selectedStatus === 'Aprobada' && tienePendientes)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
+                >
+                  {updateStatusMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    'Actualizar'
+                  )}
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Comments List */}
@@ -1158,10 +1315,83 @@ interface AtenderModalProps {
 }
 
 export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderModalProps) {
+  const [selectedAsignados, setSelectedAsignados] = useState<{ id: number; nombre: string }[]>([]);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Socket para actualizar usuarios en tiempo real
+  useSocketEquipos();
+
+  // Block body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  // Fetch ALL users (no team filtering) to include Tráfico users globally
+  const { data: users } = useQuery({
+    queryKey: ['solicitudes-users', 'all-users', 'atender-modal'],
+    queryFn: () => solicitudesService.getUsers(undefined, false),
+    enabled: isOpen,
+  });
+
+  // Pre-populate asignados with: 1) Original assignees from solicitud + 2) All users from "Tráfico" area
+  useEffect(() => {
+    if (isOpen && solicitud && users) {
+      const combinedAsignados: { id: number; nombre: string }[] = [];
+      const addedIds = new Set<number>();
+
+      // 1. Add original assignees from solicitud
+      if (solicitud.id_asignado && solicitud.asignado) {
+        const ids = solicitud.id_asignado.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+        const nombres = solicitud.asignado.split(',').map(n => n.trim());
+        ids.forEach((id, idx) => {
+          if (nombres[idx] && !addedIds.has(id)) {
+            combinedAsignados.push({ id, nombre: nombres[idx] });
+            addedIds.add(id);
+          }
+        });
+      }
+
+      // 2. Add all users from Tráfico area/puesto (if not already added)
+      const traficoUsers = users.filter(u => {
+        const area = u.area?.toLowerCase() || '';
+        const puesto = u.puesto?.toLowerCase() || '';
+        return area.includes('tráfico') || area.includes('trafico') ||
+               puesto.includes('tráfico') || puesto.includes('trafico');
+      });
+      traficoUsers.forEach(u => {
+        if (!addedIds.has(u.id)) {
+          combinedAsignados.push({ id: u.id, nombre: u.nombre });
+          addedIds.add(u.id);
+        }
+      });
+
+      setSelectedAsignados(combinedAsignados);
+    }
+  }, [isOpen, solicitud, users]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowUserDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const queryClient = useQueryClient();
 
   const atenderMutation = useMutation({
-    mutationFn: (id: number) => solicitudesService.atender(id),
+    mutationFn: ({ id, asignados }: { id: number; asignados: { id: number; nombre: string }[] }) =>
+      solicitudesService.atender(id, asignados),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
@@ -1170,6 +1400,26 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
       onClose();
     },
   });
+
+  const handleAddUser = (user: UserOption) => {
+    if (!selectedAsignados.find(a => a.id === user.id)) {
+      setSelectedAsignados(prev => [...prev, { id: user.id, nombre: user.nombre }]);
+    }
+    setUserSearch('');
+    setShowUserDropdown(false);
+  };
+
+  const handleRemoveUser = (userId: number) => {
+    setSelectedAsignados(prev => prev.filter(a => a.id !== userId));
+  };
+
+  const filteredUsers = useMemo(() => {
+    if (!users) return [];
+    return users.filter(u =>
+      !selectedAsignados.find(a => a.id === u.id) &&
+      u.nombre.toLowerCase().includes(userSearch.toLowerCase())
+    );
+  }, [users, selectedAsignados, userSearch]);
 
   if (!isOpen || !solicitud) return null;
 
@@ -1186,7 +1436,65 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
           </div>
         </div>
 
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6">
+        {/* Asignados Section */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-zinc-300 mb-2">
+            <Users className="h-4 w-4 inline mr-1.5 text-cyan-400" />
+            Asignados
+          </label>
+          <div className="relative" ref={dropdownRef}>
+            <div className="flex flex-wrap gap-2 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700 min-h-[48px]">
+              {selectedAsignados.map(asignado => (
+                <span
+                  key={asignado.id}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-xs border border-cyan-500/30"
+                >
+                  {asignado.nombre}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveUser(asignado.id)}
+                    className="hover:text-cyan-100 transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                value={userSearch}
+                onChange={(e) => {
+                  setUserSearch(e.target.value);
+                  setShowUserDropdown(true);
+                }}
+                onFocus={() => setShowUserDropdown(true)}
+                placeholder={selectedAsignados.length === 0 ? "Buscar usuarios..." : ""}
+                className="flex-1 min-w-[120px] bg-transparent text-white text-sm placeholder:text-zinc-500 focus:outline-none"
+              />
+            </div>
+            {showUserDropdown && filteredUsers.length > 0 && (
+              <div className="absolute z-20 mt-1 w-full max-h-48 overflow-auto rounded-lg bg-zinc-800 border border-zinc-700 shadow-lg">
+                {filteredUsers.map(user => (
+                  <button
+                    key={user.id}
+                    type="button"
+                    onClick={() => handleAddUser(user)}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-700 transition-colors"
+                  >
+                    <span className="text-white">{user.nombre}</span>
+                    {user.area && (
+                      <span className="text-zinc-500 text-xs ml-2">({user.area})</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-zinc-500 mt-1.5">
+            Los asignados serán responsables de dar seguimiento a la propuesta
+          </p>
+        </div>
+
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-4">
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
@@ -1225,7 +1533,7 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
             Cancelar
           </button>
           <button
-            onClick={() => atenderMutation.mutate(solicitud.id)}
+            onClick={() => atenderMutation.mutate({ id: solicitud.id, asignados: selectedAsignados })}
             disabled={atenderMutation.isPending}
             className="px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm hover:bg-cyan-700 disabled:opacity-50 flex items-center gap-2"
           >

@@ -1,13 +1,96 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Users, Building2, Tag, Database, Cloud, Plus, Trash2,
-  Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal, Package, RefreshCw,
-  Eye, User, Calendar, Briefcase, Hash, FileText
+  Filter, ChevronDown, ChevronRight, X, Layers, Package, RefreshCw,
+  Eye, User, Calendar, Hash, FileText, ArrowUpDown, ArrowUp, ArrowDown, Check
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { clientesService } from '../../services/clientes.service';
 import { Cliente } from '../../types';
+import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
+import { useSocketClientes } from '../../hooks/useSocket';
+
+// ============ TIPOS Y CONFIGURACIÓN DE FILTROS/ORDENAMIENTO ============
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
+
+interface FilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: keyof Cliente;
+  label: string;
+  type: 'string' | 'number';
+}
+
+// Campos disponibles para filtrar/ordenar
+const FILTER_FIELDS: FilterFieldConfig[] = [
+  { field: 'CUIC', label: 'CUIC', type: 'string' },
+  { field: 'T0_U_Cliente', label: 'Cliente', type: 'string' },
+  { field: 'T0_U_RazonSocial', label: 'Razón Social', type: 'string' },
+  { field: 'T0_U_Agencia', label: 'Agencia', type: 'string' },
+  { field: 'T2_U_Marca', label: 'Marca', type: 'string' },
+  { field: 'T2_U_Categoria', label: 'Categoría', type: 'string' },
+  { field: 'T2_U_Producto', label: 'Producto', type: 'string' },
+];
+
+// Campos disponibles para agrupar
+type GroupByField = 'T0_U_Agencia' | 'T2_U_Marca' | 'T2_U_Categoria';
+
+interface GroupConfig {
+  field: GroupByField;
+  label: string;
+}
+
+const AVAILABLE_GROUPINGS: GroupConfig[] = [
+  { field: 'T0_U_Agencia', label: 'Agencia' },
+  { field: 'T2_U_Marca', label: 'Marca' },
+  { field: 'T2_U_Categoria', label: 'Categoría' },
+];
+
+const OPERATORS: { value: FilterOperator; label: string }[] = [
+  { value: '=', label: 'Igual a' },
+  { value: '!=', label: 'Diferente de' },
+  { value: 'contains', label: 'Contiene' },
+  { value: 'not_contains', label: 'No contiene' },
+];
+
+// Función para aplicar filtros a los datos
+function applyFilters(data: Cliente[], filters: FilterCondition[]): Cliente[] {
+  if (filters.length === 0) return data;
+
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = item[filter.field as keyof Cliente];
+      const filterValue = filter.value;
+
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+
+      switch (filter.operator) {
+        case '=':
+          return strValue === strFilterValue;
+        case '!=':
+          return strValue !== strFilterValue;
+        case 'contains':
+          return strValue.includes(strFilterValue);
+        case 'not_contains':
+          return !strValue.includes(strFilterValue);
+        default:
+          return true;
+      }
+    });
+  });
+}
 
 // Helper para formatear fechas
 function formatDate(dateStr: string | null): string {
@@ -61,6 +144,16 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
                   <span className="font-mono text-sm px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30">
                     CUIC: {cliente.CUIC || '-'}
                   </span>
+                  {cliente.sap_database && (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-lg border ${
+                      cliente.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                      cliente.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                      cliente.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                      'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                    }`}>
+                      {cliente.sap_database}
+                    </span>
+                  )}
                 </div>
                 <p className="text-zinc-400 text-sm">{cliente.T0_U_Cliente || 'Sin nombre'}</p>
               </div>
@@ -365,129 +458,46 @@ function TabButton({
   );
 }
 
-// Filter Chip Component with Search
-function FilterChip({
-  label,
-  options,
-  value,
-  onChange,
-  onClear
-}: {
-  label: string;
-  options: string[];
-  value: string;
-  onChange: (value: string) => void;
-  onClear: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredOptions = useMemo(() => {
-    if (!searchTerm) return options;
-    return options.filter(opt =>
-      opt.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [options, searchTerm]);
-
-  const handleClose = () => {
-    setOpen(false);
-    setSearchTerm('');
-  };
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
-          value
-            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-            : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
-        }`}
-      >
-        <span>{value || label}</span>
-        {value ? (
-          <X className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); onClear(); }} />
-        ) : (
-          <ChevronDown className="h-3 w-3" />
-        )}
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            {/* Search input */}
-            <div className="p-2 border-b border-zinc-800">
-              <input
-                type="text"
-                placeholder={`Buscar ${label.toLowerCase()}...`}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50"
-                autoFocus
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            {/* Options list */}
-            <div className="max-h-52 overflow-auto">
-              {filteredOptions.length === 0 ? (
-                <div className="px-3 py-3 text-xs text-zinc-500 text-center">
-                  {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
-                </div>
-              ) : (
-                filteredOptions.map((option) => (
-                  <button
-                    key={option}
-                    onClick={() => { onChange(option); handleClose(); }}
-                    className={`w-full px-3 py-2 text-left text-xs transition-colors ${
-                      value === option
-                        ? 'bg-purple-500/20 text-purple-300'
-                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))
-              )}
-            </div>
-            {/* Count indicator */}
-            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
-              {filteredOptions.length} de {options.length} opciones
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// Grouped Table Row
+// Grouped Table Row - Level 1
 function GroupHeader({
   groupName,
   count,
   expanded,
-  onToggle
+  onToggle,
+  level = 1
 }: {
   groupName: string;
   count: number;
   expanded: boolean;
   onToggle: () => void;
+  level?: 1 | 2;
 }) {
+  const isLevel1 = level === 1;
   return (
     <tr
       onClick={onToggle}
-      className="bg-purple-500/10 border-b border-purple-500/20 cursor-pointer hover:bg-purple-500/20 transition-colors"
+      className={`border-b cursor-pointer transition-colors ${
+        isLevel1
+          ? 'bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20'
+          : 'bg-fuchsia-500/5 border-fuchsia-500/10 hover:bg-fuchsia-500/10'
+      }`}
     >
-      <td colSpan={8} className="px-4 py-3">
+      <td colSpan={8} className={`px-4 py-2.5 ${isLevel1 ? '' : 'pl-10'}`}>
         <div className="flex items-center gap-2">
           {expanded ? (
-            <ChevronDown className="h-4 w-4 text-purple-400" />
+            <ChevronDown className={`h-4 w-4 ${isLevel1 ? 'text-purple-400' : 'text-fuchsia-400'}`} />
           ) : (
-            <ChevronRight className="h-4 w-4 text-purple-400" />
+            <ChevronRight className={`h-4 w-4 ${isLevel1 ? 'text-purple-400' : 'text-fuchsia-400'}`} />
           )}
-          <span className="font-semibold text-white">{groupName || 'Sin asignar'}</span>
-          <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">
-            {count} clientes
+          <span className={`font-semibold ${isLevel1 ? 'text-white' : 'text-zinc-200 text-sm'}`}>
+            {groupName || 'Sin asignar'}
+          </span>
+          <span className={`px-2 py-0.5 rounded-full text-xs ${
+            isLevel1
+              ? 'bg-purple-500/20 text-purple-300'
+              : 'bg-fuchsia-500/20 text-fuchsia-300'
+          }`}>
+            {count} {count === 1 ? 'cliente' : 'clientes'}
           </span>
         </div>
       </td>
@@ -497,14 +507,15 @@ function GroupHeader({
 
 export function ClientesPage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'db' | 'sap'>('db');
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  // WebSocket para actualizaciones en tiempo real
+  useSocketClientes();
+
+  const [activeTab, setActiveTab] = useState<'db' | 'CIMU' | 'TEST' | 'TRADE'>('db');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [filterAgencia, setFilterAgencia] = useState('');
-  const [filterMarca, setFilterMarca] = useState('');
-  const [filterCategoria, setFilterCategoria] = useState('');
-  const [groupBy, setGroupBy] = useState<string>('');
-  const [showFilters, setShowFilters] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const limit = 20;
@@ -513,11 +524,25 @@ export function ClientesPage() {
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
 
+  // Estados para filtros avanzados
+  const [filters, setFilters] = useState<FilterCondition[]>([]);
+  const [showFilterPopup, setShowFilterPopup] = useState(false);
+
+  // Estados para agrupación
+  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
+  const [showGroupPopup, setShowGroupPopup] = useState(false);
+
+  // Estados para ordenamiento
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [showSortPopup, setShowSortPopup] = useState(false);
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
       setPage(1);
+      setSapPage(1);
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
@@ -528,35 +553,54 @@ export function ClientesPage() {
     queryFn: () => clientesService.getStats(),
   });
 
-  // Fetch filter options
-  const { data: filterOptions } = useQuery({
-    queryKey: ['clientes-filter-options'],
-    queryFn: () => clientesService.getFilterOptions(),
-  });
-
   // Fetch paginated DB clients
   const { data: dbData, isLoading: dbLoading } = useQuery({
     queryKey: ['clientes', page, debouncedSearch],
     queryFn: () => clientesService.getAll({ page, limit, search: debouncedSearch }),
   });
 
-  // Fetch ALL DB clients for filtering/grouping
-  const needsFullData = !!(filterAgencia || filterMarca || filterCategoria || groupBy);
+  // Fetch ALL DB clients for filtering/grouping/sorting
+  const needsFullData = filters.length > 0 || activeGroupings.length > 0 || sortField !== null;
   const { data: fullDbData, isLoading: fullDbLoading } = useQuery({
     queryKey: ['clientes-full', debouncedSearch],
     queryFn: () => clientesService.getAllFull(debouncedSearch || undefined),
     enabled: needsFullData,
   });
 
-  // Fetch SAP clients
-  const { data: sapData, isLoading: sapLoading, refetch: refetchSap, isFetching: sapFetching } = useQuery({
-    queryKey: ['clientes-sap', debouncedSearch],
-    queryFn: () => clientesService.getSAPClientes(debouncedSearch || undefined),
+  // SAP pagination
+  const [sapPage, setSapPage] = useState(1);
+  const sapLimit = 100;
+
+  // Fetch SAP clients per database - all prefetch on mount (no wait for tab click)
+  const { data: cimuData, isLoading: cimuLoading, refetch: refetchCimu, isFetching: cimuFetching } = useQuery({
+    queryKey: ['clientes-sap-CIMU', debouncedSearch],
+    queryFn: () => clientesService.getSAPClientesByDB('CIMU', debouncedSearch || undefined),
+    staleTime: 10 * 60 * 1000,
   });
+
+  const { data: testData, isLoading: testLoading, refetch: refetchTest, isFetching: testFetching } = useQuery({
+    queryKey: ['clientes-sap-TEST', debouncedSearch],
+    queryFn: () => clientesService.getSAPClientesByDB('TEST', debouncedSearch || undefined),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: tradeData, isLoading: tradeLoading, refetch: refetchTrade, isFetching: tradeFetching } = useQuery({
+    queryKey: ['clientes-sap-TRADE', debouncedSearch],
+    queryFn: () => clientesService.getSAPClientesByDB('TRADE', debouncedSearch || undefined),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Helper to get the active SAP query data/refetch
+  const activeSapData = activeTab === 'CIMU' ? cimuData : activeTab === 'TEST' ? testData : activeTab === 'TRADE' ? tradeData : null;
+  const activeSapLoading = activeTab === 'CIMU' ? cimuLoading : activeTab === 'TEST' ? testLoading : activeTab === 'TRADE' ? tradeLoading : false;
+  const activeSapFetching = activeTab === 'CIMU' ? cimuFetching : activeTab === 'TEST' ? testFetching : activeTab === 'TRADE' ? tradeFetching : false;
+  const activeSapRefetch = activeTab === 'CIMU' ? refetchCimu : activeTab === 'TEST' ? refetchTest : activeTab === 'TRADE' ? refetchTrade : null;
 
   // Refresh SAP data (clear cache on backend)
   const handleRefreshSap = async () => {
-    await refetchSap();
+    if (activeSapRefetch) {
+      await activeSapRefetch();
+    }
   };
 
   // Create client mutation
@@ -565,7 +609,9 @@ export function ClientesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-full'] });
-      queryClient.invalidateQueries({ queryKey: ['clientes-sap'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-CIMU'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-TEST'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-TRADE'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-stats'] });
     },
   });
@@ -576,60 +622,175 @@ export function ClientesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-full'] });
-      queryClient.invalidateQueries({ queryKey: ['clientes-sap'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-CIMU'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-TEST'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-TRADE'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-stats'] });
     },
   });
 
   // Get current data based on tab and filters
+  const isDb = activeTab === 'db';
+  const isSapTab = activeTab === 'CIMU' || activeTab === 'TEST' || activeTab === 'TRADE';
+
+  // All SAP data (for total count + filtering)
+  const allSapData = useMemo(() => {
+    if (!isSapTab) return [];
+    return activeSapData?.data || [];
+  }, [isSapTab, activeSapData]);
+
+  // Paginated SAP data
+  const paginatedSapData = useMemo(() => {
+    const start = (sapPage - 1) * sapLimit;
+    return allSapData.slice(start, start + sapLimit);
+  }, [allSapData, sapPage]);
+
+  const sapTotalPages = Math.max(1, Math.ceil(allSapData.length / sapLimit));
+
   const currentData = useMemo(() => {
-    if (activeTab === 'sap') {
-      return sapData?.data || [];
+    if (isSapTab) {
+      return paginatedSapData;
     }
     if (needsFullData && fullDbData?.data) {
       return fullDbData.data;
     }
     return dbData?.data || [];
-  }, [activeTab, sapData, fullDbData, dbData, needsFullData]);
+  }, [isSapTab, paginatedSapData, fullDbData, dbData, needsFullData]);
 
-  const isLoading = activeTab === 'sap'
-    ? sapLoading
+  const isLoading = isSapTab
+    ? activeSapLoading
     : (needsFullData ? fullDbLoading : dbLoading);
+
+  // Obtener valores únicos para cada campo de filtro
+  const getUniqueValues = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    FILTER_FIELDS.forEach(fieldConfig => {
+      const values = new Set<string>();
+      currentData.forEach(item => {
+        const val = item[fieldConfig.field];
+        if (val !== null && val !== undefined && val !== '') {
+          values.add(String(val));
+        }
+      });
+      valuesMap[fieldConfig.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [currentData]);
+
+  // Funciones para manejar filtros
+  const addFilter = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFilters(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilter = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilter = useCallback((id: string) => {
+    setFilters(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setFilters([]);
+  }, []);
+
+  // Función para toggle de agrupación
+  const toggleGrouping = useCallback((field: GroupByField) => {
+    setActiveGroupings(prev => {
+      if (prev.includes(field)) {
+        return prev.filter(f => f !== field);
+      }
+      if (prev.length >= 2) {
+        return [prev[1], field];
+      }
+      return [...prev, field];
+    });
+  }, []);
 
   // Filter data
   const filteredData = useMemo(() => {
-    let data = [...currentData];
+    let data = applyFilters(currentData, filters);
 
-    if (filterAgencia) {
-      data = data.filter(c => c.T0_U_Agencia === filterAgencia);
-    }
-    if (filterMarca) {
-      data = data.filter(c => c.T2_U_Marca === filterMarca);
-    }
-    if (filterCategoria) {
-      data = data.filter(c => c.T2_U_Categoria === filterCategoria);
+    // Aplicar ordenamiento
+    if (sortField) {
+      data = [...data].sort((a, b) => {
+        const aVal = a[sortField as keyof Cliente];
+        const bVal = b[sortField as keyof Cliente];
+
+        if (aVal === null || aVal === undefined) return sortDirection === 'asc' ? 1 : -1;
+        if (bVal === null || bVal === undefined) return sortDirection === 'asc' ? -1 : 1;
+
+        const comparison = String(aVal).localeCompare(String(bVal));
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
     }
 
     return data;
-  }, [currentData, filterAgencia, filterMarca, filterCategoria]);
+  }, [currentData, filters, sortField, sortDirection]);
 
-  // Group data
-  const groupedData = useMemo(() => {
-    if (!groupBy) return null;
+  // Group data - supports up to 2 levels
+  interface GroupedLevel1 {
+    name: string;
+    items: Cliente[];
+    subgroups?: { name: string; items: Cliente[] }[];
+  }
 
-    const groupKey = groupBy === 'Agencia' ? 'T0_U_Agencia' : groupBy === 'Marca' ? 'T2_U_Marca' : 'T2_U_Categoria';
+  const groupedData = useMemo((): GroupedLevel1[] | null => {
+    if (activeGroupings.length === 0) return null;
+
+    const groupKey1 = activeGroupings[0];
+    const groupKey2 = activeGroupings.length > 1 ? activeGroupings[1] : null;
+
     const groups: Record<string, Cliente[]> = {};
 
+    // First level grouping
     filteredData.forEach(item => {
-      const key = (item[groupKey as keyof Cliente] as string) || 'Sin asignar';
+      const key = (item[groupKey1] as string) || 'Sin asignar';
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     });
 
-    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
-  }, [filteredData, groupBy]);
+    // Sort function for groups - by name if sorting is active, otherwise by count
+    const sortGroups = (entries: [string, Cliente[]][]) => {
+      if (sortField) {
+        // Sort groups alphabetically by group name
+        return entries.sort((a, b) => {
+          const comparison = a[0].localeCompare(b[0]);
+          return sortDirection === 'asc' ? comparison : -comparison;
+        });
+      }
+      // Default: sort by count (descending)
+      return entries.sort((a, b) => b[1].length - a[1].length);
+    };
 
-  const hasActiveFilters = !!(filterAgencia || filterMarca || filterCategoria || groupBy);
+    // Convert to array and add second level if needed
+    const result: GroupedLevel1[] = sortGroups(Object.entries(groups))
+      .map(([name, items]) => {
+        if (groupKey2) {
+          // Second level grouping
+          const subgroupsMap: Record<string, Cliente[]> = {};
+          items.forEach(item => {
+            const subKey = (item[groupKey2] as string) || 'Sin asignar';
+            if (!subgroupsMap[subKey]) subgroupsMap[subKey] = [];
+            subgroupsMap[subKey].push(item);
+          });
+          const subgroups = sortGroups(Object.entries(subgroupsMap))
+            .map(([subName, subItems]) => ({ name: subName, items: subItems }));
+          return { name, items, subgroups };
+        }
+        return { name, items };
+      });
+
+    return result;
+  }, [filteredData, activeGroupings, sortField, sortDirection]);
+
+  const hasActiveFilters = filters.length > 0 || activeGroupings.length > 0 || sortField !== null;
 
   const toggleGroup = (groupName: string) => {
     setExpandedGroups(prev => {
@@ -643,11 +804,22 @@ export function ClientesPage() {
     });
   };
 
+  const [addingCuic, setAddingCuic] = useState<number | null>(null);
+
   const handleAddToDatabase = async (cliente: Cliente) => {
     try {
-      await createMutation.mutateAsync(cliente);
+      setAddingCuic(cliente.CUIC ?? null);
+      const payload: Partial<Cliente> = { ...cliente };
+      if (isSapTab) {
+        payload.sap_database = activeTab;
+        payload.card_code = cliente.ACA_U_SAPCode || null;
+        payload.salesperson_code = cliente.ASESOR_U_SAPCode_Original ? Number(cliente.ASESOR_U_SAPCode_Original) : null;
+      }
+      await createMutation.mutateAsync(payload);
     } catch (error) {
       console.error('Error adding cliente:', error);
+    } finally {
+      setAddingCuic(null);
     }
   };
 
@@ -662,76 +834,93 @@ export function ClientesPage() {
   };
 
   const clearAllFilters = () => {
-    setFilterAgencia('');
-    setFilterMarca('');
-    setFilterCategoria('');
-    setGroupBy('');
+    setFilters([]);
+    setActiveGroupings([]);
+    setSortField(null);
+    setSortDirection('asc');
     setExpandedGroups(new Set());
   };
 
-  const renderClientRow = (item: Cliente, isDb: boolean, index: number) => (
-    <tr key={isDb ? `db-${item.id}` : `sap-${index}-${item.CUIC}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
-      <td className="px-4 py-3">
-        <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">{item.CUIC || '-'}</span>
+  const sapDatabaseBadgeClasses: Record<string, string> = {
+    CIMU: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+    TEST: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    TRADE: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  };
+
+  const renderClientRow = (item: Cliente, isDbRow: boolean, index: number) => (
+    <tr key={isDbRow ? `db-${item.id}` : `sap-${index}-${item.CUIC}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+      <td className="px-2 py-2">
+        <div className="flex items-center gap-1">
+          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300">{item.CUIC || '-'}</span>
+          {isDbRow && item.sap_database && (
+            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${sapDatabaseBadgeClasses[item.sap_database] || 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'}`}>
+              {item.sap_database}
+            </span>
+          )}
+        </div>
       </td>
-      <td className="px-4 py-3">
-        <span className="font-semibold text-white">{item.T0_U_Cliente || '-'}</span>
+      <td className="px-2 py-2">
+        <span className="font-semibold text-white text-xs truncate block max-w-[120px]">{item.T0_U_Cliente || '-'}</span>
       </td>
-      <td className="px-4 py-3">
-        <span className="max-w-[200px] truncate block text-zinc-400 text-xs">{item.T0_U_RazonSocial || '-'}</span>
+      <td className="px-2 py-2 hidden lg:table-cell">
+        <span className="max-w-[150px] truncate block text-zinc-400 text-[11px]">{item.T0_U_RazonSocial || '-'}</span>
       </td>
-      <td className="px-4 py-3">
-        <span className="inline-flex items-center gap-1">
-          <Building2 className="h-3 w-3 text-cyan-400" />
-          <span className="text-cyan-300 text-xs">{item.T0_U_Agencia || '-'}</span>
+      <td className="px-2 py-2 hidden md:table-cell">
+        <span className="inline-flex items-center gap-1 max-w-[100px]">
+          <Building2 className="h-3 w-3 text-cyan-400 flex-shrink-0" />
+          <span className="text-cyan-300 text-[11px] truncate">{item.T0_U_Agencia || '-'}</span>
         </span>
       </td>
-      <td className="px-4 py-3">
-        <span className="inline-flex items-center gap-1">
-          <Tag className="h-3 w-3 text-fuchsia-400" />
-          <span className="text-fuchsia-300 text-xs">{item.T2_U_Marca || '-'}</span>
+      <td className="px-2 py-2">
+        <span className="inline-flex items-center gap-1 max-w-[100px]">
+          <Tag className="h-3 w-3 text-fuchsia-400 flex-shrink-0" />
+          <span className="text-fuchsia-300 text-[11px] truncate">{item.T2_U_Marca || '-'}</span>
         </span>
       </td>
-      <td className="px-4 py-3">
-        <span className="px-2 py-0.5 rounded-full text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30">
+      <td className="px-2 py-2 hidden xl:table-cell">
+        <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 truncate max-w-[80px] block">
           {item.T2_U_Categoria || '-'}
         </span>
       </td>
-      {isDb && (
-        <td className="px-4 py-3">
-          <span className="inline-flex items-center gap-1">
-            <Package className="h-3 w-3 text-amber-400" />
-            <span className="text-amber-300 text-xs">{item.T2_U_Producto || '-'}</span>
+      {isDbRow && (
+        <td className="px-2 py-2 hidden xl:table-cell">
+          <span className="inline-flex items-center gap-1 max-w-[100px]">
+            <Package className="h-3 w-3 text-amber-400 flex-shrink-0" />
+            <span className="text-amber-300 text-[11px] truncate">{item.T2_U_Producto || '-'}</span>
           </span>
         </td>
       )}
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1">
-          {/* Botón Ver */}
+      <td className="px-2 py-2">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={(e) => { e.stopPropagation(); setSelectedCliente(item); setShowViewModal(true); }}
-            className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border border-purple-500/20 hover:border-purple-500/40 transition-all"
+            className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border border-purple-500/20 hover:border-purple-500/40 transition-all"
             title="Ver detalles"
           >
-            <Eye className="h-3.5 w-3.5" />
+            <Eye className="h-3 w-3" />
           </button>
-          {isDb ? (
+          {isDbRow && permissions.canDeleteClientes && (
             <button
               onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
               disabled={deleteMutation.isPending}
-              className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 transition-all disabled:opacity-50"
+              className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 transition-all disabled:opacity-50"
               title="Eliminar"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="h-3 w-3" />
             </button>
-          ) : (
+          )}
+          {!isDbRow && (
             <button
               onClick={(e) => { e.stopPropagation(); handleAddToDatabase(item); }}
-              disabled={createMutation.isPending}
-              className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 transition-all disabled:opacity-50"
+              disabled={addingCuic !== null}
+              className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 transition-all disabled:opacity-50"
               title="Agregar a BD"
             >
-              <Plus className="h-3.5 w-3.5" />
+              {addingCuic === item.CUIC ? (
+                <RefreshCw className="h-3 w-3 animate-spin" />
+              ) : (
+                <Plus className="h-3 w-3" />
+              )}
             </button>
           )}
         </div>
@@ -740,7 +929,9 @@ export function ClientesPage() {
   );
 
   const dbTotalPages = dbData?.pagination?.totalPages || 1;
-  const sapTotal = sapData?.total ?? 0;
+  const cimuTotal = cimuData?.total ?? 0;
+  const testTotal = testData?.total ?? 0;
+  const tradeTotal = tradeData?.total ?? 0;
   const dbTotal = dbData?.pagination?.total ?? 0;
 
   return (
@@ -781,12 +972,12 @@ export function ClientesPage() {
         </div>
 
         {/* Control Bar */}
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4 relative z-30">
+        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4 relative z-[45]">
           <div className="flex flex-col gap-4">
             {/* Top Row: Tabs + Search */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
               {/* Tabs */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <TabButton
                   active={activeTab === 'db'}
                   onClick={() => { setActiveTab('db'); setPage(1); clearAllFilters(); }}
@@ -796,21 +987,37 @@ export function ClientesPage() {
                   loading={dbLoading}
                 />
                 <TabButton
-                  active={activeTab === 'sap'}
-                  onClick={() => { setActiveTab('sap'); clearAllFilters(); }}
+                  active={activeTab === 'CIMU'}
+                  onClick={() => { setActiveTab('CIMU'); setSapPage(1); clearAllFilters(); }}
                   icon={Cloud}
-                  label="SAP"
-                  count={sapTotal}
-                  loading={sapLoading}
+                  label="CIMU"
+                  count={cimuTotal}
+                  loading={activeTab === 'CIMU' && cimuLoading}
                 />
-                {activeTab === 'sap' && (
+                <TabButton
+                  active={activeTab === 'TEST'}
+                  onClick={() => { setActiveTab('TEST'); setSapPage(1); clearAllFilters(); }}
+                  icon={Cloud}
+                  label="TEST"
+                  count={testTotal}
+                  loading={activeTab === 'TEST' && testLoading}
+                />
+                <TabButton
+                  active={activeTab === 'TRADE'}
+                  onClick={() => { setActiveTab('TRADE'); setSapPage(1); clearAllFilters(); }}
+                  icon={Cloud}
+                  label="TRADE"
+                  count={tradeTotal}
+                  loading={activeTab === 'TRADE' && tradeLoading}
+                />
+                {isSapTab && (
                   <button
                     onClick={handleRefreshSap}
-                    disabled={sapFetching}
+                    disabled={activeSapFetching}
                     className="p-2 rounded-lg bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200 transition-all disabled:opacity-50"
                     title="Refrescar SAP"
                   >
-                    <RefreshCw className={`h-4 w-4 ${sapFetching ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`h-4 w-4 ${activeSapFetching ? 'animate-spin' : ''}`} />
                   </button>
                 )}
               </div>
@@ -827,77 +1034,229 @@ export function ClientesPage() {
                 />
               </div>
 
-              {/* Filter Toggle */}
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  showFilters || hasActiveFilters
-                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                    : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
-                }`}
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                Filtros
-                {hasActiveFilters && (
-                  <span className="w-2 h-2 rounded-full bg-purple-400" />
-                )}
-              </button>
-            </div>
+              {/* Botones de Acción: Filtrar, Agrupar, Ordenar */}
+              <div className="flex items-center gap-2">
+                {/* Botón de Filtros */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowFilterPopup(!showFilterPopup)}
+                    className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                      filters.length > 0
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                    }`}
+                    title="Filtrar"
+                  >
+                    <Filter className="h-4 w-4" />
+                    {filters.length > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white px-1">
+                        {filters.length}
+                      </span>
+                    )}
+                  </button>
+                  {showFilterPopup && (
+                    <div className="absolute right-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+                        <button onClick={() => setShowFilterPopup(false)} className="text-zinc-400 hover:text-white">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                        {filters.map((filter, index) => (
+                          <div key={filter.id} className="flex items-center gap-2">
+                            {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
+                            {index === 0 && <span className="w-8"></span>}
+                            <select
+                              value={filter.field}
+                              onChange={(e) => updateFilter(filter.id, { field: e.target.value })}
+                              className="w-[130px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                            >
+                              {FILTER_FIELDS.map((f) => (
+                                <option key={f.field} value={f.field}>{f.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={filter.operator}
+                              onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
+                              className="w-[110px] text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                            >
+                              {OPERATORS.map((op) => (
+                                <option key={op.value} value={op.value}>{op.label}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              list={`datalist-${filter.id}`}
+                              value={filter.value}
+                              onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                              placeholder="Escribe o selecciona..."
+                              className="flex-1 text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
+                            />
+                            <datalist id={`datalist-${filter.id}`}>
+                              {getUniqueValues[filter.field]?.map((val) => (
+                                <option key={val} value={val} />
+                              ))}
+                            </datalist>
+                            <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                        {filters.length === 0 && (
+                          <p className="text-[11px] text-zinc-500 text-center py-3">Sin filtros. Haz clic en "Añadir".</p>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-purple-900/30">
+                        <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
+                          <Plus className="h-3 w-3" /> Añadir
+                        </button>
+                        <button onClick={clearFilters} disabled={filters.length === 0} className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                          Limpiar
+                        </button>
+                      </div>
+                      {filters.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-purple-900/30">
+                          <span className="text-[10px] text-zinc-500">{filteredData.length} de {currentData.length} registros</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-            {/* Filters Row (Expandable) */}
-            {showFilters && (
-              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-zinc-800/50 relative z-50">
-                <span className="text-xs text-zinc-500 mr-1">
-                  <Filter className="h-3 w-3 inline mr-1" />
-                  Filtrar:
-                </span>
-                <FilterChip
-                  label="Agencia"
-                  options={filterOptions?.agencias || []}
-                  value={filterAgencia}
-                  onChange={setFilterAgencia}
-                  onClear={() => setFilterAgencia('')}
-                />
-                <FilterChip
-                  label="Marca"
-                  options={filterOptions?.marcas || []}
-                  value={filterMarca}
-                  onChange={setFilterMarca}
-                  onClear={() => setFilterMarca('')}
-                />
-                <FilterChip
-                  label="Categoria"
-                  options={filterOptions?.categorias || []}
-                  value={filterCategoria}
-                  onChange={setFilterCategoria}
-                  onClear={() => setFilterCategoria('')}
-                />
+                {/* Botón de Agrupar */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowGroupPopup(!showGroupPopup)}
+                    className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                      activeGroupings.length > 0
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                    }`}
+                    title="Agrupar"
+                  >
+                    <Layers className="h-4 w-4" />
+                    {activeGroupings.length > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white px-1">
+                        {activeGroupings.length}
+                      </span>
+                    )}
+                  </button>
+                  {showGroupPopup && (
+                    <div className="absolute right-0 top-full mt-1 z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 2)</p>
+                      {AVAILABLE_GROUPINGS.map(({ field, label }) => (
+                        <button
+                          key={field}
+                          onClick={() => toggleGrouping(field)}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
+                            activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                            activeGroupings.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
+                          }`}>
+                            {activeGroupings.includes(field) && <Check className="h-3 w-3 text-white" />}
+                          </div>
+                          {label}
+                          {activeGroupings.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
+                          {activeGroupings.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+                        </button>
+                      ))}
+                      <div className="border-t border-purple-900/30 mt-2 pt-2">
+                        <button onClick={() => setActiveGroupings([])} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                          Quitar agrupación
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
+                {/* Botón de Ordenar */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSortPopup(!showSortPopup)}
+                    className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                      sortField
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                    }`}
+                    title="Ordenar"
+                  >
+                    <ArrowUpDown className="h-4 w-4" />
+                  </button>
+                  {showSortPopup && (
+                    <div className="absolute right-0 top-full mt-1 z-[60] w-[300px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-purple-300">Ordenar por</span>
+                        <button onClick={() => setShowSortPopup(false)} className="text-zinc-400 hover:text-white">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="space-y-1">
+                        {FILTER_FIELDS.map((field) => (
+                          <div
+                            key={field.field}
+                            className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
+                              sortField === field.field ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-purple-900/20'
+                            }`}
+                          >
+                            <span className={sortField === field.field ? 'text-purple-300 font-medium' : 'text-zinc-300'}>
+                              {field.label}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => { setSortField(field.field); setSortDirection('asc'); }}
+                                className={`p-1.5 rounded transition-colors ${
+                                  sortField === field.field && sortDirection === 'asc'
+                                    ? 'bg-purple-600 text-white'
+                                    : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                                }`}
+                                title="Ascendente (A-Z)"
+                              >
+                                <ArrowUp className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => { setSortField(field.field); setSortDirection('desc'); }}
+                                className={`p-1.5 rounded transition-colors ${
+                                  sortField === field.field && sortDirection === 'desc'
+                                    ? 'bg-purple-600 text-white'
+                                    : 'text-zinc-400 hover:text-white hover:bg-purple-900/50'
+                                }`}
+                                title="Descendente (Z-A)"
+                              >
+                                <ArrowDown className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {sortField && (
+                        <div className="mt-3 pt-3 border-t border-purple-900/30">
+                          <button
+                            onClick={() => { setSortField(null); setSortDirection('asc'); }}
+                            className="w-full px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded transition-colors"
+                          >
+                            Quitar ordenamiento
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-                <span className="text-xs text-zinc-500 mr-1">
-                  <Layers className="h-3 w-3 inline mr-1" />
-                  Agrupar:
-                </span>
-                <FilterChip
-                  label="Sin agrupar"
-                  options={['Agencia', 'Marca', 'Categoria']}
-                  value={groupBy}
-                  onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); }}
-                  onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); }}
-                />
-
+                {/* Botón Limpiar Todo */}
                 {hasActiveFilters && (
                   <button
                     onClick={clearAllFilters}
-                    className="ml-auto flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300"
+                    className="flex items-center justify-center w-9 h-9 text-zinc-400 hover:text-white bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/50 transition-colors"
+                    title="Limpiar filtros"
                   >
-                    <X className="h-3 w-3" />
-                    Limpiar
+                    <X className="h-4 w-4" />
                   </button>
                 )}
               </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -907,7 +1266,14 @@ export function ClientesPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs">
               <Filter className="h-3.5 w-3.5" />
               {filteredData.length} resultados
-              {groupBy && <span className="text-zinc-500">| Agrupado por {groupBy}</span>}
+              {activeGroupings.length > 0 && (
+                <span className="text-zinc-500">
+                  | Agrupado por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
+                </span>
+              )}
+              {sortField && (
+                <span className="text-zinc-500">| Ordenado por {FILTER_FIELDS.find(f => f.field === sortField)?.label} ({sortDirection === 'asc' ? '↑' : '↓'})</span>
+              )}
             </div>
           </div>
         )}
@@ -924,38 +1290,64 @@ export function ClientesPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">CUIC</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Razon Social</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Agencia</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Categoria</th>
-                      {activeTab === 'db' && (
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Producto</th>
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">CUIC</th>
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider hidden lg:table-cell">Razón Social</th>
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider hidden md:table-cell">Agencia</th>
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider hidden xl:table-cell">Categoría</th>
+                      {isDb && (
+                        <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider hidden xl:table-cell">Producto</th>
                       )}
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider"></th>
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {groupedData ? (
-                      groupedData.map(([groupName, items]) => (
-                        <React.Fragment key={`group-${groupName}`}>
+                      groupedData.map((group) => (
+                        <React.Fragment key={`group-${group.name}`}>
+                          {/* Level 1 Header */}
                           <GroupHeader
-                            groupName={groupName}
-                            count={items.length}
-                            expanded={expandedGroups.has(groupName)}
-                            onToggle={() => toggleGroup(groupName)}
+                            groupName={group.name}
+                            count={group.items.length}
+                            expanded={expandedGroups.has(group.name)}
+                            onToggle={() => toggleGroup(group.name)}
+                            level={1}
                           />
-                          {expandedGroups.has(groupName) && items.map((item, idx) => renderClientRow(item, activeTab === 'db', idx))}
+                          {/* Level 1 Content */}
+                          {expandedGroups.has(group.name) && (
+                            group.subgroups ? (
+                              // Has subgroups (2 level grouping)
+                              group.subgroups.map((subgroup) => (
+                                <React.Fragment key={`subgroup-${group.name}-${subgroup.name}`}>
+                                  {/* Level 2 Header */}
+                                  <GroupHeader
+                                    groupName={subgroup.name}
+                                    count={subgroup.items.length}
+                                    expanded={expandedGroups.has(`${group.name}|${subgroup.name}`)}
+                                    onToggle={() => toggleGroup(`${group.name}|${subgroup.name}`)}
+                                    level={2}
+                                  />
+                                  {/* Level 2 Content */}
+                                  {expandedGroups.has(`${group.name}|${subgroup.name}`) &&
+                                    subgroup.items.map((item, idx) => renderClientRow(item, isDb, idx))
+                                  }
+                                </React.Fragment>
+                              ))
+                            ) : (
+                              // No subgroups (1 level grouping)
+                              group.items.map((item, idx) => renderClientRow(item, isDb, idx))
+                            )
+                          )}
                         </React.Fragment>
                       ))
                     ) : (
-                      filteredData.map((item, idx) => renderClientRow(item, activeTab === 'db', idx))
+                      filteredData.map((item, idx) => renderClientRow(item, isDb, idx))
                     )}
                     {filteredData.length === 0 && !groupedData && (
                       <tr>
-                        <td colSpan={activeTab === 'db' ? 8 : 7} className="px-4 py-12 text-center text-zinc-500">
-                          {activeTab === 'sap' ? "No hay clientes nuevos en SAP" : "No se encontraron clientes"}
+                        <td colSpan={isDb ? 8 : 7} className="px-4 py-12 text-center text-zinc-500">
+                          {isSapTab ? `No hay clientes nuevos en SAP (${activeTab})` : "No se encontraron clientes"}
                         </td>
                       </tr>
                     )}
@@ -964,7 +1356,7 @@ export function ClientesPage() {
               </div>
 
               {/* Pagination for DB only (when not filtering/grouping) */}
-              {activeTab === 'db' && !needsFullData && dbData?.pagination && dbTotalPages > 1 && (
+              {isDb && !needsFullData && dbData?.pagination && dbTotalPages > 1 && (
                 <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
                   <span className="text-sm text-purple-300/70">
                     Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{dbTotalPages}</span>
@@ -990,7 +1382,7 @@ export function ClientesPage() {
               )}
 
               {/* Full data info when filtering/grouping */}
-              {activeTab === 'db' && needsFullData && (
+              {isDb && needsFullData && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
                   <span className="text-xs text-zinc-500">
                     Mostrando {filteredData.length} clientes filtrados
@@ -998,13 +1390,30 @@ export function ClientesPage() {
                 </div>
               )}
 
-              {/* SAP info */}
-              {activeTab === 'sap' && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
-                  <span className="text-xs text-zinc-500">
-                    {sapTotal} clientes de SAP disponibles
-                    {sapData?.cached && <span className="ml-2 text-emerald-400">(desde cache)</span>}
+              {/* SAP pagination + info */}
+              {isSapTab && (
+                <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
+                  <span className="text-sm text-purple-300/70">
+                    Página <span className="font-semibold text-purple-300">{sapPage}</span> de <span className="font-semibold text-purple-300">{sapTotalPages}</span>
+                    <span className="text-purple-300/50 ml-2">({allSapData.length} total)</span>
+                    {activeSapData?.cached && <span className="ml-2 text-emerald-400 text-xs">(cache)</span>}
                   </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSapPage(p => Math.max(1, p - 1))}
+                      disabled={sapPage === 1}
+                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      onClick={() => setSapPage(p => Math.min(sapTotalPages, p + 1))}
+                      disabled={sapPage === sapTotalPages}
+                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
                 </div>
               )}
             </>

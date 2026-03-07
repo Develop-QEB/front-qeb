@@ -2,11 +2,17 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, Upload, ChevronDown, ChevronRight, Check, Users, Building2,
-  Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw
+  Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw, AlertTriangle, Pencil
 } from 'lucide-react';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
+import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
-import { getSapCache, setSapCache, SAP_CACHE_KEYS, getCacheTimestamp, clearSapCache } from '../../lib/sapCache';
+import { getSapCache, setSapCache, SAP_CACHE_KEYS, clearSapCache } from '../../lib/sapCache';
+import { SAP_BASE_URL } from '../../store/environmentStore';
+import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
+import type { SapDatabase } from '../../store/environmentStore';
+import { useSocketEquipos } from '../../hooks/useSocket';
+import { useAuthStore } from '../../store/authStore';
 
 // Tarifa publica lookup map based on ItemCode (full SAP codes with tarifa_publica values)
 const TARIFA_PUBLICA_MAP: Record<string, number> = {
@@ -274,6 +280,7 @@ const CIUDAD_ESTADO_MAP: Record<string, string> = {
   'SANTA CATARINA': 'Nuevo León',
   'CIUDAD DE MEXICO': 'Ciudad de México',
   'CDMX': 'Ciudad de México',
+  'ESTADO DE MEXICO': 'Estado de México',
   'MEXICO': 'Ciudad de México',
   'DF': 'Ciudad de México',
   'TIJUANA': 'Baja California',
@@ -318,13 +325,20 @@ const CIUDAD_ESTADO_MAP: Record<string, string> = {
   'LOS CABOS': 'Baja California Sur',
 };
 
+// Some entries are state-level (no specific ciudad should be set)
+const STATE_LEVEL_ENTRIES = ['CDMX', 'CIUDAD DE MEXICO', 'DF', 'ESTADO DE MEXICO', 'MEXICO'];
+
 // Extract city from article name and return estado/ciudad
-const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string } | null => {
+const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string | null } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
   for (const [ciudad, estado] of Object.entries(CIUDAD_ESTADO_MAP)) {
     if (name.includes(ciudad)) {
+      // If this is a state-level entry, don't return a ciudad
+      if (STATE_LEVEL_ENTRIES.includes(ciudad)) {
+        return { estado, ciudad: null };
+      }
       return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
     }
   }
@@ -337,7 +351,6 @@ interface SAPCuicItem {
   T0_U_Cliente: string;
   T1_U_UnidadNegocio: string;
   T0_U_Agencia: string;
-  // Usar los campos correctos de Asesor
   ASESOR_U_IDAsesor: string;
   ASESOR_U_Asesor: string;
   T1_U_IDMarca: number;
@@ -347,6 +360,8 @@ interface SAPCuicItem {
   T2_U_IDCategoria: number;
   T2_U_Categoria: string;
   ACA_U_SAPCode: string;
+  ASESOR_U_SAPCode_Original?: number;
+  sap_database?: string | null;
 }
 
 interface SAPArticulo {
@@ -371,6 +386,8 @@ interface CaraEntry {
   tarifaPublica: number;
   descuento: number;
   precioTotal: number;
+  autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado';
+  autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado';
 }
 
 interface Props {
@@ -622,6 +639,32 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const queryClient = useQueryClient();
   const isEditMode = !!editSolicitudId;
 
+  // Socket para actualizar usuarios en tiempo real cuando cambian miembros de equipos
+  useSocketEquipos();
+
+  // Current user for default asignado
+  const currentUser = useAuthStore((state) => state.user);
+
+  // Toast notification state
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'warning' }>({
+    show: false,
+    message: '',
+    type: 'success'
+  });
+
+  // Auto-dismiss toast after 5 seconds
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => setToast(prev => ({ ...prev, show: false })), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
+
+  // Helper to show toast
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToast({ show: true, message, type });
+  };
+
   // Form state
   const [step, setStep] = useState(1);
 
@@ -654,7 +697,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     tipo: '' as 'Tradicional' | 'Digital' | '',
     nse: [] as string[],
     periodo: '',
-    renta: 1,
+    renta: 0,
     bonificacion: 0,
     tarifaPublica: 0,
   });
@@ -669,17 +712,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Expanded catorcenas in table
   const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
 
-  // Fetch users
-  const { data: users } = useQuery({
-    queryKey: ['solicitudes-users'],
-    queryFn: () => solicitudesService.getUsers(),
-    enabled: isOpen,
-  });
+  // Editing cara state
+  const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
 
-  // Fetch trafico users by default
-  const { data: traficoUsers } = useQuery({
-    queryKey: ['solicitudes-users-trafico'],
-    queryFn: () => solicitudesService.getUsers('Trafico'),
+  // Fetch users (filtered by team)
+  const { data: users } = useQuery({
+    queryKey: ['solicitudes-users', 'team-filtered'],
+    queryFn: () => solicitudesService.getUsers(undefined, true),
     enabled: isOpen,
   });
 
@@ -707,42 +746,44 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // State for forcing SAP refresh
   const [forceRefreshSap, setForceRefreshSap] = useState(0);
 
-  // Fetch ALL CUIC data from SAP with cache
-  const { data: cuicData, isLoading: cuicLoading, refetch: refetchCuic, isFetching: cuicFetching } = useQuery({
-    queryKey: ['sap-cuic-all', forceRefreshSap],
+  // SAP database filter for CUIC selector
+  const [sapDbFilter, setSapDbFilter] = useState<SapDatabase | 'ALL'>('ALL');
+
+  // Fetch CUIC data from local DB instead of SAP
+  const { data: cuicDataRaw, isLoading: cuicLoading, refetch: refetchCuic, isFetching: cuicFetching } = useQuery({
+    queryKey: ['clientes-full-for-solicitud'],
     queryFn: async () => {
-      // Try cache first (unless forcing refresh)
-      if (forceRefreshSap === 0) {
-        const cached = getSapCache<SAPCuicItem[]>(SAP_CACHE_KEYS.CUIC);
-        if (cached && cached.length > 0) {
-          return cached;
-        }
-      }
-      // Fetch from SAP
-      try {
-        const response = await fetch('https://binding-convinced-ride-foto.trycloudflare.com/cuic');
-        if (!response.ok) throw new Error('Error fetching CUIC data');
-        const data = await response.json();
-        const items = (data.value || data) as SAPCuicItem[];
-        // Save to cache
-        if (items && items.length > 0) {
-          setSapCache(SAP_CACHE_KEYS.CUIC, items);
-        }
-        return items;
-      } catch (error) {
-        // If fetch fails, try to return cached data
-        const cached = getSapCache<SAPCuicItem[]>(SAP_CACHE_KEYS.CUIC);
-        if (cached && cached.length > 0) {
-          console.warn('SAP fetch failed, using cached data');
-          return cached;
-        }
-        throw error;
-      }
+      const result = await clientesService.getAllFull();
+      // Map to SAPCuicItem-compatible format
+      return (result.data || []).map(c => ({
+        CUIC: c.CUIC!,
+        T0_U_RazonSocial: c.T0_U_RazonSocial || '',
+        T0_U_Cliente: c.T0_U_Cliente || '',
+        T1_U_UnidadNegocio: c.T1_U_UnidadNegocio || '',
+        T0_U_Agencia: c.T0_U_Agencia || '',
+        ASESOR_U_IDAsesor: c.ASESOR_U_IDAsesor || '',
+        ASESOR_U_Asesor: c.ASESOR_U_Asesor || '',
+        T1_U_IDMarca: c.T1_U_IDMarca || 0,
+        T2_U_Marca: c.T2_U_Marca || '',
+        T2_U_IDProducto: c.T2_U_IDProducto || 0,
+        T2_U_Producto: c.T2_U_Producto || '',
+        T2_U_IDCategoria: c.T2_U_IDCategoria || 0,
+        T2_U_Categoria: c.T2_U_Categoria || '',
+        ACA_U_SAPCode: c.card_code || '',
+        ASESOR_U_SAPCode_Original: c.salesperson_code ?? undefined,
+        sap_database: c.sap_database || null,
+      }));
     },
     enabled: isOpen,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: 1,
+    staleTime: 2 * 60 * 1000,
   });
+
+  // Filter cuicData by selected SAP database
+  const cuicData = useMemo(() => {
+    if (!cuicDataRaw) return [];
+    if (sapDbFilter === 'ALL') return cuicDataRaw;
+    return cuicDataRaw.filter(c => c.sap_database === sapDbFilter);
+  }, [cuicDataRaw, sapDbFilter]);
 
   // Fetch ALL articulos from SAP with cache
   const { data: articulosData, isLoading: articulosLoading, refetch: refetchArticulos, isFetching: articulosFetching } = useQuery({
@@ -757,10 +798,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
       // Fetch from SAP
       try {
-        const response = await fetch('https://binding-convinced-ride-foto.trycloudflare.com/articulos');
+        const response = await fetch(`${SAP_BASE_URL}/articulos`);
         if (!response.ok) throw new Error('Error fetching articulos data');
         const data = await response.json();
-        const items = (data.value || data) as SAPArticulo[];
+        const raw = (data.value || data) as SAPArticulo[];
+        const items = filterAllowedArticulos(raw);
         // Save to cache
         if (items && items.length > 0) {
           setSapCache(SAP_CACHE_KEYS.ARTICULOS, items);
@@ -781,15 +823,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     retry: 1,
   });
 
-  // Function to force refresh SAP data
+  // Function to force refresh data
   const handleRefreshSap = () => {
     clearSapCache();
     setForceRefreshSap(prev => prev + 1);
+    queryClient.invalidateQueries({ queryKey: ['clientes-full-for-solicitud'] });
   };
-
-  // Get cache timestamps for display
-  const cuicCacheTime = getCacheTimestamp(SAP_CACHE_KEYS.CUIC);
-  const articulosCacheTime = getCacheTimestamp(SAP_CACHE_KEYS.ARTICULOS);
 
   // Fetch formatos based on selected ciudades
   const { data: formatosByCiudades } = useQuery({
@@ -805,13 +844,33 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     enabled: isOpen,
   });
 
-  // Reset form when opening modal in create mode (not edit mode) or when editSolicitudId changes
+  // Block body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  // Reset form when opening modal in create mode
   useEffect(() => {
     if (isOpen && !isEditMode) {
       // Reset all form state for a fresh start
       setStep(1);
       setSelectedCuic(null);
-      setSelectedAsignados([]);
+      // Pre-populate asignados with the current user (creator)
+      if (currentUser) {
+        setSelectedAsignados([{
+          id: currentUser.id,
+          nombre: currentUser.nombre,
+          area: currentUser.area,
+          puesto: currentUser.puesto
+        }]);
+      } else {
+        setSelectedAsignados([]);
+      }
       setNombreCampania('');
       setDescripcion('');
       setNotas('');
@@ -832,12 +891,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tipo: '',
         nse: [],
         periodo: '',
-        renta: 1,
+        renta: 0,
         bonificacion: 0,
         tarifaPublica: 0,
       });
     }
-  }, [isOpen, isEditMode]);
+  }, [isOpen, isEditMode, currentUser]);
 
   // Reset form state when switching between different solicitudes in edit mode
   useEffect(() => {
@@ -854,13 +913,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setImu(false);
     }
   }, [editSolicitudId]);
-
-  // Set default asignados when trafico users load (only if asignados is empty)
-  useEffect(() => {
-    if (isOpen && !isEditMode && traficoUsers && traficoUsers.length > 0 && selectedAsignados.length === 0) {
-      setSelectedAsignados(traficoUsers);
-    }
-  }, [traficoUsers, isOpen, isEditMode]);
 
   // Filter cities by estado
   const filteredCiudades = useMemo(() => {
@@ -937,7 +989,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   }, [catorcenasData, yearFin, catorcenaFin]);
 
   // Add cara entry
-  const handleAddCara = () => {
+  const handleAddCara = async () => {
     if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo) return;
 
     const [yearStr, catStr] = newCara.periodo.split('-');
@@ -952,11 +1004,48 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const descuento = totalCaras > 0 ? (newCara.bonificacion / totalCaras) : 0;
     const precioTotal = newCara.tarifaPublica * newCara.renta;
 
+    // Evaluar estado de autorización con el backend
+    let autorizacion_dg: CaraEntry['autorizacion_dg'] = undefined;
+    let autorizacion_dcm: CaraEntry['autorizacion_dcm'] = undefined;
+    try {
+      const ciudadesStr = newCara.ciudades.length > 0
+        ? newCara.ciudades.join(', ')
+        : filteredCiudades.join(', ');
+
+      console.log('[handleAddCara] Evaluando autorización:', {
+        ciudad: ciudadesStr,
+        estado: newCara.estado,
+        formato: newCara.formato,
+        tipo: newCara.tipo,
+        caras: newCara.renta,
+        bonificacion: newCara.bonificacion,
+        costo: precioTotal,
+        tarifa_publica: newCara.tarifaPublica
+      });
+
+      const resultado = await solicitudesService.evaluarAutorizacion({
+        ciudad: ciudadesStr,
+        estado: newCara.estado,
+        formato: newCara.formato,
+        tipo: newCara.tipo,
+        caras: newCara.renta,
+        bonificacion: newCara.bonificacion,
+        costo: precioTotal,
+        tarifa_publica: newCara.tarifaPublica
+      });
+      console.log('[handleAddCara] Resultado autorización:', resultado);
+      autorizacion_dg = resultado.autorizacion_dg;
+      autorizacion_dcm = resultado.autorizacion_dcm;
+    } catch (error: any) {
+      console.error('[handleAddCara] Error evaluando autorización:', error?.response?.data || error?.message || error);
+      // Si falla, dejamos sin estado (se evaluará al guardar)
+    }
+
     const cara: CaraEntry = {
-      id: `${Date.now()}-${Math.random()}`,
+      id: editingCaraId || `${Date.now()}-${Math.random()}`,
       articulo: newCara.articulo,
       estado: newCara.estado,
-      ciudades: newCara.ciudades.length > 0 ? newCara.ciudades : ['Todas'],
+      ciudades: newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades,
       formato: newCara.formato,
       tipo: newCara.tipo,
       nse: newCara.nse,
@@ -969,9 +1058,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tarifaPublica: newCara.tarifaPublica,
       descuento: descuento * 100, // Store as percentage
       precioTotal,
+      autorizacion_dg,
+      autorizacion_dcm,
     };
 
-    setCaras([...caras, cara]);
+    if (editingCaraId) {
+      // Update existing cara
+      setCaras(caras.map(c => c.id === editingCaraId ? cara : c));
+      setEditingCaraId(null);
+    } else {
+      // Add new cara
+      setCaras([...caras, cara]);
+    }
 
     // Auto expand the catorcena
     setExpandedCatorcenas(prev => new Set(prev).add(`${catorcenaYear}-${catorcenaNum}`));
@@ -980,7 +1078,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setNewCara({
       ...newCara,
       periodo: '',
-      renta: 1,
+      renta: 0,
       bonificacion: 0,
       // Keep articulo, estado, ciudades, formato, tipo, nse, tarifaPublica
     });
@@ -996,7 +1094,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tipo: '',
       nse: [],
       periodo: '',
-      renta: 1,
+      renta: 0,
       bonificacion: 0,
       tarifaPublica: 0,
     });
@@ -1005,6 +1103,44 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Remove cara
   const handleRemoveCara = (id: string) => {
     setCaras(caras.filter(c => c.id !== id));
+    // If we were editing this cara, clear editing state
+    if (editingCaraId === id) {
+      setEditingCaraId(null);
+    }
+  };
+
+  // Edit cara - loads cara data into form
+  const handleEditCara = (cara: CaraEntry) => {
+    setEditingCaraId(cara.id);
+    setNewCara({
+      articulo: cara.articulo,
+      estado: cara.estado,
+      ciudades: cara.ciudades,
+      formato: cara.formato,
+      tipo: cara.tipo as 'Tradicional' | 'Digital' | '',
+      nse: cara.nse,
+      periodo: `${cara.catorcenaYear}-${cara.catorcenaNum}`,
+      renta: cara.renta,
+      bonificacion: cara.bonificacion,
+      tarifaPublica: cara.tarifaPublica,
+    });
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setEditingCaraId(null);
+    setNewCara({
+      articulo: null,
+      estado: '',
+      ciudades: [],
+      formato: '',
+      tipo: '',
+      nse: [],
+      periodo: '',
+      renta: 0,
+      bonificacion: 0,
+      tarifaPublica: 0,
+    });
   };
 
   // Group caras by catorcena
@@ -1061,9 +1197,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Create mutation
   const createMutation = useMutation({
     mutationFn: (data: any) => solicitudesService.create(data),
-    onSuccess: () => {
+    onSuccess: (response: any) => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
+
+      // Check for pending authorizations and show appropriate toast
+      if (response?.autorizacion?.tienePendientes) {
+        const total = (response.autorizacion.pendientesDg || 0) + (response.autorizacion.pendientesDcm || 0);
+        showToast(`Solicitud creada. ${total} cara(s) requieren autorización de DG/DCM.`, 'warning');
+      } else {
+        showToast('Solicitud creada exitosamente', 'success');
+      }
+
       onClose();
       resetForm();
     },
@@ -1072,10 +1217,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Update mutation
   const updateMutation = useMutation({
     mutationFn: (data: any) => solicitudesService.update(editSolicitudId!, data),
-    onSuccess: () => {
+    onSuccess: (response: any) => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
       queryClient.invalidateQueries({ queryKey: ['solicitud-edit', editSolicitudId] });
+
+      // Check for pending authorizations and show appropriate toast
+      if (response?.autorizacion?.tienePendientes) {
+        const total = (response.autorizacion.pendientesDg || 0) + (response.autorizacion.pendientesDcm || 0);
+        showToast(`Solicitud actualizada. ${total} cara(s) requieren autorización de DG/DCM.`, 'warning');
+      } else {
+        showToast('Solicitud actualizada exitosamente', 'success');
+      }
+
       onClose();
       resetForm();
     },
@@ -1085,7 +1239,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const resetForm = () => {
     setStep(1);
     setSelectedCuic(null);
-    setSelectedAsignados(traficoUsers || []);
+    setSelectedAsignados([]);
     setNombreCampania('');
     setDescripcion('');
     setNotas('');
@@ -1120,6 +1274,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       categoria_id: selectedCuic.T2_U_IDCategoria,
       categoria_nombre: selectedCuic.T2_U_Categoria,
       card_code: selectedCuic.ACA_U_SAPCode,
+      salesperson_code: selectedCuic.ASESOR_U_SAPCode_Original,
+      sap_database: (selectedCuic as any).sap_database || null,
       nombre_campania: nombreCampania,
       descripcion,
       notas,
@@ -1159,12 +1315,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Populate form when editing
   useEffect(() => {
-    if (isEditMode && editSolicitudData && cuicData && articulosData && catorcenasData?.data) {
+    if (isEditMode && editSolicitudData && cuicDataRaw && articulosData && catorcenasData?.data) {
       const sol = editSolicitudData.solicitud;
 
-      // Find the CUIC item from SAP data - cuic is stored as string, CUIC from SAP is number
+      // Find the CUIC item from local DB data - cuic is stored as string, CUIC is number
       const solCuic = sol.cuic ? parseInt(sol.cuic, 10) : null;
-      const cuicItem = cuicData.find(c => c.CUIC === solCuic);
+      const cuicItem = cuicDataRaw.find(c => c.CUIC === solCuic);
       if (cuicItem) {
         setSelectedCuic(cuicItem);
       }
@@ -1190,6 +1346,40 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       } else {
         // No asignados in this solicitud - clear the state
         setSelectedAsignados([]);
+      }
+
+      // Load archivo from solicitud
+      if (sol.archivo) {
+        setArchivo(sol.archivo);
+        setTipoArchivo(sol.tipo_archivo || null);
+      }
+
+      // Load catorcenas from cotizacion dates (like ViewSolicitudModal does)
+      const cotizacion = editSolicitudData.cotizacion;
+      if (cotizacion?.fecha_inicio && cotizacion?.fecha_fin) {
+        const fechaInicioDate = new Date(cotizacion.fecha_inicio);
+        const fechaFinDate = new Date(cotizacion.fecha_fin);
+
+        const inicioCat = catorcenasData.data.find(c => {
+          const cInicio = new Date(c.fecha_inicio);
+          const cFin = new Date(c.fecha_fin);
+          return fechaInicioDate >= cInicio && fechaInicioDate <= cFin;
+        });
+
+        const finCat = catorcenasData.data.find(c => {
+          const cInicio = new Date(c.fecha_inicio);
+          const cFin = new Date(c.fecha_fin);
+          return fechaFinDate >= cInicio && fechaFinDate <= cFin;
+        });
+
+        if (inicioCat) {
+          setYearInicio(inicioCat.a_o);
+          setCatorcenaInicio(inicioCat.numero_catorcena);
+        }
+        if (finCat) {
+          setYearFin(finCat.a_o);
+          setCatorcenaFin(finCat.numero_catorcena);
+        }
       }
 
       // Set caras from the fetched data
@@ -1248,40 +1438,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             catorcenaYear: catYear,
             periodoInicio: cara.inicio_periodo || '',
             periodoFin: cara.fin_periodo || '',
-            renta: Number(cara.caras) || 1,
+            renta: Number(cara.caras) || 0,
             bonificacion: Number(cara.bonificacion) || 0,
             tarifaPublica: Number(cara.tarifa_publica) || 0,
             descuento: Number(cara.descuento) || 0,
             precioTotal: Number(cara.costo) || 0,
+            autorizacion_dg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
+            autorizacion_dcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
           };
         });
         setCaras(loadedCaras);
 
-        // Set year/catorcena range from loaded caras for fechaInicio/fechaFin
+        // Auto-expand all catorcenas in edit mode so user can see them
         if (loadedCaras.length > 0) {
-          // Find min and max catorcenas
-          let minYear = loadedCaras[0].catorcenaYear;
-          let maxYear = loadedCaras[0].catorcenaYear;
-          let minCat = loadedCaras[0].catorcenaNum;
-          let maxCat = loadedCaras[0].catorcenaNum;
-
-          loadedCaras.forEach(c => {
-            if (c.catorcenaYear < minYear || (c.catorcenaYear === minYear && c.catorcenaNum < minCat)) {
-              minYear = c.catorcenaYear;
-              minCat = c.catorcenaNum;
-            }
-            if (c.catorcenaYear > maxYear || (c.catorcenaYear === maxYear && c.catorcenaNum > maxCat)) {
-              maxYear = c.catorcenaYear;
-              maxCat = c.catorcenaNum;
-            }
-          });
-
-          setYearInicio(minYear);
-          setCatorcenaInicio(minCat);
-          setYearFin(maxYear);
-          setCatorcenaFin(maxCat);
-
-          // Auto-expand all catorcenas in edit mode so user can see them
           const catKeys = new Set(loadedCaras.map(c => `${c.catorcenaYear}-${c.catorcenaNum}`));
           setExpandedCatorcenas(catKeys);
         }
@@ -1300,19 +1469,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   if (!isOpen) return null;
 
-  // Show loading state when fetching edit data
-  if (isEditMode && editDataLoading) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-zinc-900 rounded-2xl border border-zinc-700 p-8 flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500" />
-          <p className="text-zinc-400">Cargando solicitud...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
@@ -1320,15 +1476,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold text-white">{isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud'}</h2>
-            {/* SAP Status & Refresh */}
+            <h2 className="text-xl font-bold text-white">
+              {isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud'}
+            </h2>
+            {/* Articulos status */}
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-800 rounded-lg text-[10px]">
-                <span className="text-zinc-500">CUIC:</span>
-                <span className={cuicData && cuicData.length > 0 ? 'text-emerald-400' : 'text-red-400'}>
-                  {cuicData?.length || 0}
-                </span>
-                <span className="text-zinc-600">|</span>
                 <span className="text-zinc-500">Art:</span>
                 <span className={articulosData && articulosData.length > 0 ? 'text-emerald-400' : 'text-red-400'}>
                   {articulosData?.length || 0}
@@ -1337,11 +1490,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               <button
                 type="button"
                 onClick={handleRefreshSap}
-                disabled={cuicFetching || articulosFetching}
+                disabled={articulosFetching}
                 className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
-                title={`Refrescar datos SAP${cuicCacheTime ? `\nÚltima actualización: ${cuicCacheTime.toLocaleString()}` : ''}`}
+                title="Refrescar artículos SAP"
               >
-                <RefreshCw className={`h-4 w-4 text-zinc-400 ${(cuicFetching || articulosFetching) ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 text-zinc-400 ${articulosFetching ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
@@ -1379,7 +1532,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-6">
           {/* Step 1: Cliente */}
           {step === 1 && (
             <div className="space-y-6">
@@ -1389,6 +1542,29 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <Building2 className="h-4 w-4 text-purple-400" />
                   CUIC / Cliente
                 </label>
+                {/* SAP Database filter buttons */}
+                <div className="flex items-center gap-1.5">
+                  {(['ALL', 'CIMU', 'TEST', 'TRADE'] as const).map(db => (
+                    <button
+                      key={db}
+                      type="button"
+                      onClick={() => { setSapDbFilter(db); setSelectedCuic(null); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                        sapDbFilter === db
+                          ? db === 'ALL' ? 'bg-purple-600 text-white border-purple-500'
+                          : db === 'CIMU' ? 'bg-blue-600 text-white border-blue-500'
+                          : db === 'TEST' ? 'bg-amber-600 text-white border-amber-500'
+                          : 'bg-emerald-600 text-white border-emerald-500'
+                          : 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'
+                      }`}
+                    >
+                      {db === 'ALL' ? 'Todos' : db}
+                    </button>
+                  ))}
+                  <span className="text-[10px] text-zinc-500 ml-2">
+                    {cuicData?.length || 0} clientes
+                  </span>
+                </div>
                 <SearchableSelect
                   label="Seleccionar CUIC"
                   options={cuicData || []}
@@ -1400,17 +1576,37 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   searchKeys={['T2_U_Marca', 'T2_U_Producto', 'T0_U_RazonSocial', 'CUIC']}
                   loading={cuicLoading}
                   renderOption={(item) => (
-                    <div>
-                      <div className="font-medium text-white">{item.T2_U_Marca || 'Sin marca'}</div>
-                      <div className="text-xs text-zinc-500">
-                        {item.CUIC} | {item.T2_U_Producto || 'Sin producto'}
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <div className="font-medium text-white">{item.T2_U_Marca || 'Sin marca'}</div>
+                        <div className="text-xs text-zinc-500">
+                          {item.CUIC} | {item.T2_U_Producto || 'Sin producto'}
+                        </div>
                       </div>
+                      {item.sap_database && (
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${
+                          item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                          item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                          item.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                        }`}>{item.sap_database}</span>
+                      )}
                     </div>
                   )}
                   renderSelected={(item) => (
-                    <div className="text-left">
-                      <div className="font-medium">{item.T2_U_Marca || 'Sin marca'}</div>
-                      <div className="text-[10px] text-zinc-500">{item.CUIC} | {item.T2_U_Producto || ''}</div>
+                    <div className="text-left flex items-center gap-2">
+                      <div className="flex-1">
+                        <div className="font-medium">{item.T2_U_Marca || 'Sin marca'}</div>
+                        <div className="text-[10px] text-zinc-500">{item.CUIC} | {item.T2_U_Producto || ''}</div>
+                      </div>
+                      {item.sap_database && (
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${
+                          item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                          item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                          item.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                        }`}>{item.sap_database}</span>
+                      )}
                     </div>
                   )}
                 />
@@ -1421,9 +1617,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
                   {/* Header con CUIC destacado */}
                   <div className="flex items-start justify-between mb-3 pb-3 border-b border-zinc-700/50">
-                    <div>
-                      <span className="text-[10px] text-purple-400 uppercase tracking-wider">CUIC</span>
-                      <div className="text-xl font-bold text-purple-400">{selectedCuic.CUIC}</div>
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <span className="text-[10px] text-purple-400 uppercase tracking-wider">CUIC</span>
+                        <div className="text-xl font-bold text-purple-400">{selectedCuic.CUIC}</div>
+                      </div>
+                      {selectedCuic.sap_database && (
+                        <span className={`text-[10px] font-semibold px-2 py-1 rounded-lg border ${
+                          selectedCuic.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                          selectedCuic.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                          selectedCuic.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                        }`}>{selectedCuic.sap_database}</span>
+                      )}
                     </div>
                     <div className="text-right">
                       <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Categoría</span>
@@ -1675,7 +1881,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         articulo: item,
                         tarifaPublica: tarifa.tarifa_publica,
                         estado: ciudadEstado?.estado || newCara.estado,
-                        ciudades: ciudadEstado ? [ciudadEstado.ciudad] : newCara.ciudades,
+                        ciudades: ciudadEstado?.ciudad ? [ciudadEstado.ciudad] : newCara.ciudades,
                         formato: formato || newCara.formato,
                         tipo: tipo || newCara.tipo,
                       });
@@ -1789,9 +1995,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <label className="text-xs text-zinc-500">Renta</label>
                     <input
                       type="number"
-                      min={1}
+                      min={0}
                       value={newCara.renta}
-                      onChange={(e) => setNewCara({ ...newCara, renta: parseInt(e.target.value) || 1 })}
+                      onChange={(e) => setNewCara({ ...newCara, renta: parseInt(e.target.value) || 0 })}
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     />
                   </div>
@@ -1871,19 +2077,30 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     type="button"
                     onClick={handleAddCara}
                     disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors"
+                    className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors`}
                   >
-                    <Plus className="h-4 w-4" />
-                    Agregar Cara
+                    {editingCaraId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    {editingCaraId ? 'Actualizar Cara' : 'Agregar Cara'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleClearNewCara}
-                    className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    Limpiar Campos
-                  </button>
+                  {editingCaraId ? (
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                      Cancelar Edición
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleClearNewCara}
+                      className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Limpiar Campos
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1925,7 +2142,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           {/* Expanded items */}
                           {isExpanded && (
                             <div className="bg-zinc-900/50 overflow-x-auto">
-                              <table className="w-full min-w-[900px]">
+                              <table className="w-full min-w-[1000px]">
                                 <thead>
                                   <tr className="bg-zinc-800/30">
                                     <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Artículo</th>
@@ -1937,6 +2154,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                     <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Total</th>
                                     <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Tarifa Púb.</th>
                                     <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Precio Total</th>
+                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Estado</th>
                                     <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500"></th>
                                   </tr>
                                 </thead>
@@ -1969,14 +2187,58 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-right text-zinc-300">{formatCurrency(cara.tarifaPublica)}</td>
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleRemoveCara(cara.id)}
-                                            className="p-1 hover:bg-red-500/20 rounded text-red-400 text-[10px]"
-                                            title="Eliminar"
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </button>
+                                          <div className="flex flex-col gap-0.5">
+                                            {/* Si ambos están aprobados, mostrar "Aprobado" */}
+                                            {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                                                Aprobado
+                                              </span>
+                                            )}
+                                            {/* Si cualquiera está rechazado */}
+                                            {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">
+                                                Rechazado
+                                              </span>
+                                            )}
+                                            {/* Si DG está pendiente (y ninguno rechazado) */}
+                                            {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dcm !== 'rechazado' && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
+                                                Pend. DG
+                                              </span>
+                                            )}
+                                            {/* Si DCM está pendiente (y ninguno rechazado) */}
+                                            {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
+                                                Pend. DCM
+                                              </span>
+                                            )}
+                                            {/* Si ninguno tiene estado */}
+                                            {!cara.autorizacion_dg && !cara.autorizacion_dcm && (
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-600/30 text-zinc-400">
+                                                Por evaluar
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="px-2 py-2 text-center">
+                                          <div className="flex items-center justify-center gap-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleEditCara(cara)}
+                                              className={`p-1 rounded text-[10px] ${editingCaraId === cara.id ? 'bg-purple-500/30 text-purple-300' : 'hover:bg-purple-500/20 text-purple-400'}`}
+                                              title="Editar"
+                                            >
+                                              <Pencil className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveCara(cara.id)}
+                                              className="p-1 hover:bg-red-500/20 rounded text-red-400 text-[10px]"
+                                              title="Eliminar"
+                                            >
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                          </div>
                                         </td>
                                       </tr>
                                     );
@@ -2117,7 +2379,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           <div className="flex items-center justify-between px-4 py-3 bg-zinc-800/30">
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-white">Catorcena {cat} / {year}</span>
-                              <span className="text-xs text-zinc-500">({items.length} caras)</span>
+                              <span className="text-xs text-zinc-500">({Object.keys(byArticulo).length} artículos)</span>
                             </div>
                             <div className="flex items-center gap-4 text-sm">
                               <span className="text-zinc-400">{groupRenta} renta</span>
@@ -2252,6 +2514,28 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           )}
         </div>
       </div>
+
+      {/* Toast notification */}
+      {toast.show && (
+        <div className="fixed top-4 right-4 z-[70] animate-in slide-in-from-top fade-in duration-300 max-w-md">
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${
+            toast.type === 'success' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300' :
+            toast.type === 'error' ? 'bg-red-500/20 border-red-500/50 text-red-300' :
+            'bg-amber-500/20 border-amber-500/50 text-amber-300'
+          }`}>
+            {toast.type === 'success' && <Check className="h-5 w-5 flex-shrink-0" />}
+            {toast.type === 'error' && <X className="h-5 w-5 flex-shrink-0" />}
+            {toast.type === 'warning' && <AlertTriangle className="h-5 w-5 flex-shrink-0" />}
+            <span className="text-sm font-medium">{toast.message}</span>
+            <button
+              onClick={() => setToast(prev => ({ ...prev, show: false }))}
+              className="ml-2 p-1 hover:bg-white/10 rounded transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

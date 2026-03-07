@@ -2,8 +2,8 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
-  FileText, MapPin, Layers, Pencil, Map as MapIcon, Package,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, Download, Eye
+  FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
@@ -12,8 +12,17 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
 import { propuestasService, ReservaModalItem } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
+import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
+import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
+import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
+import { useSocketPropuesta, useSocketEquipos } from '../../hooks/useSocket';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
+
+// Static URL for files
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const STATIC_URL = API_URL.replace(/\/api$/, '');
 
 // Dark map styles
 const DARK_MAP_STYLES = [
@@ -39,6 +48,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   propuesta: Propuesta;
+  readOnly?: boolean;
 }
 
 interface CaraItem {
@@ -65,6 +75,8 @@ interface CaraItem {
   anio_inicio?: number;
   catorcena_fin?: number;
   anio_fin?: number;
+  autorizacion_dg?: string;
+  autorizacion_dcm?: string;
 }
 
 // SAP Articulo interface
@@ -143,10 +155,17 @@ const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad
   // This prevents "MEXICO" from matching before "CIUDAD DE MEXICO"
   const sortedCities = Object.entries(CIUDAD_ESTADO_MAP).sort((a, b) => b[0].length - a[0].length);
 
+  // Ciudades que no existen como tal y solo deben poner el estado (Ciudad de México)
+  const CIUDADES_SIN_CIUDAD = ['CDMX', 'CIUDAD DE MEXICO', 'MEXICO', 'DF'];
+
   for (const [ciudad, estado] of sortedCities) {
     // Use word boundary check - city must be preceded and followed by non-letter chars
     const regex = new RegExp(`(^|[^A-Z])${ciudad.replace(/\s+/g, '\\s+')}([^A-Z]|$)`, 'i');
     if (regex.test(name)) {
+      // Si es una ciudad que no existe (CDMX, etc.), solo devolver estado sin ciudad
+      if (CIUDADES_SIN_CIUDAD.includes(ciudad)) {
+        return { estado, ciudad: '' };
+      }
       return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
     }
   }
@@ -165,9 +184,108 @@ interface ReservaItem {
   plaza: string;
   formato: string;
   ubicacion?: string | null;
+  isla?: string | null; // Isla from inventory
   solicitudCaraId?: number; // For linking to cara
   reservaId?: number; // For existing reservas from DB
+  grupo_completo_id?: number | null; // For grouping complete groups
+  articulo?: string; // Artículo SAP de la cara
+  grupo?: string; // Distance group name
 }
+
+// ============ ADVANCED FILTERS SYSTEM (copied from CampanaDetailPage) ============
+type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
+
+interface FilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+interface FilterFieldConfig {
+  field: string;
+  label: string;
+  type: 'string' | 'number';
+}
+
+// Campos para filtrar reservas
+const FILTER_FIELDS_RESERVAS: FilterFieldConfig[] = [
+  { field: 'codigo_unico', label: 'Código', type: 'string' },
+  { field: 'tipo', label: 'Tipo', type: 'string' },
+  { field: 'plaza', label: 'Plaza', type: 'string' },
+  { field: 'formato', label: 'Formato', type: 'string' },
+  { field: 'catorcena', label: 'Catorcena', type: 'number' },
+  { field: 'anio', label: 'Año', type: 'number' },
+];
+
+// Operadores disponibles
+const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
+  { value: '=', label: 'Igual a', forTypes: ['string', 'number'] },
+  { value: '!=', label: 'Diferente de', forTypes: ['string', 'number'] },
+  { value: 'contains', label: 'Contiene', forTypes: ['string'] },
+  { value: 'not_contains', label: 'No contiene', forTypes: ['string'] },
+  { value: '>', label: 'Mayor que', forTypes: ['number'] },
+  { value: '<', label: 'Menor que', forTypes: ['number'] },
+  { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
+  { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
+];
+
+// Opciones de agrupación (soporta múltiples niveles)
+type GroupByFieldReservas = 'catorcena' | 'tipo' | 'plaza' | 'formato' | 'grupo' | 'articulo';
+interface GroupConfigReservas {
+  field: GroupByFieldReservas;
+  label: string;
+}
+
+const AVAILABLE_GROUPINGS_RESERVAS: GroupConfigReservas[] = [
+  { field: 'catorcena', label: 'Catorcena' },
+  { field: 'grupo', label: 'Grupo Completo' },
+  { field: 'articulo', label: 'Artículo' },
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'formato', label: 'Formato' },
+  { field: 'tipo', label: 'Tipo' },
+];
+
+// Función para aplicar filtros a los datos
+function applyFiltersReservas<T>(data: T[], filters: FilterCondition[]): T[] {
+  if (filters.length === 0) return data;
+
+  return data.filter(item => {
+    return filters.every(filter => {
+      const fieldValue = (item as Record<string, unknown>)[filter.field];
+      const filterValue = filter.value;
+
+      if (fieldValue === null || fieldValue === undefined) {
+        return filter.operator === '!=' || filter.operator === 'not_contains';
+      }
+
+      const strValue = String(fieldValue).toLowerCase();
+      const strFilterValue = filterValue.toLowerCase();
+
+      switch (filter.operator) {
+        case '=':
+          return strValue === strFilterValue;
+        case '!=':
+          return strValue !== strFilterValue;
+        case 'contains':
+          return strValue.includes(strFilterValue);
+        case 'not_contains':
+          return !strValue.includes(strFilterValue);
+        case '>':
+          return Number(fieldValue) > Number(filterValue);
+        case '<':
+          return Number(fieldValue) < Number(filterValue);
+        case '>=':
+          return Number(fieldValue) >= Number(filterValue);
+        case '<=':
+          return Number(fieldValue) <= Number(filterValue);
+        default:
+          return true;
+      }
+    });
+  });
+}
+// ============ END ADVANCED FILTERS SYSTEM ============
 
 // View states for the modal
 type ViewState = 'main' | 'search-inventory';
@@ -245,6 +363,9 @@ type ProcessedInventoryItem = InventarioDisponible & {
   flujoId?: number;
   contraflujoId?: number;
   grupo?: string;
+  // Spot único fields
+  spots_disponibles?: number;
+  isCollapsedSpot?: boolean;
 };
 
 // Empty cara template
@@ -390,9 +511,23 @@ function SearchableSelect({
 
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
-export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
+export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = false }: Props) {
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  // WebSocket para escuchar cambios en reservas en tiempo real
+  useSocketPropuesta(propuesta?.id || null);
+
+  // Socket para actualizar usuarios en tiempo real
+  useSocketEquipos();
+
+  // Si readOnly es true, sobrescribir permisos para modo visualización
+  const effectiveCanEdit = !readOnly && permissions.canAsignarInventario;
+  const canEditResumen = !readOnly && permissions.canEditResumenPropuesta;
   const mapRef = useRef<google.maps.Map | null>(null);
+  const reservadosMapRef = useRef<google.maps.Map | null>(null);
+  const resumenReservasMapRef = useRef<google.maps.Map | null>(null);
 
   // Load Google Maps with required libraries
   const { isLoaded: mapsLoaded } = useLoadScript({
@@ -414,6 +549,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>();
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
   const [archivoPropuesta, setArchivoPropuesta] = useState<string | null>(null);
+  const [tipoArchivoPropuesta, setTipoArchivoPropuesta] = useState<string | null>(null);
 
   // Initial values for change detection
   const [initialValues, setInitialValues] = useState({
@@ -424,6 +560,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     yearFin: undefined as number | undefined,
     catorcenaInicio: undefined as number | undefined,
     catorcenaFin: undefined as number | undefined,
+    asignadosIds: '' as string,
   });
   const [isUpdatingPropuesta, setIsUpdatingPropuesta] = useState(false);
 
@@ -441,30 +578,67 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   // Reservas state
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
 
+  // Check if the cara being edited has reservas (to block certain fields)
+  const editingCaraHasReservas = useMemo(() => {
+    if (!editingCaraId) return false;
+    const editingCara = caras.find(c => c.localId === editingCaraId);
+    if (!editingCara) return false;
+    // Check if there are any reservas for this cara
+    return reservas.some(r =>
+      r.id.startsWith(editingCaraId) || r.solicitudCaraId === editingCara.id
+    );
+  }, [editingCaraId, caras, reservas]);
+
   // Inventory search state
   const [searchFilters, setSearchFilters] = useState({
     plaza: '',
     tipo: '',
     formato: '',
   });
-  const [selectedInventory, setSelectedInventory] = useState<Set<number>>(new Set());
+  const [selectedInventory, setSelectedInventory] = useState<Set<string>>(new Set());
+
+  // Helper function to get unique key for inventory item (handles digital spaces)
+  const getInventoryKey = useCallback((inv: InventarioDisponible | ProcessedInventoryItem): string => {
+    const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
+    return isDigital && inv.espacio_id ? `${inv.id}_${inv.espacio_id}` : `${inv.id}`;
+  }, []);
   const [selectedReservados, setSelectedReservados] = useState<Set<string>>(new Set());
   const [selectedMapReservas, setSelectedMapReservas] = useState<Set<string>>(new Set()); // For map highlighting
   const [reservadosSearchTerm, setReservadosSearchTerm] = useState('');
   const [editingReserva, setEditingReserva] = useState<ReservaItem | null>(null);
   const [editingFormato, setEditingFormato] = useState('');
   const [reservadosTipoFilter, setReservadosTipoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo' | 'Bonificacion'>('Todos');
+  const [showOnlyIslaReservados, setShowOnlyIslaReservados] = useState(false);
+  const [showReservasFlatList, setShowReservasFlatList] = useState(false); // Toggle for flat list vs grouped
+  const [groupByDistanceReservados, setGroupByDistanceReservados] = useState(false);
+  const [groupModeReservados, setGroupModeReservados] = useState<'distancia' | 'listado'>('distancia');
+  const [distanciaGruposReservados, setDistanciaGruposReservados] = useState(500);
+  const [tamanoGrupoReservados, setTamanoGrupoReservados] = useState(10);
+  const [expandedGroupsReservados, setExpandedGroupsReservados] = useState<Set<string>>(new Set(['Grupo 1']));
   const [reservadosSortColumn, setReservadosSortColumn] = useState<'codigo' | 'tipo' | 'formato' | 'ciudad'>('ciudad');
+  // Reservas summary states - Advanced Filter System
+  const [filtersReservas, setFiltersReservas] = useState<FilterCondition[]>([]);
+  const [showFiltersReservas, setShowFiltersReservas] = useState(false);
+  const [activeGroupingsReservas, setActiveGroupingsReservas] = useState<GroupByFieldReservas[]>(['catorcena', 'articulo']);
+  const [showGroupingConfigReservas, setShowGroupingConfigReservas] = useState(false);
+  const [sortFieldReservas, setSortFieldReservas] = useState<string | null>(null);
+  const [sortDirectionReservas, setSortDirectionReservas] = useState<'asc' | 'desc'>('asc');
+  const [showSortReservas, setShowSortReservas] = useState(false);
+  const [expandedReservasGroups, setExpandedReservasGroups] = useState<Set<string>>(new Set());
   const [reservadosSortDirection, setReservadosSortDirection] = useState<'asc' | 'desc'>('asc');
   const [disponiblesSearchTerm, setDisponiblesSearchTerm] = useState('');
 
   // Advanced inventory filters
   const [showOnlyUnicos, setShowOnlyUnicos] = useState(false);
   const [showOnlyCompletos, setShowOnlyCompletos] = useState(false);
+  const [showOnlyUnicosDigitales, setShowOnlyUnicosDigitales] = useState(false);
+  const [showSpotUnico, setShowSpotUnico] = useState(false);
   const [groupByDistance, setGroupByDistance] = useState(false);
+  const [groupMode, setGroupMode] = useState<'distancia' | 'listado'>('distancia');
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
+  const [showOnlyIsla, setShowOnlyIsla] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
@@ -485,6 +659,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     message: '',
     onConfirm: () => { },
   });
+
+  // Toast notification state
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+    show: false,
+    message: '',
+    type: 'info'
+  });
+
+  // Auto-dismiss toast after 4 seconds
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
+
+  // Helper to show toast
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ show: true, message, type });
+  };
 
   // Expanded groups state for collapsible groups
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Grupo 1']));
@@ -516,17 +710,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     return () => document.body.classList.remove('modal-open');
   }, [isOpen]);
 
-  // Fetch solicitud full details
+  // Fetch solicitud full details - refetch always on mount to get fresh authorization status
   const { data: solicitudDetails, isLoading: detailsLoading } = useQuery({
     queryKey: ['solicitud-full-details', propuesta.solicitud_id],
     queryFn: () => solicitudesService.getFullDetails(propuesta.solicitud_id),
     enabled: isOpen && !!propuesta.solicitud_id,
+    refetchOnMount: 'always',
   });
 
   // Fetch users
   const { data: users } = useQuery({
-    queryKey: ['solicitudes-users'],
-    queryFn: () => solicitudesService.getUsers(),
+    queryKey: ['solicitudes-users', 'team-filtered'],
+    queryFn: () => solicitudesService.getUsers(undefined, true),
     enabled: isOpen,
   });
 
@@ -542,10 +737,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     queryKey: ['sap-articulos'],
     queryFn: async () => {
       try {
-        const response = await fetch('https://binding-convinced-ride-foto.trycloudflare.com/articulos');
+        const response = await fetch(getEndpoints(useEnvironmentStore.getState().environment).articulos);
         if (!response.ok) throw new Error('Error fetching articulos');
         const data = await response.json();
-        return (data.value || data) as SAPArticulo[];
+        return filterAllowedArticulos((data.value || data) as SAPArticulo[]);
       } catch {
         return [] as SAPArticulo[];
       }
@@ -554,11 +749,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch existing reservas for this propuesta
+  // Fetch existing reservas for this propuesta - refetch always on mount for real-time data
   const { data: existingReservas, isLoading: reservasLoading } = useQuery({
     queryKey: ['propuesta-reservas-modal', propuesta.id],
     queryFn: () => propuestasService.getReservasForModal(propuesta.id),
     enabled: isOpen && !!propuesta.id,
+    refetchOnMount: 'always',
   });
 
   // Load existing reservas into state when data arrives
@@ -576,15 +772,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
           inventario_id: r.inventario_id,
           codigo_unico: r.codigo_unico || `INV-${r.inventario_id}`,
           tipo: tipo as 'Flujo' | 'Contraflujo' | 'Bonificacion',
-          catorcena: catorcenaInicio || 1,
-          anio: yearInicio || new Date().getFullYear(),
+          catorcena: matchingCara?.catorcena_inicio || catorcenaInicio || 1,
+          anio: matchingCara?.anio_inicio || yearInicio || new Date().getFullYear(),
           latitud: Number(r.latitud) || 0,
           longitud: Number(r.longitud) || 0,
           plaza: r.plaza || '',
           formato: r.formato || '',
           ubicacion: r.ubicacion,
+          isla: r.isla,
           solicitudCaraId: r.solicitud_cara_id,
           reservaId: r.reserva_id,
+          grupo_completo_id: r.grupo_completo_id,
+          articulo: matchingCara?.articulo || r.articulo || '',
         };
       });
 
@@ -657,7 +856,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       setDescripcion(descripcionVal);
 
       // Set archivo if exists
-      setArchivoPropuesta((solicitudDetails.propuesta as any)?.archivo || null);
+      setArchivoPropuesta(solicitudDetails.solicitud?.archivo || null);
+      setTipoArchivoPropuesta(solicitudDetails.solicitud?.tipo_archivo || null);
 
       // Set period from cotizacion dates
       const cot = solicitudDetails.cotizacion;
@@ -666,21 +866,34 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       let yFin: number | undefined;
       let cFin: number | undefined;
 
-      if (cot?.fecha_inicio) {
-        const fechaInicio = new Date(cot.fecha_inicio);
-        yInicio = fechaInicio.getFullYear();
-        setYearInicio(yInicio);
-        const dayOfYear = Math.floor((fechaInicio.getTime() - new Date(fechaInicio.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-        cInicio = Math.ceil(dayOfYear / 14);
-        setCatorcenaInicio(cInicio);
+      // Load catorcenas from cotizacion dates using proper date comparison
+      if (cot?.fecha_inicio && catorcenasData?.data) {
+        const fechaInicioDate = new Date(cot.fecha_inicio);
+        const inicioCat = catorcenasData.data.find(c => {
+          const cInicioDate = new Date(c.fecha_inicio);
+          const cFinDate = new Date(c.fecha_fin);
+          return fechaInicioDate >= cInicioDate && fechaInicioDate <= cFinDate;
+        });
+        if (inicioCat) {
+          yInicio = inicioCat.a_o;
+          setYearInicio(yInicio);
+          cInicio = inicioCat.numero_catorcena;
+          setCatorcenaInicio(cInicio);
+        }
       }
-      if (cot?.fecha_fin) {
-        const fechaFin = new Date(cot.fecha_fin);
-        yFin = fechaFin.getFullYear();
-        setYearFin(yFin);
-        const dayOfYear = Math.floor((fechaFin.getTime() - new Date(fechaFin.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-        cFin = Math.ceil(dayOfYear / 14);
-        setCatorcenaFin(cFin);
+      if (cot?.fecha_fin && catorcenasData?.data) {
+        const fechaFinDate = new Date(cot.fecha_fin);
+        const finCat = catorcenasData.data.find(c => {
+          const cInicioDate = new Date(c.fecha_inicio);
+          const cFinDate = new Date(c.fecha_fin);
+          return fechaFinDate >= cInicioDate && fechaFinDate <= cFinDate;
+        });
+        if (finCat) {
+          yFin = finCat.a_o;
+          setYearFin(yFin);
+          cFin = finCat.numero_catorcena;
+          setCatorcenaFin(cFin);
+        }
       }
 
       // Store initial values for change detection
@@ -692,34 +905,57 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         yearFin: yFin,
         catorcenaInicio: cInicio,
         catorcenaFin: cFin,
+        asignadosIds: propuesta.id_asignado || '',
       });
 
       // Set caras from solicitud
       if (solicitudDetails.caras) {
-        const carasWithIds: CaraItem[] = solicitudDetails.caras.map((cara, idx) => ({
-          localId: `cara-${cara.id || idx}-${Date.now()}`,
-          id: cara.id,
-          ciudad: cara.ciudad || '',
-          estados: cara.estados || '',
-          tipo: cara.tipo || '',
-          flujo: cara.flujo || '',
-          bonificacion: Number(cara.bonificacion) || 0,
-          caras: Number(cara.caras) || 0,
-          nivel_socioeconomico: cara.nivel_socioeconomico || '',
-          formato: cara.formato || '',
-          costo: Number(cara.costo) || 0,
-          tarifa_publica: Number(cara.tarifa_publica) || 0,
-          inicio_periodo: cara.inicio_periodo || '',
-          fin_periodo: cara.fin_periodo || '',
-          caras_flujo: Number(cara.caras_flujo) || 0,
-          caras_contraflujo: Number(cara.caras_contraflujo) || 0,
-          articulo: cara.articulo || '',
-          descuento: Number(cara.descuento) || 0,
-        }));
+        const carasWithIds: CaraItem[] = solicitudDetails.caras.map((cara, idx) => {
+          // Calculate catorcena from inicio_periodo
+          let catorcenaInicioCara: number | undefined;
+          let anioInicioCara: number | undefined;
+          if (cara.inicio_periodo && catorcenasData?.data) {
+            const inicioPeriodoDate = new Date(cara.inicio_periodo);
+            const catInicio = catorcenasData.data.find(c => {
+              const cInicioDate = new Date(c.fecha_inicio);
+              const cFinDate = new Date(c.fecha_fin);
+              return inicioPeriodoDate >= cInicioDate && inicioPeriodoDate <= cFinDate;
+            });
+            if (catInicio) {
+              catorcenaInicioCara = catInicio.numero_catorcena;
+              anioInicioCara = catInicio.a_o;
+            }
+          }
+
+          return {
+            localId: `cara-${cara.id || idx}-${Date.now()}`,
+            id: cara.id,
+            ciudad: cara.ciudad || '',
+            estados: cara.estados || '',
+            tipo: cara.tipo || '',
+            flujo: cara.flujo || '',
+            bonificacion: Number(cara.bonificacion) || 0,
+            caras: Number(cara.caras) || 0,
+            nivel_socioeconomico: cara.nivel_socioeconomico || '',
+            formato: cara.formato || '',
+            costo: Number(cara.costo) || 0,
+            tarifa_publica: Number(cara.tarifa_publica) || 0,
+            inicio_periodo: cara.inicio_periodo || '',
+            fin_periodo: cara.fin_periodo || '',
+            caras_flujo: Number(cara.caras_flujo) || 0,
+            caras_contraflujo: Number(cara.caras_contraflujo) || 0,
+            articulo: cara.articulo || '',
+            descuento: Number(cara.descuento) || 0,
+            catorcena_inicio: catorcenaInicioCara,
+            anio_inicio: anioInicioCara,
+            autorizacion_dg: cara.autorizacion_dg || 'aprobado',
+            autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
+          };
+        });
         setCaras(carasWithIds);
       }
     }
-  }, [solicitudDetails, propuesta, isOpen, users]);
+  }, [solicitudDetails, propuesta, isOpen, users, catorcenasData]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -743,6 +979,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   }, [caras]);
 
   // Detect if there are unsaved changes
+  const currentAsignadosIds = asignados.map(u => u.id).join(',');
   const hasChanges = useMemo(() => {
     return (
       nombreCampania !== initialValues.nombreCampania ||
@@ -751,14 +988,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       yearInicio !== initialValues.yearInicio ||
       yearFin !== initialValues.yearFin ||
       catorcenaInicio !== initialValues.catorcenaInicio ||
-      catorcenaFin !== initialValues.catorcenaFin
+      catorcenaFin !== initialValues.catorcenaFin ||
+      currentAsignadosIds !== initialValues.asignadosIds
     );
-  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, initialValues]);
+  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, initialValues]);
 
   // Handle update propuesta
   const handleUpdatePropuesta = async () => {
     setIsUpdatingPropuesta(true);
     try {
+      // Update propuesta data
       await propuestasService.updatePropuesta(propuesta.id, {
         nombre_campania: nombreCampania,
         notas,
@@ -769,6 +1008,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         catorcena_fin: catorcenaFin,
       });
 
+      // Update asignados if changed
+      const newAsignadosIds = asignados.map(u => u.id).join(',');
+      if (newAsignadosIds !== initialValues.asignadosIds) {
+        const asignadosStr = asignados.map(u => u.nombre).join(', ');
+        await propuestasService.updateAsignados(propuesta.id, asignadosStr, newAsignadosIds);
+      }
+
       // Update initial values to current values
       setInitialValues({
         nombreCampania,
@@ -778,9 +1024,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         yearFin,
         catorcenaInicio,
         catorcenaFin,
+        asignadosIds: newAsignadosIds,
       });
 
       queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
       alert('Propuesta actualizada correctamente');
     } catch (error) {
       console.error('Error updating propuesta:', error);
@@ -815,13 +1063,55 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     return { totalRenta, totalBonificacion, totalInversion };
   }, [caras]);
 
-  // Calculate KPIs for reservas
+  // Merge all reservas by grupo_completo_id (for display)
+  const reservasMerged = useMemo(() => {
+    const result: ReservaItem[] = [];
+    const processedGrupos = new Set<number>();
+
+    reservas.forEach(r => {
+      if (r.grupo_completo_id && !processedGrupos.has(r.grupo_completo_id)) {
+        const groupReservas = reservas.filter(res => res.grupo_completo_id === r.grupo_completo_id);
+        if (groupReservas.length >= 2) {
+          const baseCode = r.codigo_unico?.replace(/_Flujo|_Contraflujo/gi, '') || '';
+          result.push({
+            ...r,
+            id: `completo-${r.grupo_completo_id}`,
+            codigo_unico: `${baseCode}_Completo`,
+            tipo: 'Flujo' as const,
+          });
+          processedGrupos.add(r.grupo_completo_id);
+        } else {
+          result.push(r);
+          processedGrupos.add(r.grupo_completo_id);
+        }
+      } else if (!r.grupo_completo_id) {
+        result.push(r);
+      }
+    });
+
+    return result;
+  }, [reservas]);
+
+  // Calculate KPIs for reservas (including completo count)
   const reservasKPIs = useMemo(() => {
     const flujo = reservas.filter(r => r.tipo === 'Flujo').length;
     const contraflujo = reservas.filter(r => r.tipo === 'Contraflujo').length;
     const bonificadas = reservas.filter(r => r.tipo === 'Bonificacion').length;
     const renta = flujo + contraflujo; // Non-bonificadas
     const total = reservas.length;
+
+    // Count completo items (merged pairs)
+    const processedGrupos = new Set<number>();
+    let completos = 0;
+    reservas.forEach(r => {
+      if (r.grupo_completo_id && !processedGrupos.has(r.grupo_completo_id)) {
+        const groupReservas = reservas.filter(res => res.grupo_completo_id === r.grupo_completo_id);
+        if (groupReservas.length >= 2) {
+          completos++;
+        }
+        processedGrupos.add(r.grupo_completo_id);
+      }
+    });
 
     // Calculate money: sum tarifa_publica for each non-bonificada reserva
     let dineroTotal = 0;
@@ -841,8 +1131,99 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       }
     });
 
-    return { flujo, contraflujo, bonificadas, renta, total, dineroTotal, digitales };
+    return { flujo, contraflujo, bonificadas, renta, total, dineroTotal, digitales, completos };
   }, [reservas, caras]);
+
+  // ============ ADVANCED FILTER FUNCTIONS FOR RESERVAS ============
+  // Obtener valores únicos para cada campo
+  const getUniqueValuesReservas = useMemo(() => {
+    const valuesMap: Record<string, string[]> = {};
+    FILTER_FIELDS_RESERVAS.forEach(fieldConfig => {
+      const values = new Set<string>();
+      reservas.forEach(item => {
+        const val = item[fieldConfig.field as keyof ReservaItem];
+        if (val !== null && val !== undefined && val !== '') {
+          values.add(String(val));
+        }
+      });
+      valuesMap[fieldConfig.field] = Array.from(values).sort();
+    });
+    return valuesMap;
+  }, [reservas]);
+
+  // Funciones para manejar filtros
+  const addFilterReservas = () => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS_RESERVAS[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFiltersReservas(prev => [...prev, newFilter]);
+  };
+
+  const updateFilterReservas = (id: string, updates: Partial<FilterCondition>) => {
+    setFiltersReservas(prev =>
+      prev.map(f => (f.id === id ? { ...f, ...updates } : f))
+    );
+  };
+
+  const removeFilterReservas = (id: string) => {
+    setFiltersReservas(prev => prev.filter(f => f.id !== id));
+  };
+
+  const clearFiltersReservas = () => {
+    setFiltersReservas([]);
+  };
+
+  // Toggle agrupación (soporta múltiples niveles)
+  const toggleGroupingReservas = (field: GroupByFieldReservas) => {
+    setActiveGroupingsReservas(prev => {
+      if (prev.includes(field)) {
+        return prev.filter(f => f !== field);
+      } else if (prev.length < 3) {
+        return [...prev, field];
+      }
+      return prev;
+    });
+  };
+
+  // Filtrar y ordenar reservas (uses merged version for display)
+  const filteredReservasData = useMemo(() => {
+    let data = applyFiltersReservas(reservasMerged, filtersReservas);
+
+    // Aplicar ordenamiento
+    if (sortFieldReservas) {
+      data = [...data].sort((a, b) => {
+        const aVal = a[sortFieldReservas as keyof ReservaItem];
+        const bVal = b[sortFieldReservas as keyof ReservaItem];
+        const aStr = aVal === null || aVal === undefined ? '' : String(aVal);
+        const bStr = bVal === null || bVal === undefined ? '' : String(bVal);
+        const compare = aStr.localeCompare(bStr, undefined, { numeric: true });
+        return sortDirectionReservas === 'asc' ? compare : -compare;
+      });
+    }
+
+    return data;
+  }, [reservasMerged, filtersReservas, sortFieldReservas, sortDirectionReservas]);
+  // ============ END ADVANCED FILTER FUNCTIONS ============
+
+  // Effect to re-fit map bounds when filtered reservas change (for "Resumen de Reservas" map)
+  useEffect(() => {
+    if (resumenReservasMapRef.current && filteredReservasData.length > 0 && mapsLoaded && typeof google !== 'undefined') {
+      const bounds = new google.maps.LatLngBounds();
+      let hasValidCoords = false;
+      filteredReservasData.forEach(r => {
+        if (r.latitud && r.longitud) {
+          bounds.extend({ lat: r.latitud, lng: r.longitud });
+          hasValidCoords = true;
+        }
+      });
+      if (hasValidCoords && !bounds.isEmpty()) {
+        resumenReservasMapRef.current.fitBounds(bounds, 50);
+      }
+    }
+  }, [filteredReservasData, mapsLoaded]);
 
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
@@ -880,9 +1261,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     const contraflujoRequerido = cara.caras_contraflujo || 0;
     const bonificacionRequerido = cara.bonificacion || 0;
 
-    const flujoCompleto = flujoReservado >= flujoRequerido;
-    const contraflujoCompleto = contraflujoReservado >= contraflujoRequerido;
-    const bonificacionCompleto = bonificacionReservado >= bonificacionRequerido;
+    // Complete means EXACT match - not under, not over
+    const flujoCompleto = flujoReservado === flujoRequerido;
+    const contraflujoCompleto = contraflujoReservado === contraflujoRequerido;
+    const bonificacionCompleto = bonificacionReservado === bonificacionRequerido;
 
     const totalRequerido = flujoRequerido + contraflujoRequerido + bonificacionRequerido;
     const totalReservado = flujoReservado + contraflujoReservado + bonificacionReservado;
@@ -917,6 +1299,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     };
   };
 
+  // Check if all caras are complete (for "Aprobar propuesta" button)
+  const allCarasComplete = useMemo(() => {
+    if (caras.length === 0) return false;
+    return caras.every(cara => {
+      const status = getCaraCompletionStatus(cara);
+      return status.isComplete;
+    });
+  }, [caras, reservas]);
+
+  // Check if any cara has pending authorization
+  const hasPendingAuthorization = useMemo(() => {
+    return caras.some(cara =>
+      cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente'
+    );
+  }, [caras]);
+
   // Group caras by catorcena period with catorcena info
   const carasGroupedByCatorcena = useMemo(() => {
     const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
@@ -936,8 +1334,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
   }, [caras, catorcenasData]);
 
-  // Years options
-  const years = catorcenasData?.years || [];
+  // Years options (filtered like EditSolicitudModal)
+  const yearInicioOptions = useMemo(() => {
+    if (!catorcenasData?.years) return [];
+    if (yearFin) return catorcenasData.years.filter(y => y <= yearFin);
+    return catorcenasData.years;
+  }, [catorcenasData, yearFin]);
+
+  const yearFinOptions = useMemo(() => {
+    if (!catorcenasData?.years) return [];
+    if (yearInicio) return catorcenasData.years.filter(y => y >= yearInicio);
+    return catorcenasData.years;
+  }, [catorcenasData, yearInicio]);
+
+  const catorcenasInicioOptions = useMemo(() => {
+    if (!catorcenasData?.data || !yearInicio) return [];
+    const cats = catorcenasData.data.filter(c => c.a_o === yearInicio);
+    if (yearInicio === yearFin && catorcenaFin) return cats.filter(c => c.numero_catorcena <= catorcenaFin);
+    return cats;
+  }, [catorcenasData, yearInicio, yearFin, catorcenaFin]);
+
+  const catorcenasFinOptions = useMemo(() => {
+    if (!catorcenasData?.data || !yearFin) return [];
+    const cats = catorcenasData.data.filter(c => c.a_o === yearFin);
+    if (yearInicio === yearFin && catorcenaInicio) return cats.filter(c => c.numero_catorcena >= catorcenaInicio);
+    return cats;
+  }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
 
   // Available periods based on year range
   const availablePeriods = useMemo(() => {
@@ -980,13 +1402,27 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       return;
     }
 
+    const caraToDelete = caras.find(c => c.localId === localId);
+
     setConfirmModal({
       isOpen: true,
       title: 'Eliminar Formato',
       message: '¿Estás seguro de que deseas eliminar este formato de la propuesta?',
       confirmText: 'Eliminar',
       isDestructive: true,
-      onConfirm: () => {
+      onConfirm: async () => {
+        // If cara has DB id, delete from database
+        if (caraToDelete?.id) {
+          try {
+            await propuestasService.deleteCara(propuesta.id, caraToDelete.id);
+          } catch (error) {
+            console.error('Error deleting cara:', error);
+            alert('Error al eliminar el formato de la base de datos');
+            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+            return;
+          }
+        }
+        // Update local state
         setCaras(prev => prev.filter(c => c.localId !== localId));
         setReservas(prev => prev.filter(r => !r.id.startsWith(localId)));
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -994,20 +1430,51 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
   };
 
-  // Handle edit cara
+  // Handle edit cara - permite edición parcial cuando hay reservas
   const handleEditCara = (cara: CaraItem) => {
-    if (caraHasReservas(cara.localId)) {
-      alert('No puedes editar una cara que tiene reservas. Primero elimina las reservas.');
-      return;
-    }
+    // Ya no bloqueamos completamente - permitimos edición de ciudad, formatos y NSE
     setEditingCaraId(cara.localId);
+
+    // Find and set the selectedArticulo if we have the articulo code
+    if (cara.articulo && articulosData) {
+      const foundArticulo = articulosData.find(a => a.ItemCode === cara.articulo);
+      if (foundArticulo) {
+        setSelectedArticulo(foundArticulo);
+      }
+    }
+
+    // Calculate caras en renta (flujo + contraflujo)
+    const carasEnRenta = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0);
+
+    // Try to find the matching catorcena from inicio_periodo
+    let catorcenaInicioVal = cara.catorcena_inicio;
+    let anioInicioVal = cara.anio_inicio;
+    let catorcenaFinVal = cara.catorcena_fin;
+    let anioFinVal = cara.anio_fin;
+
+    // If catorcena fields are not set but we have dates, try to find matching catorcena
+    if ((!catorcenaInicioVal || !anioInicioVal) && cara.inicio_periodo && catorcenasData?.data) {
+      const inicioDate = new Date(cara.inicio_periodo);
+      const matchingCatorcena = catorcenasData.data.find(c => {
+        const catStart = new Date(c.fecha_inicio);
+        const catEnd = new Date(c.fecha_fin);
+        return inicioDate >= catStart && inicioDate <= catEnd;
+      });
+      if (matchingCatorcena) {
+        catorcenaInicioVal = matchingCatorcena.numero_catorcena;
+        anioInicioVal = matchingCatorcena.a_o;
+        catorcenaFinVal = matchingCatorcena.numero_catorcena;
+        anioFinVal = matchingCatorcena.a_o;
+      }
+    }
+
     setNewCara({
       ciudad: cara.ciudad,
       estados: cara.estados,
       tipo: cara.tipo,
       flujo: cara.flujo,
       bonificacion: cara.bonificacion,
-      caras: cara.caras,
+      caras: carasEnRenta,
       nivel_socioeconomico: cara.nivel_socioeconomico,
       formato: cara.formato,
       costo: cara.costo,
@@ -1018,37 +1485,122 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       caras_contraflujo: cara.caras_contraflujo,
       articulo: cara.articulo,
       descuento: cara.descuento,
+      catorcena_inicio: catorcenaInicioVal,
+      anio_inicio: anioInicioVal,
+      catorcena_fin: catorcenaFinVal,
+      anio_fin: anioFinVal,
     });
     setShowAddCaraForm(true);
   };
 
-  // Handle save cara (add or update)
-  const handleSaveCara = () => {
+  // Handle save cara (add or update) - persists to database
+  const handleSaveCara = async () => {
     if (!newCara.formato || !newCara.estados) {
       alert('Por favor completa al menos el formato y estado');
       return;
     }
 
-    if (editingCaraId) {
-      // Update existing cara
-      setCaras(prev => prev.map(c =>
-        c.localId === editingCaraId
-          ? { ...c, ...newCara }
-          : c
-      ));
-      setEditingCaraId(null);
-    } else {
-      // Add new cara
-      const newCaraItem: CaraItem = {
-        ...newCara,
-        localId: `cara-new-${Date.now()}`,
-      };
-      setCaras(prev => [...prev, newCaraItem]);
+    // If no ciudad selected but estado is, get all cities from that estado
+    let ciudadToSave = newCara.ciudad;
+    if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {
+      const selectedEstados = newCara.estados.split(',').map(s => s.trim());
+      const allCitiesForEstado = solicitudFilters.ciudades
+        .filter(c => selectedEstados.includes(c.estado))
+        .map(c => c.ciudad);
+      ciudadToSave = allCitiesForEstado.join(', ');
     }
 
-    setNewCara(EMPTY_CARA);
-    setSelectedArticulo(null);
-    setShowAddCaraForm(false);
+    // Calcular costo como caras * tarifa_publica (inversión)
+    const costoCalculado = (newCara.caras || 0) * (newCara.tarifa_publica || 0);
+
+    const caraData = {
+      ciudad: ciudadToSave,
+      estados: newCara.estados,
+      tipo: newCara.tipo,
+      flujo: newCara.flujo,
+      bonificacion: newCara.bonificacion,
+      caras: newCara.caras,
+      nivel_socioeconomico: newCara.nivel_socioeconomico,
+      formato: newCara.formato,
+      costo: costoCalculado,
+      tarifa_publica: newCara.tarifa_publica,
+      inicio_periodo: newCara.inicio_periodo,
+      fin_periodo: newCara.fin_periodo,
+      caras_flujo: newCara.caras_flujo,
+      caras_contraflujo: newCara.caras_contraflujo,
+      articulo: newCara.articulo,
+      descuento: newCara.descuento,
+    };
+
+    try {
+      if (editingCaraId) {
+        // Find the cara being edited to get its database ID
+        const caraToEdit = caras.find(c => c.localId === editingCaraId);
+        if (caraToEdit?.id) {
+          // Evaluar autorización antes de actualizar
+          let autorizacion_dg = 'aprobado';
+          let autorizacion_dcm = 'aprobado';
+          try {
+            const resultado = await solicitudesService.evaluarAutorizacion({
+              ciudad: ciudadToSave,
+              estado: newCara.estados,
+              formato: newCara.formato,
+              tipo: newCara.tipo,
+              caras: newCara.caras,
+              bonificacion: newCara.bonificacion,
+              costo: costoCalculado,
+              tarifa_publica: newCara.tarifa_publica
+            });
+            autorizacion_dg = resultado.autorizacion_dg || 'aprobado';
+            autorizacion_dcm = resultado.autorizacion_dcm || 'aprobado';
+          } catch (error) {
+            console.error('Error evaluando autorización:', error);
+          }
+
+          // Update in database with authorization status
+          const updatedCara = await propuestasService.updateCara(propuesta.id, caraToEdit.id, caraData);
+
+          // Update local state with new authorization status
+          setCaras(prev => prev.map(c =>
+            c.localId === editingCaraId
+              ? {
+                  ...c,
+                  ...newCara,
+                  costo: costoCalculado,
+                  autorizacion_dg: updatedCara?.autorizacion_dg || autorizacion_dg,
+                  autorizacion_dcm: updatedCara?.autorizacion_dcm || autorizacion_dcm
+                }
+              : c
+          ));
+        }
+        setEditingCaraId(null);
+      } else {
+        // Create new cara in database
+        const createdCara = await propuestasService.createCara(propuesta.id, caraData);
+        // Add to local state with the database ID and authorization status from response
+        const newCaraItem: CaraItem = {
+          ...newCara,
+          id: createdCara.id,
+          localId: `cara-${createdCara.id}`,
+          costo: costoCalculado,
+          autorizacion_dg: createdCara.autorizacion_dg || 'aprobado',
+          autorizacion_dcm: createdCara.autorizacion_dcm || 'aprobado',
+        };
+        setCaras(prev => [...prev, newCaraItem]);
+      }
+
+      setNewCara(EMPTY_CARA);
+      setSelectedArticulo(null);
+      setShowAddCaraForm(false);
+
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
+    } catch (error) {
+      console.error('Error saving cara:', error);
+      alert('Error al guardar la cara');
+    }
   };
 
   // Handle cancel cara form
@@ -1075,16 +1627,72 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   }, []);
 
   // Filter for unique inventories (no flujo/contraflujo duplicates)
+  // Filter for unique inventories - hide items whose counterpart is already reserved
   const filterUnicos = useCallback((inventarios: InventarioDisponible[]): InventarioDisponible[] => {
-    const seen = new Set<string>();
-    return inventarios.filter(inv => {
-      // Extract base code (without _Flujo or _Contraflujo)
-      const baseCode = inv.codigo_unico?.split('_')[0] || '';
-      const key = `${baseCode}|${inv.ubicacion}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
+    // Get base codes from already reserved items
+    const reservedBaseCodes = new Set<string>();
+    reservas.forEach(reserva => {
+      // Extract base code from the reserved item's codigo_unico
+      const baseCode = reserva.codigo_unico?.split('_')[0] || '';
+      if (baseCode) {
+        reservedBaseCodes.add(baseCode);
+      }
     });
+
+    // Filter out items whose base code is already in reservas (counterpart is reserved)
+    return inventarios.filter(inv => {
+      const baseCode = inv.codigo_unico?.split('_')[0] || '';
+      // If any item with this base code is reserved, hide this one
+      return !reservedBaseCodes.has(baseCode);
+    });
+  }, [reservas]);
+
+  // Filter for unique digital inventories - hide digital items whose codigo_unico is already reserved
+  const filterUnicosDigitales = useCallback((inventarios: InventarioDisponible[]): InventarioDisponible[] => {
+    // Get codigo_unicos that are already reserved (from digital items)
+    const reservedCodigosDigitales = new Set<string>();
+    reservas.forEach(reserva => {
+      if (reserva.codigo_unico) {
+        reservedCodigosDigitales.add(reserva.codigo_unico);
+      }
+    });
+
+    // Filter out digital items whose codigo_unico is already in reservas
+    return inventarios.filter(inv => {
+      // Only filter digital items
+      const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
+      if (!isDigital) return true; // Keep non-digital items as-is
+
+      // For digital items, exclude if this codigo_unico is already reserved
+      return !reservedCodigosDigitales.has(inv.codigo_unico || '');
+    });
+  }, [reservas]);
+
+  // Filter for spot único - collapse digital inventories to 1 row per inventario with spots indicator
+  const filterSpotUnico = useCallback((inventarios: ProcessedInventoryItem[]): ProcessedInventoryItem[] => {
+    const digitalGroups = new Map<number, ProcessedInventoryItem[]>();
+    const result: ProcessedInventoryItem[] = [];
+
+    for (const inv of inventarios) {
+      const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
+      if (isDigital) {
+        const group = digitalGroups.get(inv.id) || [];
+        group.push(inv);
+        digitalGroups.set(inv.id, group);
+      } else {
+        result.push(inv);
+      }
+    }
+
+    // Per digital group, collapse to 1 row with first available espacio
+    for (const [, group] of digitalGroups) {
+      const representative = { ...group[0] } as ProcessedInventoryItem;
+      representative.spots_disponibles = group.length;
+      representative.isCollapsedSpot = true;
+      result.push(representative);
+    }
+
+    return result;
   }, []);
 
   // Filter for complete inventories - MERGE flujo/contraflujo pairs into single "completo" rows
@@ -1204,6 +1812,93 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
   }, [tamanoGrupo, distanciaGrupos, haversineDistance]);
 
+  // Group reservados by distance (anti-cannibalization for reserved items)
+  const groupByDistanceFuncReservados = useCallback((items: ReservaItem[]): (ReservaItem & { grupo?: string })[] => {
+    if (items.length === 0) return [];
+
+    const withCoords = items.filter(r =>
+      r.latitud && r.longitud && typeof r.latitud === 'number' && typeof r.longitud === 'number' &&
+      !isNaN(r.latitud) && !isNaN(r.longitud)
+    );
+    const withoutCoords = items.filter(r =>
+      !r.latitud || !r.longitud || typeof r.latitud !== 'number' || typeof r.longitud !== 'number' ||
+      isNaN(r.latitud) || isNaN(r.longitud)
+    );
+
+    if (withCoords.length === 0) {
+      return items.map(r => ({ ...r, grupo: 'Grupo 1' }));
+    }
+
+    const grupos: ReservaItem[][] = [];
+    const remaining = [...withCoords];
+
+    while (remaining.length > 0) {
+      const grupo: ReservaItem[] = [remaining.shift()!];
+
+      while (grupo.length < tamanoGrupoReservados && remaining.length > 0) {
+        let bestIdx = -1;
+        let bestScore = Infinity;
+
+        for (let i = 0; i < remaining.length; i++) {
+          const candidate = remaining[i];
+          let minDist = Infinity;
+
+          for (const member of grupo) {
+            const dist = haversineDistance(
+              candidate.latitud, candidate.longitud,
+              member.latitud, member.longitud
+            );
+            if (dist < minDist) minDist = dist;
+          }
+
+          if (minDist >= distanciaGruposReservados) {
+            const score = Math.abs(minDist - distanciaGruposReservados * 1.2);
+            if (score < bestScore) {
+              bestScore = score;
+              bestIdx = i;
+            }
+          }
+        }
+
+        if (bestIdx >= 0) {
+          grupo.push(remaining.splice(bestIdx, 1)[0]);
+        } else {
+          break;
+        }
+      }
+
+      grupos.push(grupo);
+    }
+
+    if (withoutCoords.length > 0) {
+      grupos.push(withoutCoords);
+    }
+
+    return grupos.flatMap((grupo, idx) => {
+      const isLastGroup = idx === grupos.length - 1 && withoutCoords.length > 0;
+      const groupName = isLastGroup ? 'Sin ubicación' : `Grupo ${idx + 1}`;
+      return grupo.map(r => ({ ...r, grupo: groupName }));
+    });
+  }, [tamanoGrupoReservados, distanciaGruposReservados, haversineDistance]);
+
+  // Group by list order - chunk items sequentially (disponibles)
+  const groupByListFunc = useCallback((inventarios: ProcessedInventoryItem[]): ProcessedInventoryItem[] => {
+    if (inventarios.length === 0) return [];
+    return inventarios.map((inv, idx) => ({
+      ...inv,
+      grupo: `Grupo ${Math.floor(idx / tamanoGrupo) + 1}`,
+    }));
+  }, [tamanoGrupo]);
+
+  // Group by list order - chunk items sequentially (reservados)
+  const groupByListFuncReservados = useCallback((items: ReservaItem[]): (ReservaItem & { grupo?: string })[] => {
+    if (items.length === 0) return [];
+    return items.map((r, idx) => ({
+      ...r,
+      grupo: `Grupo ${Math.floor(idx / tamanoGrupoReservados) + 1}`,
+    }));
+  }, [tamanoGrupoReservados]);
+
   // Handle search inventory - open search view and fetch disponibles
   const handleSearchInventory = async (cara: CaraItem) => {
     setSelectedCaraForSearch(cara);
@@ -1219,8 +1914,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     // Fetch disponibles based on cara characteristics (gets all, filter in frontend)
     setIsSearching(true);
     try {
+      // If ciudad has many cities (more than 3), just filter by state only
+      // This handles the case where all cities from a state are auto-selected
+      let ciudadFilter = cara.ciudad || undefined;
+      if (ciudadFilter) {
+        const ciudadCount = ciudadFilter.split(',').length;
+        if (ciudadCount > 3) {
+          // Too many cities - just use state filter for broader search
+          ciudadFilter = undefined;
+        }
+      }
+
       const response = await inventariosService.getDisponibles({
-        ciudad: cara.ciudad || undefined,
+        ciudad: ciudadFilter,
         estado: cara.estados || undefined,
         formato: cara.formato || undefined,
         // Don't filter by flujo in backend - get all and filter in frontend
@@ -1245,8 +1951,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
     setIsSearching(true);
     try {
+      // If ciudad has many cities (more than 3), just filter by state only
+      let ciudadFilter = selectedCaraForSearch.ciudad || undefined;
+      if (ciudadFilter) {
+        const ciudadCount = ciudadFilter.split(',').length;
+        if (ciudadCount > 3) {
+          ciudadFilter = undefined;
+        }
+      }
+
       const response = await inventariosService.getDisponibles({
-        ciudad: selectedCaraForSearch.ciudad || undefined,
+        ciudad: ciudadFilter,
         estado: selectedCaraForSearch.estados || undefined,
         formato: selectedCaraForSearch.formato || undefined,
         // Don't filter by flujo in backend - get all and filter in frontend
@@ -1280,7 +1995,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         inv.plaza?.toLowerCase().includes(term) ||
         inv.ubicacion?.toLowerCase().includes(term) ||
         inv.tipo_de_cara?.toLowerCase().includes(term) ||
-        inv.nivel_socioeconomico?.toLowerCase().includes(term)
+        inv.nivel_socioeconomico?.toLowerCase().includes(term) ||
+        inv.tipo_de_mueble?.toLowerCase().includes(term)
       );
     }
 
@@ -1294,19 +2010,34 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       data = data.filter(inv => inv.tipo_de_cara === flujoFilter);
     }
 
-    // Apply unique filter
-    if (showOnlyUnicos) {
-      data = filterUnicos(data);
-    }
-
     // Apply complete filter (merges pairs into single rows)
     if (showOnlyCompletos) {
       data = filterCompletos(data);
     }
 
-    // Apply distance grouping
+    // Apply unique filter for traditional items (hide items whose counterpart is reserved)
+    if (showOnlyUnicos) {
+      data = filterUnicos(data);
+    }
+
+    // Apply unique digital filter (hide digital items with same codigo_unico in reservas)
+    if (showOnlyUnicosDigitales) {
+      data = filterUnicosDigitales(data);
+    }
+
+    // Spot único - collapse digital items to 1 row per inventario
+    if (showSpotUnico) {
+      data = filterSpotUnico(data);
+    }
+
+    // Filter by isla - only show items that have "ISLA" in the isla column
+    if (showOnlyIsla) {
+      data = data.filter(inv => inv.isla?.toUpperCase().includes('ISLA'));
+    }
+
+    // Apply grouping (distance or list)
     if (groupByDistance) {
-      data = groupByDistanceFunc(data);
+      data = groupMode === 'distancia' ? groupByDistanceFunc(data) : groupByListFunc(data);
     }
 
     // Apply sorting
@@ -1326,6 +2057,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         case 'plaza':
           aVal = a.plaza || '';
           bVal = b.plaza || '';
+          break;
+        case 'isla':
+          aVal = a.isla || '';
+          bVal = b.isla || '';
           break;
         case 'nivel_socioeconomico':
           aVal = a.nivel_socioeconomico || '';
@@ -1348,7 +2083,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, groupByDistance, filterUnicos, filterCompletos, groupByDistanceFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, showOnlyIsla, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -1360,11 +2095,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     setPoiFilterIds(null);
   }, []);
 
+  // Check if there are digital items in inventory
+  const hasDigitalInventory = useMemo(() => {
+    return inventarioDisponible.some(inv =>
+      inv.tradicional_digital === 'Digital'
+    );
+  }, [inventarioDisponible]);
+
+  // Check if there are traditional items in inventory
+  const hasTradicionalInventory = useMemo(() => {
+    return inventarioDisponible.some(inv =>
+      inv.tradicional_digital === 'Tradicional' || (!inv.total_espacios || inv.total_espacios === 0)
+    );
+  }, [inventarioDisponible]);
+
   // Clear all filters
   const clearAllFilters = useCallback(() => {
     setFlujoFilter('Todos');
     setShowOnlyUnicos(false);
     setShowOnlyCompletos(false);
+    setShowOnlyUnicosDigitales(false);
+    setShowSpotUnico(false);
+    setShowOnlyIsla(false);
     setGroupByDistance(false);
     setPoiFilterIds(null);
     setDisponiblesSearchTerm('');
@@ -1439,9 +2191,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     const matchingInventory = inventarioDisponible
       .filter(inv => inv.codigo_unico && availableCodes.includes(inv.codigo_unico));
 
-    setSelectedInventory(new Set(matchingInventory.map(inv => inv.id)));
+    setSelectedInventory(new Set(matchingInventory.map(inv => getInventoryKey(inv))));
     setShowCsvSection(false);
-  }, [csvData, inventarioDisponible]);
+  }, [csvData, inventarioDisponible, getInventoryKey]);
 
   const handleClearCsv = useCallback(() => {
     setCsvFile(null);
@@ -1481,6 +2233,74 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
   }, [processedInventory, groupByDistance]);
 
+  // Download disponibles as CSV
+  const downloadDisponiblesCSV = () => {
+    if (processedInventory.length === 0) return;
+
+    // Determine columns based on active filters
+    const baseColumns = ['codigo_unico', 'tipo_de_cara', 'plaza', 'nivel_socioeconomico', 'ubicacion'];
+    const headers = ['Código', 'Tipo', 'Plaza', 'NSE', 'Ubicación'];
+
+    // Add group column if groupByDistance is active
+    if (groupByDistance && groupedInventory) {
+      headers.unshift('Grupo');
+      baseColumns.unshift('_group');
+    }
+
+    // Build rows with group info if applicable
+    const rows: string[][] = [];
+    if (groupByDistance && groupedInventory) {
+      groupedInventory.forEach(([groupName, items]) => {
+        items.forEach(item => {
+          const row = baseColumns.map(col => {
+            if (col === '_group') return groupName;
+            const val = item[col as keyof typeof item];
+            return val === null || val === undefined ? '' : String(val);
+          });
+          rows.push(row);
+        });
+      });
+    } else {
+      processedInventory.forEach(item => {
+        const row = baseColumns.map(col => {
+          const val = item[col as keyof typeof item];
+          return val === null || val === undefined ? '' : String(val);
+        });
+        rows.push(row);
+      });
+    }
+
+    // Create CSV content
+    const escapeCSV = (val: string) => {
+      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+        return `"${val.replace(/"/g, '""')}"`;
+      }
+      return val;
+    };
+
+    const csvContent = [
+      headers.map(escapeCSV).join(','),
+      ...rows.map(row => row.map(escapeCSV).join(','))
+    ].join('\n');
+
+    // Download file
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const filterInfo = [
+      showOnlyUnicosDigitales ? 'unicos_digitales' : '',
+      showOnlyCompletos ? 'completos' : '',
+      groupByDistance ? 'agrupados' : '',
+      flujoFilter !== 'Todos' ? flujoFilter.toLowerCase() : ''
+    ].filter(Boolean).join('_') || 'todos';
+    link.download = `inventario_disponible_${filterInfo}_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Toggle group expansion
   const toggleGroupExpansion = (groupName: string) => {
     setExpandedGroups(prev => {
@@ -1492,20 +2312,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   };
 
   // Select all in group
-  const selectAllInGroup = (items: ProcessedInventoryItem[]) => {
+  // Toggle all items in a group - if all selected, deselect all; otherwise select all
+  const toggleAllInGroup = (items: ProcessedInventoryItem[]) => {
+    const allSelected = items.every(inv => selectedInventory.has(getInventoryKey(inv)));
     setSelectedInventory(prev => {
       const next = new Set(prev);
-      items.forEach(inv => next.add(inv.id));
+      if (allSelected) {
+        // Deselect all
+        items.forEach(inv => next.delete(getInventoryKey(inv)));
+      } else {
+        // Select all
+        items.forEach(inv => next.add(getInventoryKey(inv)));
+      }
       return next;
     });
   };
 
-  // Handle inventory selection
-  const toggleInventorySelection = (id: number) => {
+  // Handle inventory selection (uses unique key for digital items)
+  const toggleInventorySelection = (key: string) => {
     setSelectedInventory(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -1515,10 +2343,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     if (!selectedCaraForSearch || selectedInventory.size === 0) return;
 
     // Check for pairs that could be grouped
-    const selectedItems = processedInventory.filter(i => selectedInventory.has(i.id));
+    const selectedItems = processedInventory.filter(i => selectedInventory.has(getInventoryKey(i)));
     const potentialPairs = new Set<string>();
 
     selectedItems.forEach(item => {
+      // If item is already "Completo" (from filtered view), count it as a pair
+      if (item.isCompleto && item.flujoId && item.contraflujoId) {
+        const baseCode = item.codigo_unico?.split('_')[0];
+        if (baseCode) {
+          potentialPairs.add(baseCode);
+        }
+        return;
+      }
+
       const baseCode = item.codigo_unico?.split('_')[0]; // Assuming prefix_suffix format
       if (baseCode) {
         // Check if we have both Flujo and Contraflujo for this base code in selection
@@ -1531,12 +2368,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
 
     const runReservation = async (shouldGroup: boolean) => {
-      const newReservas: { inventario_id: number; tipo: string; latitud: number; longitud: number }[] = [];
+      const newReservas: { inventario_id: number; espacio_id?: number; tipo: string; latitud: number; longitud: number }[] = [];
       let flujoCount = 0;
       let contraflujoCount = 0;
 
-      selectedInventory.forEach(invId => {
-        const inv = processedInventory.find(i => i.id === invId);
+      selectedInventory.forEach(invKey => {
+        const inv = processedInventory.find(i => getInventoryKey(i) === invKey);
         if (!inv) return;
 
         // If it's a "completo" item, reserve both flujo and contraflujo
@@ -1545,25 +2382,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
           const flujoOrig = inventarioDisponible.find(i => i.id === inv.flujoId);
           const contraflujoOrig = inventarioDisponible.find(i => i.id === inv.contraflujoId);
 
-          if (flujoOrig && flujoCount < remainingToAssign.flujo) {
+          // For "completo" items, BOTH must have space to reserve either
+          const canReserveFlujo = flujoOrig && flujoCount < remainingToAssign.flujo;
+          const canReserveContraflujo = contraflujoOrig && contraflujoCount < remainingToAssign.contraflujo;
+
+          // Only reserve both if BOTH have space (to keep them paired)
+          if (canReserveFlujo && canReserveContraflujo) {
+            const isDigitalFlujo = flujoOrig!.tradicional_digital === 'Digital' || (flujoOrig!.total_espacios && flujoOrig!.total_espacios > 0);
             newReservas.push({
               inventario_id: inv.flujoId!,
+              espacio_id: isDigitalFlujo && flujoOrig!.espacio_id ? flujoOrig!.espacio_id : undefined,
               tipo: 'Flujo',
-              latitud: flujoOrig.latitud || 0,
-              longitud: flujoOrig.longitud || 0,
+              latitud: flujoOrig!.latitud || 0,
+              longitud: flujoOrig!.longitud || 0,
             });
             flujoCount++;
-          }
 
-          if (contraflujoOrig && contraflujoCount < remainingToAssign.contraflujo) {
+            const isDigitalContra = contraflujoOrig!.tradicional_digital === 'Digital' || (contraflujoOrig!.total_espacios && contraflujoOrig!.total_espacios > 0);
             newReservas.push({
               inventario_id: inv.contraflujoId!,
+              espacio_id: isDigitalContra && contraflujoOrig!.espacio_id ? contraflujoOrig!.espacio_id : undefined,
               tipo: 'Contraflujo',
-              latitud: contraflujoOrig.latitud || 0,
-              longitud: contraflujoOrig.longitud || 0,
+              latitud: contraflujoOrig!.latitud || 0,
+              longitud: contraflujoOrig!.longitud || 0,
             });
             contraflujoCount++;
           }
+          // If only one has space, skip this completo item entirely to maintain pairing
         } else {
           // Regular item - reserve based on tipo_de_cara
           const tipo = inv.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo';
@@ -1572,8 +2417,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
             : contraflujoCount < remainingToAssign.contraflujo;
 
           if (canReserve) {
+            // For digital items, use espacio_id directly; otherwise use inventario_id
+            const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
             newReservas.push({
-              inventario_id: invId,
+              inventario_id: inv.id,
+              espacio_id: isDigital && inv.espacio_id ? inv.espacio_id : undefined,
               tipo,
               latitud: inv.latitud || 0,
               longitud: inv.longitud || 0,
@@ -1585,7 +2433,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
       });
 
       if (newReservas.length === 0) {
-        alert('No hay caras disponibles para reservar');
+        showToast('No hay caras disponibles para reservar', 'error');
         return;
       }
 
@@ -1612,28 +2460,40 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         // Also refresh disponibles
         handleRefetchDisponibles();
 
-        alert(`Se guardaron ${result.reservasCreadas} reservas exitosamente`);
+        showToast(`Se guardaron ${result.reservasCreadas} reservas exitosamente`, 'success');
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving reservas:', error);
-        alert(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
       } finally {
         setIsSaving(false);
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     };
 
-    // Prompt logic - siempre mostrar modal con opción de agrupar si hay pares
-    if (potentialPairs.size > 0) {
+    // Prompt logic - solo mostrar modal de agrupar cuando el filtro COMPLETOS está activo
+    if (potentialPairs.size > 0 && showOnlyCompletos) {
+      // Count how many "completo" items are selected (each reserves 2 caras)
+      const completoCount = selectedItems.filter(i => i.isCompleto).length;
+      const regularCount = selectedItems.filter(i => !i.isCompleto).length;
+      const totalCaras = (completoCount * 2) + regularCount;
+
+      const message = completoCount > 0
+        ? `Se reservarán ${totalCaras} caras (${completoCount} completo${completoCount > 1 ? 's' : ''} = ${completoCount * 2} caras). ¿Agrupar Flujo + Contraflujo como "Completo"?`
+        : `Se detectaron ${potentialPairs.size} pares Flujo + Contraflujo del mismo parabús. ¿Deseas agruparlos como "Completo"?`;
+
       setConfirmModal({
         isOpen: true,
         title: 'Agrupar como Completo',
-        message: `Se detectaron ${potentialPairs.size} pares Flujo + Contraflujo del mismo parabús. ¿Deseas agruparlos como "Completo"?`,
+        message,
         confirmText: 'Sí, Agrupar',
         cancelText: 'No, Mantener Separados',
         onConfirm: () => runReservation(true),
         onCancel: () => runReservation(false)
       });
+    } else if (potentialPairs.size > 0 && !showOnlyCompletos) {
+      // Hay pares pero NO está activo el filtro completos - reservar sin agrupar directamente
+      runReservation(false);
     } else {
       // Sin pares, confirmar reservación normal
       setConfirmModal({
@@ -1650,17 +2510,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const handleReserveAsBonificacion = () => {
     if (!selectedCaraForSearch || selectedInventory.size === 0) return;
     if (selectedInventory.size > remainingToAssign.bonificacion) {
-      alert(`Solo puedes reservar ${remainingToAssign.bonificacion} caras de bonificación`);
+      showToast(`Solo puedes reservar ${remainingToAssign.bonificacion} caras de bonificación`, 'error');
       return;
     }
 
     const runBonificacion = async () => {
-      const newReservas: { inventario_id: number; tipo: string; latitud: number; longitud: number }[] = [];
-      selectedInventory.forEach(invId => {
-        const inv = processedInventory.find(i => i.id === invId);
+      const newReservas: { inventario_id: number; espacio_id?: number; tipo: string; latitud: number; longitud: number }[] = [];
+      selectedInventory.forEach(invKey => {
+        const inv = processedInventory.find(i => getInventoryKey(i) === invKey);
         if (inv) {
+          const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
           newReservas.push({
-            inventario_id: invId,
+            inventario_id: inv.id,
+            espacio_id: isDigital && inv.espacio_id ? inv.espacio_id : undefined,
             tipo: 'Bonificacion',
             latitud: inv.latitud || 0,
             longitud: inv.longitud || 0,
@@ -1690,11 +2552,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
         handleRefetchDisponibles();
 
-        // alert(`Se guardaron ${result.reservasCreadas} bonificaciones exitosamente`);
+        showToast(`Se guardaron ${result.reservasCreadas} bonificaciones exitosamente`, 'success');
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving bonificaciones:', error);
-        alert(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
       } finally {
         setIsSaving(false);
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -1755,13 +2617,57 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     );
   }, [reservas, selectedCaraForSearch]);
 
-  // Filter reservados by search term and type
+  // Group reservas by grupo_completo_id - shows pairs as single "Completo" item
+  const currentCaraReservasMerged = useMemo(() => {
+    const result: ReservaItem[] = [];
+    const processedGrupos = new Set<number>();
+
+    currentCaraReservas.forEach(r => {
+      // If has grupo_completo_id and not yet processed
+      if (r.grupo_completo_id && !processedGrupos.has(r.grupo_completo_id)) {
+        // Find all reservas in this group
+        const groupReservas = currentCaraReservas.filter(
+          res => res.grupo_completo_id === r.grupo_completo_id
+        );
+
+        if (groupReservas.length >= 2) {
+          // Create merged "Completo" item
+          const baseCode = r.codigo_unico?.replace(/_Flujo|_Contraflujo/gi, '') || '';
+          result.push({
+            ...r,
+            id: `completo-${r.grupo_completo_id}`,
+            codigo_unico: `${baseCode}_Completo`,
+            tipo: 'Flujo' as const, // Use Flujo for color (will show as purple in legend)
+            // Store original items count for reference
+          });
+          processedGrupos.add(r.grupo_completo_id);
+        } else {
+          // Single item in group, show as-is
+          result.push(r);
+          processedGrupos.add(r.grupo_completo_id);
+        }
+      } else if (!r.grupo_completo_id) {
+        // No group, show as-is
+        result.push(r);
+      }
+      // If grupo_completo_id already processed, skip (it's the pair)
+    });
+
+    return result;
+  }, [currentCaraReservas]);
+
+  // Filter reservados by search term and type (uses merged version for display)
   const filteredReservados = useMemo(() => {
-    let data = [...currentCaraReservas];
+    let data = [...currentCaraReservasMerged];
 
     // Filter by type
     if (reservadosTipoFilter !== 'Todos') {
       data = data.filter(r => r.tipo === reservadosTipoFilter);
+    }
+
+    // Filter by isla - only show items that have "ISLA" in the isla column
+    if (showOnlyIslaReservados) {
+      data = data.filter(r => r.isla?.toUpperCase().includes('ISLA'));
     }
 
     // Filter by search term
@@ -1772,8 +2678,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
         r.plaza?.toLowerCase().includes(term) ||
         r.ubicacion?.toLowerCase().includes(term) ||
         r.tipo?.toLowerCase().includes(term) ||
-        r.formato?.toLowerCase().includes(term)
+        r.formato?.toLowerCase().includes(term) ||
+        r.isla?.toLowerCase().includes(term)
       );
+    }
+
+    // Apply grouping (distance or list)
+    if (groupByDistanceReservados) {
+      data = groupModeReservados === 'distancia' ? groupByDistanceFuncReservados(data) : groupByListFuncReservados(data);
     }
 
     // Sort
@@ -1790,9 +2702,74 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
 
     return data;
-  }, [currentCaraReservas, reservadosSearchTerm, reservadosTipoFilter, reservadosSortColumn, reservadosSortDirection]);
+  }, [currentCaraReservasMerged, reservadosSearchTerm, reservadosTipoFilter, showOnlyIslaReservados, groupByDistanceReservados, groupModeReservados, groupByDistanceFuncReservados, groupByListFuncReservados, reservadosSortColumn, reservadosSortDirection]);
 
-  // Group reservados by ciudad (plaza)
+  // Group reservados by distance (computed from filteredReservados)
+  const groupedReservadosByDistance = useMemo(() => {
+    if (!groupByDistanceReservados) return null;
+
+    const groups: Record<string, ReservaItem[]> = {};
+    filteredReservados.forEach(r => {
+      const groupName = r.grupo || 'Sin grupo';
+      if (!groups[groupName]) groups[groupName] = [];
+      groups[groupName].push(r);
+    });
+
+    return Object.entries(groups).sort((a, b) => {
+      const numA = parseInt(a[0].replace('Grupo ', '')) || 999;
+      const numB = parseInt(b[0].replace('Grupo ', '')) || 999;
+      return numA - numB;
+    });
+  }, [filteredReservados, groupByDistanceReservados]);
+
+  // Group reservados by Catorcena > Artículo > Plaza > Formato (hierarchical)
+  const groupedReservadosHierarchy = useMemo(() => {
+    type Level4 = ReservaItem[];
+    type Level3 = Record<string, Level4>; // Formato -> items
+    type Level2 = Record<string, Level3>; // Plaza -> Formato
+    type Level1 = Record<string, Level2>; // Artículo -> Plaza
+    type Level0 = Record<string, Level1>; // Catorcena -> Artículo
+
+    const hierarchy: Level0 = {};
+
+    filteredReservados.forEach(r => {
+      const catorcenaKey = `Cat ${r.catorcena}/${r.anio}`;
+      const articuloKey = r.articulo || 'Sin Artículo';
+      const plazaKey = r.plaza || 'Sin Plaza';
+      const formatoKey = r.formato || 'Sin Formato';
+
+      if (!hierarchy[catorcenaKey]) hierarchy[catorcenaKey] = {};
+      if (!hierarchy[catorcenaKey][articuloKey]) hierarchy[catorcenaKey][articuloKey] = {};
+      if (!hierarchy[catorcenaKey][articuloKey][plazaKey]) hierarchy[catorcenaKey][articuloKey][plazaKey] = {};
+      if (!hierarchy[catorcenaKey][articuloKey][plazaKey][formatoKey]) hierarchy[catorcenaKey][articuloKey][plazaKey][formatoKey] = [];
+
+      hierarchy[catorcenaKey][articuloKey][plazaKey][formatoKey].push(r);
+    });
+
+    return hierarchy;
+  }, [filteredReservados]);
+
+  // Helper to get type breakdown for reservados tab
+  const getReservadosBreakdown = (items: ReservaItem[]) => {
+    const flujo = items.filter(r => r.tipo === 'Flujo').length;
+    const contraflujo = items.filter(r => r.tipo === 'Contraflujo').length;
+    const bonificacion = items.filter(r => r.tipo === 'Bonificacion').length;
+    return { flujo, contraflujo, bonificacion, total: items.length };
+  };
+
+  // Flatten hierarchy to get all items for a level
+  const flattenHierarchy = (data: unknown): ReservaItem[] => {
+    if (Array.isArray(data)) return data;
+    if (typeof data === 'object' && data !== null) {
+      return Object.values(data).flatMap(v => flattenHierarchy(v));
+    }
+    return [];
+  };
+
+  // Get catorcena keys for iteration
+  const catorcenaKeys = useMemo(() => Object.keys(groupedReservadosHierarchy).sort(), [groupedReservadosHierarchy]);
+
+  // Legacy groupedReservados for compatibility (used by toggleAllCiudadGroups)
   const groupedReservados = useMemo(() => {
     const groups: Record<string, ReservaItem[]> = {};
     filteredReservados.forEach(r => {
@@ -1824,6 +2801,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
   // State for expanded ciudad groups in reservados
   const [expandedCiudadGroups, setExpandedCiudadGroups] = useState<Set<string>>(new Set());
+  // Hierarchical expansion state for reservados (uses compound keys: "catorcena|articulo|plaza|formato")
+  const [expandedReservadosHierarchy, setExpandedReservadosHierarchy] = useState<Set<string>>(new Set());
 
   // Toggle ciudad group expansion
   const toggleCiudadGroupExpansion = (ciudad: string) => {
@@ -1835,6 +2814,40 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     });
   };
 
+  // Toggle hierarchical expansion for reservados
+  const toggleReservadosHierarchy = (key: string) => {
+    setExpandedReservadosHierarchy(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Toggle all hierarchical groups
+  const toggleAllReservadosHierarchy = () => {
+    // Collect all possible keys
+    const allKeys: string[] = [];
+    Object.entries(groupedReservadosHierarchy).forEach(([catKey, articulos]) => {
+      allKeys.push(catKey);
+      Object.entries(articulos).forEach(([artKey, plazas]) => {
+        allKeys.push(`${catKey}|${artKey}`);
+        Object.entries(plazas).forEach(([plzKey, formatos]) => {
+          allKeys.push(`${catKey}|${artKey}|${plzKey}`);
+          Object.keys(formatos).forEach(fmtKey => {
+            allKeys.push(`${catKey}|${artKey}|${plzKey}|${fmtKey}`);
+          });
+        });
+      });
+    });
+
+    if (expandedReservadosHierarchy.size >= allKeys.length) {
+      setExpandedReservadosHierarchy(new Set());
+    } else {
+      setExpandedReservadosHierarchy(new Set(allKeys));
+    }
+  };
+
   // Toggle select all reservados
   const handleToggleSelectAllReservados = () => {
     if (selectedReservados.size === filteredReservados.length) {
@@ -1842,6 +2855,30 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     } else {
       setSelectedReservados(new Set(filteredReservados.map(r => r.id)));
     }
+  };
+
+  // Toggle distance group expansion (reservados)
+  const toggleGroupExpansionReservados = (groupName: string) => {
+    setExpandedGroupsReservados(prev => {
+      const next = new Set(prev);
+      if (next.has(groupName)) next.delete(groupName);
+      else next.add(groupName);
+      return next;
+    });
+  };
+
+  // Toggle all items in a distance group (reservados)
+  const toggleAllInGroupReservados = (items: ReservaItem[]) => {
+    const allSelected = items.every(r => selectedReservados.has(r.id));
+    setSelectedReservados(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        items.forEach(r => next.delete(r.id));
+      } else {
+        items.forEach(r => next.add(r.id));
+      }
+      return next;
+    });
   };
 
   // Toggle single reservado selection
@@ -1877,9 +2914,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
           handleRefetchDisponibles();
 
           setReservas(prev => prev.filter(r => r.id !== reservaId));
+          showToast('Reserva eliminada correctamente', 'success');
         } catch (error) {
           console.error('Error deleting reserva:', error);
-          alert('Error al eliminar reserva');
+          showToast('Error al eliminar reserva', 'error');
         } finally {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         }
@@ -1909,6 +2947,56 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
   const handleCancelEdit = () => {
     setEditingReserva(null);
     setEditingFormato('');
+  };
+
+  // Bulk delete selected reservas
+  const handleBulkDeleteReservas = () => {
+    // Get selected reservas
+    const selectedReservasList = reservas.filter(r => selectedReservados.has(r.id));
+    if (selectedReservasList.length === 0) return;
+
+    // Separate reservas with backend IDs from those without
+    const reservasWithBackendId = selectedReservasList.filter(r => r.reservaId);
+    const reservasLocalOnly = selectedReservasList.filter(r => !r.reservaId);
+    const backendIds = reservasWithBackendId.map(r => r.reservaId!);
+
+    // If all are local-only (not saved to DB yet), just remove from state
+    if (backendIds.length === 0) {
+      setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
+      setSelectedReservados(new Set());
+      showToast(`${selectedReservasList.length} reservas eliminadas`, 'success');
+      return;
+    }
+
+    // Show confirmation for backend deletion
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Reservas',
+      message: `¿Seguro que quieres eliminar ${selectedReservasList.length} reserva(s)?${reservasLocalOnly.length > 0 ? ` (${reservasLocalOnly.length} pendientes + ${backendIds.length} guardadas)` : ''}`,
+      confirmText: 'Eliminar',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          // Delete from backend if there are any with reservaId
+          if (backendIds.length > 0) {
+            await propuestasService.deleteReservas(propuesta.id, backendIds);
+            queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+            queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
+            handleRefetchDisponibles();
+          }
+
+          // Remove all selected from local state
+          setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
+          setSelectedReservados(new Set());
+          showToast(`${selectedReservasList.length} reserva(s) eliminada(s) correctamente`, 'success');
+        } catch (error) {
+          console.error('Error deleting reservas:', error);
+          showToast('Error al eliminar reservas', 'error');
+        } finally {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
   };
 
   if (!isOpen) return null;
@@ -1959,11 +3047,34 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
     </div>
   );
 
+  // Toast notification JSX
+  const toastJSX = toast.show && (
+    <div className={`fixed top-4 right-4 z-[70] animate-in slide-in-from-top fade-in duration-300 max-w-md`}>
+      <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${
+        toast.type === 'success' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300' :
+        toast.type === 'error' ? 'bg-red-500/20 border-red-500/50 text-red-300' :
+        'bg-purple-500/20 border-purple-500/50 text-purple-300'
+      }`}>
+        {toast.type === 'success' && <Check className="h-5 w-5 flex-shrink-0" />}
+        {toast.type === 'error' && <X className="h-5 w-5 flex-shrink-0" />}
+        {toast.type === 'info' && <FileText className="h-5 w-5 flex-shrink-0" />}
+        <span className="text-sm font-medium">{toast.message}</span>
+        <button
+          onClick={() => setToast(prev => ({ ...prev, show: false }))}
+          className="ml-2 p-1 hover:bg-white/10 rounded transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+
   // Render inventory search view
   if (viewState === 'search-inventory') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         {confirmModalJSX}
+        {toastJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
 
         <div className="relative w-[95vw] max-w-[1600px] h-[90vh] bg-zinc-900 rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden">
@@ -2017,21 +3128,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
               <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-zinc-400 flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-amber-500" />
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
                     Contraflujo
                   </span>
-                  <span className="text-sm font-bold text-amber-400">
+                  <span className="text-sm font-bold text-blue-400">
                     {(selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo} / {selectedCaraForSearch?.caras_contraflujo || 0}
                   </span>
                 </div>
                 <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all"
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
                     style={{ width: `${Math.min(100, ((selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo) / (selectedCaraForSearch?.caras_contraflujo || 1) * 100)}%` }}
                   />
                 </div>
                 <div className="mt-1 text-xs text-zinc-500">
-                  <span className="text-amber-400 font-medium">{remainingToAssign.contraflujo}</span> restantes
+                  <span className="text-blue-400 font-medium">{remainingToAssign.contraflujo}</span> restantes
                 </div>
               </div>
 
@@ -2112,8 +3223,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         key={opt}
                         onClick={() => setFlujoFilter(opt)}
                         className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${flujoFilter === opt
-                          ? opt === 'Todos' ? 'bg-purple-500 text-white shadow' :
-                            opt === 'Flujo' ? 'bg-blue-500 text-white shadow' : 'bg-amber-500 text-white shadow'
+                          ? 'bg-blue-500 text-white shadow'
                           : 'text-zinc-400 hover:text-white'
                           }`}
                       >
@@ -2123,21 +3233,6 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                   </div>
 
                   <div className="w-px h-6 bg-zinc-700" />
-
-                  {/* Unique filter */}
-                  <button
-                    onClick={() => { setShowOnlyUnicos(!showOnlyUnicos); if (!showOnlyUnicos) setShowOnlyCompletos(false); }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicos
-                      ? 'bg-cyan-500 text-white shadow'
-                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
-                      }`}
-                  >
-                    <Grid className="h-3.5 w-3.5" />
-                    Únicos
-                    {showOnlyUnicos && (
-                      <X className="h-3 w-3 ml-0.5 hover:text-cyan-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicos(false); }} />
-                    )}
-                  </button>
 
                   {/* Complete filter */}
                   <button
@@ -2154,7 +3249,81 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     )}
                   </button>
 
-                  {/* Distance grouping */}
+                  {/* Unique filter for traditional items - only show when there are traditional items */}
+                  {hasTradicionalInventory && (
+                    <button
+                      onClick={() => { setShowOnlyUnicos(!showOnlyUnicos); if (!showOnlyUnicos) setShowOnlyCompletos(false); }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicos
+                        ? 'bg-cyan-500 text-white shadow'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        }`}
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      Únicos
+                      {showOnlyUnicos && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-cyan-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicos(false); }} />
+                      )}
+                    </button>
+                  )}
+
+                  {/* Unique digital filter - only show when there are digital items */}
+                  {hasDigitalInventory && (
+                    <button
+                      onClick={() => setShowOnlyUnicosDigitales(!showOnlyUnicosDigitales)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicosDigitales
+                        ? 'bg-orange-500 text-white shadow'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        }`}
+                    >
+                      <Monitor className="h-3.5 w-3.5" />
+                      Únicos Digitales
+                      {showOnlyUnicosDigitales && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-orange-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicosDigitales(false); }} />
+                      )}
+                    </button>
+                  )}
+
+                  {/* Spot único filter - only show when there are digital items */}
+                  {hasDigitalInventory && (
+                    <button
+                      onClick={() => setShowSpotUnico(!showSpotUnico)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showSpotUnico
+                        ? 'bg-violet-500 text-white shadow'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        }`}
+                      title="Mostrar inventarios digitales una sola vez con indicador de spots disponibles"
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      Spot único
+                      {showSpotUnico && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-violet-200" onClick={(e) => { e.stopPropagation(); setShowSpotUnico(false); }} />
+                      )}
+                    </button>
+                  )}
+
+                  {/* Isla filter */}
+                  <button
+                    onClick={() => {
+                      setShowOnlyIsla(!showOnlyIsla);
+                      // When activating isla filter, auto-sort by codigo ascending
+                      if (!showOnlyIsla) {
+                        setSortColumn('codigo_unico');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyIsla
+                      ? 'bg-teal-500 text-white shadow'
+                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                      }`}
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                    Isla
+                    {showOnlyIsla && (
+                      <X className="h-3 w-3 ml-0.5 hover:text-teal-200" onClick={(e) => { e.stopPropagation(); setShowOnlyIsla(false); }} />
+                    )}
+                  </button>
+
+                  {/* Grouping */}
                   <button
                     onClick={() => setGroupByDistance(!groupByDistance)}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${groupByDistance
@@ -2170,16 +3339,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                   </button>
                   {groupByDistance && (
                     <>
-                      <select
-                        value={distanciaGrupos}
-                        onChange={(e) => setDistanciaGrupos(parseInt(e.target.value))}
-                        className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
-                      >
-                        <option value={100}>100m</option>
-                        <option value={200}>200m</option>
-                        <option value={500}>500m</option>
-                        <option value={1000}>1km</option>
-                      </select>
+                      <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                        <button
+                          onClick={() => setGroupMode('distancia')}
+                          className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupMode === 'distancia' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                        >
+                          Distancia
+                        </button>
+                        <button
+                          onClick={() => setGroupMode('listado')}
+                          className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupMode === 'listado' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                        >
+                          Listado
+                        </button>
+                      </div>
+                      {groupMode === 'distancia' && (
+                        <select
+                          value={distanciaGrupos}
+                          onChange={(e) => setDistanciaGrupos(parseInt(e.target.value))}
+                          className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        >
+                          <option value={100}>100m</option>
+                          <option value={200}>200m</option>
+                          <option value={500}>500m</option>
+                          <option value={1000}>1km</option>
+                        </select>
+                      )}
                       <input
                         type="number"
                         value={tamanoGrupo}
@@ -2187,6 +3372,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
                         min={2}
                         max={50}
+                        title="Tamaño de grupo"
                       />
                     </>
                   )}
@@ -2262,7 +3448,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     </span>
 
                     {/* Clear all filters */}
-                    {(flujoFilter !== 'Todos' || showOnlyUnicos || showOnlyCompletos || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
+                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicos || showOnlyUnicosDigitales || showSpotUnico || showOnlyIsla || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
                       <button
                         onClick={clearAllFilters}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -2271,6 +3457,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         Limpiar
                       </button>
                     )}
+
+                    {/* Download CSV */}
+                    <button
+                      onClick={downloadDisponiblesCSV}
+                      disabled={processedInventory.length === 0}
+                      className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+                      title="Descargar CSV"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
 
                     {/* Refresh */}
                     <button
@@ -2355,7 +3551,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                   if (selectedInventory.size === processedInventory.length) {
                                     setSelectedInventory(new Set());
                                   } else {
-                                    setSelectedInventory(new Set(processedInventory.map(i => i.id)));
+                                    setSelectedInventory(new Set(processedInventory.map(i => getInventoryKey(i))));
                                   }
                                 }}
                                 className="checkbox-purple"
@@ -2373,6 +3569,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                 {sortColumn !== 'codigo_unico' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
                               </div>
                             </th>
+                            {hasDigitalInventory && (
+                              <th className="px-3 py-2 text-left text-xs text-zinc-400 font-medium">
+                                Espacio
+                              </th>
+                            )}
                             <th
                               className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
                               onClick={() => handleSort('tipo_de_cara')}
@@ -2395,6 +3596,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                   sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
                                 )}
                                 {sortColumn !== 'plaza' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                              </div>
+                            </th>
+                            <th
+                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              onClick={() => handleSort('isla')}
+                            >
+                              <div className="flex items-center gap-1">
+                                Isla
+                                {sortColumn === 'isla' && (
+                                  sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                                )}
+                                {sortColumn !== 'isla' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
                               </div>
                             </th>
                             <th
@@ -2433,7 +3646,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                   className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
                                   onClick={() => toggleGroupExpansion(groupName)}
                                 >
-                                  <td colSpan={6} className="px-3 py-2">
+                                  <td colSpan={hasDigitalInventory ? 8 : 7} className="px-3 py-2">
                                     <div className="flex items-center gap-3">
                                       {expandedGroups.has(groupName) ? (
                                         <ChevronDown className="h-4 w-4 text-purple-400" />
@@ -2447,11 +3660,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          selectAllInGroup(items);
+                                          toggleAllInGroup(items);
                                         }}
                                         className="ml-auto text-xs text-purple-400 hover:text-purple-300"
                                       >
-                                        Seleccionar todos
+                                        {items.every(inv => selectedInventory.has(getInventoryKey(inv))) ? 'Deseleccionar' : 'Seleccionar todos'}
                                       </button>
                                     </div>
                                   </td>
@@ -2459,9 +3672,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                 {/* Group Items */}
                                 {expandedGroups.has(groupName) && items.map((inv) => (
                                   <tr
-                                    key={inv.id}
-                                    onClick={() => toggleInventorySelection(inv.id)}
-                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(inv.id)
+                                    key={getInventoryKey(inv)}
+                                    onClick={() => toggleInventorySelection(getInventoryKey(inv))}
+                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(getInventoryKey(inv))
                                       ? 'bg-purple-500/10'
                                       : inv.ya_reservado_para_cara
                                         ? 'bg-green-500/5'
@@ -2471,24 +3684,36 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                     <td className="px-3 py-2 pl-8">
                                       <input
                                         type="checkbox"
-                                        checked={selectedInventory.has(inv.id)}
-                                        onChange={() => toggleInventorySelection(inv.id)}
+                                        checked={selectedInventory.has(getInventoryKey(inv))}
+                                        onChange={() => toggleInventorySelection(getInventoryKey(inv))}
                                         onClick={(e) => e.stopPropagation()}
                                         className="checkbox-purple"
                                       />
                                     </td>
                                     <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                    {hasDigitalInventory && (
+                                      <td className="px-3 py-2 text-zinc-400 text-xs">
+                                        {inv.isCollapsedSpot ? (
+                                          <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
+                                            {inv.spots_disponibles}/{inv.total_espacios}
+                                          </span>
+                                        ) : inv.numero_espacio && inv.total_espacios ? (
+                                          <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
+                                            {inv.numero_espacio} de {inv.total_espacios}
+                                          </span>
+                                        ) : '-'}
+                                      </td>
+                                    )}
                                     <td className="px-3 py-2">
-                                      <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Flujo'
-                                        ? 'bg-blue-500/20 text-blue-300'
-                                        : inv.tipo_de_cara === 'Completo'
-                                          ? 'bg-purple-500/20 text-purple-300'
-                                          : 'bg-amber-500/20 text-amber-300'
+                                      <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Completo'
+                                        ? 'bg-purple-500/20 text-purple-300'
+                                        : 'bg-blue-500/20 text-blue-300'
                                         }`}>
                                         {inv.tipo_de_cara || '-'}
                                       </span>
                                     </td>
                                     <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
+                                    <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
                                       {inv.ubicacion}
@@ -2501,9 +3726,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                             // Normal flat view
                             processedInventory.map((inv) => (
                               <tr
-                                key={inv.id}
-                                onClick={() => toggleInventorySelection(inv.id)}
-                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(inv.id)
+                                key={getInventoryKey(inv)}
+                                onClick={() => toggleInventorySelection(getInventoryKey(inv))}
+                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(getInventoryKey(inv))
                                   ? 'bg-purple-500/10'
                                   : inv.ya_reservado_para_cara
                                     ? 'bg-green-500/5'
@@ -2513,24 +3738,36 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                                 <td className="px-3 py-2">
                                   <input
                                     type="checkbox"
-                                    checked={selectedInventory.has(inv.id)}
-                                    onChange={() => toggleInventorySelection(inv.id)}
+                                    checked={selectedInventory.has(getInventoryKey(inv))}
+                                    onChange={() => toggleInventorySelection(getInventoryKey(inv))}
                                     onClick={(e) => e.stopPropagation()}
                                     className="checkbox-purple"
                                   />
                                 </td>
                                 <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                {hasDigitalInventory && (
+                                  <td className="px-3 py-2 text-zinc-400 text-xs">
+                                    {inv.isCollapsedSpot ? (
+                                      <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
+                                        {inv.spots_disponibles}/{inv.total_espacios}
+                                      </span>
+                                    ) : inv.numero_espacio && inv.total_espacios ? (
+                                      <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
+                                        {inv.numero_espacio} de {inv.total_espacios}
+                                      </span>
+                                    ) : '-'}
+                                  </td>
+                                )}
                                 <td className="px-3 py-2">
-                                  <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Flujo'
-                                    ? 'bg-blue-500/20 text-blue-300'
-                                    : inv.tipo_de_cara === 'Completo'
-                                      ? 'bg-purple-500/20 text-purple-300'
-                                      : 'bg-amber-500/20 text-amber-300'
+                                  <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Completo'
+                                    ? 'bg-purple-500/20 text-purple-300'
+                                    : 'bg-blue-500/20 text-blue-300'
                                     }`}>
                                     {inv.tipo_de_cara || '-'}
                                   </span>
                                 </td>
                                 <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
+                                <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
                                   {inv.ubicacion}
@@ -2589,8 +3826,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                   {mapsLoaded ? (
                     <AdvancedMapComponent
                       inventarios={processedInventory}
-                      selectedInventory={selectedInventory}
-                      onToggleSelection={toggleInventorySelection}
+                      selectedInventory={new Set(Array.from(selectedInventory).map(key => parseInt(key.split('_')[0])))}
+                      onToggleSelection={(id: number) => {
+                        const inv = processedInventory.find(i => i.id === id);
+                        if (inv) toggleInventorySelection(getInventoryKey(inv));
+                      }}
                       mapCenter={mapCenter}
                       onFilterByPOI={handlePOIFilter}
                       hasPOIFilter={poiFilterIds !== null}
@@ -2622,16 +3862,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         className="w-full pl-9 pr-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                       />
                     </div>
-                    {selectedReservados.size > 0 && (
+                    {effectiveCanEdit && selectedReservados.size > 0 && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-purple-400 px-2 py-1 bg-purple-500/20 rounded-full">
                           {selectedReservados.size} seleccionados
                         </span>
                         <button
-                          onClick={() => {
-                            setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
-                            setSelectedReservados(new Set());
-                          }}
+                          onClick={handleBulkDeleteReservas}
                           className="flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30 transition-colors"
                         >
                           <Trash2 className="h-3 w-3" />
@@ -2643,17 +3880,99 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
                   {/* Row 2: Filters and Tools */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    {/* Type Filter */}
-                    <select
-                      value={reservadosTipoFilter}
-                      onChange={(e) => setReservadosTipoFilter(e.target.value as any)}
-                      className="px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                    {/* Type Filter - Toggle Buttons */}
+                    <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                      {(['Todos', 'Flujo', 'Contraflujo', 'Bonificacion'] as const).map(opt => (
+                        <button
+                          key={opt}
+                          onClick={() => setReservadosTipoFilter(opt)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${reservadosTipoFilter === opt
+                            ? opt === 'Todos' ? 'bg-zinc-600 text-white shadow'
+                              : opt === 'Bonificacion' ? 'bg-emerald-500 text-white shadow'
+                              : 'bg-blue-500 text-white shadow'
+                            : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
+                          }`}
+                        >
+                          {opt === 'Bonificacion' ? 'Bonif.' : opt}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Isla filter */}
+                    <button
+                      onClick={() => {
+                        setShowOnlyIslaReservados(!showOnlyIslaReservados);
+                        // When activating isla filter, auto-sort by codigo ascending
+                        if (!showOnlyIslaReservados) {
+                          setReservadosSortColumn('codigo');
+                          setReservadosSortDirection('asc');
+                        }
+                      }}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyIslaReservados
+                        ? 'bg-teal-500 text-white shadow'
+                        : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white'
+                        }`}
                     >
-                      <option value="Todos">Todos los tipos</option>
-                      <option value="Flujo">Flujo</option>
-                      <option value="Contraflujo">Contraflujo</option>
-                      <option value="Bonificacion">Bonificación</option>
-                    </select>
+                      <MapPin className="h-3 w-3" />
+                      Isla
+                      {showOnlyIslaReservados && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-teal-200" onClick={(e) => { e.stopPropagation(); setShowOnlyIslaReservados(false); }} />
+                      )}
+                    </button>
+
+                    {/* Grouping */}
+                    <button
+                      onClick={() => setGroupByDistanceReservados(!groupByDistanceReservados)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${groupByDistanceReservados
+                        ? 'bg-green-500 text-white shadow'
+                        : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white'
+                        }`}
+                    >
+                      <Ruler className="h-3.5 w-3.5" />
+                      Agrupar
+                      {groupByDistanceReservados && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-green-200" onClick={(e) => { e.stopPropagation(); setGroupByDistanceReservados(false); }} />
+                      )}
+                    </button>
+                    {groupByDistanceReservados && (
+                      <>
+                        <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                          <button
+                            onClick={() => setGroupModeReservados('distancia')}
+                            className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupModeReservados === 'distancia' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                          >
+                            Distancia
+                          </button>
+                          <button
+                            onClick={() => setGroupModeReservados('listado')}
+                            className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupModeReservados === 'listado' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                          >
+                            Listado
+                          </button>
+                        </div>
+                        {groupModeReservados === 'distancia' && (
+                          <select
+                            value={distanciaGruposReservados}
+                            onChange={(e) => setDistanciaGruposReservados(parseInt(e.target.value))}
+                            className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                          >
+                            <option value={100}>100m</option>
+                            <option value={200}>200m</option>
+                            <option value={500}>500m</option>
+                            <option value={1000}>1km</option>
+                          </select>
+                        )}
+                        <input
+                          type="number"
+                          value={tamanoGrupoReservados}
+                          onChange={(e) => setTamanoGrupoReservados(parseInt(e.target.value) || 10)}
+                          className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                          min={2}
+                          max={50}
+                          title="Tamaño de grupo"
+                        />
+                      </>
+                    )}
 
                     {/* Sort */}
                     <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1">
@@ -2678,23 +3997,39 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       </button>
                     </div>
 
-                    {/* Expand/Collapse All */}
+                    {/* Toggle Grouped/Flat View */}
                     <button
-                      onClick={toggleAllCiudadGroups}
-                      className="flex items-center gap-1 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-400 hover:text-white transition-colors"
+                      onClick={() => setShowReservasFlatList(!showReservasFlatList)}
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                        showReservasFlatList
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                          : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white'
+                      }`}
+                      title={showReservasFlatList ? 'Mostrar agrupado' : 'Mostrar lista plana'}
                     >
-                      {expandedCiudadGroups.size === groupedReservados.length ? (
-                        <>
-                          <ChevronUp className="h-3 w-3" />
-                          Colapsar
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="h-3 w-3" />
-                          Expandir
-                        </>
-                      )}
+                      <Layers className="h-3 w-3" />
+                      {showReservasFlatList ? 'Agrupar' : 'Lista Plana'}
                     </button>
+
+                    {/* Expand/Collapse All - Only show when grouped */}
+                    {!showReservasFlatList && (
+                      <button
+                        onClick={toggleAllReservadosHierarchy}
+                        className="flex items-center gap-1 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-400 hover:text-white transition-colors"
+                      >
+                        {expandedReservadosHierarchy.size > 0 ? (
+                          <>
+                            <ChevronUp className="h-3 w-3" />
+                            Colapsar
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="h-3 w-3" />
+                            Expandir
+                          </>
+                        )}
+                      </button>
+                    )}
 
                     {/* Results count */}
                     <span className="text-xs text-zinc-500 ml-auto">
@@ -2725,86 +4060,387 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Código</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Tipo</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Formato</th>
+                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Isla</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Ubicación</th>
-                          <th className="px-4 py-3 text-center text-xs text-zinc-400 font-medium">Acciones</th>
+                          {effectiveCanEdit && <th className="px-4 py-3 text-center text-xs text-zinc-400 font-medium">Acciones</th>}
                         </tr>
                       </thead>
                       <tbody>
-                        {/* Grouped by Ciudad */}
-                        {groupedReservados.map(([ciudad, items]) => (
-                          <React.Fragment key={ciudad}>
-                            {/* Ciudad Group Header */}
-                            <tr
-                              className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
-                              onClick={() => toggleCiudadGroupExpansion(ciudad)}
-                            >
-                              <td colSpan={6} className="px-3 py-2">
-                                <div className="flex items-center gap-3">
-                                  {expandedCiudadGroups.has(ciudad) ? (
-                                    <ChevronDown className="h-4 w-4 text-purple-400" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4 text-purple-400" />
-                                  )}
-                                  <MapPin className="h-4 w-4 text-zinc-500" />
-                                  <span className="text-sm font-medium text-white">{ciudad}</span>
-                                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
-                                    {items.length} reservas
-                                  </span>
-                                </div>
-                              </td>
-                            </tr>
-                            {/* Ciudad Items */}
-                            {expandedCiudadGroups.has(ciudad) && items.map((reserva) => (
+                        {/* Distance Grouped View */}
+                        {groupByDistanceReservados && groupedReservadosByDistance ? (
+                          groupedReservadosByDistance.map(([groupName, items]) => (
+                            <React.Fragment key={groupName}>
+                              {/* Group Header */}
                               <tr
-                                key={reserva.id}
-                                onClick={() => handleToggleReservadoSelection(reserva.id)}
-                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'}`}
+                                className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
+                                onClick={() => toggleGroupExpansionReservados(groupName)}
                               >
-                                <td className="px-3 py-3 pl-8 text-center" onClick={(e) => e.stopPropagation()}>
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedReservados.has(reserva.id)}
-                                    onChange={() => handleToggleReservadoSelection(reserva.id)}
-                                    className="checkbox-purple"
-                                  />
-                                </td>
-                                <td className="px-4 py-3 text-zinc-300 font-mono text-sm">{reserva.codigo_unico}</td>
-                                <td className="px-4 py-3">
-                                  <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
-                                    ? 'bg-blue-500/20 text-blue-300'
-                                    : reserva.tipo === 'Bonificacion'
-                                      ? 'bg-emerald-500/20 text-emerald-300'
-                                      : 'bg-amber-500/20 text-amber-300'
-                                    }`}>
-                                    {reserva.tipo}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-zinc-300">{reserva.formato || '-'}</td>
-                                <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
-                                  {reserva.ubicacion || '-'}
-                                </td>
-                                <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center justify-center gap-1">
+                                <td colSpan={effectiveCanEdit ? 7 : 6} className="px-3 py-2">
+                                  <div className="flex items-center gap-3">
+                                    {expandedGroupsReservados.has(groupName) ? (
+                                      <ChevronDown className="h-4 w-4 text-green-400" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-green-400" />
+                                    )}
+                                    <span className="text-sm font-medium text-white">{groupName}</span>
+                                    <span className="px-2 py-0.5 bg-green-500/20 text-green-300 rounded-full text-xs">
+                                      {items.length} sitios
+                                    </span>
                                     <button
-                                      onClick={() => handleEditReserva(reserva)}
-                                      className="p-1.5 text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
-                                      title="Editar formato"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleAllInGroupReservados(items);
+                                      }}
+                                      className="ml-auto text-xs text-green-400 hover:text-green-300"
                                     >
-                                      <Pencil className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleRemoveReserva(reserva.id)}
-                                      className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                      title="Quitar reserva"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
+                                      {items.every(r => selectedReservados.has(r.id)) ? 'Deseleccionar' : 'Seleccionar todos'}
                                     </button>
                                   </div>
                                 </td>
                               </tr>
-                            ))}
-                          </React.Fragment>
-                        ))}
+                              {/* Group Items */}
+                              {expandedGroupsReservados.has(groupName) && items.map((reserva) => (
+                                <tr
+                                  key={reserva.id}
+                                  className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer ${
+                                    selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : ''
+                                  }`}
+                                  onClick={() => handleToggleReservadoSelection(reserva.id)}
+                                >
+                                  <td className="px-3 py-2 pl-8">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedReservados.has(reserva.id)}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleReservadoSelection(reserva.id);
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="checkbox-purple"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <span className="text-sm text-white font-medium">{reserva.codigo_unico}</span>
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <span className={`px-2 py-1 rounded-full text-xs ${
+                                      reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+                                    }`}>
+                                      {reserva.tipo}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
+                                  <td className="px-4 py-2 text-sm text-zinc-400">{reserva.isla || '-'}</td>
+                                  <td className="px-4 py-2 text-sm text-zinc-400">{reserva.plaza}</td>
+                                  {effectiveCanEdit && (
+                                    <td className="px-4 py-2 text-center">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleRemoveReserva(reserva.id); }}
+                                        className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                                        title="Eliminar"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          ))
+                        ) : showReservasFlatList ? (
+                          /* Flat List View */
+                          filteredReservados.map((reserva) => (
+                            <tr
+                              key={reserva.id}
+                              className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer ${
+                                selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : ''
+                              } ${selectedMapReservas.has(reserva.id) ? 'ring-1 ring-purple-500' : ''}`}
+                              onClick={() => handleToggleReservadoSelection(reserva.id)}
+                            >
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedReservados.has(reserva.id)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleReservadoSelection(reserva.id);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="checkbox-purple"
+                                />
+                              </td>
+                              <td className="px-4 py-2">
+                                <span className="text-sm text-white font-medium">{reserva.codigo_unico}</span>
+                              </td>
+                              <td className="px-4 py-2">
+                                <span className={`px-2 py-1 rounded-full text-xs ${
+                                  reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+                                }`}>
+                                  {reserva.tipo}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
+                              <td className="px-4 py-2 text-sm text-zinc-400">{reserva.isla || '-'}</td>
+                              <td className="px-4 py-2 text-sm text-zinc-400">{reserva.plaza}</td>
+                              {effectiveCanEdit && (
+                                <td className="px-4 py-2 text-center">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleRemoveReserva(reserva.id); }}
+                                    className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))
+                        ) : (
+                          /* Hierarchical: Catorcena > Artículo > Plaza > Formato */
+                          catorcenaKeys.map((catKey) => {
+                            const catItems = flattenHierarchy(groupedReservadosHierarchy[catKey]);
+                            const catBreakdown = getReservadosBreakdown(catItems);
+                            const catExpanded = expandedReservadosHierarchy.has(catKey);
+
+                            return (
+                              <React.Fragment key={catKey}>
+                                {/* Level 0: Catorcena Header */}
+                                <tr
+                                  className="bg-zinc-800/90 cursor-pointer hover:bg-zinc-800"
+                                  onClick={() => toggleReservadosHierarchy(catKey)}
+                                >
+                                  <td colSpan={7} className="px-3 py-2">
+                                    <div className="flex items-center gap-3">
+                                      {catExpanded ? (
+                                        <ChevronDown className="h-4 w-4 text-purple-400" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4 text-purple-400" />
+                                      )}
+                                      <Calendar className="h-4 w-4 text-purple-400" />
+                                      <span className="text-sm font-semibold text-white">{catKey}</span>
+                                      <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                                        {catBreakdown.total} caras
+                                      </span>
+                                      <div className="flex gap-1 ml-2">
+                                        {catBreakdown.flujo > 0 && (
+                                          <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                            F:{catBreakdown.flujo}
+                                          </span>
+                                        )}
+                                        {catBreakdown.contraflujo > 0 && (
+                                          <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                            C:{catBreakdown.contraflujo}
+                                          </span>
+                                        )}
+                                        {catBreakdown.bonificacion > 0 && (
+                                          <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                            B:{catBreakdown.bonificacion}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+
+                                {/* Level 1: Artículos */}
+                                {catExpanded && Object.entries(groupedReservadosHierarchy[catKey]).map(([artKey, plazas]) => {
+                                  const artKeyFull = `${catKey}|${artKey}`;
+                                  const artItems = flattenHierarchy(plazas);
+                                const artBreakdown = getReservadosBreakdown(artItems);
+                                const artExpanded = expandedReservadosHierarchy.has(artKeyFull);
+
+                                return (
+                                  <React.Fragment key={artKeyFull}>
+                                    <tr
+                                      className="bg-zinc-800/60 cursor-pointer hover:bg-zinc-800/80"
+                                      onClick={() => toggleReservadosHierarchy(artKeyFull)}
+                                    >
+                                      <td colSpan={7} className="px-3 py-2 pl-8">
+                                        <div className="flex items-center gap-3">
+                                          {artExpanded ? (
+                                            <ChevronDown className="h-4 w-4 text-indigo-400" />
+                                          ) : (
+                                            <ChevronRight className="h-4 w-4 text-indigo-400" />
+                                          )}
+                                          <Package className="h-4 w-4 text-indigo-400" />
+                                          <span className="text-sm font-medium text-zinc-200">{artKey}</span>
+                                          <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-full text-xs">
+                                            {artBreakdown.total}
+                                          </span>
+                                          <div className="flex gap-1 ml-1">
+                                            {artBreakdown.flujo > 0 && (
+                                              <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                                F:{artBreakdown.flujo}
+                                              </span>
+                                            )}
+                                            {artBreakdown.contraflujo > 0 && (
+                                              <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                                C:{artBreakdown.contraflujo}
+                                              </span>
+                                            )}
+                                            {artBreakdown.bonificacion > 0 && (
+                                              <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                                B:{artBreakdown.bonificacion}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+
+                                    {/* Level 2: Plazas */}
+                                    {artExpanded && Object.entries(plazas).map(([plzKey, formatos]) => {
+                                      const plzKeyFull = `${artKeyFull}|${plzKey}`;
+                                      const plzItems = flattenHierarchy(formatos);
+                                      const plzBreakdown = getReservadosBreakdown(plzItems);
+                                      const plzExpanded = expandedReservadosHierarchy.has(plzKeyFull);
+
+                                      return (
+                                        <React.Fragment key={plzKeyFull}>
+                                          <tr
+                                            className="bg-zinc-800/40 cursor-pointer hover:bg-zinc-800/60"
+                                            onClick={() => toggleReservadosHierarchy(plzKeyFull)}
+                                          >
+                                            <td colSpan={7} className="px-3 py-2 pl-14">
+                                              <div className="flex items-center gap-3">
+                                                {plzExpanded ? (
+                                                  <ChevronDown className="h-4 w-4 text-cyan-400" />
+                                                ) : (
+                                                  <ChevronRight className="h-4 w-4 text-cyan-400" />
+                                                )}
+                                                <MapPin className="h-4 w-4 text-cyan-400" />
+                                                <span className="text-sm text-zinc-300">{plzKey}</span>
+                                                <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded-full text-xs">
+                                                  {plzBreakdown.total}
+                                                </span>
+                                                <div className="flex gap-1 ml-1">
+                                                  {plzBreakdown.flujo > 0 && (
+                                                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                                      F:{plzBreakdown.flujo}
+                                                    </span>
+                                                  )}
+                                                  {plzBreakdown.contraflujo > 0 && (
+                                                    <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                                      C:{plzBreakdown.contraflujo}
+                                                    </span>
+                                                  )}
+                                                  {plzBreakdown.bonificacion > 0 && (
+                                                    <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                                      B:{plzBreakdown.bonificacion}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </td>
+                                          </tr>
+
+                                          {/* Level 3: Formatos */}
+                                          {plzExpanded && Object.entries(formatos).map(([fmtKey, items]) => {
+                                            const fmtKeyFull = `${plzKeyFull}|${fmtKey}`;
+                                            const fmtBreakdown = getReservadosBreakdown(items);
+                                            const fmtExpanded = expandedReservadosHierarchy.has(fmtKeyFull);
+
+                                            return (
+                                              <React.Fragment key={fmtKeyFull}>
+                                                <tr
+                                                  className="bg-zinc-800/20 cursor-pointer hover:bg-zinc-800/40"
+                                                  onClick={() => toggleReservadosHierarchy(fmtKeyFull)}
+                                                >
+                                                  <td colSpan={7} className="px-3 py-2 pl-20">
+                                                    <div className="flex items-center gap-3">
+                                                      {fmtExpanded ? (
+                                                        <ChevronDown className="h-4 w-4 text-zinc-500" />
+                                                      ) : (
+                                                        <ChevronRight className="h-4 w-4 text-zinc-500" />
+                                                      )}
+                                                      <LayoutGrid className="h-4 w-4 text-zinc-500" />
+                                                      <span className="text-sm text-zinc-400">{fmtKey}</span>
+                                                      <span className="px-2 py-0.5 bg-zinc-700 text-zinc-300 rounded-full text-xs">
+                                                        {fmtBreakdown.total}
+                                                      </span>
+                                                      <div className="flex gap-1 ml-1">
+                                                        {fmtBreakdown.flujo > 0 && (
+                                                          <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                                            F:{fmtBreakdown.flujo}
+                                                          </span>
+                                                        )}
+                                                        {fmtBreakdown.contraflujo > 0 && (
+                                                          <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                                            C:{fmtBreakdown.contraflujo}
+                                                          </span>
+                                                        )}
+                                                        {fmtBreakdown.bonificacion > 0 && (
+                                                          <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                                            B:{fmtBreakdown.bonificacion}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  </td>
+                                                </tr>
+
+                                                {/* Individual items */}
+                                                {fmtExpanded && items.map((reserva) => (
+                                                  <tr
+                                                    key={reserva.id}
+                                                    onClick={() => handleToggleReservadoSelection(reserva.id)}
+                                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'}`}
+                                                  >
+                                                    <td className="px-3 py-3 pl-24 text-center" onClick={(e) => e.stopPropagation()}>
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={selectedReservados.has(reserva.id)}
+                                                        onChange={() => handleToggleReservadoSelection(reserva.id)}
+                                                        className="checkbox-purple"
+                                                      />
+                                                    </td>
+                                                    <td className="px-4 py-3 text-zinc-300 font-mono text-sm">{reserva.codigo_unico}</td>
+                                                    <td className="px-4 py-3">
+                                                      {reserva.codigo_unico?.includes('_Completo') ? (
+                                                        <span className="px-2 py-1 rounded-full text-xs bg-purple-500/20 text-purple-300">
+                                                          Completo
+                                                        </span>
+                                                      ) : (
+                                                        <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
+                                                          ? 'bg-blue-500/20 text-blue-300'
+                                                          : reserva.tipo === 'Bonificacion'
+                                                            ? 'bg-emerald-500/20 text-emerald-300'
+                                                            : 'bg-amber-500/20 text-amber-300'
+                                                          }`}>
+                                                          {reserva.tipo}
+                                                        </span>
+                                                      )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-zinc-300">{reserva.formato || '-'}</td>
+                                                    <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
+                                                      {reserva.ubicacion || '-'}
+                                                    </td>
+                                                    {effectiveCanEdit && (
+                                                      <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                                        <button
+                                                          onClick={() => handleRemoveReserva(reserva.id)}
+                                                          className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                          title="Quitar reserva"
+                                                        >
+                                                          <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                      </td>
+                                                    )}
+                                                  </tr>
+                                                ))}
+                                              </React.Fragment>
+                                            );
+                                          })}
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        })
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -2893,14 +4529,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                           <span className="text-blue-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Flujo').length}</span> Flujo
                         </span>
                         <span className="text-zinc-500">
-                          <span className="text-amber-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Contraflujo').length}</span> Contraflujo
+                          <span className="text-blue-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Contraflujo').length}</span> Contraflujo
                         </span>
                         <span className="text-zinc-500">
                           <span className="text-emerald-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Bonificacion').length}</span> Bonificación
                         </span>
                       </div>
                       <span className="text-zinc-400">
-                        Total: <span className="text-white font-medium">{currentCaraReservas.length}</span> reservados
+                        Total: <span className="text-white font-medium">{currentCaraReservasMerged.length}</span> reservados
                       </span>
                     </div>
                   </div>
@@ -2908,36 +4544,92 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
               </div>
 
               {/* Map of Reservados */}
-              <div className="w-1/2">
+              <div className="w-1/2 relative">
                 {mapsLoaded ? (
-                  <GoogleMap
-                    mapContainerStyle={{ width: '100%', height: '100%' }}
-                    center={reservadosMapCenter}
-                    zoom={13}
-                    options={{
-                      styles: DARK_MAP_STYLES,
-                      disableDefaultUI: true,
-                      zoomControl: true,
-                    }}
-                  >
-                    {currentCaraReservas.map(reserva => (
-                      reserva.latitud && reserva.longitud && (
-                        <Marker
-                          key={reserva.id}
-                          position={{ lat: reserva.latitud, lng: reserva.longitud }}
-                          icon={{
-                            path: google.maps.SymbolPath.CIRCLE,
-                            scale: 10,
-                            fillColor: reserva.tipo === 'Flujo' ? '#3b82f6' : reserva.tipo === 'Bonificacion' ? '#10b981' : '#f59e0b',
-                            fillOpacity: 0.9,
-                            strokeColor: '#fff',
-                            strokeWeight: 2,
-                          }}
-                          title={`${reserva.codigo_unico} - ${reserva.tipo}`}
-                        />
-                      )
-                    ))}
-                  </GoogleMap>
+                  <>
+                    <GoogleMap
+                      mapContainerStyle={{ width: '100%', height: '100%' }}
+                      center={reservadosMapCenter}
+                      zoom={13}
+                      options={{
+                        styles: DARK_MAP_STYLES,
+                        disableDefaultUI: true,
+                        zoomControl: true,
+                      }}
+                      onLoad={(map) => {
+                        reservadosMapRef.current = map;
+                        // Fit bounds to all reservations
+                        if (currentCaraReservas.length > 0) {
+                          const bounds = new google.maps.LatLngBounds();
+                          currentCaraReservas.forEach(r => {
+                            if (r.latitud && r.longitud) {
+                              bounds.extend({ lat: r.latitud, lng: r.longitud });
+                            }
+                          });
+                          if (!bounds.isEmpty()) {
+                            map.fitBounds(bounds, 50);
+                          }
+                        }
+                      }}
+                    >
+                      {currentCaraReservasMerged.map(reserva => (
+                        reserva.latitud && reserva.longitud && (
+                          <Marker
+                            key={reserva.id}
+                            position={{ lat: reserva.latitud, lng: reserva.longitud }}
+                            icon={{
+                              path: google.maps.SymbolPath.CIRCLE,
+                              scale: 10,
+                              fillColor: reserva.codigo_unico?.includes('_Completo')
+                                ? '#a855f7' // Purple for Completo
+                                : reserva.tipo === 'Flujo' ? '#3b82f6' : reserva.tipo === 'Bonificacion' ? '#10b981' : '#f59e0b',
+                              fillOpacity: 0.9,
+                              strokeColor: '#fff',
+                              strokeWeight: 2,
+                            }}
+                            title={`${reserva.codigo_unico} - ${reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo}`}
+                          />
+                        )
+                      ))}
+                    </GoogleMap>
+
+                    {/* Map Legend */}
+                    <div className="absolute bottom-4 right-3 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-3 text-xs max-w-[200px]">
+                      <div className="text-zinc-300 font-semibold mb-2 flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-purple-400" />
+                        Leyenda del Mapa
+                      </div>
+
+                      {/* Dirección del tráfico */}
+                      <div className="space-y-1.5 mb-2">
+                        <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Dirección del tráfico</div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
+                          <div>
+                            <span className="text-zinc-300">Flujo / Contraflujo</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
+                          <div>
+                            <span className="text-zinc-300">Completo</span>
+                            <span className="text-zinc-500 text-[10px] ml-1">(F+C)</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Estado */}
+                      <div className="border-t border-zinc-700/70 pt-2 space-y-1.5">
+                        <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Estado</div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-emerald-500 ring-1 ring-emerald-400/30" />
+                          <div>
+                            <span className="text-zinc-300">Bonificación</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
                 ) : (
                   <div className="flex items-center justify-center h-full bg-zinc-800">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -2964,30 +4656,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
             <p className="text-sm text-zinc-400">Propuesta #{propuesta.id}</p>
           </div>
           <div className="flex items-center gap-3">
-            {/* Archivo de solicitud */}
-            {solicitudDetails?.solicitud?.archivo && (
-              <div className="flex items-center gap-2">
-                <a
-                  href={solicitudDetails.solicitud.archivo}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-lg text-xs font-medium hover:bg-violet-500/30 transition-colors"
-                  title="Ver archivo de solicitud"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  Ver Archivo
-                </a>
-                <a
-                  href={solicitudDetails.solicitud.archivo}
-                  download
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-medium hover:bg-emerald-500/30 transition-colors"
-                  title="Descargar archivo de solicitud"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Descargar
-                </a>
-              </div>
-            )}
+            
             <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:text-white">
               <X className="h-5 w-5" />
             </button>
@@ -3046,97 +4715,89 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       <input
                         type="text"
                         value={nombreCampania}
-                        onChange={(e) => setNombreCampania(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        onChange={(e) => canEditResumen && setNombreCampania(e.target.value)}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Nombre de la campaña"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs text-zinc-500">Asignados</label>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const asignadosStr = asignados.map(u => u.nombre).join(', ');
-                              const idsStr = asignados.map(u => u.id).join(',');
-                              await propuestasService.updateAsignados(propuesta.id, asignadosStr, idsStr);
-                              alert('Asignados actualizados correctamente');
-                            } catch (error) {
-                              alert('Error al actualizar asignados');
+                    <div className="space-y-2">
+                      <label className="text-xs text-zinc-500">Asignados</label>
+                      {/* Add user button */}
+                      {canEditResumen ? (
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const userId = parseInt(e.target.value);
+                            const selectedUser = users?.find((u: UserOption) => u.id === userId);
+                            if (selectedUser && !asignados.find(a => a.id === userId)) {
+                              setAsignados(prev => [...prev, selectedUser]);
                             }
                           }}
-                          className="flex items-center gap-1 px-2 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 rounded text-xs transition-colors"
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                         >
-                          <Save className="h-3 w-3" />
-                          Guardar
-                        </button>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 min-h-[38px] p-2 bg-zinc-800 border border-zinc-700 rounded-lg">
-                        {asignados.length === 0 ? (
-                          <span className="text-zinc-500 text-sm">Sin asignar</span>
-                        ) : (
-                          asignados.map(user => (
+                          <option value="">+ Agregar asignado...</option>
+                          {users?.filter((u: UserOption) => !asignados.find(a => a.id === u.id)).map((u: UserOption) => (
+                            <option key={u.id} value={u.id}>{u.nombre} - {u.area}</option>
+                          ))}
+                        </select>
+                      ) : null}
+                      {/* Selected users tags */}
+                      {asignados.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {asignados.map(user => (
                             <span
                               key={user.id}
-                              className="inline-flex items-center gap-1.5 px-2 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg text-xs"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-xs"
                             >
-                              <span className="font-medium">{user.nombre}</span>
-                              <span className="text-purple-400/70 text-[10px] px-1 py-0.5 bg-purple-500/10 rounded">{user.area || 'Sin área'}</span>
-                              <button
-                                onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
-                                className="hover:text-white ml-0.5"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
+                              {user.nombre}
+                              {canEditResumen && (
+                                <button
+                                  onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
+                                  className="hover:text-white"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
                             </span>
-                          ))
-                        )}
-                      </div>
-                      {/* User selector dropdown */}
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          const userId = parseInt(e.target.value);
-                          const selectedUser = users?.find((u: UserOption) => u.id === userId);
-                          if (selectedUser && !asignados.find(a => a.id === userId)) {
-                            setAsignados(prev => [...prev, selectedUser]);
-                          }
-                        }}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                      >
-                        <option value="">+ Agregar asignado...</option>
-                        {users?.filter((u: UserOption) => !asignados.find(a => a.id === u.id)).map((u: UserOption) => (
-                          <option key={u.id} value={u.id}>{u.nombre} - {u.area}</option>
-                        ))}
-                      </select>
+                          ))}
+                        </div>
+                      )}
+                      {!canEditResumen && asignados.length === 0 && (
+                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-400 border border-zinc-700/30">
+                          Sin asignados
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Period */}
+                  {/* Period - Same style as EditSolicitudModal */}
                   <div className="grid grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs text-zinc-500">Año Inicio</label>
                       <select
                         value={yearInicio || ''}
-                        onChange={(e) => setYearInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        onChange={(e) => canEditResumen && (setYearInicio(e.target.value ? parseInt(e.target.value) : undefined), setCatorcenaInicio(undefined))}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
-                        {years.map(y => (
+                        {yearInicioOptions.map(y => (
                           <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Catorcena Inicio</label>
+                      <label className="text-xs text-zinc-500">Cat. Inicio</label>
                       <select
                         value={catorcenaInicio || ''}
-                        onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        onChange={(e) => canEditResumen && setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                        disabled={!canEditResumen || !yearInicio}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50 ${!canEditResumen ? 'cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
-                        {Array.from({ length: 26 }, (_, i) => i + 1).map(c => (
-                          <option key={c} value={c}>{c}</option>
+                        {catorcenasInicioOptions.map(c => (
+                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
                         ))}
                       </select>
                     </div>
@@ -3144,25 +4805,27 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       <label className="text-xs text-zinc-500">Año Fin</label>
                       <select
                         value={yearFin || ''}
-                        onChange={(e) => setYearFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        onChange={(e) => canEditResumen && (setYearFin(e.target.value ? parseInt(e.target.value) : undefined), setCatorcenaFin(undefined))}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
-                        {years.map(y => (
+                        {yearFinOptions.map(y => (
                           <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Catorcena Fin</label>
+                      <label className="text-xs text-zinc-500">Cat. Fin</label>
                       <select
                         value={catorcenaFin || ''}
-                        onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        onChange={(e) => canEditResumen && setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                        disabled={!canEditResumen || !yearFin}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50 ${!canEditResumen ? 'cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
-                        {Array.from({ length: 26 }, (_, i) => i + 1).map(c => (
-                          <option key={c} value={c}>{c}</option>
+                        {catorcenasFinOptions.map(c => (
+                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
                         ))}
                       </select>
                     </div>
@@ -3174,8 +4837,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       <label className="text-xs text-zinc-500">Notas</label>
                       <textarea
                         value={notas}
-                        onChange={(e) => setNotas(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20"
+                        onChange={(e) => canEditResumen && setNotas(e.target.value)}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Notas adicionales..."
                       />
                     </div>
@@ -3183,75 +4847,127 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       <label className="text-xs text-zinc-500">Descripción</label>
                       <textarea
                         value={descripcion}
-                        onChange={(e) => setDescripcion(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20"
+                        onChange={(e) => canEditResumen && setDescripcion(e.target.value)}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Descripción de la propuesta..."
                       />
                     </div>
                   </div>
 
-                  {/* Archivo and Update Button */}
-                  <div className="flex items-center justify-between pt-2 border-t border-zinc-700/30">
-                    {/* Archivo section */}
-                    <div className="flex items-center gap-3">
-                      <input
-                        ref={archivoInputRef}
-                        type="file"
-                        className="hidden"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                        onChange={handleArchivoUpload}
-                      />
-                      {archivoPropuesta ? (
-                        <div className="flex items-center gap-2">
+                  {/* Archivo section - Same style as EditSolicitudModal */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-zinc-500">Archivo (opcional)</label>
+                    <input
+                      ref={archivoInputRef}
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                      onChange={handleArchivoUpload}
+                    />
+                    {archivoPropuesta ? (
+                      <div className="flex items-center gap-3 p-3 bg-zinc-800 border border-emerald-500/30 rounded-xl">
+                        {/* Preview - image or file icon */}
+                        {tipoArchivoPropuesta?.startsWith('image/') ? (
                           <a
                             href={archivoPropuesta}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs hover:bg-emerald-500/30 transition-colors"
+                            className="block"
                           >
-                            <FileText className="h-3.5 w-3.5" />
-                            Ver Archivo
+                            <img
+                              src={archivoPropuesta}
+                              alt="Preview"
+                              className="w-16 h-16 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                            />
                           </a>
-                          <button
-                            onClick={() => archivoInputRef.current?.click()}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700/50 text-zinc-300 border border-zinc-600 rounded-lg text-xs hover:bg-zinc-700 transition-colors"
+                        ) : (
+                          <a
+                            href={archivoPropuesta}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-16 h-16 flex items-center justify-center bg-zinc-700 rounded-lg hover:bg-zinc-600 transition-colors"
                           >
-                            <Download className="h-3.5 w-3.5" />
-                            Cambiar
-                          </button>
+                            <FileText className="h-6 w-6 text-zinc-400" />
+                          </a>
+                        )}
+                        {/* File info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-emerald-400 font-medium">Archivo adjunto</div>
+                          <div className="text-xs text-zinc-500 truncate">{tipoArchivoPropuesta || 'Archivo'}</div>
                         </div>
-                      ) : (
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={archivoPropuesta}
+                            download
+                            className="p-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
+                            title="Descargar"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                          {canEditResumen && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => archivoInputRef.current?.click()}
+                                className="px-3 py-2 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
+                              >
+                                Cambiar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setArchivoPropuesta(null); setTipoArchivoPropuesta(null); }}
+                                className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ) : canEditResumen ? (
+                      <button
+                        type="button"
+                        onClick={() => archivoInputRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-zinc-700 hover:border-violet-500/50 rounded-xl text-zinc-400 hover:text-violet-300 transition-colors"
+                      >
+                        <Upload className="h-5 w-5" />
+                        <span className="text-sm">Seleccionar archivo</span>
+                      </button>
+                    ) : (
+                      <div className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-zinc-700/50 rounded-xl text-zinc-500">
+                        <span className="text-sm">Sin archivo adjunto</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Update button */}
+                  {canEditResumen && (
+                    <div className="flex justify-end pt-2 border-t border-zinc-700/30">
+                      {/* Update button - shows when there are changes */}
+                      {hasChanges && (
                         <button
-                          onClick={() => archivoInputRef.current?.click()}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700/50 text-zinc-300 border border-zinc-600 rounded-lg text-xs hover:bg-zinc-700 transition-colors"
+                          onClick={handleUpdatePropuesta}
+                          disabled={isUpdatingPropuesta}
+                          className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Download className="h-3.5 w-3.5" />
-                          Subir Archivo
+                          {isUpdatingPropuesta ? (
+                            <>
+                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              Guardando...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4" />
+                              Actualizar Propuesta
+                            </>
+                          )}
                         </button>
                       )}
                     </div>
-
-                    {/* Update button - shows when there are changes */}
-                    {hasChanges && (
-                      <button
-                        onClick={handleUpdatePropuesta}
-                        disabled={isUpdatingPropuesta}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isUpdatingPropuesta ? (
-                          <>
-                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Guardando...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="h-4 w-4" />
-                            Actualizar Propuesta
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -3272,13 +4988,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     <span className="text-zinc-400">
                       Inversión: <span className="text-amber-300 font-medium">{formatCurrency(carasKPIs.totalInversion)}</span>
                     </span>
-                    <button
-                      onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Agregar Cara
-                    </button>
+                    {effectiveCanEdit && canEditResumen && (
+                      <button
+                        onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Agregar Cara
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -3291,56 +5009,63 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className="text-xs text-zinc-500 mb-1 block">Artículo SAP</label>
-                      <SearchableSelect
-                        label="Seleccionar artículo"
-                        options={articulosData || []}
-                        value={selectedArticulo}
-                        onChange={(item: SAPArticulo) => {
-                          setSelectedArticulo(item);
-                          // Auto-complete all fields from article
-                          const tarifa = getTarifaFromItemCode(item.ItemCode);
-                          const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
-                          const formato = getFormatoFromArticulo(item.ItemName);
-                          const tipo = getTipoFromName(item.ItemName);
-                          setNewCara({
-                            ...newCara,
-                            articulo: item.ItemCode,
-                            tarifa_publica: tarifa,
-                            estados: ciudadEstado?.estado || newCara.estados,
-                            ciudad: ciudadEstado?.ciudad || newCara.ciudad,
-                            formato: formato || newCara.formato,
-                            tipo: tipo || newCara.tipo,
-                          });
-                        }}
-                        onClear={() => {
-                          setSelectedArticulo(null);
-                          setNewCara({ ...newCara, articulo: '', tarifa_publica: 0, estados: '', ciudad: '', formato: '', tipo: '' });
-                        }}
-                        displayKey="ItemName"
-                        valueKey="ItemCode"
-                        searchKeys={['ItemCode', 'ItemName']}
-                        loading={articulosLoading}
-                        renderOption={(item: SAPArticulo) => (
-                          <div>
-                            <div className="font-medium text-white">{item.ItemCode}</div>
-                            <div className="text-xs text-zinc-500">{item.ItemName}</div>
-                          </div>
-                        )}
-                        renderSelected={(item: SAPArticulo) => (
-                          <div className="text-left">
-                            <div className="font-medium text-sm">{item.ItemCode}</div>
-                            <div className="text-[10px] text-zinc-500 truncate">{item.ItemName}</div>
-                          </div>
-                        )}
-                      />
+                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
+                      {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                        <SearchableSelect
+                          label="Seleccionar artículo"
+                          options={articulosData || []}
+                          value={selectedArticulo}
+                          onChange={(item: SAPArticulo) => {
+                            setSelectedArticulo(item);
+                            // Auto-complete all fields from article
+                            const tarifa = getTarifaFromItemCode(item.ItemCode);
+                            const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
+                            const formato = getFormatoFromArticulo(item.ItemName);
+                            const tipo = getTipoFromName(item.ItemName);
+                            setNewCara({
+                              ...newCara,
+                              articulo: item.ItemCode,
+                              tarifa_publica: tarifa,
+                              estados: ciudadEstado?.estado || newCara.estados,
+                              // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
+                              ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
+                              formato: formato || newCara.formato,
+                              tipo: tipo || newCara.tipo,
+                            });
+                          }}
+                          onClear={() => {
+                            setSelectedArticulo(null);
+                            setNewCara({ ...newCara, articulo: '', tarifa_publica: 0, estados: '', ciudad: '', formato: '', tipo: '' });
+                          }}
+                          displayKey="ItemName"
+                          valueKey="ItemCode"
+                          searchKeys={['ItemCode', 'ItemName']}
+                          loading={articulosLoading}
+                          renderOption={(item: SAPArticulo) => (
+                            <div>
+                              <div className="font-medium text-white">{item.ItemCode}</div>
+                              <div className="text-xs text-zinc-500">{item.ItemName}</div>
+                            </div>
+                          )}
+                          renderSelected={(item: SAPArticulo) => (
+                            <div className="text-left">
+                              <div className="font-medium text-sm">{item.ItemCode}</div>
+                              <div className="text-[10px] text-zinc-500 truncate">{item.ItemName}</div>
+                            </div>
+                          )}
+                        />
+                      ) : (
+                        <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300">
+                          {selectedArticulo ? `${selectedArticulo.ItemCode} - ${selectedArticulo.ItemName}` : newCara.articulo || 'Sin artículo'}
+                        </div>
+                      )}
                     </div>
 
                     {/* Catorcena - solo una, filtrada por rango de propuesta */}
                     <div className="mb-4">
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">
-                          Catorcena
+                          Catorcena {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
                           {propuesta.catorcena_inicio && propuesta.anio_inicio && propuesta.catorcena_fin && propuesta.anio_fin && (
                             <span className="text-zinc-600 ml-1">
                               (Rango: {propuesta.catorcena_inicio}/{propuesta.anio_inicio} - {propuesta.catorcena_fin}/{propuesta.anio_fin})
@@ -3350,6 +5075,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         <select
                           value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
                           onChange={(e) => {
+                            if (!canEditResumen || editingCaraHasReservas) return;
                             if (e.target.value) {
                               const [year, cat] = e.target.value.split('-').map(Number);
                               const period = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
@@ -3374,7 +5100,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                               });
                             }
                           }}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          disabled={!canEditResumen || editingCaraHasReservas}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar catorcena</option>
                           {catorcenasData?.data
@@ -3399,46 +5126,65 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
 
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Estados {newCara.estados && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
-                        <MultiSelectDropdown
-                          options={solicitudFilters?.estados || []}
-                          selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
-                          onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
-                          placeholder="Seleccionar estados..."
-                        />
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Estados {newCara.estados && !editingCaraId && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                          <MultiSelectDropdown
+                            options={solicitudFilters?.estados || []}
+                            selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
+                            onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
+                            placeholder="Seleccionar estados..."
+                          />
+                        ) : (
+                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                            {newCara.estados || '-'}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Ciudades {newCara.ciudad && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
-                        <MultiSelectDropdown
-                          options={
-                            solicitudFilters?.ciudades
-                              .filter(c => {
-                                if (!newCara.estados) return true;
-                                const selectedEstados = newCara.estados.split(',').map(s => s.trim());
-                                return selectedEstados.includes(c.estado);
-                              })
-                              .map(c => c.ciudad) || []
-                          }
-                          selected={newCara.ciudad ? newCara.ciudad.split(',').map(s => s.trim()).filter(Boolean) : []}
-                          onChange={(selected) => setNewCara({ ...newCara, ciudad: selected.join(', ') })}
-                          placeholder="Seleccionar ciudades..."
-                        />
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {newCara.ciudad && !editingCaraId && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                          <MultiSelectDropdown
+                            options={
+                              solicitudFilters?.ciudades
+                                .filter(c => {
+                                  if (!newCara.estados) return true;
+                                  const selectedEstados = newCara.estados.split(',').map(s => s.trim());
+                                  return selectedEstados.includes(c.estado);
+                                })
+                                .map(c => c.ciudad) || []
+                            }
+                            selected={newCara.ciudad ? newCara.ciudad.split(',').map(s => s.trim()).filter(Boolean) : []}
+                            onChange={(selected) => setNewCara({ ...newCara, ciudad: selected.join(', ') })}
+                            placeholder="Seleccionar ciudades..."
+                          />
+                        ) : (
+                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                            {newCara.ciudad || '-'}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Formatos {newCara.formato && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
-                        <MultiSelectDropdown
-                          options={solicitudFilters?.formatos || []}
-                          selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
-                          onChange={(selected) => setNewCara({ ...newCara, formato: selected.join(', ') })}
-                          placeholder="Seleccionar formatos..."
-                        />
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Formatos {newCara.formato && !editingCaraId && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                          <MultiSelectDropdown
+                            options={solicitudFilters?.formatos || []}
+                            selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
+                            onChange={(selected) => setNewCara({ ...newCara, formato: selected.join(', ') })}
+                            placeholder="Seleccionar formatos..."
+                          />
+                        ) : (
+                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                            {newCara.formato || '-'}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Tipo</label>
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Tipo</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => setNewCara({ ...newCara, tipo: e.target.value })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          onChange={(e) => canEditResumen && !editingCaraHasReservas && !editingCaraId && setNewCara({ ...newCara, tipo: e.target.value })}
+                          disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
@@ -3446,40 +5192,34 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         </select>
                       </div>
                     </div>
-                    <div className="grid grid-cols-5 gap-4 mb-4">
+                    <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras Flujo</label>
+                        <label className="text-xs text-zinc-500">Caras en Renta</label>
                         <input
                           type="number"
-                          value={newCara.caras_flujo || ''}
+                          value={newCara.caras || ''}
                           onChange={(e) => {
+                            if (!canEditResumen) return;
                             const val = parseInt(e.target.value) || 0;
-                            setNewCara({ ...newCara, caras_flujo: val, caras: val + (newCara.caras_contraflujo || 0) });
+                            // Auto-calculate flujo and contraflujo (half and half)
+                            const flujo = Math.ceil(val / 2);
+                            const contraflujo = Math.floor(val / 2);
+                            setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
+                        <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras Contraflujo</label>
-                        <input
-                          type="number"
-                          value={newCara.caras_contraflujo || ''}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value) || 0;
-                            setNewCara({ ...newCara, caras_contraflujo: val, caras: (newCara.caras_flujo || 0) + val });
-                          }}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                          min="0"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Bonificación</label>
+                        <label className="text-xs text-zinc-500">Caras Bonificadas</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
-                          onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -3488,8 +5228,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         <input
                           type="number"
                           value={newCara.tarifa_publica || ''}
-                          onChange={(e) => setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -3503,7 +5244,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                         />
                       </div>
                     </div>
-                    <div className="flex justify-end gap-2">
+
+                    {/* Preview calculation - Resumen y cálculos */}
+                    {(newCara.caras || 0) > 0 && (newCara.tarifa_publica || 0) > 0 && (
+                      <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/30 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-400">Inversión (Tarifa Cliente):</span>
+                          <span className="text-zinc-300">
+                            {newCara.caras} caras × {formatCurrency(newCara.tarifa_publica)} = <span className="text-emerald-400 font-medium">{formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))}</span>
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-400">Caras Totales:</span>
+                          <span className="text-zinc-300">
+                            {newCara.caras || 0} caras + {newCara.bonificacion || 0} bonif. = <span className="text-blue-400 font-medium">{(newCara.caras || 0) + (newCara.bonificacion || 0)} caras totales</span>
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-400">Tarifa Efectiva:</span>
+                          <span className="text-zinc-300">
+                            {formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))} ÷ {(newCara.caras || 0) + (newCara.bonificacion || 0)} = <span className="text-purple-400 font-medium">{formatCurrency(((newCara.caras || 0) + (newCara.bonificacion || 0)) > 0 ? ((newCara.caras || 0) * (newCara.tarifa_publica || 0)) / ((newCara.caras || 0) + (newCara.bonificacion || 0)) : 0)}</span>
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 mt-4">
                       <button
                         onClick={handleCancelCaraForm}
                         className="px-4 py-2 bg-zinc-700 text-zinc-300 rounded-lg text-sm hover:bg-zinc-600 transition-colors"
@@ -3525,19 +5291,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     <div className="p-8 text-center text-zinc-500">
                       <Layers className="h-10 w-10 mx-auto mb-3 opacity-30" />
                       <p>No hay formatos/caras en esta propuesta</p>
-                      <button
-                        onClick={() => setShowAddCaraForm(true)}
-                        className="mt-3 text-purple-400 hover:text-purple-300 text-sm"
-                      >
-                        Agregar primera cara
-                      </button>
+                      {effectiveCanEdit && canEditResumen && (
+                        <button
+                          onClick={() => setShowAddCaraForm(true)}
+                          className="mt-3 text-purple-400 hover:text-purple-300 text-sm"
+                        >
+                          Agregar primera cara
+                        </button>
+                      )}
                     </div>
                   ) : (
                     carasGroupedByCatorcena.map(([periodo, groupData]) => {
                       const isCatorcenaExpanded = expandedCatorcenas.has(periodo);
                       const catorcenaLabel = groupData.catorcenaNum
                         ? `Catorcena #${groupData.catorcenaNum}${groupData.year ? ` - ${groupData.year}` : ''}`
-                        : `Periodo: ${periodo}`;
+                        : `Periodo: ${new Date(periodo).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}`;
 
                       return (
                         <div key={periodo}>
@@ -3568,155 +5336,130 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                             const carasFaltantes = status.totalRequerido - status.totalReservado;
 
                             // Determine status color and indicator
-                            const statusColor = status.totalDiff === 0
-                              ? 'emerald' // Exact match
+                            // Green = complete (reservado >= requerido), Amber = incomplete (reservado < requerido)
+                            const statusColor = status.isComplete ? 'emerald' : 'amber';
+
+                            // Display text for diff:
+                            // - Missing (totalDiff < 0): show "faltan X"
+                            // - Excess (totalDiff > 0): show "quitar X"
+                            const diffDisplay = status.totalDiff === 0
+                              ? null
                               : status.totalDiff > 0
-                                ? 'amber' // Over-reserved (needs attention)
-                                : 'red'; // Under-reserved (deficit)
+                                ? `quitar ${status.totalDiff}`
+                                : `faltan ${Math.abs(status.totalDiff)}`;
 
                             return (
-                              <div key={cara.localId} className={`${statusColor === 'emerald' ? 'bg-emerald-500/5' : statusColor === 'amber' ? 'bg-amber-500/5' : 'bg-red-500/5'}`}>
-                                {/* Cara header */}
-                                <div
-                                  className="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-zinc-800/30 transition-colors"
-                                  onClick={() => toggleCara(cara.localId)}
-                                >
-                                  {/* Completion indicator with difference badge */}
-                                  <div className="relative">
-                                    <div className={`w-2 h-2 rounded-full ${
-                                      statusColor === 'emerald' ? 'bg-emerald-500' :
-                                      statusColor === 'amber' ? 'bg-amber-500 animate-pulse' :
-                                      'bg-red-500 animate-pulse'
-                                    }`} />
-                                    {status.totalDiff !== 0 && (
-                                      <div className={`absolute -top-2 -right-3 px-1.5 py-0.5 text-[9px] font-bold rounded ${
-                                        status.totalDiff > 0 ? 'bg-amber-500 text-amber-950' : 'bg-red-500 text-white'
-                                      }`}>
-                                        {status.totalDiff > 0 ? `+${status.totalDiff}` : status.totalDiff}
-                                      </div>
-                                    )}
-                                  </div>
+                              <div key={cara.localId} className={`${statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
+                                {/* Cara row */}
+                                <div className="flex items-center gap-3 px-5 py-3 hover:bg-zinc-800/30 transition-colors">
+                                  {/* Completion indicator */}
+                                  <div className={`w-2 h-2 rounded-full ${
+                                    statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+                                  }`} />
 
-                                  <button className="text-zinc-400 ml-2">
-                                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                  </button>
-                                  <div className="flex-1 grid grid-cols-4 gap-3 text-sm">
+                                  <div className="flex-1 grid grid-cols-6 gap-3 text-sm">
                                     <div>
                                       <span className="text-zinc-500 text-xs">Formato</span>
                                       <p className="text-white font-medium">{cara.formato || '-'}</p>
                                     </div>
                                     <div>
+                                      <span className="text-zinc-500 text-xs">Tipo</span>
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                                        {cara.tipo || '-'}
+                                      </span>
+                                    </div>
+                                    <div>
                                       <span className="text-zinc-500 text-xs">Ciudad</span>
-                                      <p className="text-zinc-300">{cara.ciudad || cara.estados || '-'}</p>
+                                      <p className="text-zinc-300 text-xs truncate" title={cara.ciudad || cara.estados}>{cara.ciudad || cara.estados || '-'}</p>
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Artículo</span>
-                                      <p className="text-zinc-300">{cara.articulo || '-'}</p>
+                                      <p className="text-zinc-300 text-xs">{cara.articulo || '-'}</p>
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Caras</span>
                                       <div className="flex items-center gap-1">
                                         <p className="text-white font-medium">{status.totalReservado}/{totalCaras}</p>
-                                        {status.totalDiff !== 0 && (
-                                          <span className={`text-xs font-medium ${status.totalDiff > 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                                            ({status.totalDiff > 0 ? '+' : ''}{status.totalDiff})
+                                        {diffDisplay && (
+                                          <span className={`text-xs font-medium ${status.totalDiff > 0 ? 'text-red-400' : 'text-amber-400'}`}>
+                                            ({diffDisplay})
                                           </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">Autorización</span>
+                                      <div className="flex flex-col gap-0.5">
+                                        {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Aprobado</span>
+                                        )}
+                                        {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rechazado</span>
+                                        )}
+                                        {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dcm !== 'rechazado' && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
+                                        )}
+                                        {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. DCM</span>
                                         )}
                                       </div>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleSearchInventory(cara); }}
-                                      className={`p-2 rounded-lg border transition-colors ${status.isComplete
-                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
-                                        : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
-                                        }`}
-                                      title={status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
-                                    >
-                                      <Search className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
-                                      className="p-2 rounded-lg border transition-colors bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
-                                      title="Editar"
-                                    >
-                                      <Pencil className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
-                                      disabled={hasReservas}
-                                      className={`p-2 rounded-lg border transition-colors ${hasReservas
-                                        ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
-                                        : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
-                                        }`}
-                                      title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
+                                    {/* Botón Buscar Inventario - deshabilitado si hay autorizaciones pendientes */}
+                                    {effectiveCanEdit && permissions.canBuscarInventarioEnModal && (() => {
+                                      const tienePendientes = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
+                                      const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
+                                      const bloqueado = tienePendientes || tieneRechazado;
+
+                                      return (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); if (!bloqueado) handleSearchInventory(cara); }}
+                                          disabled={bloqueado}
+                                          className={`p-2 rounded-lg border transition-colors ${
+                                            bloqueado
+                                              ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                              : status.isComplete
+                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                                                : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
+                                          }`}
+                                          title={
+                                            tieneRechazado ? 'Cara rechazada - no se puede asignar inventario' :
+                                            tienePendientes ? 'Esta cara necesita autorización antes de asignar inventario' :
+                                            status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'
+                                          }
+                                        >
+                                          <Search className="h-4 w-4" />
+                                        </button>
+                                      );
+                                    })()}
+                                    {effectiveCanEdit && (
+                                      <>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
+                                          className="p-2 rounded-lg border transition-colors bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
+                                          title="Editar"
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </button>
+                                        {canEditResumen && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
+                                            disabled={hasReservas}
+                                            className={`p-2 rounded-lg border transition-colors ${hasReservas
+                                              ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                              : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+                                              }`}
+                                            title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </button>
+                                        )}
+                                      </>
+                                    )}
                                   </div>
                                 </div>
 
-                                {/* Expanded content - reservas */}
-                                {isExpanded && (
-                                  <div className="px-5 py-3 bg-zinc-900/30 border-t border-zinc-700/30">
-                                    {caraReservas.length === 0 ? (
-                                      <div className="text-center py-4 text-zinc-500 text-sm">
-                                        <MapPin className="h-6 w-6 mx-auto mb-2 opacity-30" />
-                                        <p>Sin inventario reservado</p>
-                                        <button
-                                          onClick={() => handleSearchInventory(cara)}
-                                          className="mt-2 text-purple-400 hover:text-purple-300 text-xs"
-                                        >
-                                          Buscar inventario
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
-                                          <thead>
-                                            <tr className="text-zinc-500 text-xs">
-                                              <th className="text-left pb-2">Código</th>
-                                              <th className="text-left pb-2">Tipo</th>
-                                              <th className="text-left pb-2">Plaza</th>
-                                              <th className="text-left pb-2">Formato</th>
-                                              <th className="text-left pb-2">Ubicación</th>
-                                              <th className="text-right pb-2">Acciones</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {caraReservas.map(reserva => (
-                                              <tr key={reserva.id} className="border-t border-zinc-700/30">
-                                                <td className="py-2 text-zinc-300 font-mono text-xs">{reserva.codigo_unico}</td>
-                                                <td className="py-2">
-                                                  <span className={`px-2 py-0.5 rounded-full text-xs ${reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
-                                                    reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' :
-                                                      'bg-emerald-500/20 text-emerald-300'
-                                                    }`}>
-                                                    {reserva.tipo}
-                                                  </span>
-                                                </td>
-                                                <td className="py-2 text-zinc-300">{reserva.plaza}</td>
-                                                <td className="py-2 text-zinc-300">{reserva.formato}</td>
-                                                <td className="py-2 text-zinc-400 truncate max-w-[200px]">{reserva.ubicacion}</td>
-                                                <td className="py-2 text-right">
-                                                  {/* Removed as per request to only allow deletion from searcher 
-                                                  <button
-                                                    onClick={() => setReservas(prev => prev.filter(r => r.id !== reserva.id))}
-                                                    className="p-1 text-red-400 hover:text-red-300"
-                                                  >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                  </button>
-                                                  */}
-                                                </td>
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
                               </div>
                             );
                           })}
@@ -3727,35 +5470,82 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                 </div>
               </div>
 
-              {/* Section 3: Reservas Summary with Map and Selection */}
+              {/* Section 3: Reservas Summary with Map and Selection - ADVANCED FILTERS */}
               {reservas.length > 0 && (() => {
-                // Group reservas by plaza for selection
-                const reservasByPlaza = reservas.reduce((acc, r) => {
-                  const plaza = r.plaza || 'Sin Plaza';
-                  if (!acc[plaza]) acc[plaza] = [];
-                  acc[plaza].push(r);
-                  return acc;
-                }, {} as Record<string, typeof reservas>);
-                const plazas = Object.keys(reservasByPlaza).sort();
+                // Use filtered data from useMemo
+                const filteredReservas = filteredReservasData;
+
+                // Helper to get group key based on field
+                const getFieldValue = (r: ReservaItem, field: GroupByFieldReservas): string => {
+                  switch (field) {
+                    case 'catorcena': return `Cat ${r.catorcena}/${r.anio}`;
+                    case 'tipo': return r.tipo;
+                    case 'plaza': return r.plaza || 'Sin Plaza';
+                    case 'formato': return r.formato || 'Sin Formato';
+                    case 'grupo': return r.grupo_completo_id ? `Grupo ${r.grupo_completo_id}` : 'Sin Grupo';
+                    case 'articulo': return r.articulo || 'Sin Artículo';
+                    default: return 'Otros';
+                  }
+                };
+
+                // Multi-level grouping
+                type GroupedData = Record<string, ReservaItem[] | Record<string, ReservaItem[] | Record<string, ReservaItem[]>>>;
+                const groupData = (items: ReservaItem[], fields: GroupByFieldReservas[]): GroupedData => {
+                  if (fields.length === 0) return {};
+                  const [firstField, ...restFields] = fields;
+                  const grouped: GroupedData = {};
+                  items.forEach(item => {
+                    const key = getFieldValue(item, firstField);
+                    if (!grouped[key]) grouped[key] = restFields.length > 0 ? {} : [];
+                    if (restFields.length > 0) {
+                      const subGrouped = groupData([item], restFields);
+                      Object.entries(subGrouped).forEach(([subKey, subItems]) => {
+                        const target = grouped[key] as Record<string, ReservaItem[] | Record<string, ReservaItem[]>>;
+                        if (!target[subKey]) target[subKey] = Array.isArray(subItems) ? [] : {};
+                        if (Array.isArray(subItems)) {
+                          (target[subKey] as ReservaItem[]).push(...subItems);
+                        } else {
+                          Object.entries(subItems).forEach(([thirdKey, thirdItems]) => {
+                            const thirdTarget = target[subKey] as Record<string, ReservaItem[]>;
+                            if (!thirdTarget[thirdKey]) thirdTarget[thirdKey] = [];
+                            thirdTarget[thirdKey].push(...(thirdItems as ReservaItem[]));
+                          });
+                        }
+                      });
+                    } else {
+                      (grouped[key] as ReservaItem[]).push(item);
+                    }
+                  });
+                  return grouped;
+                };
+
+                const groupedReservas = groupData(filteredReservas, activeGroupingsReservas);
+                const groupKeys = Object.keys(groupedReservas).sort();
+
+                // Count items recursively
+                const countItems = (data: unknown): number => {
+                  if (Array.isArray(data)) return data.length;
+                  if (typeof data === 'object' && data !== null) {
+                    return Object.values(data).reduce((sum, v) => sum + countItems(v), 0);
+                  }
+                  return 0;
+                };
 
                 // Toggle functions
                 const toggleAllMapReservas = () => {
-                  if (selectedMapReservas.size === reservas.length) {
+                  if (selectedMapReservas.size === filteredReservas.length) {
                     setSelectedMapReservas(new Set());
                   } else {
-                    setSelectedMapReservas(new Set(reservas.map(r => r.id)));
+                    setSelectedMapReservas(new Set(filteredReservas.map(r => r.id)));
                   }
                 };
-                const togglePlazaMapReservas = (plaza: string) => {
-                  const plazaIds = reservasByPlaza[plaza].map(r => r.id);
-                  const allSelected = plazaIds.every(id => selectedMapReservas.has(id));
+                const toggleGroupItems = (items: ReservaItem[]) => {
+                  const ids = items.map(r => r.id);
+                  const allSelected = ids.every(id => selectedMapReservas.has(id));
                   setSelectedMapReservas(prev => {
                     const next = new Set(prev);
-                    if (allSelected) {
-                      plazaIds.forEach(id => next.delete(id));
-                    } else {
-                      plazaIds.forEach(id => next.add(id));
-                    }
+                    if (allSelected) ids.forEach(id => next.delete(id));
+                    else ids.forEach(id => next.add(id));
                     return next;
                   });
                 };
@@ -3766,6 +5556,64 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                     else next.add(id);
                     return next;
                   });
+                  // Pan map to the selected reserva's location
+                  const reserva = filteredReservas.find(r => r.id === id);
+                  if (reserva?.latitud && reserva?.longitud && resumenReservasMapRef.current) {
+                    resumenReservasMapRef.current.panTo({ lat: reserva.latitud, lng: reserva.longitud });
+                    resumenReservasMapRef.current.setZoom(15);
+                  }
+                };
+                const toggleReservasGroup = (groupKey: string) => {
+                  setExpandedReservasGroups(prev => {
+                    const next = new Set(prev);
+                    if (next.has(groupKey)) next.delete(groupKey);
+                    else next.add(groupKey);
+                    return next;
+                  });
+                };
+
+                // Flatten all items for a group
+                const flattenItems = (data: unknown): ReservaItem[] => {
+                  if (Array.isArray(data)) return data;
+                  if (typeof data === 'object' && data !== null) {
+                    return Object.values(data).flatMap(v => flattenItems(v));
+                  }
+                  return [];
+                };
+
+                // Get type breakdown for a group of items
+                const getTypeBreakdown = (items: ReservaItem[]) => {
+                  const flujo = items.filter(r => r.tipo === 'Flujo').length;
+                  const contraflujo = items.filter(r => r.tipo === 'Contraflujo').length;
+                  const bonificacion = items.filter(r => r.tipo === 'Bonificacion').length;
+                  return { flujo, contraflujo, bonificacion, total: items.length };
+                };
+
+                // Render type breakdown badges
+                const TypeBreakdownBadges = ({ items }: { items: ReservaItem[] }) => {
+                  const breakdown = getTypeBreakdown(items);
+                  return (
+                    <div className="flex items-center gap-1">
+                      {breakdown.flujo > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                          F:{breakdown.flujo}
+                        </span>
+                      )}
+                      {breakdown.contraflujo > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          C:{breakdown.contraflujo}
+                        </span>
+                      )}
+                      {breakdown.bonificacion > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          B:{breakdown.bonificacion}
+                        </span>
+                      )}
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-zinc-700/50 text-zinc-300">
+                        {breakdown.total}
+                      </span>
+                    </div>
+                  );
                 };
 
                 return (
@@ -3774,106 +5622,398 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       <h3 className="text-sm font-medium text-white flex items-center gap-2">
                         <MapIcon className="h-4 w-4 text-purple-400" />
                         Resumen de Reservas
-                      </h3>
-                      <div className="flex items-center gap-3 text-xs">
-                        <span className="text-zinc-400">
-                          {selectedMapReservas.size > 0
-                            ? `${selectedMapReservas.size} seleccionadas`
-                            : 'Selecciona para resaltar en mapa'}
+                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                          {filteredReservas.length} de {reservasMerged.length}
                         </span>
-                        {selectedMapReservas.size > 0 && (
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        {/* ADVANCED FILTER BUTTON */}
+                        <div className="relative">
                           <button
-                            onClick={() => setSelectedMapReservas(new Set())}
-                            className="text-purple-400 hover:text-purple-300"
+                            onClick={() => { setShowFiltersReservas(!showFiltersReservas); setShowGroupingConfigReservas(false); setShowSortReservas(false); }}
+                            className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
+                              filtersReservas.length > 0
+                                ? 'bg-purple-600 text-white border border-purple-500'
+                                : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+                            }`}
+                            title="Filtrar"
                           >
-                            Limpiar
+                            <Filter className="h-3.5 w-3.5" />
+                            {filtersReservas.length > 0 && (
+                              <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">{filtersReservas.length}</span>
+                            )}
                           </button>
+                          {showFiltersReservas && (
+                            <div className="absolute right-0 top-full mt-1 z-50 w-[520px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+                                <button onClick={() => setShowFiltersReservas(false)} className="text-zinc-400 hover:text-white">
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                              <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-purple pr-1">
+                                {filtersReservas.map((filter, index) => (
+                                  <div key={filter.id} className="flex items-center gap-2">
+                                    {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
+                                    {index === 0 && <span className="w-8"></span>}
+                                    <select
+                                      value={filter.field}
+                                      onChange={(e) => updateFilterReservas(filter.id, { field: e.target.value })}
+                                      className="w-[130px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                                    >
+                                      {FILTER_FIELDS_RESERVAS.map((f) => (
+                                        <option key={f.field} value={f.field}>{f.label}</option>
+                                      ))}
+                                    </select>
+                                    <select
+                                      value={filter.operator}
+                                      onChange={(e) => updateFilterReservas(filter.id, { operator: e.target.value as FilterOperator })}
+                                      className="w-[110px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                                    >
+                                      {FILTER_OPERATORS.filter(op => {
+                                        const fieldConfig = FILTER_FIELDS_RESERVAS.find(f => f.field === filter.field);
+                                        return fieldConfig && op.forTypes.includes(fieldConfig.type);
+                                      }).map((op) => (
+                                        <option key={op.value} value={op.value}>{op.label}</option>
+                                      ))}
+                                    </select>
+                                    <select
+                                      value={filter.value}
+                                      onChange={(e) => updateFilterReservas(filter.id, { value: e.target.value })}
+                                      className="flex-1 text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                                    >
+                                      <option value="">Seleccionar...</option>
+                                      {getUniqueValuesReservas[filter.field]?.map((val) => (
+                                        <option key={val} value={val}>{val}</option>
+                                      ))}
+                                    </select>
+                                    <button onClick={() => removeFilterReservas(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                                {filtersReservas.length === 0 && (
+                                  <p className="text-[11px] text-zinc-500 text-center py-3">Sin filtros. Haz clic en "Añadir".</p>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-between mt-2 pt-2 border-t border-purple-900/30">
+                                <button onClick={addFilterReservas} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
+                                  <Plus className="h-3 w-3" /> Añadir
+                                </button>
+                                <button
+                                  onClick={clearFiltersReservas}
+                                  disabled={filtersReservas.length === 0}
+                                  className="px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                  Limpiar
+                                </button>
+                              </div>
+                              {filtersReservas.length > 0 && (
+                                <div className="mt-2 pt-2 border-t border-purple-900/30">
+                                  <span className="text-[10px] text-zinc-500">{filteredReservas.length} de {reservasMerged.length} registros</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* GROUP BUTTON - Multi-level */}
+                        <div className="relative">
+                          <button
+                            onClick={() => { setShowGroupingConfigReservas(!showGroupingConfigReservas); setShowFiltersReservas(false); setShowSortReservas(false); }}
+                            className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
+                            title="Agrupar"
+                          >
+                            <Layers className="h-3.5 w-3.5" />
+                            {activeGroupingsReservas.length > 0 && (
+                              <span className="px-1 py-0.5 rounded bg-purple-600 text-[10px]">{activeGroupingsReservas.length}</span>
+                            )}
+                          </button>
+                          {showGroupingConfigReservas && (
+                            <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]">
+                              <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 3)</p>
+                              {AVAILABLE_GROUPINGS_RESERVAS.map(({ field, label }) => (
+                                <button
+                                  key={field}
+                                  onClick={() => toggleGroupingReservas(field)}
+                                  className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
+                                    activeGroupingsReservas.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                                  }`}
+                                >
+                                  <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                    activeGroupingsReservas.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
+                                  }`}>
+                                    {activeGroupingsReservas.includes(field) && <Check className="h-3 w-3 text-white" />}
+                                  </div>
+                                  {label}
+                                  {activeGroupingsReservas.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
+                                  {activeGroupingsReservas.indexOf(field) === 1 && <span className="ml-auto text-[10px] text-pink-400">2°</span>}
+                                  {activeGroupingsReservas.indexOf(field) === 2 && <span className="ml-auto text-[10px] text-cyan-400">3°</span>}
+                                </button>
+                              ))}
+                              <div className="border-t border-purple-900/30 mt-2 pt-2">
+                                <button onClick={() => setActiveGroupingsReservas([])} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                                  Quitar agrupación
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* SORT BUTTON */}
+                        <div className="relative">
+                          <button
+                            onClick={() => { setShowSortReservas(!showSortReservas); setShowFiltersReservas(false); setShowGroupingConfigReservas(false); }}
+                            className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
+                            title="Ordenar"
+                          >
+                            <ArrowUpDown className="h-3.5 w-3.5" />
+                          </button>
+                          {showSortReservas && (
+                            <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                              <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Ordenar por</p>
+                              {FILTER_FIELDS_RESERVAS.map(({ field, label }) => (
+                                <button
+                                  key={field}
+                                  onClick={() => {
+                                    if (sortFieldReservas === field) {
+                                      setSortDirectionReservas(prev => prev === 'asc' ? 'desc' : 'asc');
+                                    } else {
+                                      setSortFieldReservas(field);
+                                      setSortDirectionReservas('asc');
+                                    }
+                                  }}
+                                  className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 ${
+                                    sortFieldReservas === field ? 'text-purple-300' : 'text-zinc-400'
+                                  }`}
+                                >
+                                  {label}
+                                  {sortFieldReservas === field && (
+                                    <span className="ml-auto">
+                                      {sortDirectionReservas === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                              <div className="border-t border-purple-900/30 mt-2 pt-2">
+                                <button onClick={() => setSortFieldReservas(null)} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                                  Quitar orden
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {selectedMapReservas.size > 0 && (
+                          <>
+                            <span className="text-zinc-400 text-xs">{selectedMapReservas.size} sel.</span>
+                            <button onClick={() => setSelectedMapReservas(new Set())} className="text-purple-400 hover:text-purple-300 text-xs">
+                              Limpiar
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
-                    <div className="flex min-h-[420px]">
+                    <div className="flex h-[520px]">
                       {/* Selection Panel */}
-                      <div className="w-72 border-r border-zinc-700/50 bg-zinc-900/30 flex flex-col flex-shrink-0">
+                      <div className="w-96 border-r border-zinc-700/50 bg-zinc-900/30 flex flex-col flex-shrink-0">
                         {/* Select All Header */}
-                        <div className="px-4 py-3 border-b border-zinc-700/50 bg-zinc-800/50">
-                          <label className="flex items-center gap-3 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedMapReservas.size === reservas.length && reservas.length > 0}
-                              onChange={toggleAllMapReservas}
-                              className="checkbox-purple"
-                            />
-                            <span className="text-sm font-medium text-white">Seleccionar Todas</span>
-                            <span className="ml-auto px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
-                              {reservas.length}
-                            </span>
-                          </label>
+                        <div className="px-4 py-2.5 border-b border-zinc-700/50 bg-zinc-800/50">
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedMapReservas.size === filteredReservas.length && filteredReservas.length > 0}
+                                onChange={toggleAllMapReservas}
+                                className="checkbox-purple"
+                              />
+                              <span className="text-sm font-medium text-white">Seleccionar</span>
+                              <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                                {filteredReservas.length}
+                              </span>
+                            </label>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => setExpandedReservasGroups(new Set(groupKeys))}
+                                className="p-1.5 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded transition-colors"
+                                title="Expandir todo"
+                              >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setExpandedReservasGroups(new Set())}
+                                className="p-1.5 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded transition-colors"
+                                title="Colapsar todo"
+                              >
+                                <ChevronUp className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                        {/* Plaza Groups */}
+                        {/* Grouped Reservas - Multi-level */}
                         <div className="flex-1 overflow-y-auto scrollbar-thin">
-                          {plazas.map(plaza => {
-                            const plazaReservas = reservasByPlaza[plaza];
-                            const plazaIds = plazaReservas.map(r => r.id);
-                            const allPlazaSelected = plazaIds.every(id => selectedMapReservas.has(id));
-                            const somePlazaSelected = plazaIds.some(id => selectedMapReservas.has(id));
+                          {groupKeys.map(groupKey => {
+                            const groupData = groupedReservas[groupKey];
+                            const isLevel1Array = Array.isArray(groupData);
+                            const level1Items = flattenItems(groupData);
+                            const totalItems = countItems(groupData);
+                            const allSelected = level1Items.every(r => selectedMapReservas.has(r.id));
+                            const someSelected = level1Items.some(r => selectedMapReservas.has(r.id));
+                            const isExpanded = expandedReservasGroups.has(groupKey);
 
                             return (
-                              <div key={plaza} className="border-b border-zinc-800/50">
-                                {/* Plaza Header */}
-                                <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/30 hover:bg-zinc-800/50">
+                              <div key={groupKey} className="border-b border-zinc-700/30">
+                                <button
+                                  onClick={() => toggleReservasGroup(groupKey)}
+                                  className="w-full flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-purple-900/20 to-zinc-800/30 hover:from-purple-900/30 hover:to-zinc-800/50 transition-all"
+                                >
+                                  {isExpanded ? <ChevronDown className="h-4 w-4 text-purple-400" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}
                                   <input
                                     type="checkbox"
-                                    checked={allPlazaSelected}
-                                    ref={(el) => { if (el) el.indeterminate = somePlazaSelected && !allPlazaSelected; }}
-                                    onChange={() => togglePlazaMapReservas(plaza)}
-                                    className="checkbox-purple"
+                                    checked={allSelected}
+                                    ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                                    onChange={(e) => { e.stopPropagation(); toggleGroupItems(level1Items); }}
                                     onClick={(e) => e.stopPropagation()}
+                                    className="checkbox-purple"
                                   />
-                                  <MapPin className="h-3.5 w-3.5 text-zinc-500" />
-                                  <span className="text-sm text-white flex-1">{plaza}</span>
-                                  <span className="text-xs text-zinc-500">{plazaReservas.length}</span>
-                                </div>
-                                {/* Individual Reservas */}
-                                <div className="bg-zinc-900/50">
-                                  {plazaReservas.map(reserva => (
-                                    <label
-                                      key={reserva.id}
-                                      className={`flex items-center gap-2 px-4 py-1.5 pl-8 cursor-pointer text-xs transition-colors ${
-                                        selectedMapReservas.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'
-                                      }`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedMapReservas.has(reserva.id)}
-                                        onChange={() => toggleSingleMapReserva(reserva.id)}
-                                        className="checkbox-purple"
-                                      />
-                                      <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
-                                      <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
-                                        reserva.tipo === 'Flujo' ? 'bg-blue-500/20 text-blue-300' :
-                                        reserva.tipo === 'Contraflujo' ? 'bg-amber-500/20 text-amber-300' :
-                                        'bg-emerald-500/20 text-emerald-300'
-                                      }`}>
-                                        {reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}
-                                      </span>
-                                    </label>
-                                  ))}
-                                </div>
+                                  <span className="text-[10px] text-purple-400 font-medium">
+                                    {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[0])?.label}:
+                                  </span>
+                                  <span className="text-sm font-medium text-white flex-1 text-left truncate">{groupKey}</span>
+                                  <TypeBreakdownBadges items={level1Items} />
+                                </button>
+                                {isExpanded && (
+                                  <div className="bg-zinc-900/40 border-l-2 border-purple-500/30 ml-3">
+                                    {isLevel1Array ? (
+                                      // Direct items
+                                      (groupData as ReservaItem[]).map(reserva => (
+                                        <label
+                                          key={reserva.id}
+                                          className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs transition-colors ${
+                                            selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:bg-zinc-800/40'
+                                          }`}
+                                        >
+                                          <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                          <span className="text-zinc-400 font-mono text-[11px]">{reserva.codigo_unico}</span>
+                                          <span className="text-zinc-500 text-[11px] truncate max-w-[80px]">{reserva.plaza}</span>
+                                          <span className="text-zinc-500 text-[11px]">{reserva.formato}</span>
+                                          <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
+                                            reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
+                                            reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+                                          }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                        </label>
+                                      ))
+                                    ) : (
+                                      // Level 2 groups
+                                      Object.entries(groupData as Record<string, ReservaItem[] | Record<string, ReservaItem[]>>).map(([subKey, subData]) => {
+                                        const subFullKey = `${groupKey}-${subKey}`;
+                                        const subItems = flattenItems(subData);
+                                        const isSubExpanded = expandedReservasGroups.has(subFullKey);
+                                        const allSubSelected = subItems.every(r => selectedMapReservas.has(r.id));
+                                        const someSubSelected = subItems.some(r => selectedMapReservas.has(r.id));
+                                        const isLevel2Array = Array.isArray(subData);
+
+                                        return (
+                                          <div key={subKey} className="border-l border-pink-500/20 ml-2">
+                                            <button
+                                              onClick={() => toggleReservasGroup(subFullKey)}
+                                              className="w-full flex items-center gap-2 px-2 py-1.5 bg-zinc-800/20 hover:bg-zinc-800/40"
+                                            >
+                                              {isSubExpanded ? <ChevronDown className="h-3 w-3 text-pink-400" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
+                                              <input
+                                                type="checkbox"
+                                                checked={allSubSelected}
+                                                ref={(el) => { if (el) el.indeterminate = someSubSelected && !allSubSelected; }}
+                                                onChange={(e) => { e.stopPropagation(); toggleGroupItems(subItems); }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="checkbox-purple"
+                                              />
+                                              <span className="text-[10px] text-pink-400">
+                                                {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[1])?.label}:
+                                              </span>
+                                              <span className="text-[11px] text-white flex-1 text-left truncate">{subKey}</span>
+                                              <TypeBreakdownBadges items={subItems} />
+                                            </button>
+                                            {isSubExpanded && (
+                                              <div className="ml-2 border-l border-cyan-500/20">
+                                                {isLevel2Array ? (
+                                                  (subData as ReservaItem[]).map(reserva => (
+                                                    <label
+                                                      key={reserva.id}
+                                                      className={`flex items-center gap-2 px-3 py-1 cursor-pointer text-[11px] ${
+                                                        selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:bg-zinc-800/40'
+                                                      }`}
+                                                    >
+                                                      <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                                      <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
+                                                      <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
+                                                        reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
+                                                        reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+                                                      }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                                    </label>
+                                                  ))
+                                                ) : (
+                                                  // Level 3 groups
+                                                  Object.entries(subData as Record<string, ReservaItem[]>).map(([thirdKey, thirdItems]) => {
+                                                    const thirdFullKey = `${subFullKey}-${thirdKey}`;
+                                                    const isThirdExpanded = expandedReservasGroups.has(thirdFullKey);
+                                                    return (
+                                                      <div key={thirdKey}>
+                                                        <button
+                                                          onClick={() => toggleReservasGroup(thirdFullKey)}
+                                                          className="w-full flex items-center gap-2 px-2 py-1 bg-zinc-800/10 hover:bg-zinc-800/30"
+                                                        >
+                                                          {isThirdExpanded ? <ChevronDown className="h-3 w-3 text-cyan-400" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
+                                                          <span className="text-[10px] text-cyan-400">
+                                                            {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[2])?.label}:
+                                                          </span>
+                                                          <span className="text-[11px] text-white flex-1 text-left truncate">{thirdKey}</span>
+                                                          <TypeBreakdownBadges items={thirdItems} />
+                                                        </button>
+                                                        {isThirdExpanded && thirdItems.map(reserva => (
+                                                          <label
+                                                            key={reserva.id}
+                                                            className={`flex items-center gap-2 px-4 py-1 cursor-pointer text-[11px] ${
+                                                              selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:bg-zinc-800/40'
+                                                            }`}
+                                                          >
+                                                            <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                                            <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
+                                                          </label>
+                                                        ))}
+                                                      </div>
+                                                    );
+                                                  })
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
                         </div>
                         {/* KPIs Mini Summary */}
                         <div className="p-3 border-t border-zinc-700/50 bg-zinc-800/50">
-                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                          <div className={`grid gap-2 text-center text-xs ${reservasKPIs.completos > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
                             <div>
                               <p className="text-zinc-500">Flujo</p>
                               <p className="text-blue-400 font-bold">{reservasKPIs.flujo}</p>
                             </div>
                             <div>
                               <p className="text-zinc-500">Contra</p>
-                              <p className="text-amber-400 font-bold">{reservasKPIs.contraflujo}</p>
+                              <p className="text-blue-400 font-bold">{reservasKPIs.contraflujo}</p>
                             </div>
+                            {reservasKPIs.completos > 0 && (
+                              <div>
+                                <p className="text-zinc-500">Completo</p>
+                                <p className="text-purple-400 font-bold">{reservasKPIs.completos}</p>
+                              </div>
+                            )}
                             <div>
                               <p className="text-zinc-500">Bonif</p>
                               <p className="text-emerald-400 font-bold">{reservasKPIs.bonificadas}</p>
@@ -3883,42 +6023,100 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
                       </div>
 
                       {/* Map */}
-                      <div className="flex-1">
+                      <div className="flex-1 relative">
                         {mapsLoaded ? (
-                          <GoogleMap
-                            mapContainerStyle={{ width: '100%', height: '100%' }}
-                            center={{ lat: 20.6597, lng: -103.3496 }}
-                            zoom={11}
-                            options={{
-                              styles: DARK_MAP_STYLES,
-                              disableDefaultUI: true,
-                              zoomControl: true,
-                            }}
-                          >
-                            {reservas.map(reserva => {
-                              if (!reserva.latitud || !reserva.longitud) return null;
-                              const isSelected = selectedMapReservas.has(reserva.id);
-                              const hasSelection = selectedMapReservas.size > 0;
+                          <>
+                            <GoogleMap
+                              mapContainerStyle={{ width: '100%', height: '100%' }}
+                              center={filteredReservas.find(r => r.latitud && r.longitud) ? { lat: filteredReservas.find(r => r.latitud && r.longitud)!.latitud, lng: filteredReservas.find(r => r.latitud && r.longitud)!.longitud } : { lat: 20.6597, lng: -103.3496 }}
+                              zoom={11}
+                              options={{
+                                styles: DARK_MAP_STYLES,
+                                disableDefaultUI: true,
+                                zoomControl: true,
+                              }}
+                              onLoad={(map) => {
+                                resumenReservasMapRef.current = map;
+                                // Center map on reservas bounds
+                                if (filteredReservas.length > 0) {
+                                  const bounds = new google.maps.LatLngBounds();
+                                  let hasValidCoords = false;
+                                  filteredReservas.forEach(r => {
+                                    if (r.latitud && r.longitud) {
+                                      bounds.extend({ lat: r.latitud, lng: r.longitud });
+                                      hasValidCoords = true;
+                                    }
+                                  });
+                                  if (hasValidCoords && !bounds.isEmpty()) {
+                                    map.fitBounds(bounds, 50);
+                                  }
+                                }
+                              }}
+                            >
+                              {filteredReservas.map(reserva => {
+                                if (!reserva.latitud || !reserva.longitud) return null;
+                                const isSelected = selectedMapReservas.has(reserva.id);
+                                const hasSelection = selectedMapReservas.size > 0;
+                                const isCompleto = reserva.codigo_unico?.includes('_Completo');
 
-                              return (
-                                <Marker
-                                  key={reserva.id}
-                                  position={{ lat: reserva.latitud, lng: reserva.longitud }}
-                                  onClick={() => toggleSingleMapReserva(reserva.id)}
-                                  icon={{
-                                    path: google.maps.SymbolPath.CIRCLE,
-                                    scale: isSelected ? 12 : (hasSelection ? 6 : 8),
-                                    fillColor: reserva.tipo === 'Flujo' ? '#3b82f6' :
-                                      reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
-                                    fillOpacity: isSelected ? 1 : (hasSelection ? 0.3 : 0.9),
-                                    strokeColor: isSelected ? '#fff' : (hasSelection ? 'transparent' : '#fff'),
-                                    strokeWeight: isSelected ? 3 : 2,
-                                  }}
-                                  zIndex={isSelected ? 1000 : 1}
-                                />
-                              );
-                            })}
-                          </GoogleMap>
+                                return (
+                                  <Marker
+                                    key={reserva.id}
+                                    position={{ lat: reserva.latitud, lng: reserva.longitud }}
+                                    onClick={() => toggleSingleMapReserva(reserva.id)}
+                                    icon={{
+                                      path: google.maps.SymbolPath.CIRCLE,
+                                      scale: isSelected ? 12 : (hasSelection ? 6 : 8),
+                                      fillColor: isCompleto ? '#a855f7' :
+                                        reserva.tipo === 'Flujo' ? '#3b82f6' :
+                                        reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
+                                      fillOpacity: isSelected ? 1 : (hasSelection ? 0.3 : 0.9),
+                                      strokeColor: isSelected ? '#fff' : (hasSelection ? 'transparent' : '#fff'),
+                                      strokeWeight: isSelected ? 3 : 2,
+                                    }}
+                                    zIndex={isSelected ? 1000 : 1}
+                                  />
+                                );
+                              })}
+                            </GoogleMap>
+
+                            {/* Map Legend */}
+                            <div className="absolute bottom-3 right-3 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-2.5 text-xs max-w-[180px]">
+                              <div className="text-zinc-300 font-semibold mb-1.5 flex items-center gap-1.5">
+                                <MapPin className="h-3 w-3 text-purple-400" />
+                                Leyenda
+                              </div>
+
+                              {/* Dirección del tráfico */}
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                                  <span className="text-zinc-300">Flujo</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                                  <span className="text-zinc-300">Contraflujo</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+                                  <span className="text-zinc-300">Completo</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                  <span className="text-zinc-300">Bonificación</span>
+                                </div>
+                              </div>
+
+                              {/* Estado de selección */}
+                              <div className="border-t border-zinc-700/70 pt-1.5 mt-1.5 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-white ring-2 ring-white/50" />
+                                  <span className="text-zinc-300">Seleccionado</span>
+                                  <span className="text-zinc-500 text-[10px]">({selectedMapReservas.size})</span>
+                                </div>
+                              </div>
+                            </div>
+                          </>
                         ) : (
                           <div className="flex items-center justify-center h-full bg-zinc-800">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -3932,9 +6130,81 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta }: Props) {
             </>
           )}
         </div>
+
+        {/* Footer with Aprobar button */}
+        {caras.length > 0 && (
+          <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-900/80 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {/* Status summary */}
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${allCarasComplete ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                  <span className="text-zinc-400">
+                    {allCarasComplete ? (
+                      <span className="text-emerald-400">Todas las caras completas</span>
+                    ) : (
+                      <span className="text-amber-400">
+                        {caras.filter(c => !getCaraCompletionStatus(c).isComplete).length} cara(s) incompleta(s)
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {hasPendingAuthorization && (
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    Autorizaciones pendientes
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+              >
+                Cerrar
+              </button>
+              {effectiveCanEdit && (
+                <button
+                  disabled={!allCarasComplete || hasPendingAuthorization || isSaving}
+                  onClick={async () => {
+                    setIsSaving(true);
+                    try {
+                      await propuestasService.updateStatus(propuesta.id, 'Pase a ventas');
+                      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+                      queryClient.invalidateQueries({ queryKey: ['propuesta', propuesta.id] });
+                      queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
+                      showToast('Propuesta aprobada y enviada a ventas', 'success');
+                      onClose();
+                    } catch (error) {
+                      console.error('Error al aprobar propuesta:', error);
+                      showToast(`Error al aprobar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
+                    allCarasComplete && !hasPendingAuthorization && !isSaving
+                      ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
+                      : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                  }`}
+                >
+                  {isSaving ? (
+                    <div className="h-4 w-4 inline-block mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4 inline-block mr-2" />
+                  )}
+                  {isSaving ? 'Aprobando...' : 'Aprobar Propuesta'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       {/* Confirmation Modal */}
       {confirmModalJSX}
+      {/* Toast Notification */}
+      {toastJSX}
 
       {/* Loading Overlay */}
       {isSaving && (

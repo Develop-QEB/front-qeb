@@ -10,6 +10,7 @@ export interface PropuestasParams {
   yearFin?: number;
   catorcenaInicio?: number;
   catorcenaFin?: number;
+  soloAtendidas?: boolean;
 }
 
 export interface PropuestaStats {
@@ -283,7 +284,80 @@ export const propuestasService = {
     }
     return response.data.data;
   },
+
+  async updateCara(propuestaId: number, caraId: number, data: CaraUpdateData): Promise<SolicitudCara> {
+    const response = await api.patch<ApiResponse<SolicitudCara>>(`/propuestas/${propuestaId}/caras/${caraId}`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar cara');
+    }
+    return response.data.data;
+  },
+
+  async createCara(propuestaId: number, data: CaraUpdateData): Promise<SolicitudCara> {
+    const response = await api.post<ApiResponse<SolicitudCara>>(`/propuestas/${propuestaId}/caras`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear cara');
+    }
+    return response.data.data;
+  },
+
+  async deleteCara(propuestaId: number, caraId: number): Promise<void> {
+    const response = await api.delete<ApiResponse<void>>(`/propuestas/${propuestaId}/caras/${caraId}`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al eliminar cara');
+    }
+  },
+
+  async getCaras(propuestaId: number): Promise<SolicitudCara[]> {
+    const response = await api.get<ApiResponse<SolicitudCara[]>>(`/propuestas/${propuestaId}/caras`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener caras de propuesta');
+    }
+    return response.data.data;
+  },
 };
+
+export interface CaraUpdateData {
+  ciudad?: string;
+  estados?: string;
+  tipo?: string;
+  flujo?: string;
+  bonificacion?: number;
+  caras?: number;
+  nivel_socioeconomico?: string;
+  formato?: string;
+  costo?: number;
+  tarifa_publica?: number;
+  inicio_periodo?: string;
+  fin_periodo?: string;
+  caras_flujo?: number;
+  caras_contraflujo?: number;
+  articulo?: string;
+  descuento?: number;
+}
+
+export interface SolicitudCara {
+  id: number;
+  idquote?: string;
+  ciudad?: string;
+  estados?: string;
+  tipo?: string;
+  flujo?: string;
+  bonificacion?: number;
+  caras: number;
+  nivel_socioeconomico: string;
+  formato: string;
+  costo: number;
+  tarifa_publica: number;
+  inicio_periodo: string;
+  fin_periodo: string;
+  caras_flujo?: number;
+  caras_contraflujo?: number;
+  articulo?: string;
+  descuento?: number;
+  autorizacion_dg?: string;
+  autorizacion_dcm?: string;
+}
 
 export interface ReservaModalItem {
   reserva_id: number;
@@ -296,7 +370,9 @@ export interface ReservaModalItem {
   plaza: string;
   formato: string;
   ubicacion: string | null;
+  isla: string | null;
   estatus: string;
   grupo_completo_id: number | null;
   solicitud_cara_id: number;
+  articulo: string | null;
 }

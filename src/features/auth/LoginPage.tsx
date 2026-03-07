@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { authService } from '../../services/auth.service';
 import { Button } from '../../components/ui/button';
@@ -19,6 +20,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setAuth = useAuthStore((state) => state.setAuth);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,10 +39,13 @@ export function LoginPage() {
 
     try {
       const response = await authService.login(data.email, data.password);
+      // Limpiar caché de React Query en memoria para evitar datos del usuario anterior
+      queryClient.clear();
       setAuth(response.user, response.accessToken, response.refreshToken);
       navigate('/');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al iniciar sesion');
+    } catch (err: any) {
+      const message = err?.response?.data?.error || err?.message || 'Error al iniciar sesion';
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -114,6 +119,16 @@ export function LoginPage() {
                 'Ingresar'
               )}
             </Button>
+
+            {/* Link to register */}
+            <div className="text-center pt-2">
+              <p className="text-zinc-400 text-sm">
+                ¿No estás registrado?{' '}
+                <Link to="/register" className="text-purple-400 hover:text-purple-300 transition-colors">
+                  Regístrate aquí
+                </Link>
+              </p>
+            </div>
           </form>
         </div>
 
