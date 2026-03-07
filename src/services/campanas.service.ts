@@ -448,7 +448,7 @@ export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote | SAPD
     console.log('========== SAP RESPONSE ==========');
     console.log('Status:', response.status);
     console.log('Endpoint:', endpoint);
-    console.log('Series:', deliveryNote.Series);
+    console.log('Series:', (deliveryNote as any).Series);
     console.log('Response data:', JSON.stringify(data, null, 2));
     console.log('==================================');
 
