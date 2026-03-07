@@ -13033,21 +13033,12 @@ export function TareaSeguimientoPage() {
     try {
       setUploadArtError(null);
 
-<<<<<<< HEAD
-      // Subir todos los archivos y enviar solo URL + metadata
-      const filesWithUrls = await Promise.all(
-        data.files.map(async ({ file, spot }) => {
-          const uploaded = await campanasService.uploadArteFile(file);
-          return {
-            archivo: uploaded.url,
-=======
       // Subir todos los archivos a Spaces y obtener URLs
       const filesWithUrls = await Promise.all(
         data.files.map(async ({ file, spot }) => {
           const uploadResult = await campanasService.uploadArteFile(file);
           return {
             archivo: uploadResult.url,
->>>>>>> ba4e19226fede55759911d7ffb866a5d11658aec
             spot,
             nombre: file.name,
             tipo: file.type.startsWith('video/') ? 'video' : 'image',
@@ -16395,21 +16386,12 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
 
           // 2. Luego agregar los nuevos archivos (si hay)
           if (files.length > 0) {
-<<<<<<< HEAD
-            // Subir todos los archivos y enviar solo URL + metadata
-            const filesWithUrls = await Promise.all(
-              files.map(async ({ file, spot }) => {
-                const uploaded = await campanasService.uploadArteFile(file);
-                return {
-                  archivo: uploaded.url,
-=======
             // Subir todos los archivos a Spaces y obtener URLs
             const filesWithUrls = await Promise.all(
               files.map(async ({ file, spot }) => {
                 const uploadResult = await campanasService.uploadArteFile(file);
                 return {
                   archivo: uploadResult.url,
->>>>>>> ba4e19226fede55759911d7ffb866a5d11658aec
                   spot,
                   nombre: file.name,
                   tipo: file.type.startsWith('video/') ? 'video' : 'image',
