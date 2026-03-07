@@ -55,9 +55,27 @@ import { campanasService, InventarioConArte, TareaCampana, ArteExistente, Digita
 import { proveedoresService } from '../../services/proveedores.service';
 import { Proveedor, Catorcena } from '../../types';
 import { solicitudesService } from '../../services/solicitudes.service';
+
+const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MESES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+function getPeriodoLabel(item: { catorcena: number; anio: number; inicio_periodo?: string }, tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+    const parts = item.inicio_periodo.split('-');
+    return parts.length >= 2 ? `${MESES_FULL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${item.catorcena} / ${item.anio}`;
+  }
+  return `Cat ${item.catorcena} / ${item.anio}`;
+}
+function getPeriodoShort(item: { catorcena: number; anio: number; inicio_periodo?: string }, tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+    const parts = item.inicio_periodo.split('-');
+    return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${item.catorcena} / ${item.anio}`;
+  }
+  return `${item.catorcena}/${item.anio}`;
+}
 import { Badge } from '../../components/ui/badge';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
 import * as XLSX from 'xlsx';
@@ -144,7 +162,7 @@ interface InventoryFilters {
 // Opciones para los selectores
 const GROUP_BY_OPTIONS: { value: GroupByField; label: string }[] = [
   { value: 'none', label: 'Sin agrupar' },
-  { value: 'catorcena', label: 'Por Catorcena' },
+  { value: 'catorcena', label: 'Por Periodo' },
   { value: 'ciudad', label: 'Por Ciudad' },
   { value: 'plaza', label: 'Por Plaza' },
   { value: 'mueble', label: 'Por Mueble' },
@@ -154,7 +172,7 @@ const GROUP_BY_OPTIONS: { value: GroupByField; label: string }[] = [
 
 const SORT_OPTIONS: { value: SortField; label: string }[] = [
   { value: 'codigo_unico', label: 'Código' },
-  { value: 'catorcena', label: 'Catorcena' },
+  { value: 'catorcena', label: 'Periodo' },
   { value: 'ciudad', label: 'Ciudad' },
   { value: 'plaza', label: 'Plaza' },
   { value: 'mueble', label: 'Mueble' },
@@ -225,6 +243,15 @@ interface TaskRow {
   archivo_testigo?: string;
 }
 
+type ImpresionFlowConflict = {
+  itemId: string;
+  codigoUnico: string;
+  mueble: string;
+  ciudad: string;
+  estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido';
+  tareaTitulo: string;
+};
+
 interface CalendarEvent {
   id: string;
   title: string;
@@ -283,7 +310,7 @@ const FILTER_FIELDS_INVENTARIO: FilterFieldConfig[] = [
   { field: 'ubicacion', label: 'Ubicación', type: 'string' },
   { field: 'nse', label: 'NSE', type: 'string' },
   { field: 'tipo_de_cara', label: 'Tipo Cara', type: 'string' },
-  { field: 'catorcena', label: 'Catorcena', type: 'number' },
+  { field: 'catorcena', label: 'Periodo', type: 'number' },
   { field: 'aps', label: 'APS', type: 'number' },
 ];
 
@@ -306,7 +333,7 @@ const FILTER_FIELDS_TAREAS: FilterFieldConfig[] = [
 
 // Opciones de agrupación para las tablas
 const GROUPING_OPTIONS_INVENTARIO: { field: GroupByField; label: string }[] = [
-  { field: 'catorcena', label: 'Catorcena' },
+  { field: 'catorcena', label: 'Periodo' },
   { field: 'aps', label: 'APS' },
   { field: 'grupo', label: 'Grupo' },
   { field: 'estado_arte', label: 'Estado Arte' },
@@ -377,14 +404,14 @@ const flujoLabels: Record<string, string> = {
   instalado: 'Instalado',
 };
 
-const flujoColors: Record<string, string> = {
-  carga_artes: 'bg-zinc-500/20 text-zinc-400',
-  revision_artes: 'bg-amber-500/20 text-amber-400',
-  artes_aprobados: 'bg-green-500/20 text-green-400',
-  en_impresion: 'bg-blue-500/20 text-blue-400',
-  artes_recibidos: 'bg-cyan-500/20 text-cyan-400',
-  instalado: 'bg-emerald-500/20 text-emerald-400',
-};
+const getFlujoColors = (isDark: boolean): Record<string, string> => ({
+  carga_artes: isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500',
+  revision_artes: isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-50 text-amber-700',
+  artes_aprobados: isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  en_impresion: isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  artes_recibidos: isDark ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-50 text-cyan-700',
+  instalado: isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-50 text-emerald-700',
+});
 
 function getItemFlujoStatus(item: InventoryRow, tab: MainTab): string {
   switch (tab) {
@@ -406,13 +433,14 @@ function getItemFlujoStatus(item: InventoryRow, tab: MainTab): string {
   }
 }
 
-function FlujoBadges({ items, tab }: { items: InventoryRow[]; tab: MainTab }) {
+function FlujoBadges({ items, tab, isDark = true }: { items: InventoryRow[]; tab: MainTab; isDark?: boolean }) {
   const counts: Record<string, number> = {};
   items.forEach(item => {
     const status = getItemFlujoStatus(item, tab);
     counts[status] = (counts[status] || 0) + 1;
   });
 
+  const flujoColors = getFlujoColors(isDark);
   return (
     <span className="inline-flex flex-wrap gap-1 ml-2">
       {Object.entries(counts).map(([status, count]) => (
@@ -429,11 +457,12 @@ function FlujoBadges({ items, tab }: { items: InventoryRow[]; tab: MainTab }) {
 // Oculta Programación si el grupo es Tradicional, Impresiones si es Digital
 // Recibe mapas de estado de impresión, programación e instalación para sincronizar
 // correctamente con los tabs de gestión de artes
-function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }: {
+function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap, isDark = true }: {
   items: InventoryRow[];
   impresionMap?: Map<string, { estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido'; titulo: string }>;
   programacionMap?: Map<string, { estado: 'en_programacion' | 'programado' }>;
   instalacionMap?: Map<string, { estado: 'en_proceso' | 'validar_instalacion' | 'instalado'; titulo: string; tareaId: number }>;
+  isDark?: boolean;
 }) {
   if (items.length === 0) return null;
 
@@ -496,7 +525,7 @@ function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }:
   const getColor = (completed: number, inProgress: number) => {
     if (completed === total) return 'text-green-400';
     if (completed > 0 || inProgress > 0) return 'text-amber-400';
-    return 'text-zinc-600';
+    return isDark ? 'text-zinc-600' : 'text-gray-300';
   };
 
   const uploadColor = getColor(conArte, sinArte > 0 && conArte > 0 ? sinArte : 0);
@@ -516,10 +545,10 @@ function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }:
 }
 
 // Función para obtener la clave de agrupación basada en el campo
-function getGroupKeyForField(item: InventoryRow, field: GroupByField): string {
+function getGroupKeyForField(item: InventoryRow, field: GroupByField, tipoPeriodo?: string): string {
   switch (field) {
     case 'catorcena':
-      return `Catorcena ${item.catorcena} - ${item.anio}`;
+      return getPeriodoLabel(item, tipoPeriodo);
     case 'aps':
       return `APS ${item.aps ?? 'Sin asignar'}`;
     case 'grupo':
@@ -554,27 +583,30 @@ const estadoTareaLabels: Record<string, string> = {
   atendido: 'Instalado',
 };
 
-const statusColors: Record<string, string> = {
-  sin_revisar: 'bg-zinc-500/20 text-zinc-400',
-  en_revision: 'bg-amber-500/20 text-amber-400',
-  aprobado: 'bg-green-500/20 text-green-400',
-  rechazado: 'bg-red-500/20 text-red-400',
-  sin_atender: 'bg-zinc-500/20 text-zinc-400',
-  en_progreso: 'bg-blue-500/20 text-blue-400',
-  atendido: 'bg-green-500/20 text-green-400',
-  pendiente: 'bg-amber-500/20 text-amber-400',
-  completada: 'bg-green-500/20 text-green-400',
-  cancelada: 'bg-red-500/20 text-red-400',
+const getStatusColors = (isDark: boolean): Record<string, string> => ({
+  sin_revisar: isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500',
+  en_revision: isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-50 text-amber-700',
+  aprobado: isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  rechazado: isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-50 text-red-700',
+  sin_atender: isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500',
+  en_progreso: isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  atendido: isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  pendiente: isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-50 text-amber-700',
+  completada: isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  cancelada: isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-50 text-red-700',
   // Valores de la BD (con mayúscula)
-  'Activo': 'bg-green-500/20 text-green-400',
-  'Pendiente': 'bg-amber-500/20 text-amber-400',
-  'Atendido': 'bg-blue-500/20 text-blue-400',
-  'En Progreso': 'bg-blue-500/20 text-blue-400',
-  'Completado': 'bg-green-500/20 text-green-400',
-  'Cancelado': 'bg-red-500/20 text-red-400',
-  'Notificación': 'bg-purple-500/20 text-purple-400',
-  validado: 'bg-green-500/20 text-green-400',
-};
+  'Activo': isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  'Pendiente': isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-50 text-amber-700',
+  'Atendido': isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  'En Progreso': isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  'Completado': isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  'Cancelado': isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-50 text-red-700',
+  'Notificación': isDark ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-50 text-purple-700',
+  'Enviada': isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  'Activada': isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-700',
+  'Finalizada': isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+  validado: isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700',
+});
 
 // ============================================================================
 // SUB-COMPONENTS
@@ -682,18 +714,20 @@ function EmptyState({
   icon: Icon = FileText,
   action,
   onAction,
+  isDark = true,
 }: {
   message: string;
   description?: string;
   icon?: typeof FileText;
   action?: string;
   onAction?: () => void;
+  isDark?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
       <Icon className="h-12 w-12 mb-4 opacity-60" />
-      <p className="text-base font-semibold text-zinc-300">{message}</p>
-      {description && <p className="text-sm mt-2 text-center max-w-md text-zinc-400">{description}</p>}
+      <p className={`text-base font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{message}</p>
+      {description && <p className={`text-sm mt-2 text-center max-w-md ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{description}</p>}
       {action && onAction && (
         <button
           onClick={onAction}
@@ -707,9 +741,10 @@ function EmptyState({
 }
 
 // Status Badge Component
-function StatusBadge({ status, labels }: { status: string; labels?: Record<string, string> }) {
+function StatusBadge({ status, labels, isDark = true }: { status: string; labels?: Record<string, string>; isDark?: boolean }) {
   const label = labels ? labels[status] || status : status;
-  const colorClass = statusColors[status] || 'bg-zinc-500/20 text-zinc-400';
+  const statusColors = getStatusColors(isDark);
+  const colorClass = statusColors[status] || (isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500');
   return (
     <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${colorClass}`}>
       {label}
@@ -725,6 +760,7 @@ function TreeNode({
   isExpanded,
   onToggle,
   children,
+  isDark = true,
 }: {
   label: string;
   count: number;
@@ -732,6 +768,7 @@ function TreeNode({
   isExpanded: boolean;
   onToggle: () => void;
   children?: React.ReactNode;
+  isDark?: boolean;
 }) {
   return (
     <div>
@@ -747,7 +784,7 @@ function TreeNode({
         ) : (
           <ChevronRight className="h-4 w-4 text-purple-400 flex-shrink-0" />
         )}
-        <span className="text-xs font-medium text-zinc-300">{label}</span>
+        <span className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{label}</span>
         <span className="text-[10px] text-muted-foreground">({count})</span>
       </button>
       {isExpanded && children}
@@ -786,12 +823,14 @@ function DigitalGalleryModal({
   imagenes,
   isLoading,
   title,
+  isDark = true,
 }: {
   isOpen: boolean;
   onClose: () => void;
   imagenes: ImagenDigitalView[];
   isLoading: boolean;
   title?: string;
+  isDark?: boolean;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -839,7 +878,7 @@ function DigitalGalleryModal({
               <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
             </div>
           ) : imagenes.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-zinc-500">
+            <div className={`flex-1 flex items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
               <div className="text-center">
                 <Film className="h-12 w-12 mx-auto mb-2 opacity-30" />
                 <p>No hay archivos digitales</p>
@@ -905,7 +944,7 @@ function DigitalGalleryModal({
                       }`}
                     >
                       {img.tipo === 'video' ? (
-                        <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                        <div className={`w-full h-full ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} flex items-center justify-center`}>
                           <Play className="h-6 w-6 text-cyan-400" />
                         </div>
                       ) : (
@@ -930,7 +969,7 @@ function DigitalGalleryModal({
         <div className="flex items-center justify-end gap-2 p-4 border-t border-border flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors"
+            className={`px-4 py-2 text-sm font-medium ${isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'} transition-colors`}
           >
             Cerrar
           </button>
@@ -952,6 +991,8 @@ function UploadArtModal({
   isSubmitting,
   error,
   campanaId,
+  tipoPeriodo = 'catorcena',
+  isDark = true,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -963,6 +1004,8 @@ function UploadArtModal({
   isSubmitting: boolean;
   error: string | null;
   campanaId: number;
+  tipoPeriodo?: string;
+  isDark?: boolean;
 }) {
   const [selectedOption, setSelectedOption] = useState<UploadOption>('file');
   const [existingArtUrl, setExistingArtUrl] = useState('');
@@ -1048,7 +1091,9 @@ function UploadArtModal({
           key = `APS ${item.aps}`;
           break;
         case 'catorcena':
-          key = `Catorcena ${item.catorcena}`;
+          key = tipoPeriodo === 'mensual' && item.inicio_periodo
+            ? (() => { const parts = item.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_FULL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${item.catorcena}`; })()
+            : `Cat ${item.catorcena}`;
           break;
         case 'grupo':
           if (item.grupo_id) {
@@ -1611,7 +1656,7 @@ function UploadArtModal({
                 >
                   <option value="none">Sin agrupar</option>
                   <option value="aps">Por APS</option>
-                  <option value="catorcena">Por Catorcena</option>
+                  <option value="catorcena">Por Periodo</option>
                   <option value="grupo">Por Grupo</option>
                 </select>
                 <select
@@ -1621,7 +1666,7 @@ function UploadArtModal({
                 >
                   <option value="codigo">Codigo</option>
                   <option value="aps">APS</option>
-                  <option value="catorcena">Catorcena</option>
+                  <option value="catorcena">Periodo</option>
                 </select>
               </div>
 
@@ -1729,6 +1774,8 @@ const TIPOS_TAREA = [
   { value: 'Impresión', label: 'Impresión', description: 'Impresión de materiales publicitarios' },
   { value: 'Testigo', label: 'Testigo', description: 'Validación de instalación con evidencia fotográfica' },
   { value: 'Programación', label: 'Programación', description: 'Programación de artes digitales con indicaciones' },
+  { value: 'Orden de Programación', label: 'Orden de Programación', description: 'Orden de programación para tráfico' },
+  { value: 'Orden de Instalación', label: 'Orden de Instalación', description: 'Orden de instalación para tráfico' },
 ];
 
 // ============================================================================
@@ -1761,6 +1808,7 @@ interface FilterToolbarProps {
   groupingOptions?: { field: GroupByField; label: string }[]; // Opciones de agrupación personalizadas
   hideGrouping?: boolean; // Ocultar botón de agrupación
   hideSort?: boolean; // Ocultar botón de ordenamiento
+  isDark?: boolean;
 }
 
 function FilterToolbar({
@@ -1769,7 +1817,7 @@ function FilterToolbar({
   sortField, sortDirection, showSort, setShowSort, setSortField, setSortDirection,
   filteredCount, totalCount, useFixedDropdowns = false,
   filterFields = FILTER_FIELDS_INVENTARIO, groupingOptions = GROUPING_OPTIONS_INVENTARIO,
-  hideGrouping = false, hideSort = false,
+  hideGrouping = false, hideSort = false, isDark = true,
 }: FilterToolbarProps) {
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const groupBtnRef = useRef<HTMLButtonElement>(null);
@@ -1828,7 +1876,7 @@ function FilterToolbar({
         </button>
         {showFilters && (
           <div
-            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[520px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4`}
+            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[520px] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-4`}
             style={useFixedDropdowns ? getDropdownPosition(filterBtnRef, 520) : undefined}
           >
             <div className="flex items-center justify-between mb-3">
@@ -1880,7 +1928,7 @@ function FilterToolbar({
           </button>
           {showGrouping && (
             <div
-              className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]`}
+              className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]`}
               style={useFixedDropdowns ? getDropdownPosition(groupBtnRef, 200) : undefined}
             >
               <div className="flex items-center justify-between mb-2 px-2">
@@ -2117,6 +2165,7 @@ function TestigoTaskView({
   campanaId,
   getCatorcenaFromFechaFin,
   canResolveProduccionTasks = true,
+  tipoPeriodo = 'catorcena',
 }: {
   task: TaskRow;
   taskInventory: InventoryRow[];
@@ -2125,6 +2174,7 @@ function TestigoTaskView({
   campanaId: number;
   getCatorcenaFromFechaFin: string | null;
   canResolveProduccionTasks?: boolean;
+  tipoPeriodo?: string;
 }) {
   const queryClient = useQueryClient();
   const [testigoFile, setTestigoFile] = useState<File | null>(null);
@@ -2217,7 +2267,7 @@ function TestigoTaskView({
 
     const groups: Record<string, InventoryRow[]> = {};
     filteredData.forEach(item => {
-      const keyParts = activeGroupings.map(field => getGroupKeyForField(item, field));
+      const keyParts = activeGroupings.map(field => getGroupKeyForField(item, field, tipoPeriodo));
       const key = keyParts.join(' > ');
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
@@ -2313,7 +2363,7 @@ function TestigoTaskView({
             </p>
           </div>
           <div>
-            <span className="text-zinc-500">Catorcena:</span>
+            <span className="text-zinc-500">Periodo:</span>
             <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
           </div>
           <div>
@@ -2393,7 +2443,7 @@ function TestigoTaskView({
                         <th className="p-2 font-medium text-purple-300">Ciudad</th>
                         <th className="p-2 font-medium text-purple-300">Mueble</th>
                         <th className="p-2 font-medium text-purple-300">Medidas</th>
-                        <th className="p-2 font-medium text-purple-300">Catorcena</th>
+                        <th className="p-2 font-medium text-purple-300">Periodo</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2414,7 +2464,7 @@ function TestigoTaskView({
                           <td className="p-2 text-zinc-300">{item.ciudad}</td>
                           <td className="p-2 text-zinc-300">{item.mueble}</td>
                           <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                          <td className="p-2 text-zinc-400">C{item.catorcena}</td>
+                          <td className="p-2 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2433,7 +2483,7 @@ function TestigoTaskView({
                   <th className="p-3 font-medium text-purple-300">Plaza</th>
                   <th className="p-3 font-medium text-purple-300">Mueble</th>
                   <th className="p-3 font-medium text-purple-300">Medidas</th>
-                  <th className="p-3 font-medium text-purple-300">Catorcena</th>
+                  <th className="p-3 font-medium text-purple-300">Periodo</th>
                 </tr>
               </thead>
               <tbody>
@@ -2455,7 +2505,7 @@ function TestigoTaskView({
                     <td className="p-3 text-zinc-400">{item.plaza}</td>
                     <td className="p-3 text-zinc-300">{item.mueble}</td>
                     <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                    <td className="p-3 text-zinc-400">C{item.catorcena}</td>
+                    <td className="p-3 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2606,6 +2656,7 @@ function TaskDetailModal({
   canResolveRevisionArtesTasks = true,
   canResolveCorreccionTasks = true,
   digitalSummaryMap,
+  tipoPeriodo = 'catorcena',
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -2618,10 +2669,15 @@ function TaskDetailModal({
   onCorrect: (reservaIds: number[], instrucciones: string) => void;
   onUpdateArte: (reservaIds: number[], archivo: string) => void;
   onUpdateArteDigital: (reservaIds: number[], files: { file: File; spot: number }[], deleteArchivos?: string[]) => Promise<void>;
-  onTaskComplete: (taskId: string, observaciones?: string) => Promise<void>;
+  onTaskComplete: (taskId: string, observaciones?: string, archivoTestigo?: string) => Promise<void>;
   onSendToReview: (reservaIds: number[], responsableOriginal: string) => Promise<void>;
-  onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string, asignadoId?: string) => Promise<void>;
-  onCreateRecepcionFaltante: (faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[], observaciones: string) => Promise<void>;
+  onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string, asignadoId?: string, guiaPdfUrl?: string) => Promise<void>;
+  onCreateRecepcionFaltante: (
+    faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[],
+    observaciones: string,
+    guiaPdfUrl?: string,
+    faltantesReservaIds?: string[]
+  ) => Promise<void>;
   onUpdateTask: (taskId: string, data: { evidencia?: string; estatus?: string }) => Promise<void>;
   isUpdating: boolean;
   campanaId: number;
@@ -2629,6 +2685,7 @@ function TaskDetailModal({
   canResolveRevisionArtesTasks?: boolean;
   canResolveCorreccionTasks?: boolean;
   digitalSummaryMap: Map<number, DigitalFileSummary>;
+  tipoPeriodo?: string;
 }) {
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
@@ -2792,9 +2849,14 @@ function TaskDetailModal({
     );
   }, [usuariosRecepcionData]);
 
-  // Función para obtener texto de catorcena desde fecha_fin
+  // Función para obtener texto de catorcena/periodo desde fecha_fin
   const getCatorcenaFromFechaFin = useMemo(() => {
-    if (!task?.fecha_fin || !catorcenasData?.data) return null;
+    if (!task?.fecha_fin) return null;
+    if (tipoPeriodo === 'mensual') {
+      const d = new Date(task.fecha_fin);
+      return !isNaN(d.getTime()) ? `${MESES_FULL[d.getMonth()]} ${d.getFullYear()}` : null;
+    }
+    if (!catorcenasData?.data) return null;
     const fechaFin = new Date(task.fecha_fin);
     const catorcena = catorcenasData.data.find((c: { fecha_inicio: string; fecha_fin: string; numero_catorcena: number; a_o: number }) => {
       const inicio = new Date(c.fecha_inicio);
@@ -2802,10 +2864,10 @@ function TaskDetailModal({
       return fechaFin >= inicio && fechaFin <= fin;
     });
     if (catorcena) {
-      return `Catorcena ${catorcena.numero_catorcena}, ${catorcena.a_o}`;
+      return `Cat ${catorcena.numero_catorcena} / ${catorcena.a_o}`;
     }
     return null;
-  }, [task?.fecha_fin, catorcenasData?.data]);
+  }, [task?.fecha_fin, catorcenasData?.data, tipoPeriodo]);
 
   // Estados para el sistema de decisiones de revisión
   const [decisiones, setDecisiones] = useState<DecisionesState>({});
@@ -2828,6 +2890,16 @@ function TaskDetailModal({
   // Estado para archivos digitales cargados desde API (fallback si evidencia no tiene archivos)
   const [loadedArchivosDigitales, setLoadedArchivosDigitales] = useState<{ archivo: string; archivoData?: string; spot: number; tipo: string }[]>([]);
   const [isLoadingArchivosDigitales, setIsLoadingArchivosDigitales] = useState(false);
+  // Estado para envío de Orden de Programación
+  const [isSendingOrden, setIsSendingOrden] = useState(false);
+  // Estado para indicaciones editables en Orden de Programación (Pendiente)
+  const [ordenIndicaciones, setOrdenIndicaciones] = useState<Record<string, string>>({});
+
+  // Reset orden indicaciones when task changes
+  useEffect(() => {
+    setOrdenIndicaciones({});
+    setIsSendingOrden(false);
+  }, [task?.id]);
 
   // Estado para nodos expandidos en las tablas de Impresión y Recepción
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
@@ -2854,6 +2926,9 @@ function TaskDetailModal({
   const [cantidadesRecibidas, setCantidadesRecibidas] = useState<Record<string, number>>({});
   const [observacionesRecepcion, setObservacionesRecepcion] = useState('');
   const [isFinalizandoRecepcion, setIsFinalizandoRecepcion] = useState(false);
+  const [recepcionFiles, setRecepcionFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [isUploadingRecepcion, setIsUploadingRecepcion] = useState(false);
+  const [impresionPdfFile, setImpresionPdfFile] = useState<File | null>(null);
 
   // Parsear datos de impresiones desde evidencia (para tareas de Impresión y Recepción)
   const impresionesData = useMemo(() => {
@@ -2868,6 +2943,59 @@ function TaskDetailModal({
     }
     return null;
   }, [task]);
+
+  const guiaPdfUrl = useMemo(() => {
+    if (!task?.evidencia) return null;
+    try {
+      const ev = JSON.parse(task.evidencia);
+      return ev?.guia_pdf || null;
+    } catch {
+      return null;
+    }
+  }, [task?.evidencia]);
+
+  const { data: tareasGuiaFallback } = useQuery({
+    queryKey: ['campana-tareas-guia-fallback', campanaId, task?.id],
+    queryFn: () => campanasService.getTareas(campanaId),
+    enabled: isOpen && task?.tipo === 'Recepción' && !guiaPdfUrl,
+    staleTime: 30_000,
+  });
+
+  const guiaPdfUrlResolved = useMemo(() => {
+    if (guiaPdfUrl) return guiaPdfUrl;
+    if (!task || !tareasGuiaFallback?.length) return null;
+
+    const idsActuales = (task.ids_reservas || '')
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean);
+
+    const comparteReservas = (ids?: string | null) => {
+      const arr = (ids || '').split(',').map(v => v.trim()).filter(Boolean);
+      return arr.some(id => idsActuales.includes(id));
+    };
+
+    const recepciones = tareasGuiaFallback
+      .filter(t => t.tipo === 'Recepción' && t.id !== Number(task.id))
+      .sort((a, b) => b.id - a.id);
+
+    for (const t of recepciones) {
+      if (!comparteReservas(t.ids_reservas)) continue;
+      try {
+        const ev = t.evidencia ? JSON.parse(t.evidencia) : null;
+        if (ev?.guia_pdf) return ev.guia_pdf as string;
+      } catch {}
+    }
+
+    for (const t of recepciones) {
+      try {
+        const ev = t.evidencia ? JSON.parse(t.evidencia) : null;
+        if (ev?.guia_pdf) return ev.guia_pdf as string;
+      } catch {}
+    }
+
+    return null;
+  }, [guiaPdfUrl, task, tareasGuiaFallback]);
 
 
   // Estados para editar arte
@@ -2925,7 +3053,7 @@ function TaskDetailModal({
   // Efecto para cargar nombres de archivos digitales cuando se abre el tab "Ver tabla" en Programación
   useEffect(() => {
     const loadDigitalFileNames = async () => {
-      if (task?.tipo !== 'Programación' || programacionTab !== 'tabla' || taskInventory.length === 0) return;
+      if ((task?.tipo !== 'Programación' && task?.tipo !== 'Orden de Programación') || programacionTab !== 'tabla' || taskInventory.length === 0) return;
 
       // Recopilar todas las reservas únicas
       const allReservaIds = new Set<number>();
@@ -2974,7 +3102,7 @@ function TaskDetailModal({
   // Efecto para cargar archivos digitales para el tab "Resumen" en Programación si no están en evidencia
   useEffect(() => {
     const loadArchivosForResumen = async () => {
-      if (!isOpen || task?.tipo !== 'Programación') {
+      if (!isOpen || (task?.tipo !== 'Programación' && task?.tipo !== 'Orden de Programación' && task?.tipo !== 'Orden de Instalación' && task?.tipo !== 'Instalación')) {
         setLoadedArchivosDigitales([]);
         return;
       }
@@ -3036,7 +3164,7 @@ function TaskDetailModal({
 
     const groups: Record<string, Record<string, Record<string, InventoryRow[]>>> = {};
     taskInventory.forEach(item => {
-      const catorcenaKey = `Catorcena ${item.catorcena} - ${item.anio}`;
+      const catorcenaKey = getPeriodoLabel(item, tipoPeriodo);
       const apsKey = `APS ${item.aps ?? 'Sin asignar'}`;
       let grupoKey: string;
       if (item.grupo_id) {
@@ -3135,7 +3263,7 @@ function TaskDetailModal({
 
     const getGroupKey = (item: InventoryRow, field: GroupByField): string => {
       switch (field) {
-        case 'catorcena': return `Catorcena ${item.catorcena} - ${item.anio}`;
+        case 'catorcena': return getPeriodoLabel(item, tipoPeriodo);
         case 'aps': return `APS ${item.aps ?? 'Sin asignar'}`;
         case 'grupo':
           if (item.grupo_id) {
@@ -3439,7 +3567,7 @@ function TaskDetailModal({
 
     const groups: Record<string, InventoryRow[]> = {};
     filteredDataResumen.forEach(item => {
-      const keyParts = activeGroupingsResumen.map(field => getGroupKeyForField(item, field));
+      const keyParts = activeGroupingsResumen.map(field => getGroupKeyForField(item, field, tipoPeriodo));
       const key = keyParts.join(' > ');
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
@@ -3453,7 +3581,7 @@ function TaskDetailModal({
 
     const groups: Record<string, InventoryRow[]> = {};
     filteredDataEditar.forEach(item => {
-      const keyParts = activeGroupingsEditar.map(field => getGroupKeyForField(item, field));
+      const keyParts = activeGroupingsEditar.map(field => getGroupKeyForField(item, field, tipoPeriodo));
       const key = keyParts.join(' > ');
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
@@ -3607,9 +3735,9 @@ function TaskDetailModal({
       // Rechazar y crear tarea de corrección con todos los rechazados
       if (rechazados.length > 0) {
         const todosIds = rechazados.flatMap(r => r.ids);
-        const descripcion = rechazados.map(r =>
-          `**${r.items.map(i => i.codigo_unico).join(', ')}:**\n${r.motivo}`
-        ).join('\n\n---\n\n');
+        // Solo guardar el motivo de rechazo (sin códigos de inventario para no exceder VARCHAR(255))
+        // Los códigos ya están en el inventario asociado a la tarea
+        const descripcion = rechazados.map(r => r.motivo).join(' | ');
 
         // Subir imagen de rechazo si existe (usar la primera que encuentre)
         let imagenRechazoUrl: string | undefined;
@@ -3819,13 +3947,9 @@ function TaskDetailModal({
     try {
       let archivo = '';
       if (uploadOption === 'file' && selectedFile) {
-        // Convertir archivo a base64 (como en solicitudes)
-        archivo = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error('Error al leer el archivo'));
-          reader.readAsDataURL(selectedFile);
-        });
+        // Subir archivo a Spaces y usar la URL
+        const uploadResult = await campanasService.uploadArteFile(selectedFile);
+        archivo = uploadResult.url;
       } else if (uploadOption === 'existing') {
         archivo = existingArtUrl;
       } else if (uploadOption === 'link') {
@@ -3854,13 +3978,9 @@ function TaskDetailModal({
     try {
       let archivo = '';
       if (uploadOption === 'file' && selectedFile) {
-        // Convertir archivo a base64 (como en solicitudes)
-        archivo = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error('Error al leer el archivo'));
-          reader.readAsDataURL(selectedFile);
-        });
+        // Subir archivo a Spaces y usar la URL
+        const uploadResult = await campanasService.uploadArteFile(selectedFile);
+        archivo = uploadResult.url;
       } else if (uploadOption === 'existing') {
         archivo = existingArtUrl;
       } else if (uploadOption === 'link') {
@@ -3982,7 +4102,7 @@ function TaskDetailModal({
       posY += 18;
 
       // Tabla de items
-      const headers = ['Cant.', 'Ancho', 'Alto', 'Catorcena', 'Formato', 'Plaza', 'URL Imagen'];
+      const headers = ['Cant.', 'Ancho', 'Alto', 'Periodo', 'Formato', 'Plaza', 'URL Imagen'];
       const colWidths = [15, 18, 18, 38, 28, 30, 33];
       const availableWidth = pageWidth - 30;
       const rowHeight = 12;
@@ -4021,9 +4141,11 @@ function TaskDetailModal({
         doc.rect(startX, posY, availableWidth, rowHeight, 'F');
 
         // Formatear catorcena
-        const catorcenaText = item.catorcena && item.anio
-          ? `Cat: ${item.catorcena}, ${item.anio}`
-          : '-';
+        const catorcenaText = tipoPeriodo === 'mensual' && item.inicio_periodo
+          ? (() => { const d = new Date(item.inicio_periodo); return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : '-'; })()
+          : item.catorcena && item.anio
+            ? `Cat: ${item.catorcena}, ${item.anio}`
+            : '-';
 
         const imageUrl = grupo.archivo ? (getImageUrl(grupo.archivo) || grupo.archivo) : '';
 
@@ -4130,10 +4252,21 @@ function TaskDetailModal({
 
     setIsCreatingRecepcion(true);
     try {
-      await onCreateRecepcion(task.id, recepcionAsignadoNombre || undefined, recepcionAsignadoId || undefined);
+      let guiaPdfUrlCreada: string | undefined;
+      if (impresionPdfFile) {
+        const pdfResult = await campanasService.uploadTestigoFile(impresionPdfFile);
+        guiaPdfUrlCreada = pdfResult.url;
+      }
+      await onCreateRecepcion(
+        task.id,
+        recepcionAsignadoNombre || undefined,
+        recepcionAsignadoId || undefined,
+        guiaPdfUrlCreada
+      );
       setRecepcionAsignadoNombre('');
       setRecepcionAsignadoId('');
       setRecepcionAsignadoSearch('');
+      setImpresionPdfFile(null);
       onClose();
     } catch (error) {
       console.error('Error al crear tarea de recepción:', error);
@@ -4148,8 +4281,51 @@ function TaskDetailModal({
 
     setIsFinalizandoRecepcion(true);
     try {
+      const normalizeArteKey = (value?: string | null): string => {
+        if (!value) return 'sin_arte';
+        const cleaned = value.split('?')[0].trim();
+        const slashIdx = Math.max(cleaned.lastIndexOf('/'), cleaned.lastIndexOf('\\'));
+        const base = slashIdx >= 0 ? cleaned.substring(slashIdx + 1) : cleaned;
+        try {
+          return decodeURIComponent(base).toLowerCase();
+        } catch {
+          return base.toLowerCase();
+        }
+      };
+
       // Calcular faltantes por arte
       const faltantesPorArte: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[] = [];
+      const faltantesReservaIds = new Set<string>();
+
+      // Mapa de ids de reservas por arte para crear tarea de faltantes con ids_reservas correctos
+      const reservaIdsByArte = taskInventory.reduce((acc, item) => {
+        const key = item.archivo_arte || 'sin_arte';
+        if (!acc[key]) acc[key] = [];
+        const rsvIds = String(item.rsv_id || item.id)
+          .split(',')
+          .map(v => v.trim())
+          .filter(Boolean);
+        acc[key].push(...rsvIds);
+        return acc;
+      }, {} as Record<string, string[]>);
+      const reservaIdsByArteNorm = taskInventory.reduce((acc, item) => {
+        const keyNorm = normalizeArteKey(item.archivo_arte || 'sin_arte');
+        if (!acc[keyNorm]) acc[keyNorm] = [];
+        const rsvIds = String(item.rsv_id || item.id)
+          .split(',')
+          .map(v => v.trim())
+          .filter(Boolean);
+        acc[keyNorm].push(...rsvIds);
+        return acc;
+      }, {} as Record<string, string[]>);
+
+      const getReservaIdsForArte = (arteKey: string): string[] => {
+        const direct = reservaIdsByArte[arteKey];
+        if (direct && direct.length > 0) return direct;
+        const norm = reservaIdsByArteNorm[normalizeArteKey(arteKey)];
+        if (norm && norm.length > 0) return norm;
+        return [];
+      };
 
       // Verificar tipo de tarea desde evidencia
       let tipoEvidencia = '';
@@ -4184,6 +4360,8 @@ function TaskDetailModal({
               recibidas,
               faltantes: diferencia
             });
+            const idsArte = getReservaIdsForArte(key);
+            idsArte.slice(0, diferencia).forEach(id => faltantesReservaIds.add(id));
           }
         });
       } else if (Object.keys(impresionesData).length > 0) {
@@ -4199,10 +4377,25 @@ function TaskDetailModal({
               recibidas,
               faltantes
             });
+            const idsArte = getReservaIdsForArte(arteUrl);
+            idsArte.slice(0, faltantes).forEach(id => faltantesReservaIds.add(id));
           }
         });
       } else {
         // Fallback: usar taskInventory
+        if (taskInventory.length === 0) {
+          const recibidasTotal = cantidadesRecibidas.__total__ || 0;
+          const faltantesTotal = Math.max(0, impresionesOrdenadas - recibidasTotal);
+          if (faltantesTotal > 0) {
+            faltantesPorArte.push({
+              arte: 'Sin arte',
+              solicitadas: impresionesOrdenadas,
+              recibidas: recibidasTotal,
+              faltantes: faltantesTotal
+            });
+          }
+        }
+
         const artesAgrupados = taskInventory.reduce((acc, item) => {
           const key = item.archivo_arte || 'sin_arte';
           if (!acc[key]) {
@@ -4226,17 +4419,54 @@ function TaskDetailModal({
               recibidas,
               faltantes
             });
+            const idsArte = getReservaIdsForArte(key);
+            idsArte.slice(0, faltantes).forEach(id => faltantesReservaIds.add(id));
           }
         });
       }
 
-      // Si hay faltantes, crear nueva tarea de recepción
-      if (faltantesPorArte.length > 0) {
-        await onCreateRecepcionFaltante(faltantesPorArte, observacionesRecepcion);
+      // Fallback defensivo: si hay faltantes pero no se pudo mapear por arte,
+      // limitar a la cantidad faltante total (nunca incluir todos los IDs).
+      if (faltantesPorArte.length > 0 && faltantesReservaIds.size === 0) {
+        const totalFaltantes = faltantesPorArte.reduce((sum, f) => sum + f.faltantes, 0);
+        (task.ids_reservas || '')
+          .split(',')
+          .map(v => v.trim())
+          .filter(Boolean)
+          .slice(0, totalFaltantes)
+          .forEach(id => faltantesReservaIds.add(String(id)));
       }
 
-      // Actualizar la tarea actual como completada (con observaciones si las hay)
-      await onTaskComplete(task.id, observacionesRecepcion || undefined);
+      // Si hay faltantes, crear nueva tarea de recepción
+      if (faltantesPorArte.length > 0) {
+        await onCreateRecepcionFaltante(
+          faltantesPorArte,
+          observacionesRecepcion,
+          guiaPdfUrl || undefined,
+          Array.from(faltantesReservaIds)
+        );
+      }
+
+      // Subir fotos comprobatorias si existen
+      let archivoTestigoUrl: string | undefined;
+      if (recepcionFiles.length > 0) {
+        setIsUploadingRecepcion(true);
+        try {
+          const uploadedUrls: string[] = [];
+          for (const { file } of recepcionFiles) {
+            const uploadResult = await campanasService.uploadTestigoFile(file);
+            uploadedUrls.push(uploadResult.url);
+          }
+          archivoTestigoUrl = JSON.stringify(uploadedUrls);
+        } catch (uploadErr) {
+          console.error('Error al subir fotos comprobatorias:', uploadErr);
+        } finally {
+          setIsUploadingRecepcion(false);
+        }
+      }
+
+      // Actualizar la tarea actual como completada (con observaciones y foto comprobatoria)
+      await onTaskComplete(task.id, observacionesRecepcion || undefined, archivoTestigoUrl);
 
       // Cerrar modal
       onClose();
@@ -4259,6 +4489,8 @@ function TaskDetailModal({
       // Reset estados de Recepción
       setCantidadesRecibidas({});
       setObservacionesRecepcion('');
+      setRecepcionFiles([]);
+      setImpresionPdfFile(null);
     }
   }, [isOpen]);
 
@@ -4300,7 +4532,7 @@ function TaskDetailModal({
           </div>
 
           {/* Tabs - Solo mostrar si NO es tarea de Impresión, Recepción, Instalación ni Testigo */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && (
+          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Orden de Programación' && (
             <div className="flex flex-wrap gap-2 mt-4">
               {tabs
                 .filter(tab => canResolveCurrentTask || tab.key === 'resumen')
@@ -4378,7 +4610,7 @@ function TaskDetailModal({
                     <p className="text-white font-medium">{task.asignado || '-'}</p>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Catorcena de entrega:</span>
+                    <span className="text-zinc-500">{tipoPeriodo === 'mensual' ? 'Periodo de entrega:' : 'Fecha de entrega:'}</span>
                     <p className="text-white font-medium">{impresionesData?.catorcena_entrega || getCatorcenaFromFechaFin || '-'}</p>
                   </div>
                   <div className="md:col-span-3">
@@ -4592,6 +4824,51 @@ function TaskDetailModal({
                       </div>
                     )}
                   </div>
+                  <div className="mt-4">
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor en PDF (opcional)</label>
+                    {impresionPdfFile ? (
+                      <div className="flex items-center gap-2 mb-2 p-2 bg-zinc-800 rounded border border-border">
+                        <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
+                        <span className="text-xs text-zinc-300 truncate flex-1">{impresionPdfFile.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setImpresionPdfFile(null)}
+                          className="text-red-400 hover:text-red-300 text-xs"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : null}
+                    <div className="border-2 border-dashed border-purple-500/30 rounded-lg p-3 text-center hover:border-purple-500/50 transition-colors">
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 20 * 1024 * 1024) {
+                              alert(`${file.name} supera 20MB`);
+                            } else {
+                              setImpresionPdfFile(file);
+                            }
+                          }
+                          e.target.value = '';
+                        }}
+                        className="hidden"
+                        id="impresion-pdf-input"
+                        disabled={isCreatingRecepcion}
+                      />
+                      <label htmlFor="impresion-pdf-input" className="cursor-pointer">
+                        <div className="space-y-1 py-1">
+                          <Upload className="h-6 w-6 text-zinc-500 mx-auto" />
+                          <p className="text-xs text-zinc-400">
+                            {impresionPdfFile ? 'Cambiar PDF' : 'Sube la guía del proveedor'}
+                          </p>
+                          <p className="text-[10px] text-zinc-500">PDF (máx. 20MB)</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               )}
                 </>
@@ -4602,7 +4879,7 @@ function TaskDetailModal({
                 <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
                   <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
                     <h4 className="text-sm font-medium text-purple-300">
-                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por Catorcena &gt; APS &gt; Grupo
+                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por Periodo &gt; APS &gt; Grupo
                     </h4>
                   </div>
                   <div className="max-h-[400px] overflow-y-auto divide-y divide-border">
@@ -4815,7 +5092,7 @@ function TaskDetailModal({
                 <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
                   <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
                     <h4 className="text-sm font-medium text-purple-300">
-                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por Catorcena &gt; APS &gt; Grupo
+                      Desglose completo ({taskInventory.length} ubicaciones) - Agrupado por Periodo &gt; APS &gt; Grupo
                     </h4>
                   </div>
                   <div className="max-h-[400px] overflow-y-auto divide-y divide-border">
@@ -5025,7 +5302,7 @@ function TaskDetailModal({
                                 <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
                                   {faltante.arte ? (
                                     <img
-                                      src={faltante.arte}
+                                      src={getImageUrl(faltante.arte) || faltante.arte}
                                       alt="Arte"
                                       className="w-full h-full object-cover"
                                     />
@@ -5042,7 +5319,7 @@ function TaskDetailModal({
                                     {faltante.cantidad} faltante{faltante.cantidad !== 1 ? 's' : ''}
                                   </p>
                                   <p className="text-xs text-zinc-500 truncate">
-                                    {faltante.arte ? faltante.arte.split('/').pop() : 'Sin arte asignado'}
+                                    {!faltante.arte ? 'Sin arte asignado' : faltante.arte.startsWith('data:') ? 'Arte' : faltante.arte.split('/').pop()}
                                   </p>
                                 </div>
 
@@ -5097,7 +5374,7 @@ function TaskDetailModal({
                         const impresionesEntries = Object.entries(impresionesDesglose);
                         if (impresionesEntries.length > 0) {
                           return impresionesEntries.map(([arteUrl, cantidad]) => {
-                            const nombreArchivo = arteUrl.split('/').pop() || 'arte';
+                            const nombreArchivo = arteUrl.startsWith('data:') ? 'Arte' : (arteUrl.split('/').pop() || 'arte');
                             const imageUrl = getImageUrl(arteUrl);
                             return (
                               <div key={arteUrl} className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
@@ -5175,9 +5452,63 @@ function TaskDetailModal({
                         const artesArray = Object.entries(artesAgrupados);
 
                         if (artesArray.length === 0) {
+                          let fallbackThumb: string | null = null;
+                          if (task.evidencia) {
+                            try {
+                              const evidenciaObj = JSON.parse(task.evidencia);
+                              const arteFromFaltantes = evidenciaObj?.faltantesPorArte?.[0]?.arte;
+                              if (arteFromFaltantes) {
+                                fallbackThumb = getImageUrl(arteFromFaltantes) || arteFromFaltantes;
+                              }
+                            } catch {}
+                          }
                           return (
-                            <div className="p-4 text-center text-zinc-500">
-                              No hay items asociados a esta tarea
+                            <div className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
+                              <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700 flex items-center justify-center">
+                                {fallbackThumb ? (
+                                  <img
+                                    src={fallbackThumb}
+                                    alt="Arte"
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <Image className="h-5 w-5 text-zinc-600" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white">{impresionesOrdenadas} solicitada{impresionesOrdenadas !== 1 ? 's' : ''}</p>
+                                <p className="text-xs text-zinc-500 truncate">Sin desglose de arte</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-zinc-500">Recibidas:</span>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  value={cantidadesRecibidas.__total__ ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '' || /^\d+$/.test(val)) {
+                                      setCantidadesRecibidas(prev => ({
+                                        ...prev,
+                                        __total__: val === '' ? 0 : parseInt(val)
+                                      }));
+                                    }
+                                  }}
+                                  onFocus={(e) => {
+                                    if (cantidadesRecibidas.__total__ === 0) {
+                                      setCantidadesRecibidas(prev => ({ ...prev, __total__: '' as any }));
+                                    }
+                                    e.target.select();
+                                  }}
+                                  onBlur={(e) => {
+                                    if (e.target.value === '') {
+                                      setCantidadesRecibidas(prev => ({ ...prev, __total__: 0 }));
+                                    }
+                                  }}
+                                  className="w-20 px-2 py-1 text-center text-sm bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                />
+                              </div>
                             </div>
                           );
                         }
@@ -5208,7 +5539,7 @@ function TaskDetailModal({
                                 {cantidad} {cantidad !== 1 ? 'ubicaciones' : 'ubicación'}
                               </p>
                               <p className="text-xs text-zinc-500 truncate">
-                                {grupo.archivo ? grupo.archivo.split('/').pop() : 'Sin arte asignado'}
+                                {!grupo.archivo ? 'Sin arte asignado' : grupo.archivo.startsWith('data:') ? `Arte (${grupo.items[0]?.codigo_unico || 'imagen'})` : grupo.archivo.split('/').pop()}
                               </p>
                             </div>
 
@@ -5307,6 +5638,81 @@ function TaskDetailModal({
                         className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
                       />
                     </div>
+
+                    {/* Fotos comprobatorias */}
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-400 mb-1">Fotos comprobatorias (opcional)</label>
+                      {recepcionFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {recepcionFiles.map((item, idx) => (
+                            <div key={idx} className="relative group">
+                              <img src={item.preview} alt={`Foto ${idx + 1}`} className="h-20 w-20 object-cover rounded border border-border" />
+                              <button
+                                type="button"
+                                onClick={() => setRecepcionFiles(prev => prev.filter((_, i) => i !== idx))}
+                                className="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="border-2 border-dashed border-purple-500/30 rounded-lg p-3 text-center hover:border-purple-500/50 transition-colors">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/jpg"
+                          multiple
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            files.forEach(file => {
+                              if (file.size > 10 * 1024 * 1024) {
+                                alert(`${file.name} supera 10MB`);
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                setRecepcionFiles(prev => [...prev, { file, preview: ev.target?.result as string }]);
+                              };
+                              reader.readAsDataURL(file);
+                            });
+                            e.target.value = '';
+                          }}
+                          className="hidden"
+                          id="recepcion-file-input"
+                          disabled={isFinalizandoRecepcion}
+                        />
+                        <label htmlFor="recepcion-file-input" className="cursor-pointer">
+                          <div className="space-y-1 py-1">
+                            <Upload className="h-6 w-6 text-zinc-500 mx-auto" />
+                            <p className="text-xs text-zinc-400">
+                              {recepcionFiles.length > 0 ? 'Agregar más fotos' : 'Sube fotos como comprobante del pedido'}
+                            </p>
+                            <p className="text-[10px] text-zinc-500">JPG o PNG (máx. 10MB cada una)</p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* PDF guía del proveedor (solo lectura en Recepción) */}
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor (PDF)</label>
+                      {guiaPdfUrlResolved ? (
+                        <a
+                          href={getImageUrl(guiaPdfUrlResolved) || guiaPdfUrlResolved}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-border rounded-lg text-sm text-zinc-300 transition-colors"
+                        >
+                          <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
+                          <span>Ver / descargar guía PDF</span>
+                        </a>
+                      ) : (
+                        <div className="px-3 py-2 bg-zinc-900/40 border border-border rounded-lg text-xs text-zinc-500">
+                          Esta tarea no tiene guía PDF adjunta.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -5320,6 +5726,49 @@ function TaskDetailModal({
                     <div className="mt-3 pt-3 border-t border-green-500/20">
                       <p className="text-xs font-medium text-zinc-400 mb-1">Observaciones:</p>
                       <p className="text-sm text-zinc-300 bg-zinc-800/50 rounded p-2">{task.contenido}</p>
+                    </div>
+                  )}
+                  {task.archivo_testigo && (
+                    <div className="mt-3 pt-3 border-t border-green-500/20">
+                      <p className="text-xs font-medium text-zinc-400 mb-2">Fotos comprobatorias:</p>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {(() => {
+                          // Soportar JSON array (múltiples) o string simple (una sola)
+                          let urls: string[] = [];
+                          try {
+                            const parsed = JSON.parse(task.archivo_testigo);
+                            urls = Array.isArray(parsed) ? parsed : [task.archivo_testigo];
+                          } catch {
+                            urls = [task.archivo_testigo];
+                          }
+                          return urls.map((url, idx) => {
+                            const imgUrl = getImageUrl(url) || url;
+                            return (
+                              <img
+                                key={idx}
+                                src={imgUrl}
+                                alt={`Comprobante ${idx + 1}`}
+                                className="max-h-[150px] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => window.open(imgUrl, '_blank')}
+                              />
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                  {guiaPdfUrlResolved && (
+                    <div className="mt-3 pt-3 border-t border-green-500/20">
+                      <p className="text-xs font-medium text-zinc-400 mb-2">Guía del proveedor:</p>
+                      <a
+                        href={getImageUrl(guiaPdfUrlResolved) || guiaPdfUrlResolved}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-border rounded-lg text-sm text-zinc-300 transition-colors"
+                      >
+                        <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
+                        <span>Descargar guía PDF</span>
+                      </a>
                     </div>
                   )}
                 </div>
@@ -5384,7 +5833,7 @@ function TaskDetailModal({
                     </p>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Catorcena:</span>
+                    <span className="text-zinc-500">Periodo:</span>
                     <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
                   </div>
                   <div>
@@ -5417,6 +5866,83 @@ function TaskDetailModal({
                   </div>
                 )}
               </div>
+
+              {/* Indicaciones de instalación (read-only, si existen en evidencia) */}
+              {task.evidencia && (() => {
+                try {
+                  const parsed = JSON.parse(task.evidencia);
+                  const indicaciones = parsed.indicaciones || {};
+                  const archivosEv = parsed.archivos || [];
+                  if (Object.keys(indicaciones).length === 0 && archivosEv.length === 0) return null;
+
+                  // Build display items: prefer archivos with key (new format), fallback to indicaciones keys
+                  let displayItems: { key: string; label: string; tipoArchivo: string }[];
+                  const hasValidArchivos = archivosEv.length > 0 && archivosEv[0]?.key;
+                  if (hasValidArchivos) {
+                    // New format: archivos have key + nombre
+                    displayItems = archivosEv.map((a: any, idx: number) => ({
+                      key: a.key,
+                      label: a.nombre || `Arte ${idx + 1}`,
+                      tipoArchivo: a.tipo || 'tradicional',
+                    }));
+                  } else {
+                    // Fallback: use indicaciones keys directly
+                    displayItems = Object.keys(indicaciones).map((k: string, idx: number) => {
+                      // Match with archivos by index if available
+                      const archivo = archivosEv[idx];
+                      return {
+                        key: k,
+                        label: k.startsWith('arte_') ? `Arte ${idx + 1}` : (k.startsWith('data:') ? `Arte ${idx + 1}` : (k.split('/').pop() || `Arte ${idx + 1}`)),
+                        tipoArchivo: archivo?.tipo || 'tradicional',
+                      };
+                    });
+                  }
+
+                  return (
+                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                      <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Instalación</h4>
+                      <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
+                        {displayItems.map((item: any, idx: number) => {
+                          const indicacion = indicaciones[item.key] || '';
+                          // Get image preview from taskInventory (deduplicated archivo_arte)
+                          const uniqueArtes = [...new Set(taskInventory.map(i => i.archivo_arte).filter(Boolean))];
+                          const arteUrl = uniqueArtes[idx] || null;
+                          const fileUrl = arteUrl ? (arteUrl.startsWith('data:') ? arteUrl : getImageUrl(arteUrl)) : null;
+                          const displayLabel = item.label || `Arte ${idx + 1}`;
+                          return (
+                            <div key={idx} className="flex gap-3 p-2 border rounded-lg bg-purple-900/10 border-purple-500/20">
+                              <div className="flex-shrink-0 w-16 h-12 bg-zinc-800 rounded overflow-hidden cursor-pointer" onClick={() => fileUrl && window.open(fileUrl, '_blank')}>
+                                {fileUrl ? (
+                                  <img src={fileUrl} alt={displayLabel} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <Image className="h-4 w-4 text-zinc-600" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-xs text-white font-medium truncate">{displayLabel}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${item.tipoArchivo === 'digital' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                    {item.tipoArchivo === 'digital' ? 'Digital' : 'Tradicional'}
+                                  </span>
+                                </div>
+                                <div className="bg-zinc-800/60 rounded p-1.5">
+                                  <p className="text-xs text-white whitespace-pre-wrap">
+                                    {indicacion || <span className="text-zinc-500 italic">Sin indicaciones</span>}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                } catch (e) {
+                  return null;
+                }
+              })()}
 
               {/* Lista de artes con filtros (mismo estilo que Revisión) */}
               <div className="bg-zinc-900/50 rounded-lg border border-border">
@@ -5474,7 +6000,7 @@ function TaskDetailModal({
                                 <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                 <th className="p-2 font-medium text-purple-300">Mueble</th>
                                 <th className="p-2 font-medium text-purple-300">Medidas</th>
-                                <th className="p-2 font-medium text-purple-300">Catorcena</th>
+                                <th className="p-2 font-medium text-purple-300">Periodo</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -5495,7 +6021,7 @@ function TaskDetailModal({
                                   <td className="p-2 text-zinc-300">{item.ciudad}</td>
                                   <td className="p-2 text-zinc-300">{item.mueble}</td>
                                   <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                                  <td className="p-2 text-zinc-400">C{item.catorcena}</td>
+                                  <td className="p-2 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -5514,7 +6040,7 @@ function TaskDetailModal({
                           <th className="p-3 font-medium text-purple-300">Plaza</th>
                           <th className="p-3 font-medium text-purple-300">Mueble</th>
                           <th className="p-3 font-medium text-purple-300">Medidas</th>
-                          <th className="p-3 font-medium text-purple-300">Catorcena</th>
+                          <th className="p-3 font-medium text-purple-300">Periodo</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -5536,7 +6062,7 @@ function TaskDetailModal({
                             <td className="p-3 text-zinc-400">{item.plaza}</td>
                             <td className="p-3 text-zinc-300">{item.mueble}</td>
                             <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                            <td className="p-3 text-zinc-400">C{item.catorcena}</td>
+                            <td className="p-3 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -5595,6 +6121,772 @@ function TaskDetailModal({
             </div>
           )}
 
+          {/* === VISTA ESPECIAL PARA ORDEN DE INSTALACIÓN === */}
+          {task.tipo === 'Orden de Instalación' && (
+            <div className="space-y-6">
+              {/* Tabs */}
+              <div className="flex gap-2 border-b border-border pb-2">
+                <button
+                  onClick={() => setProgramacionTab('resumen')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'resumen'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Resumen
+                </button>
+                <button
+                  onClick={() => setProgramacionTab('tabla')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'tabla'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Ver tabla ({taskInventory.length})
+                </button>
+              </div>
+
+              {/* Tab Resumen */}
+              {programacionTab === 'resumen' && (
+                <>
+                  {/* Info de la Orden */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Orden</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <p className="text-white font-medium">{task.titulo || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Estatus:</span>
+                        <p className={`font-medium ${
+                          task.estatus === 'Finalizada' ? 'text-green-400' :
+                          task.estatus === 'Activada' ? 'text-blue-400' :
+                          'text-yellow-400'
+                        }`}>
+                          {task.estatus}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Asignado:</span>
+                        <p className="text-white font-medium">{task.asignado || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Periodo:</span>
+                        <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Creador:</span>
+                        <p className="text-white">{task.creador || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <p className="text-white">{task.fecha_inicio || '-'}</p>
+                      </div>
+                      {task.descripcion && (
+                        <div className="col-span-2">
+                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <p className="text-white">{task.descripcion}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Badge de estado */}
+                  {task.estatus === 'Activada' && (
+                    <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-blue-400" />
+                      <span className="text-sm text-blue-300 font-medium">Activada - Esperando instalación por Operaciones</span>
+                    </div>
+                  )}
+                  {task.estatus === 'Finalizada' && (
+                    <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-400" />
+                      <span className="text-sm text-green-300 font-medium">Finalizada - Instalación completada por Operaciones</span>
+                    </div>
+                  )}
+
+                  {/* Indicaciones por Archivo */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Instalación por Archivo</h4>
+                    {(() => {
+                      let indicaciones: Record<string, string> = {};
+                      let archivosFromEvidencia: { nombre: string; tipo: string; archivoData?: string; spot?: number }[] = [];
+                      try {
+                        if (task.evidencia) {
+                          const parsed = JSON.parse(task.evidencia);
+                          indicaciones = parsed.indicaciones || {};
+                          archivosFromEvidencia = parsed.archivos || [];
+                        }
+                      } catch (e) {
+                        console.error('Error parsing orden instalacion evidencia:', e);
+                      }
+
+                      // Use loaded digital files as fallback for thumbnails
+                      const archivos = archivosFromEvidencia.length > 0 ? archivosFromEvidencia : [];
+                      const currentIndicaciones = Object.keys(ordenIndicaciones).length > 0 ? ordenIndicaciones : indicaciones;
+
+                      if (archivos.length === 0 && Object.keys(indicaciones).length === 0) {
+                        return (
+                          <div className="text-center py-8 text-zinc-500 text-sm">
+                            <Image className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                            No hay archivos asociados a esta orden
+                          </div>
+                        );
+                      }
+
+                      // Show archivos from evidencia, or just indicaciones keys
+                      const displayItems = archivos.length > 0
+                        ? archivos.map(a => ({ key: (a as any).key || a.nombre, label: a.nombre, tipoArchivo: a.tipo }))
+                        : Object.keys(indicaciones).map(k => ({ key: k, label: k, tipoArchivo: 'tradicional' }));
+
+                      return (
+                        <div className="space-y-4">
+                          {displayItems.map((item, index) => {
+                            const indicacion = currentIndicaciones[item.key] || '';
+                            // Try to find loaded digital file for thumbnail
+                            const digitalFile = loadedArchivosDigitales.find(d => d.archivo === item.key);
+                            const fileUrl = digitalFile ? getImageUrl(digitalFile.archivoData || digitalFile.archivo) : null;
+
+                            return (
+                              <div key={index} className="flex gap-4 p-3 border rounded-lg bg-purple-900/10 border-purple-500/20">
+                                {/* Thumbnail */}
+                                <div className="flex-shrink-0 w-24 h-16 bg-zinc-800 rounded overflow-hidden">
+                                  {fileUrl ? (
+                                    <>
+                                      <img
+                                        src={fileUrl}
+                                        alt={item.label}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = 'none';
+                                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                        }}
+                                      />
+                                      <div className="w-full h-full flex items-center justify-center hidden">
+                                        <Image className="h-6 w-6 text-zinc-600" />
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-6 w-6 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Info y indicaciones */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Image className="h-4 w-4 text-green-400" />
+                                    <span className="text-sm text-white font-medium truncate" title={item.label}>
+                                      {item.label.split('/').pop() || item.label}
+                                    </span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${item.tipoArchivo === 'digital' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                      {item.tipoArchivo === 'digital' ? 'Digital' : 'Tradicional'}
+                                    </span>
+                                  </div>
+                                  {/* Indicaciones: editable when Pendiente, read-only otherwise */}
+                                  {task.estatus === 'Pendiente' ? (
+                                    <textarea
+                                      value={indicacion}
+                                      onChange={(e) => {
+                                        const newIndicaciones = { ...currentIndicaciones, [item.key]: e.target.value };
+                                        setOrdenIndicaciones(newIndicaciones);
+                                      }}
+                                      placeholder="Escribir indicaciones para este archivo..."
+                                      className="w-full bg-zinc-800/60 rounded p-2 text-xs text-white placeholder:text-zinc-500 border border-zinc-700 focus:border-purple-500 focus:outline-none resize-none"
+                                      rows={2}
+                                    />
+                                  ) : (
+                                    <div className="bg-zinc-800/60 rounded p-2">
+                                      <p className="text-xs text-white whitespace-pre-wrap">
+                                        {indicacion || <span className="text-zinc-500 italic">Sin indicaciones especificadas</span>}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Botón Activar (solo cuando estatus=Pendiente) */}
+                  {task.estatus === 'Pendiente' && (
+                    <div className="mt-4 flex justify-end gap-3">
+                      {/* Save indicaciones button */}
+                      {Object.keys(ordenIndicaciones).length > 0 && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              let evidenciaObj: any = {};
+                              try {
+                                if (task.evidencia) evidenciaObj = JSON.parse(task.evidencia);
+                              } catch (e) { /* ignore */ }
+                              const newEvidencia = JSON.stringify({
+                                ...evidenciaObj,
+                                indicaciones: ordenIndicaciones,
+                              });
+                              await onUpdateTask(task.id, { evidencia: newEvidencia });
+                              setOrdenIndicaciones({});
+                            } catch (e) {
+                              console.error('Error saving indicaciones:', e);
+                            }
+                          }}
+                          disabled={isUpdating}
+                          className="flex items-center gap-2 px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors disabled:opacity-50"
+                        >
+                          <Check className="h-4 w-4" />
+                          Guardar indicaciones
+                        </button>
+                      )}
+                      <button
+                        onClick={async () => {
+                          setIsSendingOrden(true);
+                          try {
+                            // Save indicaciones first if modified
+                            if (Object.keys(ordenIndicaciones).length > 0) {
+                              let evidenciaObj: any = {};
+                              try {
+                                if (task.evidencia) evidenciaObj = JSON.parse(task.evidencia);
+                              } catch (e) { /* ignore */ }
+                              const newEvidencia = JSON.stringify({
+                                ...evidenciaObj,
+                                indicaciones: ordenIndicaciones,
+                              });
+                              await onUpdateTask(task.id, { evidencia: newEvidencia });
+                            }
+                            await campanasService.activarOrdenInstalacion(campanaId, parseInt(task.id));
+                            setOrdenIndicaciones({});
+                            onClose();
+                          } catch (e) {
+                            console.error('Error activando orden:', e);
+                            alert(e instanceof Error ? e.message : 'Error al activar orden de instalación');
+                          } finally {
+                            setIsSendingOrden(false);
+                          }
+                        }}
+                        disabled={isSendingOrden || isUpdating}
+                        className="flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isSendingOrden ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Activando...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4" />
+                            Activar
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Tab Ver Tabla */}
+              {programacionTab === 'tabla' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-zinc-400">{filteredProgramacionModalData.length} de {taskInventory.length} items</span>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                        <input
+                          type="text"
+                          placeholder="Buscar por ID, código, nombre archivo..."
+                          value={programacionModalSearch}
+                          onChange={(e) => setProgramacionModalSearch(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                        />
+                        {programacionModalSearch && (
+                          <button
+                            onClick={() => setProgramacionModalSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'Periodo', 'Estado Arte'];
+                          const rows = filteredProgramacionModalData.map(item => [
+                            item.id,
+                            item.codigo_unico,
+                            item.tradicional_digital,
+                            item.ubicacion,
+                            item.plaza,
+                            item.mueble,
+                            item.ciudad,
+                            item.catorcena,
+                            item.estado_arte,
+                          ]);
+                          const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${(c || '').toString().replace(/"/g, '""')}"`).join(','))].join('\n');
+                          const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `orden_instalacion_${task.id}_inventario.csv`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-600/30 transition-colors"
+                        title="Descargar tabla como CSV"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        CSV
+                      </button>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto max-h-[400px] overflow-y-auto rounded-lg border border-border">
+                    <table className="w-full text-xs">
+                      <thead className="bg-zinc-800/80 sticky top-0 z-10">
+                        <tr>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">ID</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Código</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Tipo</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Ubicación</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Plaza</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Mueble</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Ciudad</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Periodo</th>
+                          <th className="text-left px-3 py-2 text-zinc-400 font-medium">Estado Arte</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {filteredProgramacionModalData.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-zinc-800/30">
+                            <td className="px-3 py-2 text-white">{item.id}</td>
+                            <td className="px-3 py-2 text-white font-mono text-[10px]">{item.codigo_unico}</td>
+                            <td className="px-3 py-2 text-white">{item.tradicional_digital}</td>
+                            <td className="px-3 py-2 text-white">{item.ubicacion}</td>
+                            <td className="px-3 py-2 text-white">{item.plaza}</td>
+                            <td className="px-3 py-2 text-white">{item.mueble}</td>
+                            <td className="px-3 py-2 text-white">{item.ciudad}</td>
+                            <td className="px-3 py-2 text-white">{item.catorcena}</td>
+                            <td className="px-3 py-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${getStatusColors(true)[item.estado_arte || ''] || 'bg-zinc-500/20 text-zinc-400'}`}>
+                                {item.estado_arte || '-'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* === VISTA ESPECIAL PARA ORDEN DE PROGRAMACIÓN === */}
+          {task.tipo === 'Orden de Programación' && (
+            <div className="space-y-6">
+              {/* Tabs */}
+              <div className="flex gap-2 border-b border-border pb-2">
+                <button
+                  onClick={() => setProgramacionTab('resumen')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'resumen'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Resumen
+                </button>
+                <button
+                  onClick={() => setProgramacionTab('tabla')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'tabla'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Ver tabla ({taskInventory.length})
+                </button>
+              </div>
+
+              {/* Tab Resumen */}
+              {programacionTab === 'resumen' && (
+                <>
+                  {/* Info de la Tarea */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Orden</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <p className="text-white font-medium">{task.titulo || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Estatus:</span>
+                        <p className={`font-medium ${
+                          task.estatus === 'Finalizada' ? 'text-green-400' :
+                          task.estatus === 'Enviada' ? 'text-blue-400' :
+                          'text-yellow-400'
+                        }`}>
+                          {task.estatus}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Asignado:</span>
+                        <p className="text-white font-medium">{task.asignado || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Periodo:</span>
+                        <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Creador:</span>
+                        <p className="text-white">{task.creador || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <p className="text-white">{task.fecha_inicio || '-'}</p>
+                      </div>
+                      {task.descripcion && (
+                        <div className="col-span-2">
+                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <p className="text-white">{task.descripcion}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Badge de estado */}
+                  {task.estatus === 'Enviada' && (
+                    <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-blue-400" />
+                      <span className="text-sm text-blue-300 font-medium">Enviada - Esperando programación por Operaciones</span>
+                    </div>
+                  )}
+                  {task.estatus === 'Finalizada' && (
+                    <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-400" />
+                      <span className="text-sm text-green-300 font-medium">Finalizada - Programación completada por Operaciones</span>
+                    </div>
+                  )}
+
+                  {/* Indicaciones por Arte */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-purple-300 mb-3">Indicaciones de Programación por Arte</h4>
+                    {(() => {
+                      let indicaciones: Record<string, string> = {};
+                      let archivosFromEvidencia: { archivo: string; archivoData?: string; spot: number; tipo: string }[] = [];
+                      try {
+                        if (task.evidencia) {
+                          const parsed = JSON.parse(task.evidencia);
+                          indicaciones = parsed.indicaciones || {};
+                          archivosFromEvidencia = parsed.archivos || [];
+                        }
+                      } catch (e) {
+                        console.error('Error parsing orden programacion evidencia:', e);
+                      }
+
+                      const evidenciaHasArchivoData = archivosFromEvidencia.length > 0 &&
+                        archivosFromEvidencia.every(a => a.archivoData && a.archivoData.trim() !== '');
+                      const archivos = evidenciaHasArchivoData ? archivosFromEvidencia : loadedArchivosDigitales;
+
+                      // Initialize ordenIndicaciones from evidencia on first render
+                      const currentIndicaciones = Object.keys(ordenIndicaciones).length > 0 ? ordenIndicaciones : indicaciones;
+
+                      if (isLoadingArchivosDigitales) {
+                        return (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-purple-400 mr-2" />
+                            <span className="text-zinc-400 text-sm">Cargando archivos digitales...</span>
+                          </div>
+                        );
+                      }
+
+                      if (archivos.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-zinc-500 text-sm">
+                            <Image className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                            No hay archivos digitales asociados a esta orden
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-4">
+                          {archivos.map((archivo, index) => {
+                            const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
+                            const isVideo = archivo.tipo === 'video';
+                            const indicacion = currentIndicaciones[archivo.archivo] || '';
+                            const fileUrl = getImageUrl(archivo.archivoData || archivo.archivo);
+
+                            return (
+                              <div key={index} className="flex gap-4 p-3 border rounded-lg bg-purple-900/10 border-purple-500/20">
+                                {/* Thumbnail */}
+                                <div className="flex-shrink-0 w-24 h-16 bg-zinc-800 rounded overflow-hidden">
+                                  {isVideo ? (
+                                    <div className="w-full h-full flex items-center justify-center bg-zinc-800">
+                                      <Play className="h-6 w-6 text-purple-400" />
+                                    </div>
+                                  ) : fileUrl ? (
+                                    <>
+                                      <img
+                                        src={fileUrl}
+                                        alt={fileName}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = 'none';
+                                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                        }}
+                                      />
+                                      <div className="w-full h-full flex items-center justify-center hidden">
+                                        <Image className="h-6 w-6 text-zinc-600" />
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-6 w-6 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Info y indicaciones */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2 mb-2">
+                                    <div className="flex items-center gap-2">
+                                      {isVideo ? (
+                                        <Video className="h-4 w-4 text-blue-400" />
+                                      ) : (
+                                        <Image className="h-4 w-4 text-green-400" />
+                                      )}
+                                      <span className="text-sm text-white font-medium truncate" title={fileName}>
+                                        {fileName}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-400 bg-zinc-700 px-1.5 py-0.5 rounded">
+                                        Spot {archivo.spot}
+                                      </span>
+                                    </div>
+                                    {/* Download */}
+                                    <a
+                                      href={fileUrl || '#'}
+                                      download={fileName}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-1 px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs hover:bg-blue-600/30 transition-colors"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                      Descargar
+                                    </a>
+                                  </div>
+                                  {/* Indicaciones: editable when Pendiente, read-only otherwise */}
+                                  {task.estatus === 'Pendiente' ? (
+                                    <textarea
+                                      value={indicacion}
+                                      onChange={(e) => {
+                                        const newIndicaciones = { ...currentIndicaciones, [archivo.archivo]: e.target.value };
+                                        setOrdenIndicaciones(newIndicaciones);
+                                      }}
+                                      placeholder="Escribir indicaciones para este arte..."
+                                      className="w-full bg-zinc-800/60 rounded p-2 text-xs text-white placeholder:text-zinc-500 border border-zinc-700 focus:border-purple-500 focus:outline-none resize-none"
+                                      rows={2}
+                                    />
+                                  ) : (
+                                    <div className="bg-zinc-800/60 rounded p-2">
+                                      <p className="text-xs text-white whitespace-pre-wrap">
+                                        {indicacion || <span className="text-zinc-500 italic">Sin indicaciones especificadas</span>}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Botón Enviar a Operaciones (solo cuando estatus=Pendiente) */}
+                  {task.estatus === 'Pendiente' && (
+                    <div className="mt-4 flex justify-end gap-3">
+                      {/* Save indicaciones button */}
+                      {Object.keys(ordenIndicaciones).length > 0 && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              let evidenciaObj: any = {};
+                              try {
+                                if (task.evidencia) evidenciaObj = JSON.parse(task.evidencia);
+                              } catch (e) { /* ignore */ }
+                              const newEvidencia = JSON.stringify({
+                                ...evidenciaObj,
+                                indicaciones: ordenIndicaciones,
+                              });
+                              await onUpdateTask(task.id, { evidencia: newEvidencia });
+                              setOrdenIndicaciones({});
+                            } catch (e) {
+                              console.error('Error saving indicaciones:', e);
+                            }
+                          }}
+                          disabled={isUpdating}
+                          className="flex items-center gap-2 px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors disabled:opacity-50"
+                        >
+                          <Check className="h-4 w-4" />
+                          Guardar indicaciones
+                        </button>
+                      )}
+                      <button
+                        onClick={async () => {
+                          setIsSendingOrden(true);
+                          try {
+                            // Save indicaciones first if modified
+                            if (Object.keys(ordenIndicaciones).length > 0) {
+                              let evidenciaObj: any = {};
+                              try {
+                                if (task.evidencia) evidenciaObj = JSON.parse(task.evidencia);
+                              } catch (e) { /* ignore */ }
+                              const newEvidencia = JSON.stringify({
+                                ...evidenciaObj,
+                                indicaciones: ordenIndicaciones,
+                              });
+                              await onUpdateTask(task.id, { evidencia: newEvidencia });
+                            }
+                            await campanasService.enviarOrdenProgramacion(campanaId, parseInt(task.id));
+                            setOrdenIndicaciones({});
+                            onClose();
+                          } catch (e) {
+                            console.error('Error enviando orden:', e);
+                            alert(e instanceof Error ? e.message : 'Error al enviar orden de programación');
+                          } finally {
+                            setIsSendingOrden(false);
+                          }
+                        }}
+                        disabled={isSendingOrden || isUpdating}
+                        className="flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isSendingOrden ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Enviando...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4" />
+                            Enviar a Operaciones
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Tab Ver Tabla - Reuse same table as Programación */}
+              {programacionTab === 'tabla' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-zinc-400">{filteredProgramacionModalData.length} de {taskInventory.length} items</span>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                        <input
+                          type="text"
+                          placeholder="Buscar por ID, código, nombre archivo..."
+                          value={programacionModalSearch}
+                          onChange={(e) => setProgramacionModalSearch(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                        />
+                        {programacionModalSearch && (
+                          <button
+                            onClick={() => setProgramacionModalSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Periodo', 'Estado Arte'];
+                          const rows = filteredProgramacionModalData.map(item => [
+                            item.id,
+                            item.codigo_unico,
+                            item.tradicional_digital,
+                            item.ubicacion,
+                            item.plaza,
+                            item.mueble,
+                            item.ciudad,
+                            item.nse,
+                            item.catorcena,
+                            item.estado_arte,
+                          ]);
+                          const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${(c || '').toString().replace(/"/g, '""')}"`).join(','))].join('\n');
+                          const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `orden_programacion_${task.id}_inventario.csv`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-600/30 transition-colors"
+                        title="Descargar tabla como CSV"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        CSV
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-zinc-900 z-10">
+                        <tr className="border-b border-border">
+                          <th className="text-left p-2 text-zinc-400 font-medium">ID</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Código</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Tipo</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Ubicación</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Plaza</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Mueble</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Ciudad</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">NSE</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Periodo</th>
+                          <th className="text-left p-2 text-zinc-400 font-medium">Estado Arte</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredProgramacionModalData.map(item => (
+                          <tr key={item.id} className="border-b border-border/50 hover:bg-zinc-800/30">
+                            <td className="p-2 text-zinc-300">{item.id}</td>
+                            <td className="p-2 text-zinc-300">{item.codigo_unico}</td>
+                            <td className="p-2 text-zinc-300">{item.tradicional_digital}</td>
+                            <td className="p-2 text-zinc-300 max-w-[200px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
+                            <td className="p-2 text-zinc-300">{item.plaza}</td>
+                            <td className="p-2 text-zinc-300">{item.mueble}</td>
+                            <td className="p-2 text-zinc-300">{item.ciudad}</td>
+                            <td className="p-2 text-zinc-300">{item.nse}</td>
+                            <td className="p-2 text-zinc-300">{item.catorcena}</td>
+                            <td className="p-2">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                item.estado_arte === 'aprobado' ? 'bg-green-900/30 text-green-400' :
+                                item.estado_arte === 'rechazado' ? 'bg-red-900/30 text-red-400' :
+                                'bg-zinc-700/50 text-zinc-400'
+                              }`}>
+                                {item.estado_arte || 'sin_revisar'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* === VISTA ESPECIAL PARA TAREAS DE PROGRAMACIÓN === */}
           {task.tipo === 'Programación' && (
             <div className="space-y-6">
@@ -5644,7 +6936,7 @@ function TaskDetailModal({
                         <p className="text-white font-medium">{task.asignado || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Catorcena:</span>
+                        <span className="text-zinc-500 text-xs">Periodo:</span>
                         <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
                       </div>
                       <div>
@@ -5907,7 +7199,7 @@ function TaskDetailModal({
                       {/* Botón exportar CSV */}
                       <button
                         onClick={() => {
-                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Catorcena', 'Estado Arte'];
+                          const headers = ['ID', 'Código', 'Tipo', 'Ubicación', 'Plaza', 'Mueble', 'Ciudad', 'NSE', 'Periodo', 'Estado Arte'];
                           const rows = filteredProgramacionModalData.map(item => [
                             item.id,
                             item.codigo_unico,
@@ -5917,7 +7209,7 @@ function TaskDetailModal({
                             item.mueble,
                             item.ciudad,
                             item.nse,
-                            item.catorcena ? `C${item.catorcena}` : '-',
+                            tipoPeriodo === 'mensual' ? getPeriodoShort(item, tipoPeriodo) : (item.catorcena ? `C${item.catorcena}` : '-'),
                             item.estado_arte || '-',
                           ]);
                           const csvContent = [
@@ -6207,11 +7499,12 @@ function TaskDetailModal({
               campanaId={campanaId}
               getCatorcenaFromFechaFin={getCatorcenaFromFechaFin}
               canResolveProduccionTasks={canResolveProduccionTasks}
+              tipoPeriodo={tipoPeriodo}
             />
           )}
 
-          {/* Tab Resumen - Solo para tareas que NO son Impresión, Recepción, Instalación, Testigo ni Programación */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && activeTab === 'resumen' && (
+          {/* Tab Resumen - Solo para tareas que NO son Impresión, Recepción, Instalación, Testigo, Programación ni Orden de Programación */}
+          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Orden de Programación' && activeTab === 'resumen' && (
             <div className="space-y-4">
               {/* Info de la tarea - Compacta */}
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
@@ -6259,53 +7552,21 @@ function TaskDetailModal({
                         <h5 className="text-sm font-medium text-red-300">Motivo del Rechazo</h5>
                       </div>
                       {(() => {
-                        // Parsear la descripción para extraer códigos y motivo
                         const desc = task.descripcion || '';
 
-                        // Extraer códigos: todo lo que está entre ** y :** (los : están dentro del **)
-                        const codigosMatch = desc.match(/\*\*(.+?):\*\*/);
-                        const codigosAfectados = codigosMatch ? codigosMatch[1].trim() : null;
-
-                        // Extraer motivo: todo lo que está después de **códigos:** hasta "Por favor" o fin
-                        let motivoRechazo = '';
-                        if (codigosAfectados) {
-                          // Buscar el texto después de **códigos:**
-                          const afterCodigos = desc.split(/\*\*[^*]+:\*\*\s*/)[1];
-                          if (afterCodigos) {
-                            // Quitar "Por favor corrige..." si existe
-                            motivoRechazo = afterCodigos.split(/Por favor/i)[0].trim();
-                          }
-                        }
-
-                        // Si no se pudo extraer, limpiar la descripción completa
-                        if (!motivoRechazo) {
-                          motivoRechazo = desc
-                            .replace(/Artes rechazados con el siguiente motivo:\s*/i, '')
-                            .replace(/\*\*[^*]+:\*\*\s*/g, '')
-                            .replace(/Por favor corrige los artes y vuelve a enviar a revisión\./i, '')
-                            .trim();
-                        }
+                        // Limpiar prefijos/sufijos del formato viejo y extraer solo el motivo real
+                        let motivoRechazo = desc
+                          .replace(/^Artes rechazados con el siguiente motivo:\s*/i, '')
+                          .replace(/Por favor corrige los artes y vuelve a enviar a revisión\.?\s*/gi, '')
+                          .replace(/\*\*[^*]+:\*\*\s*/g, '')
+                          .replace(/---/g, '')
+                          .trim();
 
                         return (
                           <div className="space-y-3">
-                            {codigosAfectados && (
-                              <div>
-                                <span className="text-zinc-400 text-xs uppercase tracking-wide">Artes afectados:</span>
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {codigosAfectados.split(',').map((codigo, idx) => (
-                                    <span key={idx} className="px-2 py-0.5 bg-zinc-800 rounded text-xs text-zinc-300 font-mono">
-                                      {codigo.trim()}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            <div>
-                              <span className="text-zinc-400 text-xs uppercase tracking-wide">Motivo:</span>
-                              <p className="mt-1 text-white text-sm bg-zinc-800/50 rounded p-2 border-l-2 border-red-500">
-                                {motivoRechazo || 'Sin motivo especificado'}
-                              </p>
-                            </div>
+                            <p className="text-white text-sm bg-zinc-800/50 rounded p-2 border-l-2 border-red-500">
+                              {motivoRechazo || 'Sin motivo especificado'}
+                            </p>
                             {/* Imagen de referencia del rechazo (si existe en evidencia) */}
                             {(() => {
                               try {
@@ -6421,7 +7682,7 @@ function TaskDetailModal({
                                 <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                 <th className="p-2 font-medium text-purple-300">Mueble</th>
                                 <th className="p-2 font-medium text-purple-300">Medidas</th>
-                                <th className="p-2 font-medium text-purple-300">Catorcena</th>
+                                <th className="p-2 font-medium text-purple-300">Periodo</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -6442,7 +7703,7 @@ function TaskDetailModal({
                                   <td className="p-2 text-zinc-300">{item.ciudad}</td>
                                   <td className="p-2 text-zinc-300">{item.mueble}</td>
                                   <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                                  <td className="p-2 text-zinc-400">C{item.catorcena}</td>
+                                  <td className="p-2 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -6461,7 +7722,7 @@ function TaskDetailModal({
                           <th className="p-3 font-medium text-purple-300">Plaza</th>
                           <th className="p-3 font-medium text-purple-300">Mueble</th>
                           <th className="p-3 font-medium text-purple-300">Medidas</th>
-                          <th className="p-3 font-medium text-purple-300">Catorcena</th>
+                          <th className="p-3 font-medium text-purple-300">Periodo</th>
                           <th className="p-3 font-medium text-purple-300">Estado</th>
                         </tr>
                       </thead>
@@ -6501,7 +7762,7 @@ function TaskDetailModal({
                             <td className="p-3 text-zinc-400">{item.plaza}</td>
                             <td className="p-3 text-zinc-300">{item.mueble}</td>
                             <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                            <td className="p-3 text-zinc-400">C{item.catorcena}</td>
+                            <td className="p-3 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                             <td className="p-3">
                               <span className={`px-2 py-0.5 rounded text-[10px] ${
                                 item.estado_arte === 'aprobado' ? 'bg-green-500/20 text-green-400' :
@@ -7747,6 +9008,18 @@ function CreateTaskModal({
   }[]>([]);
   const [isLoadingArchivosDigitales, setIsLoadingArchivosDigitales] = useState(false);
 
+  // Campos específicos para Instalación/Orden de Instalación - indicaciones por cada archivo
+  const [instalacionIndicaciones, setInstalacionIndicaciones] = useState<Record<string, string>>({});
+  const [archivosInstalacion, setArchivosInstalacion] = useState<{
+    nombre: string;
+    nombreLegible?: string;
+    tipo: 'tradicional' | 'digital';
+    id?: number;
+    archivoData?: string;
+    spot?: number;
+  }[]>([]);
+  const [isLoadingArchivosInstalacion, setIsLoadingArchivosInstalacion] = useState(false);
+
   // Inicializar impresiones cuando cambia el inventario seleccionado (cantidad de ubicaciones por defecto)
   useEffect(() => {
     if (isOpen && selectedInventory.length > 0 && tipo === 'Impresión') {
@@ -7767,7 +9040,7 @@ function CreateTaskModal({
 
   // Cargar archivos digitales cuando se selecciona tipo Programación
   useEffect(() => {
-    if (isOpen && selectedInventory.length > 0 && tipo === 'Programación') {
+    if (isOpen && selectedInventory.length > 0 && (tipo === 'Programación' || tipo === 'Orden de Programación')) {
       const loadDigitalFiles = async () => {
         setIsLoadingArchivosDigitales(true);
         try {
@@ -7794,6 +9067,66 @@ function CreateTaskModal({
         }
       };
       loadDigitalFiles();
+    }
+  }, [isOpen, selectedInventory, tipo, campanaId]);
+
+  // Cargar archivos para Instalación / Orden de Instalación (tradicionales + digitales)
+  useEffect(() => {
+    if (isOpen && selectedInventory.length > 0 && (tipo === 'Instalación' || tipo === 'Orden de Instalación')) {
+      const loadInstalacionFiles = async () => {
+        setIsLoadingArchivosInstalacion(true);
+        try {
+          const archivos: typeof archivosInstalacion = [];
+          const archivosVistos = new Set<string>();
+
+          // 1. Archivos tradicionales (de archivo_arte, deduplicados)
+          selectedInventory.forEach(item => {
+            if (item.archivo_arte && !archivosVistos.has(item.archivo_arte)) {
+              archivosVistos.add(item.archivo_arte);
+              // Generar nombre legible: si es base64/URL larga, usar nombre del item
+              const isDataUrl = item.archivo_arte.startsWith('data:');
+              const nombreLegible = isDataUrl
+                ? `Arte - ${item.codigo_unico || (item as any).clave || 'Archivo'}`
+                : (item.archivo_arte.split('/').pop() || 'Arte');
+              archivos.push({
+                nombre: item.archivo_arte,
+                tipo: 'tradicional',
+                archivoData: isDataUrl ? item.archivo_arte : getImageUrl(item.archivo_arte) || undefined,
+                nombreLegible,
+              });
+            }
+          });
+
+          // 2. Archivos digitales (via API)
+          const reservaIds = selectedInventory.flatMap(item =>
+            item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+          );
+          if (reservaIds.length > 0) {
+            const idsParam = reservaIds.join(',');
+            const imagenes = await campanasService.getImagenesDigitales(campanaId, idsParam);
+            imagenes.forEach(img => {
+              if (!archivosVistos.has(img.archivo)) {
+                archivosVistos.add(img.archivo);
+                archivos.push({
+                  nombre: img.archivo,
+                  tipo: 'digital',
+                  id: img.id,
+                  archivoData: img.archivoData,
+                  spot: img.spot,
+                });
+              }
+            });
+          }
+
+          setArchivosInstalacion(archivos);
+        } catch (error) {
+          console.error('Error al cargar archivos de instalación:', error);
+          setArchivosInstalacion([]);
+        } finally {
+          setIsLoadingArchivosInstalacion(false);
+        }
+      };
+      loadInstalacionFiles();
     }
   }, [isOpen, selectedInventory, tipo, campanaId]);
 
@@ -7926,11 +9259,59 @@ function CreateTaskModal({
       (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
+      // Indicaciones por archivo (si hay)
+      if (archivosInstalacion.length > 0) {
+        // Usar keys cortas (arte_0, arte_1...) en vez del nombre/base64 para no exceder VARCHAR(10000)
+        const indicacionesCompactas: Record<string, string> = {};
+        const archivosCompactos = archivosInstalacion.map((a, i) => {
+          const shortKey = `arte_${i}`;
+          // Mapear la indicación del nombre original al key corto
+          if (instalacionIndicaciones[a.nombre]) {
+            indicacionesCompactas[shortKey] = instalacionIndicaciones[a.nombre];
+          }
+          return {
+            key: shortKey,
+            nombre: a.nombreLegible || (a.nombre.startsWith('data:') ? `Arte ${i + 1}` : (a.nombre.split('/').pop() || `Arte ${i + 1}`)),
+            tipo: a.tipo,
+          };
+        });
+        (payload as any).evidencia = JSON.stringify({
+          indicaciones: indicacionesCompactas,
+          archivos: archivosCompactos,
+        });
+      }
       // Asignados múltiples para Instalación (área Operaciones)
       if (selectedAsignadosInstalacion.length > 0) {
         // Guardar IDs separados por coma
         (payload as any).id_asignado = selectedAsignadosInstalacion.map(u => u.id).join(', ');
         // Guardar nombres separados por coma
+        payload.asignado = selectedAsignadosInstalacion.map(u => u.nombre).join(', ');
+      }
+    } else if (tipo === 'Orden de Instalación') {
+      // Campos adicionales para Orden de Instalación (misma estructura que Instalación)
+      (payload as any).fecha_fin = fechaEntrega;
+      (payload as any).fecha_creacion = new Date().toISOString();
+      (payload as any).listado_inventario = selectedIds.join(',');
+      // Usar keys cortas para no exceder VARCHAR(10000)
+      const indicacionesCompactasOI: Record<string, string> = {};
+      const archivosCompactosOI = archivosInstalacion.map((a, i) => {
+        const shortKey = `arte_${i}`;
+        if (instalacionIndicaciones[a.nombre]) {
+          indicacionesCompactasOI[shortKey] = instalacionIndicaciones[a.nombre];
+        }
+        return {
+          key: shortKey,
+          nombre: a.nombreLegible || (a.nombre.startsWith('data:') ? `Arte ${i + 1}` : (a.nombre.split('/').pop() || `Arte ${i + 1}`)),
+          tipo: a.tipo,
+        };
+      });
+      (payload as any).evidencia = JSON.stringify({
+        indicaciones: indicacionesCompactasOI,
+        archivos: archivosCompactosOI,
+      });
+      // Asignados múltiples para Orden de Instalación (área Operaciones)
+      if (selectedAsignadosInstalacion.length > 0) {
+        (payload as any).id_asignado = selectedAsignadosInstalacion.map(u => u.id).join(', ');
         payload.asignado = selectedAsignadosInstalacion.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Impresión') {
@@ -7989,6 +9370,24 @@ function CreateTaskModal({
         // Guardar nombres separados por coma
         payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
       }
+    } else if (tipo === 'Orden de Programación') {
+      // Campos adicionales para Orden de Programación (misma estructura que Programación)
+      (payload as any).fecha_fin = fechaEntrega;
+      (payload as any).fecha_creacion = new Date().toISOString();
+      (payload as any).listado_inventario = selectedIds.join(',');
+      (payload as any).evidencia = JSON.stringify({
+        indicaciones: programacionIndicaciones,
+        archivos: archivosDigitalesProgramacion.map(a => ({
+          archivo: a.archivo,
+          spot: a.spot,
+          tipo: a.tipo,
+        })),
+      });
+      // Asignados múltiples para Orden de Programación (área Operaciones)
+      if (selectedAsignadosProgramacion.length > 0) {
+        (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(', ');
+        payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
+      }
     } else if (proveedorId && selectedProveedor) {
       // Para otros tipos usa proveedores
       payload.proveedores_id = proveedorId;
@@ -8045,6 +9444,9 @@ function CreateTaskModal({
     // Reset campos de Programación
     setProgramacionIndicaciones({});
     setArchivosDigitalesProgramacion([]);
+    // Reset campos de Instalación indicaciones
+    setInstalacionIndicaciones({});
+    setArchivosInstalacion([]);
     // Reset campos de Programación (múltiples asignados área Operaciones)
     setSelectedAsignadosProgramacion([]);
     setAsignadoSearchProgramacion('');
@@ -8121,7 +9523,7 @@ function CreateTaskModal({
         {tipo && (
           <div className="space-y-4 border-t border-border pt-4">
             {/* Campos comunes - Título para tipos que no tienen formulario propio */}
-            {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Instalación' && tipo !== 'Testigo' && tipo !== 'Programación' && (
+            {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Instalación' && tipo !== 'Orden de Instalación' && tipo !== 'Testigo' && tipo !== 'Programación' && (
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
                 <input
@@ -8136,7 +9538,7 @@ function CreateTaskModal({
             )}
 
             {/* === FORMULARIO INSTALACIÓN === */}
-            {tipo === 'Instalación' && (
+            {(tipo === 'Instalación' || tipo === 'Orden de Instalación') && (
               <>
                 {/* Título */}
                 <div>
@@ -8265,6 +9667,54 @@ function CreateTaskModal({
                     disabled
                     className="w-full px-3 py-2 text-sm bg-zinc-800/50 border border-border rounded-lg text-zinc-400 cursor-not-allowed"
                   />
+                </div>
+                {/* Indicaciones por archivo (Instalación y Orden de Instalación) */}
+                <div className="border-t border-border pt-4">
+                  <h4 className="text-sm font-medium text-zinc-300 mb-3">Indicaciones por archivo</h4>
+                  {isLoadingArchivosInstalacion ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-500"></div>
+                      <span className="ml-2 text-xs text-zinc-400">Cargando archivos...</span>
+                    </div>
+                  ) : archivosInstalacion.length === 0 ? (
+                    <p className="text-xs text-zinc-500 italic">No se encontraron archivos para los items seleccionados</p>
+                  ) : (
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                      {archivosInstalacion.map((archivo, idx) => {
+                        const displayName = archivo.nombreLegible || (archivo.nombre.startsWith('data:') ? `Arte ${idx + 1}` : (archivo.nombre.split('/').pop() || `Arte ${idx + 1}`));
+                        const previewSrc = archivo.archivoData || (archivo.nombre.startsWith('data:') ? archivo.nombre : getImageUrl(archivo.nombre));
+                        return (
+                        <div key={`${archivo.tipo}-${idx}`} className="bg-zinc-800/50 rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            {previewSrc && (
+                              <img
+                                src={previewSrc}
+                                alt={displayName}
+                                className="w-12 h-12 object-cover rounded border border-border cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={() => window.open(previewSrc, '_blank')}
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-zinc-300 truncate">{displayName}</p>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${archivo.tipo === 'digital' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                {archivo.tipo === 'digital' ? 'Digital' : 'Tradicional'}
+                              </span>
+                            </div>
+                          </div>
+                          <label className="block text-[10px] text-zinc-500 mb-1">Indicaciones para este archivo</label>
+                          <textarea
+                            value={instalacionIndicaciones[archivo.nombre] || ''}
+                            onChange={(e) => setInstalacionIndicaciones(prev => ({ ...prev, [archivo.nombre]: e.target.value }))}
+                            rows={2}
+                            disabled={isSubmitting}
+                            className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none disabled:opacity-50"
+                            placeholder="Indicaciones para este archivo..."
+                          />
+                        </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -8412,8 +9862,8 @@ function CreateTaskModal({
               </>
             )}
 
-            {/* === FORMULARIO PROGRAMACIÓN === */}
-            {tipo === 'Programación' && (
+            {/* === FORMULARIO PROGRAMACIÓN / ORDEN DE PROGRAMACIÓN === */}
+            {(tipo === 'Programación' || tipo === 'Orden de Programación') && (
               <>
                 {/* Título */}
                 <div>
@@ -9036,11 +10486,11 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !fechaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : !titulo.trim()) || isSubmitting}
+            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !fechaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : tipo === 'Orden de Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0) : !titulo.trim()) || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {(isSubmitting || (tipo === 'Programación' && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isSubmitting ? 'Generando...' : tipo === 'Programación' && isLoadingArchivosDigitales ? 'Cargando archivos...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : tipo === 'Testigo' ? 'Crear Testigo' : 'Crear tarea'}
+            {(isSubmitting || ((tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Generando...' : (tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales ? 'Cargando archivos...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : tipo === 'Testigo' ? 'Crear Testigo' : tipo === 'Orden de Programación' ? 'Crear Orden de Programación' : 'Crear tarea'}
           </button>
         </div>
       </div>
@@ -9494,6 +10944,8 @@ export function TareaSeguimientoPage() {
   const [isTaskWarningModalOpen, setIsTaskWarningModalOpen] = useState(false);
   const [existingTasksForCreate, setExistingTasksForCreate] = useState<Array<{ id: number; titulo: string | null; tipo: string | null; estatus: string | null; responsable: string | null }>>([]);
   const [isCheckingExistingTasks, setIsCheckingExistingTasks] = useState(false);
+  const [isImpresionConflictModalOpen, setIsImpresionConflictModalOpen] = useState(false);
+  const [impresionFlowConflicts, setImpresionFlowConflicts] = useState<ImpresionFlowConflict[]>([]);
 
   // Tipo inicial para el modal de crear tarea (basado en estado de inventarios)
   const [initialTaskTipo, setInitialTaskTipo] = useState<string>('');
@@ -9512,6 +10964,8 @@ export function TareaSeguimientoPage() {
     queryFn: () => campanasService.getById(campanaId),
     enabled: campanaId > 0,
   });
+
+  const tipoPeriodo = (campana as any)?.tipo_periodo || 'catorcena';
 
   // Inventario SIN arte (para tab "Subir Artes")
   const { data: inventarioSinArteAPI = [], isLoading: isLoadingInventarioSinArte } = useQuery({
@@ -9999,8 +11453,8 @@ export function TareaSeguimientoPage() {
     estado_programacion?: EstadoProgramacion;
     indicaciones?: string;
   })[] => {
-    // Filtrar tareas de tipo Programación
-    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación');
+    // Filtrar tareas de tipo Programación y Orden de Programación
+    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación' || t.tipo === 'Orden de Programación');
 
     if (tareasProgramacion.length === 0) return [];
 
@@ -10172,11 +11626,26 @@ export function TareaSeguimientoPage() {
       return normalizedIds;
     };
 
+    const recepcionIdsMap = new Map<number, Set<string>>();
+    const recepcionEsFaltantesMap = new Map<number, boolean>();
+
+    tareasRecepcion.forEach(recepcion => {
+      const listadoRecepcion = recepcion.listado_inventario || recepcion.ids_reservas || '';
+      recepcionIdsMap.set(recepcion.id, normalizeToInventoryIds(listadoRecepcion));
+      let esFaltantes = false;
+      if (recepcion.evidencia) {
+        try {
+          const evidenciaObj = JSON.parse(recepcion.evidencia);
+          esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
+        } catch {}
+      }
+      recepcionEsFaltantesMap.set(recepcion.id, esFaltantes);
+    });
+
     // Crear mapa de tarea de impresión -> tareas de recepción relacionadas (puede haber varias: normal + faltantes)
     const impresionToRecepcionesMap = new Map<number, typeof tareasRecepcion>();
     tareasRecepcion.forEach(recepcion => {
-      const listadoRecepcion = recepcion.listado_inventario || recepcion.ids_reservas || '';
-      const recepcionIds = normalizeToInventoryIds(listadoRecepcion);
+      const recepcionIds = recepcionIdsMap.get(recepcion.id) || new Set<string>();
 
       tareasImpresion.forEach(impresion => {
         const listadoImpresion = impresion.listado_inventario || impresion.ids_reservas || '';
@@ -10207,48 +11676,43 @@ export function TareaSeguimientoPage() {
       // Reemplazar asteriscos con comas y luego dividir (ids_reservas puede usar * como separador)
       const ids = listado.replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean);
 
-      // Determinar estado del flujo de impresión
       const tareasRecepcionRelacionadas = impresionToRecepcionesMap.get(tarea.id) || [];
-      let estadoImpresion: EstadoImpresion = 'en_impresion';
-      let tareaRecepcionId: number | undefined;
-
-      if (tareasRecepcionRelacionadas.length > 0) {
-        // Buscar si hay alguna recepción completada (no faltantes)
-        const recepcionCompletada = tareasRecepcionRelacionadas.find(recepcion => {
-          const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
-          // Verificar si es tarea de faltantes
-          let esFaltantes = false;
-          if (recepcion.evidencia) {
-            try {
-              const evidenciaObj = JSON.parse(recepcion.evidencia);
-              esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
-            } catch (e) {}
-          }
-          return esCompletada && !esFaltantes;
+      ids.forEach(id => {
+        const recepcionesDelId = tareasRecepcionRelacionadas.filter(recepcion => {
+          const idsRecepcion = recepcionIdsMap.get(recepcion.id);
+          return idsRecepcion?.has(id);
         });
 
-        if (recepcionCompletada) {
-          estadoImpresion = 'recibido';
-          tareaRecepcionId = recepcionCompletada.id;
-        } else {
-          // Hay recepciones pero ninguna completada normal
-          estadoImpresion = 'pendiente_recepcion';
-          tareaRecepcionId = tareasRecepcionRelacionadas[0]?.id;
-        }
-      }
+        let estadoImpresion: EstadoImpresion = 'en_impresion';
+        let tareaRecepcionId: number | undefined;
+        let estatusMostrado = tarea.estatus || 'Pendiente';
+        let tituloMostrado = tarea.titulo || `Impresión #${tarea.id}`;
 
-      // Si hay tarea de recepción pendiente, mostrar su estatus en vez del de impresión
-      let estatusMostrado = tarea.estatus || 'Pendiente';
-      let tituloMostrado = tarea.titulo || `Impresión #${tarea.id}`;
-      if (estadoImpresion === 'pendiente_recepcion' && tareaRecepcionId) {
-        const tareaRecepcion = tareasRecepcionRelacionadas.find(r => r.id === tareaRecepcionId);
-        if (tareaRecepcion) {
-          estatusMostrado = tareaRecepcion.estatus || 'Pendiente';
-          tituloMostrado = tareaRecepcion.titulo || `Recepción #${tareaRecepcionId}`;
-        }
-      }
+        if (recepcionesDelId.length > 0) {
+          const recepcionCompletadaNormal = recepcionesDelId.find(recepcion => {
+            const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
+            return esCompletada && !recepcionEsFaltantesMap.get(recepcion.id);
+          });
 
-      ids.forEach(id => {
+          const recepcionPendiente = recepcionesDelId.find(recepcion =>
+            recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
+          );
+
+          if (recepcionCompletadaNormal && !recepcionPendiente) {
+            estadoImpresion = 'recibido';
+            tareaRecepcionId = recepcionCompletadaNormal.id;
+          } else {
+            estadoImpresion = 'pendiente_recepcion';
+            tareaRecepcionId = recepcionPendiente?.id || recepcionesDelId[0]?.id;
+            if (recepcionPendiente) {
+              estatusMostrado = recepcionPendiente.estatus || 'Pendiente';
+              tituloMostrado = recepcionPendiente.titulo || `Recepción #${recepcionPendiente.id}`;
+            } else {
+              estatusMostrado = 'Pendiente';
+            }
+          }
+        }
+
         reservaToTareaMap.set(id, {
           tarea_id: estadoImpresion === 'pendiente_recepcion' && tareaRecepcionId ? tareaRecepcionId : tarea.id,
           tarea_estatus: estatusMostrado,
@@ -10307,10 +11771,26 @@ export function TareaSeguimientoPage() {
 
     if (tareasImpresion.length === 0) return map;
 
+    const recepcionIdsMap = new Map<number, Set<string>>();
+    const recepcionEsFaltantesMap = new Map<number, boolean>();
+
+    tareasRecepcion.forEach(recepcion => {
+      const idsRecepcion = new Set((recepcion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
+      recepcionIdsMap.set(recepcion.id, idsRecepcion);
+      let esFaltantes = false;
+      if (recepcion.evidencia) {
+        try {
+          const evidenciaObj = JSON.parse(recepcion.evidencia);
+          esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
+        } catch {}
+      }
+      recepcionEsFaltantesMap.set(recepcion.id, esFaltantes);
+    });
+
     // Crear mapa de tarea impresión -> tareas de recepción (puede haber varias: normal + faltantes)
     const impresionToRecepciones = new Map<number, typeof tareasRecepcion>();
     tareasRecepcion.forEach(recepcion => {
-      const recepcionIds = new Set((recepcion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
+      const recepcionIds = recepcionIdsMap.get(recepcion.id) || new Set<string>();
       tareasImpresion.forEach(impresion => {
         const impresionIds = new Set((impresion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
         const hasCommon = [...impresionIds].some(id => recepcionIds.has(id));
@@ -10326,33 +11806,24 @@ export function TareaSeguimientoPage() {
     tareasImpresion.forEach(tarea => {
       const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
       const tareasRecepcionRelacionadas = impresionToRecepciones.get(tarea.id) || [];
-
-      let estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido' = 'en_impresion';
-
-      if (tareasRecepcionRelacionadas.length > 0) {
-        // Si hay ALGUNA recepción completada (no faltantes), el estado es 'recibido'
-        const hayRecepcionCompletada = tareasRecepcionRelacionadas.some(recepcion => {
-          const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
-          // Verificar si es tarea de faltantes
-          let esFaltantes = false;
-          if (recepcion.evidencia) {
-            try {
-              const evidenciaObj = JSON.parse(recepcion.evidencia);
-              esFaltantes = evidenciaObj.tipo === 'recepcion_faltantes';
-            } catch (e) {}
-          }
-          return esCompletada && !esFaltantes;
+      ids.forEach(id => {
+        const recepcionesDelId = tareasRecepcionRelacionadas.filter(recepcion => {
+          const idsRecepcion = recepcionIdsMap.get(recepcion.id);
+          return idsRecepcion?.has(id);
         });
 
-        if (hayRecepcionCompletada) {
-          estado = 'recibido';
-        } else {
-          // Hay recepciones pero ninguna completada (o solo faltantes)
-          estado = 'pendiente_recepcion';
+        let estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido' = 'en_impresion';
+        if (recepcionesDelId.length > 0) {
+          const hayRecepcionCompletadaNormal = recepcionesDelId.some(recepcion => {
+            const esCompletada = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
+            return esCompletada && !recepcionEsFaltantesMap.get(recepcion.id);
+          });
+          const hayRecepcionPendiente = recepcionesDelId.some(recepcion =>
+            recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
+          );
+          estado = (hayRecepcionCompletadaNormal && !hayRecepcionPendiente) ? 'recibido' : 'pendiente_recepcion';
         }
-      }
 
-      ids.forEach(id => {
         map.set(id, { estado, titulo: tarea.titulo || `Impresión #${tarea.id}` });
       });
     });
@@ -10393,7 +11864,7 @@ export function TareaSeguimientoPage() {
   // Mapa de rsv_id -> estado de programación (para FlowStepIcons)
   const programacionStatusMap = useMemo(() => {
     const map = new Map<string, { estado: 'en_programacion' | 'programado' }>();
-    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación');
+    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación' || t.tipo === 'Orden de Programación');
     tareasProgramacion.forEach(tarea => {
       const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
       const estado: 'en_programacion' | 'programado' = tarea.estatus === 'Completado' ? 'programado' : 'en_programacion';
@@ -10709,9 +12180,9 @@ export function TareaSeguimientoPage() {
   const tasks = useMemo((): TaskRow[] => {
     return tareasAPI
       .filter((t) => {
-        if (t.estatus === 'Atendido' || t.estatus === 'Completado') return false;
+        if (t.estatus === 'Atendido' || t.estatus === 'Completado' || t.estatus === 'Finalizada' || t.estatus === 'Activada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación'];
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación', 'Orden de Instalación'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
@@ -10739,9 +12210,9 @@ export function TareaSeguimientoPage() {
   const completedTasks = useMemo((): TaskRow[] => {
     return tareasAPI
       .filter((t) => {
-        if (t.estatus !== 'Atendido' && t.estatus !== 'Completado') return false;
+        if (t.estatus !== 'Atendido' && t.estatus !== 'Completado' && t.estatus !== 'Finalizada' && t.estatus !== 'Activada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación'];
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación', 'Orden de Instalación'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
@@ -10982,7 +12453,7 @@ export function TareaSeguimientoPage() {
     XLSX.utils.book_append_sheet(wb, wsCompletadas, 'Completadas');
 
     // Descargar
-    const filename = `tareas_produccion_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const filename = `tareas_gestion_artes_${new Date().toISOString().split('T')[0]}.xlsx`;
     XLSX.writeFile(wb, filename);
   }, [filteredTasks, filteredCompletedTasks]);
 
@@ -10996,7 +12467,7 @@ export function TareaSeguimientoPage() {
 
     // Usar filteredTestigoData para la tab de testigo
     filteredTestigoData.forEach((item) => {
-      const key = getGroupKeyForField(item, groupField);
+      const key = getGroupKeyForField(item, groupField, tipoPeriodo);
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     });
@@ -11020,9 +12491,9 @@ export function TareaSeguimientoPage() {
     const sortedInventory = [...filteredInventory].sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
     sortedInventory.forEach((item) => {
-      const level1Key = activeGroupingsVersionario[0] ? getGroupKeyForField(item, activeGroupingsVersionario[0]) : 'Todo';
-      const level2Key = activeGroupingsVersionario[1] ? getGroupKeyForField(item, activeGroupingsVersionario[1]) : 'Items';
-      const level3Key = activeGroupingsVersionario[2] ? getGroupKeyForField(item, activeGroupingsVersionario[2]) : 'Items';
+      const level1Key = activeGroupingsVersionario[0] ? getGroupKeyForField(item, activeGroupingsVersionario[0], tipoPeriodo) : 'Todo';
+      const level2Key = activeGroupingsVersionario[1] ? getGroupKeyForField(item, activeGroupingsVersionario[1], tipoPeriodo) : 'Items';
+      const level3Key = activeGroupingsVersionario[2] ? getGroupKeyForField(item, activeGroupingsVersionario[2], tipoPeriodo) : 'Items';
 
       if (!groups[level1Key]) groups[level1Key] = {};
       if (!groups[level1Key][level2Key]) groups[level1Key][level2Key] = {};
@@ -11062,9 +12533,9 @@ export function TareaSeguimientoPage() {
     const sortedInventory = [...filteredInventory].sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
     sortedInventory.forEach((item) => {
-      const level1Key = activeGroupingsAtender[0] ? getGroupKeyForField(item, activeGroupingsAtender[0]) : 'Todo';
-      const level2Key = activeGroupingsAtender[1] ? getGroupKeyForField(item, activeGroupingsAtender[1]) : 'Items';
-      const level3Key = activeGroupingsAtender[2] ? getGroupKeyForField(item, activeGroupingsAtender[2]) : 'Items';
+      const level1Key = activeGroupingsAtender[0] ? getGroupKeyForField(item, activeGroupingsAtender[0], tipoPeriodo) : 'Todo';
+      const level2Key = activeGroupingsAtender[1] ? getGroupKeyForField(item, activeGroupingsAtender[1], tipoPeriodo) : 'Items';
+      const level3Key = activeGroupingsAtender[2] ? getGroupKeyForField(item, activeGroupingsAtender[2], tipoPeriodo) : 'Items';
 
       if (!groups[level1Key]) groups[level1Key] = {};
       if (!groups[level1Key][level2Key]) groups[level1Key][level2Key] = {};
@@ -11103,9 +12574,9 @@ export function TareaSeguimientoPage() {
     const sortedInventory = [...filteredProgramacionData].sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
     sortedInventory.forEach((item) => {
-      const level1Key = activeGroupingsProgramacion[0] ? getGroupKeyForField(item, activeGroupingsProgramacion[0]) : 'Todo';
-      const level2Key = activeGroupingsProgramacion[1] ? getGroupKeyForField(item, activeGroupingsProgramacion[1]) : 'Items';
-      const level3Key = activeGroupingsProgramacion[2] ? getGroupKeyForField(item, activeGroupingsProgramacion[2]) : 'Items';
+      const level1Key = activeGroupingsProgramacion[0] ? getGroupKeyForField(item, activeGroupingsProgramacion[0], tipoPeriodo) : 'Todo';
+      const level2Key = activeGroupingsProgramacion[1] ? getGroupKeyForField(item, activeGroupingsProgramacion[1], tipoPeriodo) : 'Items';
+      const level3Key = activeGroupingsProgramacion[2] ? getGroupKeyForField(item, activeGroupingsProgramacion[2], tipoPeriodo) : 'Items';
 
       if (!groups[level1Key]) groups[level1Key] = {};
       if (!groups[level1Key][level2Key]) groups[level1Key][level2Key] = {};
@@ -11144,9 +12615,9 @@ export function TareaSeguimientoPage() {
     const sortedInventory = [...filteredTestigoData].sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
     sortedInventory.forEach((item) => {
-      const level1Key = activeGroupingsTestigo[0] ? getGroupKeyForField(item, activeGroupingsTestigo[0]) : 'Todo';
-      const level2Key = activeGroupingsTestigo[1] ? getGroupKeyForField(item, activeGroupingsTestigo[1]) : 'Items';
-      const level3Key = activeGroupingsTestigo[2] ? getGroupKeyForField(item, activeGroupingsTestigo[2]) : 'Items';
+      const level1Key = activeGroupingsTestigo[0] ? getGroupKeyForField(item, activeGroupingsTestigo[0], tipoPeriodo) : 'Todo';
+      const level2Key = activeGroupingsTestigo[1] ? getGroupKeyForField(item, activeGroupingsTestigo[1], tipoPeriodo) : 'Items';
+      const level3Key = activeGroupingsTestigo[2] ? getGroupKeyForField(item, activeGroupingsTestigo[2], tipoPeriodo) : 'Items';
 
       if (!groups[level1Key]) groups[level1Key] = {};
       if (!groups[level1Key][level2Key]) groups[level1Key][level2Key] = {};
@@ -11182,6 +12653,32 @@ export function TareaSeguimientoPage() {
     }
     return filteredInventory.filter((item) => selectedInventoryIds.has(item.id));
   }, [filteredInventory, filteredImpresionesData, filteredProgramacionData, selectedInventoryIds, activeMainTab]);
+
+  const getSelectedImpresionFlowConflicts = useCallback((): ImpresionFlowConflict[] => {
+    const conflicts: ImpresionFlowConflict[] = [];
+    const seen = new Set<string>();
+
+    selectedInventoryItems.forEach((item) => {
+      const rsvIds = item.rsv_id.split(',').map(id => id.trim()).filter(Boolean);
+      const flowInfo = rsvIds
+        .map((id) => impresionStatusMap.get(id))
+        .find((info) => Boolean(info));
+
+      if (!flowInfo || seen.has(item.id)) return;
+
+      seen.add(item.id);
+      conflicts.push({
+        itemId: item.id,
+        codigoUnico: item.codigo_unico || item.id,
+        mueble: item.mueble || '-',
+        ciudad: item.ciudad || '-',
+        estado: flowInfo.estado,
+        tareaTitulo: flowInfo.titulo || '-',
+      });
+    });
+
+    return conflicts;
+  }, [selectedInventoryItems, impresionStatusMap]);
 
   // Compute summary stats
   const summaryStats = useMemo((): SummaryStats => {
@@ -11255,7 +12752,10 @@ export function TareaSeguimientoPage() {
     const hasIMU = selectedInventoryItems.some(item => item.imu === 1 || item.imu === '1');
 
     // Verificar si algún item ya pasó por impresión (estado recibido)
-    const hasRecibido = selectedInventoryItems.some(item => (item as any).estado_impresion === 'recibido');
+    const hasInImpresionFlow = selectedInventoryItems.some((item) => {
+      const rsvIds = item.rsv_id.split(',').map(id => id.trim()).filter(Boolean);
+      return rsvIds.some((id) => impresionStatusMap.has(id));
+    });
 
     // Contar estados
     const counts = {
@@ -11295,17 +12795,32 @@ export function TareaSeguimientoPage() {
 
     if (allAprobado) {
       if (allDigital) {
-        // Para digitales aprobados: solo mostrar Programación
-        availableTipos = ['Programación'];
-        initialTipo = 'Programación';
-      } else if (hasIMU && !hasRecibido) {
+        // Para digitales aprobados: Tráfico crea Orden de Programación, Operaciones crea Programación
+        if (permissions.canCreateOrdenProgramacion) {
+          availableTipos = ['Orden de Programación'];
+          initialTipo = 'Orden de Programación';
+        } else {
+          availableTipos = ['Programación'];
+          initialTipo = 'Programación';
+        }
+      } else if (hasIMU && !hasInImpresionFlow) {
         // Tradicionales con IMU: mostrar Impresión e Instalación
-        availableTipos = ['Impresión', 'Instalación'];
-        initialTipo = 'Impresión';
+        if (permissions.canCreateOrdenInstalacion) {
+          availableTipos = ['Impresión', 'Orden de Instalación', 'Instalación'];
+          initialTipo = 'Impresión';
+        } else {
+          availableTipos = ['Impresión', 'Instalación'];
+          initialTipo = 'Impresión';
+        }
       } else {
-        // Tradicionales sin IMU: solo Instalación
-        availableTipos = ['Instalación'];
-        initialTipo = 'Instalación';
+        // Tradicionales sin IMU: Instalación (y Orden de Instalación para Tráfico)
+        if (permissions.canCreateOrdenInstalacion) {
+          availableTipos = ['Orden de Instalación', 'Instalación'];
+          initialTipo = 'Orden de Instalación';
+        } else {
+          availableTipos = ['Instalación'];
+          initialTipo = 'Instalación';
+        }
       }
     } else if (allPendiente) {
       // Todos pendientes de revisión: solo mostrar Revisión de artes
@@ -11314,19 +12829,34 @@ export function TareaSeguimientoPage() {
     } else {
       // Mezcla: mostrar tipos según IMU y tipo de inventario (pero excluir Impresión si ya fue recibido)
       if (allDigital) {
-        availableTipos = ['Programación', 'Revisión de artes'];
-        initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Programación' : 'Revisión de artes';
-      } else if (hasIMU && !hasRecibido) {
-        availableTipos = ['Instalación', 'Revisión de artes', 'Impresión'];
-        initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Impresión' : 'Revisión de artes';
+        if (permissions.canCreateOrdenProgramacion) {
+          availableTipos = ['Orden de Programación', 'Revisión de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Orden de Programación' : 'Revisión de artes';
+        } else {
+          availableTipos = ['Programación', 'Revisión de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Programación' : 'Revisión de artes';
+        }
+      } else if (hasIMU && !hasInImpresionFlow) {
+        if (permissions.canCreateOrdenInstalacion) {
+          availableTipos = ['Orden de Instalación', 'Instalación', 'Revisión de artes', 'Impresión'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Impresión' : 'Revisión de artes';
+        } else {
+          availableTipos = ['Instalación', 'Revisión de artes', 'Impresión'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Impresión' : 'Revisión de artes';
+        }
       } else {
-        availableTipos = ['Instalación', 'Revisión de artes'];
-        initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Instalación' : 'Revisión de artes';
+        if (permissions.canCreateOrdenInstalacion) {
+          availableTipos = ['Orden de Instalación', 'Instalación', 'Revisión de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Orden de Instalación' : 'Revisión de artes';
+        } else {
+          availableTipos = ['Instalación', 'Revisión de artes'];
+          initialTipo = counts.aprobado > counts.sinRevisar + counts.enRevision ? 'Instalación' : 'Revisión de artes';
+        }
       }
     }
 
     return { initialTipo, availableTipos };
-  }, [selectedInventoryItems, activeMainTab, activeEstadoProgramacionTab]);
+  }, [selectedInventoryItems, activeMainTab, activeEstadoProgramacionTab, permissions.canCreateOrdenProgramacion, permissions.canCreateOrdenInstalacion, impresionStatusMap]);
 
   // Verificar si alguno de los items seleccionados tiene relación con instalación
   const hasSelectedItemsWithInstalacion = useMemo(() => {
@@ -11346,6 +12876,16 @@ export function TareaSeguimientoPage() {
     const { initialTipo, availableTipos } = calculateTaskTiposConfig();
     setInitialTaskTipo(initialTipo);
     setAvailableTaskTipos(availableTipos);
+
+    // Si el tipo inicial es Impresion, bloquear elementos ya ligados al flujo de impresion
+    if (initialTipo === 'Impresión') {
+      const conflicts = getSelectedImpresionFlowConflicts();
+      if (conflicts.length > 0) {
+        setImpresionFlowConflicts(conflicts);
+        setIsImpresionConflictModalOpen(true);
+        return;
+      }
+    }
 
     setIsCheckingExistingTasks(true);
     try {
@@ -11370,9 +12910,19 @@ export function TareaSeguimientoPage() {
     } finally {
       setIsCheckingExistingTasks(false);
     }
-  }, [selectedInventoryIds, selectedInventoryItems, campanaId, calculateTaskTiposConfig]);
+  }, [selectedInventoryIds, selectedInventoryItems, campanaId, calculateTaskTiposConfig, getSelectedImpresionFlowConflicts]);
 
   const handleCreateTask = useCallback(async (task: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<string, number> }) => {
+    if (task.tipo === 'Impresión') {
+      const conflicts = getSelectedImpresionFlowConflicts();
+      if (conflicts.length > 0) {
+        setImpresionFlowConflicts(conflicts);
+        setCreateTaskError('Quita los inventarios que ya estan en flujo de impresion para poder crear esta tarea.');
+        setIsImpresionConflictModalOpen(true);
+        return;
+      }
+    }
+
     // Get reserva IDs from selected inventory items
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => id.trim()).filter(id => id)
@@ -11408,7 +12958,7 @@ export function TareaSeguimientoPage() {
       console.error('Error al crear tarea:', error);
       setCreateTaskError(error instanceof Error ? error.message : 'Error al crear tarea');
     }
-  }, [selectedInventoryItems, createTareaMutation, campanaId, queryClient]);
+  }, [selectedInventoryItems, createTareaMutation, campanaId, queryClient, getSelectedImpresionFlowConflicts]);
 
   const handleUploadArt = useCallback(async (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => {
     // Get reserva IDs from selected inventory items
@@ -11447,15 +12997,10 @@ export function TareaSeguimientoPage() {
           return;
         }
 
-        // Convertir archivo a base64 (como en solicitudes)
+        // Subir archivo a Spaces y usar la URL
         setUploadArtError(null);
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error('Error al leer el archivo'));
-          reader.readAsDataURL(data.value as File);
-        });
-        archivo = base64;
+        const uploadResult = await campanasService.uploadArteFile(data.value as File);
+        archivo = uploadResult.url;
       }
 
       if (archivo) {
@@ -11488,17 +13033,12 @@ export function TareaSeguimientoPage() {
     try {
       setUploadArtError(null);
 
-      // Convertir todos los archivos a base64 con su spot
-      const filesWithBase64 = await Promise.all(
+      // Subir todos los archivos a Spaces y obtener URLs
+      const filesWithUrls = await Promise.all(
         data.files.map(async ({ file, spot }) => {
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = () => reject(new Error(`Error al leer el archivo ${file.name}`));
-            reader.readAsDataURL(file);
-          });
+          const uploadResult = await campanasService.uploadArteFile(file);
           return {
-            archivo: base64,
+            archivo: uploadResult.url,
             spot,
             nombre: file.name,
             tipo: file.type.startsWith('video/') ? 'video' : 'image',
@@ -11507,7 +13047,7 @@ export function TareaSeguimientoPage() {
       );
 
       // Llamar al servicio para asignar arte digital
-      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithBase64);
+      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithUrls);
 
       // Invalidar queries y cerrar modal
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
@@ -12362,7 +13902,7 @@ export function TareaSeguimientoPage() {
                       </>
                     )}
                   </button>
-                  {permissions.canCreateTareasGestionArtes && (
+                  {(permissions.canCreateTareasGestionArtes || permissions.canCreateOrdenProgramacion || permissions.canCreateOrdenInstalacion) && (
                     <button
                       onClick={handleCreateTaskClick}
                       disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
@@ -12799,96 +14339,170 @@ export function TareaSeguimientoPage() {
                 icon={activeMainTab === 'versionario' ? Image : activeMainTab === 'atender' ? Eye : activeMainTab === 'impresiones' ? Printer : Camera}
               />
             ) : activeMainTab === 'impresiones' && activeEstadoImpresionTab === 'recibido' ? (
-              // Vista de items recibidos con checkboxes para crear tareas
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-purple-900/20 sticky top-0 z-10">
-                    <tr className="border-b border-border text-left">
-                      <th className="p-2 w-8">
-                        <button
-                          onClick={() => {
-                            const allSelected = filteredImpresionesData.every(item => selectedInventoryIds.has(item.id));
-                            setSelectedInventoryIds(prev => {
-                              const next = new Set(prev);
-                              filteredImpresionesData.forEach(item => {
-                                if (allSelected) next.delete(item.id);
-                                else next.add(item.id);
-                              });
-                              return next;
-                            });
-                          }}
-                          className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                            filteredImpresionesData.every(item => selectedInventoryIds.has(item.id)) && filteredImpresionesData.length > 0
-                              ? 'bg-purple-600 border-purple-600'
-                              : 'border-purple-500/50 hover:border-purple-400'
-                          }`}
-                        >
-                          {filteredImpresionesData.every(item => selectedInventoryIds.has(item.id)) && filteredImpresionesData.length > 0 && (
-                            <Check className="h-3 w-3 text-white" />
-                          )}
-                        </button>
-                      </th>
-                      <th className="p-2 font-medium text-purple-300">Arte</th>
-                      <th className="p-2 font-medium text-purple-300">Código</th>
-                      <th className="p-2 font-medium text-purple-300">Ciudad</th>
-                      <th className="p-2 font-medium text-purple-300">Plaza</th>
-                      <th className="p-2 font-medium text-purple-300">Mueble</th>
-                      <th className="p-2 font-medium text-purple-300">Medidas</th>
-                      <th className="p-2 font-medium text-purple-300">Catorcena</th>
-                      <th className="p-2 font-medium text-purple-300">Tarea Impresión</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredImpresionesData.map((item) => (
-                      <tr
-                        key={item.id}
-                        onClick={() => {
-                          setSelectedInventoryIds(prev => {
-                            const next = new Set(prev);
-                            if (next.has(item.id)) next.delete(item.id);
-                            else next.add(item.id);
-                            return next;
-                          });
-                        }}
-                        className={`border-b border-border/50 hover:bg-purple-900/10 cursor-pointer transition-colors ${
-                          selectedInventoryIds.has(item.id) ? 'bg-purple-900/20' : ''
-                        }`}
-                      >
-                        <td className="p-2">
-                          <div
-                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                              selectedInventoryIds.has(item.id)
-                                ? 'bg-purple-600 border-purple-600'
-                                : 'border-purple-500/50'
-                            }`}
-                          >
-                            {selectedInventoryIds.has(item.id) && (
-                              <Check className="h-3 w-3 text-white" />
+              // Vista de cards para recibido (mismo estilo que pendiente de recepcion)
+              <div className="divide-y divide-border">
+                {(() => {
+                  // Agrupar por tarea de impresion
+                  const tareasAgrupadas = filteredImpresionesData.reduce((acc, item) => {
+                    const tareaId = (item as any).tarea_id || 0;
+                    if (!acc[tareaId]) {
+                      acc[tareaId] = {
+                        tarea_id: tareaId,
+                        tarea_titulo: (item as any).tarea_titulo || `Impresion #${tareaId}`,
+                        tarea_estatus: (item as any).tarea_estatus || 'Pendiente',
+                        proveedor: (item as any).proveedor || '-',
+                        items: [],
+                      };
+                    }
+                    acc[tareaId].items.push(item);
+                    return acc;
+                  }, {} as Record<number, { tarea_id: number; tarea_titulo: string; tarea_estatus: string; proveedor: string; items: typeof filteredImpresionesData }>);
+
+                  return Object.values(tareasAgrupadas).map(grupo => {
+                    const groupSelected = grupo.items.every(item => selectedInventoryIds.has(item.id));
+                    return (
+                      <div key={grupo.tarea_id} className="p-4">
+                        {/* Header de tarea */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => {
+                                setSelectedInventoryIds(prev => {
+                                  const next = new Set(prev);
+                                  grupo.items.forEach(item => {
+                                    if (groupSelected) next.delete(item.id);
+                                    else next.add(item.id);
+                                  });
+                                  return next;
+                                });
+                              }}
+                              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                groupSelected
+                                  ? 'bg-purple-600 border-purple-600'
+                                  : 'border-purple-500/50 hover:border-purple-400'
+                              }`}
+                              title="Seleccionar grupo"
+                            >
+                              {groupSelected && <Check className="h-3 w-3 text-white" />}
+                            </button>
+                            <div className="p-2 rounded-lg bg-emerald-500/20">
+                              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-semibold text-white">{grupo.tarea_titulo}</h4>
+                              <p className="text-xs text-zinc-400">
+                                Proveedor: <span className="text-purple-300">{grupo.proveedor}</span>
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs">
+                              Recibido
+                            </Badge>
+                            <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
+                              {grupo.items.length} items
+                            </Badge>
+                            {permissions.canOpenTasks && (
+                              <button
+                                onClick={() => {
+                                  const tarea = tareasAPI.find(t => t.id === grupo.tarea_id);
+                                  if (tarea) {
+                                    const taskRow: TaskRow = {
+                                      id: tarea.id.toString(),
+                                      tipo: tarea.tipo || 'Impresión',
+                                      estatus: tarea.estatus || 'Pendiente',
+                                      identificador: `TASK-${tarea.id.toString().padStart(3, '0')}`,
+                                      fecha_inicio: tarea.fecha_inicio?.split('T')[0] || '',
+                                      fecha_fin: tarea.fecha_fin?.split('T')[0] || '',
+                                      creador: tarea.responsable_nombre || tarea.responsable || '',
+                                      asignado: tarea.asignado || '',
+                                      descripcion: tarea.descripcion || '',
+                                      titulo: tarea.titulo || '',
+                                      inventario_ids: tarea.ids_reservas ? tarea.ids_reservas.split(',') : [],
+                                      campana_id: campanaId,
+                                      nombre_proveedores: tarea.nombre_proveedores || undefined,
+                                      proveedores_id: tarea.proveedores_id || undefined,
+                                      num_impresiones: tarea.num_impresiones || undefined,
+                                      evidencia: tarea.evidencia || undefined,
+                                    };
+                                    setSelectedTask(taskRow);
+                                    setIsTaskDetailModalOpen(true);
+                                  }
+                                }}
+                                className="px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                              >
+                                Ver detalle
+                              </button>
                             )}
                           </div>
-                        </td>
-                        <td className="p-2">
-                          {item.archivo_arte ? (
-                            <div className="w-12 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
-                              <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
-                            </div>
-                          ) : (
-                            <div className="w-12 h-10 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-                              <Image className="h-4 w-4 text-zinc-600" />
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-2 text-zinc-300 font-mono text-[10px]">{item.codigo_unico}</td>
-                        <td className="p-2 text-zinc-300">{item.ciudad}</td>
-                        <td className="p-2 text-zinc-400">{item.plaza}</td>
-                        <td className="p-2 text-zinc-300">{item.mueble}</td>
-                        <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
-                        <td className="p-2 text-zinc-400">C{item.catorcena}</td>
-                        <td className="p-2 text-zinc-400 text-[10px]">{(item as any).tarea_titulo || '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+
+                        {/* Lista de items agrupados por arte */}
+                        <div className="bg-zinc-900/30 rounded-lg overflow-hidden">
+                          {(() => {
+                            const artesAgrupados = grupo.items.reduce((acc, item) => {
+                              const key = item.archivo_arte || 'sin_arte';
+                              if (!acc[key]) {
+                                acc[key] = { items: [], archivo: item.archivo_arte };
+                              }
+                              acc[key].items.push(item);
+                              return acc;
+                            }, {} as Record<string, { items: typeof grupo.items; archivo: string | undefined }>);
+
+                            return Object.entries(artesAgrupados).map(([arteKey, arteGrupo]) => {
+                              const arteSelected = arteGrupo.items.every(item => selectedInventoryIds.has(item.id));
+                              return (
+                                <div key={arteKey} className="flex items-center gap-3 p-2 border-b border-border/30 last:border-0">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedInventoryIds(prev => {
+                                        const next = new Set(prev);
+                                        arteGrupo.items.forEach(item => {
+                                          if (arteSelected) next.delete(item.id);
+                                          else next.add(item.id);
+                                        });
+                                        return next;
+                                      });
+                                    }}
+                                    className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                      arteSelected
+                                        ? 'bg-purple-600 border-purple-600'
+                                        : 'border-purple-500/50 hover:border-purple-400'
+                                    }`}
+                                    title="Seleccionar arte"
+                                  >
+                                    {arteSelected && <Check className="h-3 w-3 text-white" />}
+                                  </button>
+                                  <div className="w-12 h-10 bg-zinc-800 rounded overflow-hidden flex-shrink-0">
+                                    {arteGrupo.archivo ? (
+                                      <img
+                                        src={getImageUrl(arteGrupo.archivo) || ''}
+                                        alt="Arte"
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <Image className="h-4 w-4 text-zinc-600" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs text-white">
+                                      {arteGrupo.items.length} {arteGrupo.items.length === 1 ? 'ubicacion' : 'ubicaciones'}
+                                    </p>
+                                    <p className="text-[10px] text-zinc-500 truncate">
+                                      {arteGrupo.items[0].mueble} - {arteGrupo.items[0].ciudad}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             ) : activeMainTab === 'impresiones' ? (
               // Vista de items en proceso de impresión (no recibido)
@@ -13879,7 +15493,7 @@ export function TareaSeguimientoPage() {
                                 <tr className="border-b border-border text-left">
                                   <th className="p-2 pl-6 font-medium text-purple-300">Código</th>
                                   <th className="p-2 font-medium text-purple-300">Tipo Cara</th>
-                                  <th className="p-2 font-medium text-purple-300">Catorcena</th>
+                                  <th className="p-2 font-medium text-purple-300">Periodo</th>
                                   <th className="p-2 font-medium text-purple-300">APS</th>
                                   <th className="p-2 font-medium text-purple-300">Plaza</th>
                                   <th className="p-2 font-medium text-purple-300">Ciudad</th>
@@ -13891,7 +15505,7 @@ export function TareaSeguimientoPage() {
                                   <tr key={item.id} className="border-b border-border/50 hover:bg-zinc-800/30">
                                     <td className="p-2 pl-6 text-white font-mono">{item.codigo_unico}</td>
                                     <td className="p-2 text-zinc-300">{item.tipo_de_cara}</td>
-                                    <td className="p-2 text-zinc-300">{item.catorcena}</td>
+                                    <td className="p-2 text-zinc-300">{getPeriodoShort(item, tipoPeriodo)}</td>
                                     <td className="p-2 text-zinc-300">{item.aps || '-'}</td>
                                     <td className="p-2 text-zinc-300">{item.plaza}</td>
                                     <td className="p-2 text-zinc-300">{item.ciudad}</td>
@@ -14195,8 +15809,8 @@ export function TareaSeguimientoPage() {
                 <ClipboardList className="h-4 w-4 text-blue-400" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">Tareas de Produccion</h3>
-                <p className="text-xs text-zinc-400">Gestiona las tareas de instalacion y produccion de esta campaña</p>
+                <h3 className="text-sm font-semibold text-white">Tareas de Gestión de Artes</h3>
+                <p className="text-xs text-zinc-400">Tareas del flujo de gestión de artes: revisión, impresión, instalación y programación</p>
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
@@ -14345,10 +15959,12 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300">{task.titulo}</td>
                             <td className="p-2">
                               {/* Solo mostrar botón Abrir si: canOpenTasks=true Y (no tiene restricción O es tarea del tipo permitido) Y no está bloqueado por cannotOpenCorreccionTasks */}
-                              {permissions.canOpenTasks && !(permissions.cannotOpenCorreccionTasks && task.tipo === 'Correccion') && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks && !permissions.canOnlyOpenCorreccionTasks) ||
+                              {permissions.canOpenTasks && !(permissions.cannotOpenCorreccionTasks && task.tipo === 'Correccion') && ((!permissions.canOnlyOpenImpresionTasks && !permissions.canOnlyOpenRecepcionTasks && !permissions.canOnlyOpenCorreccionTasks && !permissions.canOnlyOpenOrdenProgramacionTasks && !permissions.canOnlyOpenOrdenInstalacionTasks) ||
                                 (permissions.canOnlyOpenImpresionTasks && task.tipo === 'Impresión') ||
                                 (permissions.canOnlyOpenRecepcionTasks && (task.tipo === 'Recepción' || task.tipo === 'Instalación' || task.tipo === 'Testigo' || task.tipo === 'Programación')) ||
-                                (permissions.canOnlyOpenCorreccionTasks && task.tipo === 'Correccion')) ? (
+                                (permissions.canOnlyOpenCorreccionTasks && (task.tipo === 'Correccion' || task.tipo === 'Instalación')) ||
+                                (permissions.canOnlyOpenOrdenProgramacionTasks && (task.tipo === 'Orden de Programación' || task.tipo === 'Orden de Instalación')) ||
+                                (permissions.canOnlyOpenOrdenInstalacionTasks && task.tipo === 'Orden de Instalación')) ? (
                                 <button
                                   onClick={() => {
                                     setSelectedTask(task);
@@ -14420,19 +16036,30 @@ export function TareaSeguimientoPage() {
                             <td className="p-2 text-zinc-300">{task.asignado}</td>
                             <td className="p-2 text-zinc-300 max-w-[150px] truncate">{task.descripcion}</td>
                             <td className="p-2">
-                              {task.tipo === 'Testigo' && task.archivo_testigo && (
+                              <div className="flex items-center gap-1">
                                 <button
                                   onClick={() => {
-                                    setSelectedTestigoFile(task.archivo_testigo ?? null);
-                                    setIsTestigoFileModalOpen(true);
+                                    setSelectedTask(task);
+                                    setIsTaskDetailModalOpen(true);
                                   }}
-                                  className="flex items-center gap-1 px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-                                  title="Ver archivo testigo"
+                                  className="px-2 py-1 text-[10px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
                                 >
-                                  <Eye className="h-3 w-3" />
-                                  Ver
+                                  Abrir
                                 </button>
-                              )}
+                                {(task.tipo === 'Testigo' || task.tipo === 'Recepción') && task.archivo_testigo && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedTestigoFile(task.archivo_testigo ?? null);
+                                      setIsTestigoFileModalOpen(true);
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-1 text-[10px] bg-zinc-700 hover:bg-zinc-600 text-white rounded transition-colors"
+                                    title="Ver foto"
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                    Foto
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -14540,6 +16167,64 @@ export function TareaSeguimientoPage() {
         </div>
       )}
 
+      {/* Warning Modal - Inventarios ya en flujo de impresion */}
+      {isImpresionConflictModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setIsImpresionConflictModalOpen(false)} />
+          <div className="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl max-w-xl w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-500/20 rounded-lg">
+                <AlertCircle className="h-5 w-5 text-red-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white">No se puede crear tarea de impresion</h3>
+            </div>
+
+            <p className="text-sm text-zinc-300 mb-4">
+              Estos inventarios ya forman parte del flujo de impresion. Quitalos de la seleccion para evitar duplicados:
+            </p>
+
+            <div className="bg-zinc-800 rounded-lg p-3 mb-4 max-h-56 overflow-y-auto space-y-2">
+              {impresionFlowConflicts.map((item) => (
+                <div key={item.itemId} className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2">
+                  <p className="text-sm font-medium text-white">{item.codigoUnico}</p>
+                  <p className="text-xs text-zinc-400">{item.mueble} - {item.ciudad}</p>
+                  <p className="text-xs text-amber-400 mt-1">
+                    Estado: {item.estado === 'en_impresion' ? 'En impresion' : item.estado === 'pendiente_recepcion' ? 'Pendiente recepcion' : 'Recibido'} - {item.tareaTitulo}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setIsImpresionConflictModalOpen(false);
+                }}
+                className="px-4 py-2 text-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => {
+                  const conflictIds = new Set(impresionFlowConflicts.map(item => item.itemId));
+                  setSelectedInventoryIds((prev) => {
+                    const next = new Set(prev);
+                    conflictIds.forEach((id) => next.delete(id));
+                    return next;
+                  });
+                  setCreateTaskError(null);
+                  setImpresionFlowConflicts([]);
+                  setIsImpresionConflictModalOpen(false);
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              >
+                Quitar de seleccion
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Warning Modal - Tareas existentes al crear tarea */}
       {isTaskWarningModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -14622,6 +16307,7 @@ export function TareaSeguimientoPage() {
         isSubmitting={assignArteMutation.isPending}
         error={uploadArtError}
         campanaId={campanaId}
+        tipoPeriodo={tipoPeriodo}
       />
 
       {/* Digital Gallery Modal */}
@@ -14657,11 +16343,7 @@ export function TareaSeguimientoPage() {
           if (selectedTask && selectedTask.creador) {
             const tareaData: Parameters<typeof createTareaMutation.mutateAsync>[0] = {
               titulo: `Corrección de artes - Rechazo`,
-              descripcion: `Artes rechazados con el siguiente motivo:
-
-${comentario || 'Sin motivo especificado'}
-
-Por favor corrige los artes y vuelve a enviar a revisión.`,
+              descripcion: (comentario || 'Sin motivo especificado').substring(0, 255),
               tipo: 'Correccion',
               asignado: selectedTask.creador,
               ids_reservas: reservaIds.join(','),
@@ -14704,17 +16386,12 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
 
           // 2. Luego agregar los nuevos archivos (si hay)
           if (files.length > 0) {
-            // Convertir todos los archivos a base64 con su spot
-            const filesWithBase64 = await Promise.all(
+            // Subir todos los archivos a Spaces y obtener URLs
+            const filesWithUrls = await Promise.all(
               files.map(async ({ file, spot }) => {
-                const base64 = await new Promise<string>((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result as string);
-                  reader.onerror = () => reject(new Error(`Error al leer el archivo ${file.name}`));
-                  reader.readAsDataURL(file);
-                });
+                const uploadResult = await campanasService.uploadArteFile(file);
                 return {
-                  archivo: base64,
+                  archivo: uploadResult.url,
                   spot,
                   nombre: file.name,
                   tipo: file.type.startsWith('video/') ? 'video' : 'image',
@@ -14722,7 +16399,7 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
               })
             );
             // Llamar al servicio para agregar nuevos archivos digitales (sin eliminar los existentes)
-            await campanasService.addArteDigital(campanaId, reservaIds, filesWithBase64);
+            await campanasService.addArteDigital(campanaId, reservaIds, filesWithUrls);
           }
 
           // Invalidar queries
@@ -14732,12 +16409,13 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
           queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
           queryClient.invalidateQueries({ queryKey: ['digital-file-summaries', campanaId] });
         }}
-        onTaskComplete={async (taskId, observaciones) => {
+        onTaskComplete={async (taskId, observaciones, archivoTestigo) => {
           await updateTareaMutation.mutateAsync({
             tareaId: parseInt(taskId),
             data: {
               estatus: 'Atendido',
-              ...(observaciones && { contenido: observaciones })
+              ...(observaciones && { contenido: observaciones }),
+              ...(archivoTestigo && { archivo_testigo: archivoTestigo }),
             }
           });
         }}
@@ -14753,7 +16431,7 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
             ids_reservas: reservaIds.join(','),
           });
         }}
-        onCreateRecepcion={async (tareaImpresionId, asignadoNombre, asignadoId) => {
+        onCreateRecepcion={async (tareaImpresionId, asignadoNombre, asignadoId, guiaPdfUrl) => {
           if (!selectedTask) return;
 
           // 1. Marcar la tarea de Impresión como "Atendido"
@@ -14771,10 +16449,14 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
             const evidenciaObj = evidenciaRecepcion ? JSON.parse(evidenciaRecepcion) : {};
             // Agregar tipo para identificar que es recepción normal (no faltantes)
             evidenciaObj.tipo = 'recepcion_normal';
+            if (guiaPdfUrl) evidenciaObj.guia_pdf = guiaPdfUrl;
             evidenciaRecepcion = JSON.stringify(evidenciaObj);
           } catch (e) {
             // Si no es JSON válido, crear objeto nuevo
-            evidenciaRecepcion = JSON.stringify({ tipo: 'recepcion_normal' });
+            evidenciaRecepcion = JSON.stringify({
+              tipo: 'recepcion_normal',
+              ...(guiaPdfUrl ? { guia_pdf: guiaPdfUrl } : {})
+            });
           }
 
           // Usar el usuario seleccionado o fallback al asignado/creador original
@@ -14797,7 +16479,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
           // Refrescar lista de tareas
           queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
         }}
-        onCreateRecepcionFaltante={async (faltantes, observaciones) => {
+        onCreateRecepcionFaltante={async (faltantes, observaciones, guiaPdfUrlParam, faltantesReservaIds) => {
           if (!selectedTask) return;
 
           // Construir descripción con detalle de faltantes
@@ -14812,14 +16494,24 @@ Por favor registra la cantidad de impresiones recibidas.`,
             (selectedTask.titulo?.match(/TASK-\d+/) || [''])[0] ||
             `TASK-${selectedTask.id}`;
 
-          // Guardar info de faltantes en evidencia para que el modal lo lea correctamente
+          // Guardar info de faltantes en evidencia y conservar guía PDF previa si existe
+          let guiaPdfAnterior: string | undefined;
+          try {
+            const evidenciaAnterior = selectedTask.evidencia ? JSON.parse(selectedTask.evidencia) : {};
+            guiaPdfAnterior = evidenciaAnterior?.guia_pdf;
+          } catch {
+            guiaPdfAnterior = undefined;
+          }
+          const guiaPdfFinal = guiaPdfUrlParam || guiaPdfAnterior;
+
           const evidenciaFaltantes = JSON.stringify({
             tipo: 'recepcion_faltantes',
             faltantesPorArte: faltantes.map(f => ({
               arte: f.arte,
               cantidad: f.faltantes
             })),
-            totalFaltantes
+            totalFaltantes,
+            ...(guiaPdfFinal ? { guia_pdf: guiaPdfFinal } : {})
           });
 
           await createTareaMutation.mutateAsync({
@@ -14837,7 +16529,9 @@ Por favor registra la cantidad de impresiones recibidas.`,
             tipo: 'Recepción',
             asignado: selectedTask.asignado || selectedTask.creador || '',
             id_asignado: (selectedTask as any).id_asignado || '',
-            ids_reservas: selectedTask.inventario_ids?.join(',') || '',
+            ids_reservas: (faltantesReservaIds && faltantesReservaIds.length > 0)
+              ? faltantesReservaIds.join(',')
+              : (selectedTask.inventario_ids?.join(',') || ''),
             evidencia: evidenciaFaltantes,
             num_impresiones: totalFaltantes,
           });
@@ -14862,25 +16556,28 @@ Por favor registra la cantidad de impresiones recibidas.`,
         canResolveRevisionArtesTasks={permissions.canResolveRevisionArtesTasks}
         canResolveCorreccionTasks={permissions.canResolveCorreccionTasks}
         digitalSummaryMap={digitalSummaryMap}
+        tipoPeriodo={tipoPeriodo}
       />
 
       {/* Modal para ver archivo testigo */}
       {isTestigoFileModalOpen && selectedTestigoFile && (() => {
-        // Construir URL completa del archivo
-        const fileUrl = selectedTestigoFile.startsWith('http')
-          ? selectedTestigoFile
-          : `${STATIC_URL}${selectedTestigoFile}`;
-        const isPdf = selectedTestigoFile.toLowerCase().endsWith('.pdf');
-        const fileName = selectedTestigoFile.split('/').pop() || 'archivo';
+        // Soportar JSON array (múltiples) o string simple (una sola)
+        let fileUrls: string[] = [];
+        try {
+          const parsed = JSON.parse(selectedTestigoFile);
+          fileUrls = Array.isArray(parsed) ? parsed : [selectedTestigoFile];
+        } catch {
+          fileUrls = [selectedTestigoFile];
+        }
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsTestigoFileModalOpen(false)} />
-            <div className="relative bg-card border border-border rounded-xl w-full max-w-md mx-4 p-6">
+            <div className="relative bg-card border border-border rounded-xl w-full max-w-lg mx-4 p-6 max-h-[80vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <Eye className="h-5 w-5 text-purple-400" />
-                  Archivo Testigo
+                  {fileUrls.length > 1 ? `Fotos comprobatorias (${fileUrls.length})` : 'Foto comprobatoria'}
                 </h3>
                 <button
                   onClick={() => setIsTestigoFileModalOpen(false)}
@@ -14889,27 +16586,36 @@ Por favor registra la cantidad de impresiones recibidas.`,
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-full p-4 bg-zinc-900/50 rounded-lg border border-border">
-                  <div className="flex items-center gap-3">
-                    <div className="p-3 bg-purple-600/20 rounded-lg">
-                      {isPdf ? <FileText className="h-8 w-8 text-purple-400" /> : <Image className="h-8 w-8 text-purple-400" />}
+              <div className="flex flex-col gap-3">
+                {fileUrls.map((url, idx) => {
+                  const resolvedUrl = getImageUrl(url) || (url.startsWith('http') ? url : `${STATIC_URL}${url}`);
+                  const isPdf = url.toLowerCase().endsWith('.pdf');
+                  return (
+                    <div key={idx} className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
+                      {isPdf ? (
+                        <div className="flex items-center gap-3 p-4">
+                          <FileText className="h-8 w-8 text-purple-400 flex-shrink-0" />
+                          <p className="text-sm text-white truncate flex-1">{url.split('/').pop()}</p>
+                        </div>
+                      ) : (
+                        <img
+                          src={resolvedUrl}
+                          alt={`Comprobante ${idx + 1}`}
+                          className="w-full max-h-[250px] object-contain"
+                        />
+                      )}
+                      <a
+                        href={resolvedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 text-sm transition-colors"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        Abrir {fileUrls.length > 1 ? `foto ${idx + 1}` : 'foto'}
+                      </a>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{fileName}</p>
-                      <p className="text-xs text-zinc-400">{isPdf ? 'Documento PDF' : 'Imagen'}</p>
-                    </div>
-                  </div>
-                </div>
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-                >
-                  <ExternalLink className="h-5 w-5" />
-                  Abrir archivo
-                </a>
+                  );
+                })}
               </div>
             </div>
           </div>

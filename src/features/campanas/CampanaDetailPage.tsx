@@ -4,13 +4,14 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioReservado, InventarioConAPS, buildDeliveryNote, postDeliveryNoteToSAP, HistorialItem } from '../../services/campanas.service';
+import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, isMigratedCampaign, HistorialItem } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import { Badge } from '../../components/ui/badge';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { formatDate } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana } from '../../hooks/useSocket';
 
@@ -27,34 +28,37 @@ interface InfoItemProps {
   label: string;
   value: string | number | null | undefined;
   type?: InfoItemType;
+  isDark?: boolean;
 }
 
 // Estilos para chips según tipo de dato
-const chipStyles: Record<InfoItemType, string> = {
-  date: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-  catorcena: 'bg-violet-500/20 text-violet-300 border border-violet-500/30',
-  user: 'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-  id: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono',
-  amount: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold',
-  percent: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30',
-  status: 'bg-pink-500/20 text-pink-300 border border-pink-500/30',
-  category: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30',
-  default: 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30',
-};
+const getChipStyles = (isDark: boolean): Record<InfoItemType, string> => ({
+  date: isDark ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-blue-50 text-blue-700 border border-blue-200',
+  catorcena: isDark ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'bg-violet-50 text-violet-700 border border-violet-200',
+  user: isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-50 text-purple-700 border border-purple-200',
+  id: isDark ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono' : 'bg-amber-50 text-amber-700 border border-amber-200 font-mono',
+  amount: isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold',
+  percent: isDark ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border border-cyan-200',
+  status: isDark ? 'bg-pink-500/20 text-pink-300 border border-pink-500/30' : 'bg-pink-50 text-pink-700 border border-pink-200',
+  category: isDark ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+  default: isDark ? 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30' : 'bg-gray-100 text-gray-700 border border-gray-200',
+});
 
-// Formatear fecha como "Catorcena X, YYYY"
+// Formatear fecha como "Cat X / YYYY"
 function formatAsCatorcena(dateStr: string): string {
   try {
     const fecha = new Date(dateStr);
     if (isNaN(fecha.getTime())) return dateStr;
     const catorcena = calcularCatorcena(fecha);
     const anio = fecha.getFullYear();
-    return `Catorcena ${catorcena}, ${anio}`;
+    return `Cat ${catorcena} / ${anio}`;
   } catch {
     return dateStr;
   }
 }
 
+
+const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 // Helper to find catorcena from date using API data
 function dateToCatorcena(dateStr: string, catorcenas: Catorcena[]): { catorcena: string; year: number } | null {
@@ -66,20 +70,32 @@ function dateToCatorcena(dateStr: string, catorcenas: Catorcena[]): { catorcena:
     return date >= inicio && date <= fin;
   });
   if (found) {
-    return { catorcena: `Catorcena ${found.numero_catorcena}`, year: found.a_o };
+    return { catorcena: `Cat ${found.numero_catorcena}`, year: found.a_o };
   }
   return null;
 }
 
-function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[]): string {
+function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[], tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual') {
+    const parts = dateStr.split('-');
+    if (parts.length >= 2) {
+      return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
+    }
+    return dateStr;
+  }
   const result = dateToCatorcena(dateStr, catorcenas);
   if (result) {
-    return `${result.catorcena}, ${result.year}`;
+    return `${result.catorcena} / ${result.year}`;
+  }
+  // Fallback: show month name for monthly periods
+  const parts = dateStr.split('-');
+  if (parts.length >= 2) {
+    return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
   }
   return dateStr;
 }
 
-function InfoItem({ label, value, type = 'default' }: InfoItemProps) {
+function InfoItem({ label, value, type = 'default', isDark = true }: InfoItemProps) {
   if (value === null || value === undefined || value === '') return null;
 
   // Formatear valor según tipo
@@ -98,6 +114,8 @@ function InfoItem({ label, value, type = 'default' }: InfoItemProps) {
     }).format(value);
   }
 
+  const chipStyles = getChipStyles(isDark);
+
   return (
     <div className="flex justify-between items-center py-1.5 border-b border-border/50 last:border-0">
       <span className="text-xs text-muted-foreground">{label}</span>
@@ -109,15 +127,15 @@ function InfoItem({ label, value, type = 'default' }: InfoItemProps) {
 }
 
 // Skeleton Components
-function InfoCardSkeleton() {
+function InfoCardSkeleton({ isDark = true }: { isDark?: boolean }) {
   return (
     <div className="bg-card rounded-xl border border-border p-4 animate-pulse">
       <div className="h-4 bg-purple-500/20 rounded w-24 mb-4"></div>
       <div className="space-y-3">
         {[...Array(6)].map((_, i) => (
           <div key={i} className="flex justify-between items-center py-1.5">
-            <div className="h-3 bg-zinc-700/50 rounded w-20"></div>
-            <div className="h-5 bg-zinc-700/30 rounded-md w-28"></div>
+            <div className={`h-3 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} rounded w-20`}></div>
+            <div className={`h-5 ${isDark ? 'bg-zinc-700/30' : 'bg-gray-100'} rounded-md w-28`}></div>
           </div>
         ))}
       </div>
@@ -125,15 +143,15 @@ function InfoCardSkeleton() {
   );
 }
 
-function TableSkeleton() {
+function TableSkeleton({ isDark = true }: { isDark?: boolean }) {
   return (
     <div className="animate-pulse">
       <div className="space-y-2">
         {/* Header skeleton */}
         <div className="flex items-center gap-2 pb-2">
-          <div className="h-7 bg-purple-900/30 rounded-lg w-32"></div>
-          <div className="h-7 bg-purple-900/30 rounded-lg w-24"></div>
-          <div className="h-7 bg-purple-900/30 rounded-lg w-20"></div>
+          <div className={`h-7 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'} rounded-lg w-32`}></div>
+          <div className={`h-7 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'} rounded-lg w-24`}></div>
+          <div className={`h-7 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'} rounded-lg w-20`}></div>
         </div>
         {/* Table rows skeleton */}
         <div className="border border-border rounded-lg overflow-hidden">
@@ -145,7 +163,7 @@ function TableSkeleton() {
           {[...Array(5)].map((_, i) => (
             <div key={i} className="px-3 py-2.5 border-t border-border flex gap-4">
               {[...Array(6)].map((_, j) => (
-                <div key={j} className="h-3 bg-zinc-700/40 rounded w-16"></div>
+                <div key={j} className={`h-3 ${isDark ? 'bg-zinc-700/40' : 'bg-gray-200'} rounded w-16`}></div>
               ))}
             </div>
           ))}
@@ -155,19 +173,19 @@ function TableSkeleton() {
   );
 }
 
-function MapSkeleton() {
+function MapSkeleton({ isDark = true }: { isDark?: boolean }) {
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-purple-900/20 animate-pulse">
       <div className="w-12 h-12 rounded-full bg-purple-500/30 mb-3 flex items-center justify-center">
         <Loader2 className="h-6 w-6 text-purple-400 animate-spin" />
       </div>
       <div className="h-3 bg-purple-500/20 rounded w-32 mb-2"></div>
-      <div className="h-2 bg-zinc-700/30 rounded w-24"></div>
+      <div className={`h-2 ${isDark ? 'bg-zinc-700/30' : 'bg-gray-200'} rounded w-24`}></div>
     </div>
   );
 }
 
-function CommentsSkeleton() {
+function CommentsSkeleton({ isDark = true }: { isDark?: boolean }) {
   return (
     <div className="flex-1 overflow-hidden p-3 space-y-3 animate-pulse">
       {[...Array(4)].map((_, i) => (
@@ -175,12 +193,12 @@ function CommentsSkeleton() {
           <div className="w-6 h-6 rounded-full bg-purple-500/30 flex-shrink-0"></div>
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 bg-zinc-700/50 rounded w-20"></div>
-              <div className="h-2 bg-zinc-700/30 rounded w-16"></div>
+              <div className={`h-3 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} rounded w-20`}></div>
+              <div className={`h-2 ${isDark ? 'bg-zinc-700/30' : 'bg-gray-100'} rounded w-16`}></div>
             </div>
             <div className="space-y-1">
-              <div className="h-2 bg-zinc-700/40 rounded w-full"></div>
-              <div className="h-2 bg-zinc-700/40 rounded w-3/4"></div>
+              <div className={`h-2 ${isDark ? 'bg-zinc-700/40' : 'bg-gray-200'} rounded w-full`}></div>
+              <div className={`h-2 ${isDark ? 'bg-zinc-700/40' : 'bg-gray-200'} rounded w-3/4`}></div>
             </div>
           </div>
         </div>
@@ -199,15 +217,16 @@ interface EmptyStateProps {
     onClick: () => void;
   };
   className?: string;
+  isDark?: boolean;
 }
 
-function EmptyState({ icon, title, description, action, className = '' }: EmptyStateProps) {
+function EmptyState({ icon, title, description, action, className = '', isDark = true }: EmptyStateProps) {
   return (
     <div className={`flex flex-col items-center justify-center py-8 px-4 ${className}`}>
       <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-3">
         {icon || <Package className="h-6 w-6 text-purple-400" />}
       </div>
-      <p className="text-sm font-medium text-zinc-300 text-center">{title}</p>
+      <p className={`text-sm font-medium text-center ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{title}</p>
       {description && (
         <p className="text-xs text-muted-foreground text-center mt-1 max-w-xs">{description}</p>
       )}
@@ -298,13 +317,13 @@ function ErrorState({
 }
 
 // Map Empty State Component
-function MapEmptyState() {
+function MapEmptyState({ isDark = true }: { isDark?: boolean }) {
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-purple-900/10">
       <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-3">
         <MapPinOff className="h-6 w-6 text-purple-400" />
       </div>
-      <p className="text-sm font-medium text-zinc-300">Sin ubicaciones</p>
+      <p className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Sin ubicaciones</p>
       <p className="text-xs text-muted-foreground text-center mt-1">
         No hay coordenadas disponibles para mostrar en el mapa
       </p>
@@ -413,11 +432,30 @@ interface TableColumn {
 
 const TABLE_COLUMNS: TableColumn[] = [
   { field: 'codigo_unico', label: 'Código' },
-  { field: 'solicitud_caras_id', label: 'Grupo ID' },
-  { field: 'mueble', label: 'Mueble' },
-  { field: 'estado', label: 'Estado' },
-  { field: 'tipo_de_cara', label: 'Tipo' },
+  { field: 'articulo', label: 'Artículo' },
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'tipo_de_cara', label: 'Formato' },
   { field: 'caras_totales', label: 'Caras' },
+  { field: 'tarifa_publica', label: 'Tarifa' },
+  { field: 'total_inversion', label: 'Inversión' },
+  { field: 'latitud', label: 'Lat' },
+  { field: 'longitud', label: 'Lon' },
+  { field: 'medidas', label: 'Medidas' },
+];
+
+const TABLE_COLUMNS_APS: TableColumn[] = [
+  { field: 'codigo_unico', label: 'Código' },
+  { field: 'articulo', label: 'Artículo' },
+  { field: 'plaza', label: 'Plaza' },
+  { field: 'formato', label: 'Formato' },
+  //{ field: 'caras_totales', label: 'Caras' },
+  { field: 'tarifa_publica', label: 'Tarifa' },
+  //{ field: 'total_inversion', label: 'Inversión' },
+  { field: 'latitud', label: 'Lat' },
+  { field: 'longitud', label: 'Lon' },
+  { field: 'medidas', label: 'Medidas' },
+  { field: 'aps', label: 'APS' },
+  { field: 'estatus_reserva', label: 'Estatus' },
 ];
 
 const OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
@@ -430,6 +468,89 @@ const OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | '
   { value: '>=', label: 'Mayor o igual', forTypes: ['number'] },
   { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
 ];
+
+function fmtMoney(n: number): string {
+  return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+function GroupSummaryInline({ items, groupField, isDark = true }: { items: InventarioReservado[]; groupField: string; isDark?: boolean }) {
+  if (groupField === 'aps') return null;
+  const carasTotal = items.reduce((s, i) => s + (Number(i.caras_totales) || 0), 0);
+  const getTarifa = (i: InventarioReservado) => Number(i.tarifa_publica_sc) || Number(i.tarifa_publica) || 0;
+  const totalInversion = items.reduce((s, i) => s + getTarifa(i) * (Number(i.caras_totales) || 0), 0);
+  const tarifas = [...new Set(items.map(i => Math.round(getTarifa(i))).filter(t => t > 0))];
+  const uniformTarifa = tarifas.length === 1 ? tarifas[0] : 0;
+  const showTarifa = groupField !== 'inicio_periodo';
+  return (
+    <div className="flex items-center gap-2 text-[10px] ml-2 shrink-0">
+      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{carasTotal}</span></span>
+      {showTarifa && <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Tarifa: <span className="text-amber-400 font-medium">{uniformTarifa > 0 ? fmtMoney(uniformTarifa) : '$0'}</span></span>}
+      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inv: <span className="text-emerald-400 font-medium">{fmtMoney(totalInversion)}</span></span>
+    </div>
+  );
+}
+
+function GroupMetaBadges({ items, skipFields, isDark = true }: { items: InventarioReservado[]; skipFields: string[]; isDark?: boolean }) {
+  const plazas = [...new Set(items.map(i => i.plaza).filter(Boolean))] as string[];
+  const formatos = [...new Set(items.map(i => i.formato ?? i.tipo_de_cara).filter(Boolean))] as string[];
+  const articulos = [...new Set(items.map(i => i.articulo).filter(Boolean))] as string[];
+  const showPlazas = !skipFields.includes('plaza') && plazas.length > 0;
+  const showArticulos = !skipFields.includes('articulo') && articulos.length > 0;
+  const showFormatos = !skipFields.includes('formato') && formatos.length > 0;
+  if (!showPlazas && !showArticulos && !showFormatos) return null;
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1 px-2 py-1.5 mb-1 border-b border-purple-900/10">
+      {showPlazas && (
+        <div className="flex items-center gap-1">
+          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plaza:</span>
+          {plazas.slice(0, 3).map(p => <span key={p} className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{p}</span>)}
+          {plazas.length > 3 && <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>+{plazas.length - 3}</span>}
+        </div>
+      )}
+      {showArticulos && (
+        <div className="flex items-center gap-1">
+          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Art:</span>
+          {articulos.slice(0, 2).map(a => <span key={a} className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-violet-900/40 text-violet-300' : 'bg-violet-50 text-violet-700'}`}>{a}</span>)}
+          {articulos.length > 2 && <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>+{articulos.length - 2}</span>}
+        </div>
+      )}
+      {showFormatos && (
+        <div className="flex items-center gap-1">
+          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Formato:</span>
+          {formatos.slice(0, 2).map(f => <span key={f} className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-purple-900/40 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>{f}</span>)}
+          {formatos.length > 2 && <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>+{formatos.length - 2}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', isDark = true) {
+  if (col.field === 'codigo_unico') return <td key={col.field} className={`${p} ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{item.codigo_unico || '-'}</td>;
+  if (col.field === 'caras_totales') return <td key={col.field} className={`${p} text-center`}><span className={`px-1 py-0.5 rounded text-[10px] ${isDark ? 'bg-pink-500/20 text-pink-400' : 'bg-pink-50 text-pink-700'}`}>{item.caras_totales}</span></td>;
+  if (col.field === 'renta') return <td key={col.field} className={`${p} text-center ${isDark ? 'text-violet-300' : 'text-violet-700'} text-[10px]`}>{item.renta != null ? item.renta : '-'}</td>;
+  if (col.field === 'bonificacion_sc') return <td key={col.field} className={`${p} text-center ${isDark ? 'text-pink-300' : 'text-pink-700'} text-[10px]`}>{item.bonificacion_sc != null ? item.bonificacion_sc : '-'}</td>;
+  if (col.field === 'tarifa_publica') {
+    const t = Number(item.tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
+    return <td key={col.field} className={`${p} text-amber-400 text-right font-mono text-[10px]`}>{fmtMoney(t)}</td>;
+  }
+  if (col.field === 'total_inversion') {
+    const t = Number(item.tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
+    const inv = t * (Number(item.caras_totales) || 0);
+    return <td key={col.field} className={`${p} text-emerald-400 text-right font-mono font-medium text-[10px]`}>{fmtMoney(inv)}</td>;
+  }
+  if (col.field === 'latitud') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-mono text-[10px]`}>{item.latitud != null ? item.latitud.toFixed(5) : '-'}</td>;
+  if (col.field === 'longitud') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-mono text-[10px]`}>{item.longitud != null ? item.longitud.toFixed(5) : '-'}</td>;
+  if (col.field === 'medidas') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{item.ancho && item.alto ? `${item.ancho}×${item.alto}` : '-'}</td>;
+  const value = item[col.field as keyof InventarioReservado];
+  return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{value !== null && value !== undefined ? String(value) : '-'}</td>;
+}
+
+function renderAPSCell(item: InventarioConAPS, col: TableColumn, p = 'p-1.5', isDark = true) {
+  if (col.field === 'aps') return <td key={col.field} className={`${p} text-center`}><span className={`px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-50 text-cyan-700'}`}>{item.aps}</span></td>;
+  if (col.field === 'estatus_reserva') return <td key={col.field} className={p}><span className={`px-1.5 py-0.5 rounded text-[10px] ${item.estatus_reserva === 'confirmado' ? (isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700') : item.estatus_reserva === 'pendiente' ? (isDark ? 'bg-yellow-500/20 text-yellow-400' : 'bg-yellow-50 text-yellow-700') : (isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500')}`}>{item.estatus_reserva || 'N/A'}</span></td>;
+  return renderReservadoCell(item, col, p, isDark);
+}
 
 // Función para aplicar filtros a los datos
 function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
@@ -479,10 +600,17 @@ function calcularCatorcena(fecha: Date): number {
   return Math.ceil(diaDelAnio / 14);
 }
 
-// Helper para formatear inicio_periodo como "Catorcena X, Año YYYY"
-function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS): string {
+// Helper para formatear inicio_periodo como "Cat X / YYYY" o "Mes YYYY"
+function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS, tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+    const parts = item.inicio_periodo.split('-');
+    if (parts.length >= 2) {
+      return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
+    }
+  }
+
   if (item.numero_catorcena && item.anio_catorcena) {
-    return `Catorcena ${item.numero_catorcena}, ${item.anio_catorcena}`;
+    return `Cat ${item.numero_catorcena} / ${item.anio_catorcena}`;
   }
 
   // Si tenemos la fecha de inicio_periodo, calcular la catorcena
@@ -490,7 +618,7 @@ function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS): stri
     const fecha = new Date(item.inicio_periodo);
     const catorcena = calcularCatorcena(fecha);
     const anio = fecha.getFullYear();
-    return `Catorcena ${catorcena}, ${anio}`;
+    return `Cat ${catorcena} / ${anio}`;
   }
 
   return 'Sin asignar';
@@ -525,9 +653,9 @@ function formatArticulo(item: InventarioReservado | InventarioConAPS): string {
 }
 
 // Helper para obtener el valor de agrupación formateado
-function getGroupValue(item: InventarioReservado | InventarioConAPS, field: GroupByField): string {
+function getGroupValue(item: InventarioReservado | InventarioConAPS, field: GroupByField, tipoPeriodo?: string): string {
   if (field === 'inicio_periodo') {
-    return formatInicioPeriodo(item);
+    return formatInicioPeriodo(item, tipoPeriodo);
   }
   if (field === 'articulo') {
     return formatArticulo(item);
@@ -544,6 +672,7 @@ export function CampanaDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const permissions = getPermissions(user?.rol);
   const campanaId = id ? parseInt(id, 10) : 1;
 
@@ -581,6 +710,7 @@ export function CampanaDetailPage() {
   const [enviandoCodigo, setEnviandoCodigo] = useState(false);
   const [pinVerificado, setPinVerificado] = useState(false);
   const [errorPIN, setErrorPIN] = useState('');
+  const [showIncompleteDetail, setShowIncompleteDetail] = useState(false);
 
   // Estado para filtros (inventario reservado)
   const [filtersReservado, setFiltersReservado] = useState<FilterCondition[]>([]);
@@ -604,6 +734,8 @@ export function CampanaDetailPage() {
   const [showPostSAPModal, setShowPostSAPModal] = useState(false);
   const [postingToSAP, setPostingToSAP] = useState(false);
   const [postSAPResult, setPostSAPResult] = useState<{ success: boolean; message: string; data?: unknown } | null>(null);
+  const [alreadyPosted, setAlreadyPosted] = useState(false);
+  const [previewDeliveryNote, setPreviewDeliveryNote] = useState<any>(null);
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -614,6 +746,13 @@ export function CampanaDetailPage() {
     queryFn: () => campanasService.getById(campanaId),
   });
 
+  // Inicializar alreadyPosted desde la DB
+  useEffect(() => {
+    if (campana?.posted_to_sap) {
+      setAlreadyPosted(true);
+    }
+  }, [campana?.posted_to_sap]);
+
   const { data: inventarioReservado = [], isLoading: isLoadingInventario, error: errorInventario, refetch: refetchInventario } = useQuery({
     queryKey: ['campana-inventario', campanaId],
     queryFn: () => campanasService.getInventarioReservado(campanaId),
@@ -623,6 +762,12 @@ export function CampanaDetailPage() {
   const { data: inventarioConAPS = [], isLoading: isLoadingAPS, error: errorAPS, refetch: refetchAPS } = useQuery({
     queryKey: ['campana-inventario-aps', campanaId],
     queryFn: () => campanasService.getInventarioConAPS(campanaId),
+    enabled: !!campana,
+  });
+
+  const { data: solicitudCaras = [] } = useQuery({
+    queryKey: ['campana-caras', campanaId],
+    queryFn: () => campanasService.getCaras(campanaId),
     enabled: !!campana,
   });
 
@@ -638,7 +783,7 @@ export function CampanaDetailPage() {
     queryFn: () => solicitudesService.getCatorcenas(),
   });
   const catorcenas = catorcenasData?.data || [];
-
+  const tipoPeriodo = (campana as any)?.tipo_periodo || 'catorcena';
 
   // Calcular centro del mapa basado en inventario
   const mapCenter = useMemo(() => {
@@ -907,6 +1052,9 @@ export function CampanaDetailPage() {
           message: 'Delivery Note creado exitosamente en SAP',
           data: result.data,
         });
+        setAlreadyPosted(true);
+        // Guardar en DB que ya se posteó
+        try { await campanasService.markPostedToSAP(campana.id); } catch (e) { console.error('Error marcando posted_to_sap:', e); }
       } else {
         setPostSAPResult({
           success: false,
@@ -933,7 +1081,7 @@ export function CampanaDetailPage() {
     const grouped: Record<string, InventarioReservado[] | Record<string, InventarioReservado[]>> = {};
 
     filteredInventarioReservado.forEach(item => {
-      const firstKey = getGroupValue(item, activeGroupings[0]);
+      const firstKey = getGroupValue(item, activeGroupings[0], tipoPeriodo);
 
       if (activeGroupings.length === 1) {
         if (!grouped[firstKey]) {
@@ -944,7 +1092,7 @@ export function CampanaDetailPage() {
         if (!grouped[firstKey]) {
           grouped[firstKey] = {};
         }
-        const secondKey = getGroupValue(item, activeGroupings[1]);
+        const secondKey = getGroupValue(item, activeGroupings[1], tipoPeriodo);
         if (!(grouped[firstKey] as Record<string, InventarioReservado[]>)[secondKey]) {
           (grouped[firstKey] as Record<string, InventarioReservado[]>)[secondKey] = [];
         }
@@ -1025,7 +1173,7 @@ export function CampanaDetailPage() {
 
   // Columnas visibles (excluye las que están agrupadas) - Inventario APS
   const visibleColumnsAPS = useMemo(() => {
-    return TABLE_COLUMNS.filter(col => !activeGroupingsAPS.includes(col.field as GroupByField));
+    return TABLE_COLUMNS_APS.filter(col => !activeGroupingsAPS.includes(col.field as GroupByField));
   }, [activeGroupingsAPS]);
 
   // Toggle agrupación (con APS) - soporta hasta 3 niveles
@@ -1105,7 +1253,7 @@ export function CampanaDetailPage() {
     const grouped: GroupedLevel1 = {};
 
     filteredInventarioAPS.forEach(item => {
-      const firstKey = getGroupValue(item, activeGroupingsAPS[0]);
+      const firstKey = getGroupValue(item, activeGroupingsAPS[0], tipoPeriodo);
 
       if (activeGroupingsAPS.length === 1) {
         if (!grouped[firstKey]) {
@@ -1116,7 +1264,7 @@ export function CampanaDetailPage() {
         if (!grouped[firstKey]) {
           grouped[firstKey] = {};
         }
-        const secondKey = getGroupValue(item, activeGroupingsAPS[1]);
+        const secondKey = getGroupValue(item, activeGroupingsAPS[1], tipoPeriodo);
         if (!(grouped[firstKey] as GroupedLevel2)[secondKey]) {
           (grouped[firstKey] as GroupedLevel2)[secondKey] = [];
         }
@@ -1126,11 +1274,11 @@ export function CampanaDetailPage() {
         if (!grouped[firstKey]) {
           grouped[firstKey] = {};
         }
-        const secondKey = getGroupValue(item, activeGroupingsAPS[1]);
+        const secondKey = getGroupValue(item, activeGroupingsAPS[1], tipoPeriodo);
         if (!(grouped[firstKey] as GroupedLevel2)[secondKey]) {
           (grouped[firstKey] as GroupedLevel2)[secondKey] = {};
         }
-        const thirdKey = getGroupValue(item, activeGroupingsAPS[2]);
+        const thirdKey = getGroupValue(item, activeGroupingsAPS[2], tipoPeriodo);
         if (!((grouped[firstKey] as GroupedLevel2)[secondKey] as GroupedLevel3)[thirdKey]) {
           ((grouped[firstKey] as GroupedLevel2)[secondKey] as GroupedLevel3)[thirdKey] = [];
         }
@@ -1398,6 +1546,43 @@ export function CampanaDetailPage() {
             <Badge variant={statusVariants[campana.status] || 'secondary'} className="text-xs sm:text-sm">
               {campana.status}
             </Badge>
+            {campana.incompleteness_detail && campana.incompleteness_detail.length > 0 && (() => {
+              const totalEsperadas = campana.incompleteness_detail.reduce((sum: number, d: any) => sum + d.caras_esperadas, 0);
+              const totalReservas = campana.incompleteness_detail.reduce((sum: number, d: any) => sum + d.reservas_count, 0);
+              const isIncomplete = totalReservas < totalEsperadas;
+              if (!isIncomplete) return null;
+              return (
+              <div className="relative">
+                <button
+                  onClick={() => setShowIncompleteDetail(!showIncompleteDetail)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs border cursor-pointer hover:opacity-80 transition-opacity ${isDark ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}
+                >
+                  Incompleta ({totalReservas}/{totalEsperadas} caras) {showIncompleteDetail ? '▲' : '▼'}
+                </button>
+                {showIncompleteDetail && campana.incompleteness_detail && campana.incompleteness_detail.length > 0 && (
+                  <div className={`absolute top-full right-0 mt-2 z-50 rounded-lg border shadow-xl p-3 min-w-[220px] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                    <p className={`text-xs font-semibold mb-2 ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>Desglose por catorcena:</p>
+                    <div className="space-y-1.5">
+                      {campana.incompleteness_detail.map((d: any) => (
+                        <div key={`${d.anio}-${d.catorcena}`} className="flex items-center justify-between gap-4">
+                          <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                            Cat {String(d.catorcena).padStart(2, '0')}
+                          </span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            d.completa
+                              ? (isDark ? 'text-green-300 bg-green-500/20 border border-green-500/30' : 'text-green-700 bg-green-50 border border-green-200')
+                              : (isDark ? 'text-yellow-300 bg-yellow-500/20 border border-yellow-500/30' : 'text-yellow-700 bg-yellow-50 border border-yellow-200')
+                          }`}>
+                            {d.reservas_count}/{d.caras_esperadas} {d.completa ? '✓' : `— faltan ${d.caras_esperadas - d.reservas_count}`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -1413,12 +1598,12 @@ export function CampanaDetailPage() {
           <div className="bg-card rounded-xl border border-border p-3 md:p-4">
             <h3 className="text-xs md:text-sm font-semibold mb-2 md:mb-3 text-purple-300 uppercase tracking-wide">Campaña</h3>
             <div className="space-y-0">
-              <InfoItem label="Articulo" value={campana.articulo} type="category" />
+              <InfoItem label="Plaza" value={[...new Set([...inventarioReservado, ...inventarioConAPS].map(i => i.plaza).filter(Boolean))].join(', ') || (campana as any).plazas || null} type="category" isDark={isDark} />
               {campana.fecha_inicio && (
                 <div className="flex justify-between items-center py-1.5 border-b border-border/50">
                   <span className="text-xs text-muted-foreground">Inicio</span>
                   <span className="text-xs px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                    {getCatorcenaDisplay(campana.fecha_inicio, catorcenas)}
+                    {getCatorcenaDisplay(campana.fecha_inicio, catorcenas, tipoPeriodo)}
                   </span>
                 </div>
               )}
@@ -1426,17 +1611,18 @@ export function CampanaDetailPage() {
                 <div className="flex justify-between items-center py-1.5 border-b border-border/50">
                   <span className="text-xs text-muted-foreground">Fin</span>
                   <span className="text-xs px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                    {getCatorcenaDisplay(campana.fecha_fin, catorcenas)}
+                    {getCatorcenaDisplay(campana.fecha_fin, catorcenas, tipoPeriodo)}
                   </span>
                 </div>
               )}
-              <InfoItem label="Total Caras" value={campana.total_caras} type="default" />
-              <InfoItem label="Frontal" value={campana.frontal} type="default" />
-              <InfoItem label="Cruzada" value={campana.cruzada} type="default" />
-              <InfoItem label="NSE" value={campana.nivel_socioeconomico ? [...new Set(campana.nivel_socioeconomico.split(",").map(s => s.trim()))].join(", ") : null} type="category" />
-              <InfoItem label="Bonificacion" value={campana.bonificacion} type="default" />
-              <InfoItem label="Descuento" value={campana.descuento ? `${campana.descuento}%` : null} type="percent" />
-              <InfoItem label="Inversion" value={typeof campana.inversion === "string" ? parseFloat(campana.inversion) : campana.inversion} type="amount" />
+              <InfoItem label="Total Caras" value={campana.total_caras} type="default" isDark={isDark} />
+              <InfoItem label="Caras Renta" value={solicitudCaras.reduce((s, c) => s + (c.caras ?? 0), 0) || null} type="default" isDark={isDark} />
+              {/*<InfoItem label="Frontal" value={campana.frontal} type="default" isDark={isDark} />*/}
+              {/*<InfoItem label="Cruzada" value={campana.cruzada} type="default" isDark={isDark} />*/}
+              {/*<InfoItem label="NSE" value={campana.nivel_socioeconomico ? [...new Set(campana.nivel_socioeconomico.split(",").map(s => s.trim()))].join(", ") : null} type="category" isDark={isDark} />*/}
+              <InfoItem label="Bonificacion" value={campana.bonificacion} type="default" isDark={isDark} />
+              <InfoItem label="Descuento" value={campana.descuento ? `${campana.descuento}%` : null} type="percent" isDark={isDark} />
+              <InfoItem label="Inversion" value={typeof campana.inversion === "string" ? parseFloat(campana.inversion) : campana.inversion} type="amount" isDark={isDark} />
               {/*<InfoItem label="Precio" value={typeof campana.precio === "string" ? parseFloat(campana.precio) : campana.precio} type="amount" /> */}
             </div>
           </div>
@@ -1448,12 +1634,12 @@ export function CampanaDetailPage() {
               <InfoItem label="Cliente" value={campana.T0_U_Cliente} type="user" />
               {campana.sap_database && (
                 <div className="flex items-center gap-2 px-3 py-1.5">
-                  <span className="text-zinc-500 text-xs">SAP BD:</span>
+                  <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>SAP BD:</span>
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                    campana.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                    campana.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                    campana.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
-                    'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                    campana.sap_database === 'CIMU' ? (isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200') :
+                    campana.sap_database === 'TEST' ? (isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200') :
+                    campana.sap_database === 'TRADE' ? (isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200') :
+                    (isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-100 text-gray-700 border-gray-200')
                   }`}>{campana.sap_database}</span>
                 </div>
               )}
@@ -1478,18 +1664,21 @@ export function CampanaDetailPage() {
               <InfoItem label="Actualizado" value={campana.updated_at} type="date" />
             </div>
 
-            {(campana.observaciones || campana.descripcion || campana.notas) && (
+            {(campana.descripcion || campana.observaciones) && (
               <>
-                <h3 className="text-sm font-semibold mb-2 mt-4 text-purple-300 uppercase tracking-wide">Notas</h3>
+                <h3 className="text-sm font-semibold mb-2 mt-4 text-purple-300 uppercase tracking-wide">Descripción Tráfico</h3>
                 {campana.descripcion && (
                   <p className="text-sm text-muted-foreground mb-2">{campana.descripcion}</p>
                 )}
                 {campana.observaciones && (
                   <p className="text-sm text-muted-foreground mb-2">{campana.observaciones}</p>
                 )}
-                {campana.notas && (
-                  <p className="text-sm text-muted-foreground">{campana.notas}</p>
-                )}
+              </>
+            )}
+            {campana.notas && (
+              <>
+                <h3 className="text-sm font-semibold mb-2 mt-4 text-purple-300 uppercase tracking-wide">Notas Dirección</h3>
+                <p className="text-sm text-muted-foreground">{campana.notas}</p>
               </>
             )}
           </div>
@@ -1506,7 +1695,7 @@ export function CampanaDetailPage() {
               <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
             </div>
           ) : historial.length === 0 ? (
-            <div className="text-center py-6 text-zinc-500 text-sm">
+            <div className={`text-center py-6 text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
               No hay acciones registradas
             </div>
           ) : (
@@ -1524,18 +1713,18 @@ export function CampanaDetailPage() {
                   >
                     <div className="flex-shrink-0 w-2 h-2 rounded-full bg-purple-400" />
                     <div className="flex-1 min-w-0">
-                      <span className="text-sm text-zinc-200">
+                      <span className={`text-sm ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
                         {item.accion} {tipoCapitalizado}
                       </span>
                       {item.detalles && (
-                        <p className="text-xs text-zinc-500 truncate" title={item.detalles}>
+                        <p className={`text-xs truncate ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title={item.detalles}>
                           {item.detalles}
                         </p>
                       )}
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <span className="text-xs text-zinc-500 block">{fecha}</span>
-                      <span className="text-xs text-zinc-600">{hora}</span>
+                      <span className={`text-xs block ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{fecha}</span>
+                      <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-300'}`}>{hora}</span>
                     </div>
                   </div>
                 );
@@ -1578,7 +1767,7 @@ export function CampanaDetailPage() {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 p-3 md:p-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
             {/* Columna izquierda: Mapa */}
             <div className="h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative map-dark-controls">
               {!isLoaded || isLoadingInventario ? (
@@ -1966,22 +2155,7 @@ export function CampanaDetailPage() {
                               )}
                             </button>
                           </td>
-                          {visibleColumnsReservado.map(col => {
-                            const value = item[col.field as keyof InventarioReservado];
-                            if (col.field === 'codigo_unico') {
-                              return <td key={col.field} className="p-2 text-white font-medium">{value || '-'}</td>;
-                            }
-                            if (col.field === 'caras_totales') {
-                              return (
-                                <td key={col.field} className="p-2 text-center">
-                                  <span className="px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-400">
-                                    {value}
-                                  </span>
-                                </td>
-                              );
-                            }
-                            return <td key={col.field} className="p-2 text-zinc-300">{value || '-'}</td>;
-                          })}
+                          {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-2'))}
                         </tr>
                       ))}
                     </tbody>
@@ -2036,7 +2210,8 @@ export function CampanaDetailPage() {
                                 {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[0])?.label}:
                               </span>
                               <span className="text-xs text-white">{groupKey}</span>
-                              <span className="ml-auto text-[10px] text-muted-foreground">
+                              <GroupSummaryInline items={allGroupItems} groupField={activeGroupings[0]} />
+                              <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                 {totalItems} items
                               </span>
                             </button>
@@ -2045,6 +2220,7 @@ export function CampanaDetailPage() {
                           {/* Contenido expandido */}
                           {isExpanded && (
                             <div className="px-2 py-1">
+                              <GroupMetaBadges items={allGroupItems} skipFields={activeGroupings} />
                               {isNested && nestedGroups ? (
                                 // Segundo nivel de agrupación
                                 <div className="space-y-1">
@@ -2084,13 +2260,16 @@ export function CampanaDetailPage() {
                                               {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}:
                                             </span>
                                             <span className="text-[10px] text-white">{subGroupKey}</span>
-                                            <span className="ml-auto text-[10px] text-muted-foreground">
+                                            <GroupSummaryInline items={subItems} groupField={activeGroupings[1]} />
+                                            <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                               {subItems.length}
-                                          </span>
+                                            </span>
                                           </button>
                                         </div>
                                         {isSubExpanded && (
-                                          <table className="w-full text-xs">
+                                          <div>
+                                            <GroupMetaBadges items={subItems} skipFields={activeGroupings} />
+                                            <table className="w-full text-xs">
                                             <thead>
                                               <tr className="border-b border-border/30 text-left">
                                                 <th className="p-1.5 w-8"></th>
@@ -2122,26 +2301,12 @@ export function CampanaDetailPage() {
                                                       )}
                                                     </button>
                                                   </td>
-                                                  {visibleColumnsReservado.map(col => {
-                                                    const value = item[col.field as keyof InventarioReservado];
-                                                    if (col.field === 'codigo_unico') {
-                                                      return <td key={col.field} className="p-1.5 text-white font-medium">{value || '-'}</td>;
-                                                    }
-                                                    if (col.field === 'caras_totales') {
-                                                      return (
-                                                        <td key={col.field} className="p-1.5 text-center">
-                                                          <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
-                                                            {value}
-                                                          </span>
-                                                        </td>
-                                                      );
-                                                    }
-                                                    return <td key={col.field} className="p-1.5 text-zinc-400">{value !== null && value !== undefined ? String(value) : '-'}</td>;
-                                                  })}
+                                                  {visibleColumnsReservado.map(col => renderReservadoCell(item, col))}
                                                 </tr>
                                               ))}
                                             </tbody>
                                           </table>
+                                          </div>
                                         )}
                                       </div>
                                     );
@@ -2181,22 +2346,7 @@ export function CampanaDetailPage() {
                                             )}
                                           </button>
                                         </td>
-                                        {visibleColumnsReservado.map(col => {
-                                          const value = item[col.field as keyof InventarioReservado];
-                                          if (col.field === 'codigo_unico') {
-                                            return <td key={col.field} className="p-1.5 text-white font-medium">{value || '-'}</td>;
-                                          }
-                                          if (col.field === 'caras_totales') {
-                                            return (
-                                              <td key={col.field} className="p-1.5 text-center">
-                                                <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
-                                                  {value}
-                                                </span>
-                                              </td>
-                                            );
-                                          }
-                                          return <td key={col.field} className="p-1.5 text-zinc-400">{value !== null && value !== undefined ? String(value) : '-'}</td>;
-                                        })}
+                                        {visibleColumnsReservado.map(col => renderReservadoCell(item, col))}
                                       </tr>
                                     ))}
                                   </tbody>
@@ -2224,7 +2374,7 @@ export function CampanaDetailPage() {
               <span className="text-[10px] sm:text-xs text-muted-foreground">
                 {filteredInventarioAPS.length} registros
               </span>
-              {permissions.canEditDetalleCampana && (
+              {permissions.canEditDetalleCampana && !alreadyPosted && (
                 <button
                   onClick={() => setShowRemoveAPSModal(true)}
                   disabled={selectedItemsAPS.size === 0}
@@ -2240,17 +2390,24 @@ export function CampanaDetailPage() {
               )}
               {permissions.canEditDetalleCampana && inventarioConAPS.length > 0 && (
                 <button
-                  onClick={() => setShowPostSAPModal(true)}
-                  className="flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border bg-cyan-900/30 border-cyan-500/20 hover:bg-cyan-900/50 hover:border-cyan-500/40 transition-colors"
-                  title="Enviar a SAP"
+                  onClick={() => {
+                    if (campana) {
+                      const dn = buildDeliveryNote(campana, inventarioConAPS, campana.sap_database);
+                      setPreviewDeliveryNote(dn);
+                    }
+                    setShowPostSAPModal(true);
+                  }}
+                  disabled={alreadyPosted}
+                  className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${alreadyPosted ? 'bg-zinc-800/50 border-zinc-700 cursor-not-allowed opacity-50' : 'bg-cyan-900/30 border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40'}`}
+                  title={alreadyPosted ? 'Ya se envió a SAP' : 'Enviar a SAP'}
                 >
-                  <Upload className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-cyan-400 mr-1" />
-                  <span className="text-[10px] sm:text-xs font-medium text-cyan-300">POST</span>
+                  <Upload className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${alreadyPosted ? 'text-zinc-500' : 'text-cyan-400'}`} />
+                  <span className={`text-[10px] sm:text-xs font-medium ${alreadyPosted ? 'text-zinc-500' : 'text-cyan-300'}`}>{alreadyPosted ? 'ENVIADO' : 'POST'}</span>
                 </button>
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 p-3 md:p-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
             {/* Columna izquierda: Mapa */}
             <div className="h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative map-dark-controls">
               {!isLoaded || isLoadingAPS ? (
@@ -2629,13 +2786,9 @@ export function CampanaDetailPage() {
                           )}
                         </button>
                       </th>
-                      <th className="p-2 font-medium text-purple-300">Código</th>
-                      <th className="p-2 font-medium text-purple-300">Tipo</th>
-                      <th className="p-2 font-medium text-purple-300">Plaza</th>
-                      <th className="p-2 font-medium text-purple-300">Ubicación</th>
-                      <th className="p-2 font-medium text-purple-300">Caras</th>
-                      <th className="p-2 font-medium text-purple-300">APS</th>
-                      <th className="p-2 font-medium text-purple-300">Estatus</th>
+                      {visibleColumnsAPS.map(col => (
+                        <th key={col.field} className="p-2 font-medium text-purple-300">{col.label}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -2661,33 +2814,7 @@ export function CampanaDetailPage() {
                             )}
                           </button>
                         </td>
-                        <td className="p-2 text-white font-medium">{item.codigo_unico}</td>
-                        <td className="p-2 text-zinc-300">{item.tipo_de_cara || '-'}</td>
-                        <td className="p-2 text-zinc-300">{item.plaza || '-'}</td>
-                        <td className="p-2 text-zinc-400 max-w-[150px] truncate" title={item.mueble || ''}>
-                          {item.mueble || '-'}
-                        </td>
-                        <td className="p-2 text-center">
-                          <span className="px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-400">
-                            {item.caras_totales}
-                          </span>
-                        </td>
-                        <td className="p-2 text-center">
-                          <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium">
-                            {item.aps}
-                          </span>
-                        </td>
-                        <td className="p-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                            item.estatus_reserva === 'confirmado'
-                              ? 'bg-green-500/20 text-green-400'
-                              : item.estatus_reserva === 'pendiente'
-                              ? 'bg-yellow-500/20 text-yellow-400'
-                              : 'bg-zinc-500/20 text-zinc-400'
-                          }`}>
-                            {item.estatus_reserva || 'N/A'}
-                          </span>
-                        </td>
+                        {visibleColumnsAPS.map(col => renderAPSCell(item, col, 'p-2'))}
                       </tr>
                     ))}
                   </tbody>
@@ -2752,7 +2879,8 @@ export function CampanaDetailPage() {
                               {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[0])?.label}:
                             </span>
                             <span className="text-xs text-white">{groupKey}</span>
-                            <span className="ml-auto text-[10px] text-muted-foreground">
+                            <GroupSummaryInline items={allGroupItemsAPS} groupField={activeGroupingsAPS[0]} />
+                            <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                               {totalItems} items
                             </span>
                           </button>
@@ -2761,6 +2889,7 @@ export function CampanaDetailPage() {
                         {/* Contenido expandido */}
                         {isExpanded && (
                           <div className="px-2 py-1">
+                            <GroupMetaBadges items={allGroupItemsAPS} skipFields={activeGroupingsAPS[0] === 'aps' ? [...activeGroupingsAPS, 'plaza', 'formato'] : activeGroupingsAPS} />
                             {isLevel1Array ? (
                               // Solo 1 nivel - mostrar items directamente
                               <table className="w-full text-xs">
@@ -2795,22 +2924,7 @@ export function CampanaDetailPage() {
                                           )}
                                         </button>
                                       </td>
-                                      {visibleColumnsAPS.map(col => {
-                                        const value = item[col.field as keyof InventarioConAPS];
-                                        if (col.field === 'codigo_unico') {
-                                          return <td key={col.field} className="p-1.5 text-white font-medium">{value || '-'}</td>;
-                                        }
-                                        if (col.field === 'caras_totales') {
-                                          return (
-                                            <td key={col.field} className="p-1.5 text-center">
-                                              <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
-                                                {value}
-                                              </span>
-                                            </td>
-                                          );
-                                        }
-                                        return <td key={col.field} className="p-1.5 text-zinc-400">{value !== null && value !== undefined ? String(value) : '-'}</td>;
-                                      })}
+                                      {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
                                     </tr>
                                   ))}
                                 </tbody>
@@ -2858,13 +2972,15 @@ export function CampanaDetailPage() {
                                             {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[1])?.label}:
                                           </span>
                                           <span className="text-[10px] text-white">{subGroupKey}</span>
-                                          <span className="ml-auto text-[10px] text-muted-foreground">
+                                          <GroupSummaryInline items={allSubItemsAPS} groupField={activeGroupingsAPS[1]} />
+                                          <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                             {subTotalItems}
                                           </span>
                                         </button>
                                       </div>
                                       {isSubExpanded && (
                                         <div className="px-2 py-1">
+                                          <GroupMetaBadges items={allSubItemsAPS} skipFields={activeGroupingsAPS[1] === 'aps' ? [...activeGroupingsAPS, 'plaza', 'formato'] : activeGroupingsAPS} />
                                           {isLevel2Array ? (
                                             // Solo 2 niveles - mostrar items
                                             <table className="w-full text-xs">
@@ -2899,22 +3015,7 @@ export function CampanaDetailPage() {
                                                         )}
                                                       </button>
                                                     </td>
-                                                    {visibleColumnsAPS.map(col => {
-                                                      const value = item[col.field as keyof InventarioConAPS];
-                                                      if (col.field === 'codigo_unico') {
-                                                        return <td key={col.field} className="p-1.5 text-white font-medium">{value || '-'}</td>;
-                                                      }
-                                                      if (col.field === 'caras_totales') {
-                                                        return (
-                                                          <td key={col.field} className="p-1.5 text-center">
-                                                            <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
-                                                              {value}
-                                                            </span>
-                                                          </td>
-                                                        );
-                                                      }
-                                                      return <td key={col.field} className="p-1.5 text-zinc-400">{value !== null && value !== undefined ? String(value) : '-'}</td>;
-                                                    })}
+                                                    {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
                                                   </tr>
                                                 ))}
                                               </tbody>
@@ -2959,64 +3060,53 @@ export function CampanaDetailPage() {
                                                           {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[2])?.label}:
                                                         </span>
                                                         <span className="text-[10px] text-white">{thirdGroupKey}</span>
-                                                        <span className="ml-auto text-[10px] text-muted-foreground">
+                                                        <GroupSummaryInline items={thirdItems} groupField={activeGroupingsAPS[2]} />
+                                                        <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                                           {thirdItems.length}
                                                         </span>
                                                       </button>
                                                     </div>
                                                     {isThirdExpanded && (
-                                                      <table className="w-full text-xs">
-                                                        <thead>
-                                                          <tr className="border-b border-border/30 text-left">
-                                                            <th className="p-1.5 w-8"></th>
-                                                            {visibleColumnsAPS.map(col => (
-                                                              <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
-                                                            ))}
-                                                          </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                          {thirdItems.map((item) => (
-                                                            <tr
-                                                              key={item.rsv_ids}
-                                                              id={`row-aps-${item.rsv_ids}`}
-                                                              className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
-                                                                selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
-                                                              }`}
-                                                            >
-                                                              <td className="p-1.5 w-8">
-                                                                <button
-                                                                  onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
-                                                                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
-                                                                    selectedItemsAPS.has(String(item.rsv_ids))
-                                                                      ? 'bg-cyan-600 border-cyan-600'
-                                                                      : 'border-cyan-500/50 hover:border-cyan-400'
-                                                                  }`}
-                                                                >
-                                                                  {selectedItemsAPS.has(String(item.rsv_ids)) && (
-                                                                    <Check className="h-2.5 w-2.5 text-white" />
-                                                                  )}
-                                                                </button>
-                                                              </td>
-                                                              {visibleColumnsAPS.map(col => {
-                                                                const value = item[col.field as keyof InventarioConAPS];
-                                                                if (col.field === 'codigo_unico') {
-                                                                  return <td key={col.field} className="p-1.5 text-white font-medium">{value || '-'}</td>;
-                                                                }
-                                                                if (col.field === 'caras_totales') {
-                                                                  return (
-                                                                    <td key={col.field} className="p-1.5 text-center">
-                                                                      <span className="px-1 py-0.5 rounded bg-pink-500/20 text-pink-400 text-[10px]">
-                                                                        {value}
-                                                                      </span>
-                                                                    </td>
-                                                                  );
-                                                                }
-                                                                return <td key={col.field} className="p-1.5 text-zinc-400">{value !== null && value !== undefined ? String(value) : '-'}</td>;
-                                                              })}
+                                                      <div>
+                                                        <GroupMetaBadges items={thirdItems} skipFields={activeGroupingsAPS[2] === 'aps' ? [...activeGroupingsAPS, 'plaza', 'formato'] : activeGroupingsAPS} />
+                                                        <table className="w-full text-xs">
+                                                          <thead>
+                                                            <tr className="border-b border-border/30 text-left">
+                                                              <th className="p-1.5 w-8"></th>
+                                                              {visibleColumnsAPS.map(col => (
+                                                                <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                                              ))}
                                                             </tr>
-                                                          ))}
-                                                        </tbody>
-                                                      </table>
+                                                          </thead>
+                                                          <tbody>
+                                                            {thirdItems.map((item) => (
+                                                              <tr
+                                                                key={item.rsv_ids}
+                                                                id={`row-aps-${item.rsv_ids}`}
+                                                                className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
+                                                                  selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
+                                                                }`}
+                                                              >
+                                                                <td className="p-1.5 w-8">
+                                                                  <button
+                                                                    onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                                                    className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                                      selectedItemsAPS.has(String(item.rsv_ids))
+                                                                        ? 'bg-cyan-600 border-cyan-600'
+                                                                        : 'border-cyan-500/50 hover:border-cyan-400'
+                                                                    }`}
+                                                                  >
+                                                                    {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                                                      <Check className="h-2.5 w-2.5 text-white" />
+                                                                    )}
+                                                                  </button>
+                                                                </td>
+                                                                {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
+                                                              </tr>
+                                                            ))}
+                                                          </tbody>
+                                                        </table>
+                                                      </div>
                                                     )}
                                                   </div>
                                                 );
@@ -3238,8 +3328,8 @@ export function CampanaDetailPage() {
 
       {/* Modal POST a SAP */}
       {showPostSAPModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-[#1a1025] border border-purple-900/50 rounded-xl p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => !postingToSAP && !postSAPResult && setShowPostSAPModal(false)}>
+          <div className="bg-[#1a1025] border border-purple-900/50 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-purple-300">Enviar a SAP</h3>
               <button
@@ -3247,7 +3337,8 @@ export function CampanaDetailPage() {
                   setShowPostSAPModal(false);
                   setPostSAPResult(null);
                 }}
-                className="text-muted-foreground hover:text-foreground"
+                disabled={postingToSAP}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -3256,33 +3347,109 @@ export function CampanaDetailPage() {
             {!postSAPResult ? (
               <>
                 <div className="mb-6">
-                  <p className="text-sm text-zinc-400 mb-4">
-                    Se enviará un Delivery Note a SAP con los siguientes datos:
-                  </p>
-                  <div className="bg-purple-900/20 rounded-lg p-3 space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Campaña:</span>
-                      <span className="text-zinc-300">{campana?.nombre}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Items con APS:</span>
-                      <span className="text-zinc-300">{inventarioConAPS.length}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">APS únicos:</span>
-                      <span className="text-zinc-300">{new Set(inventarioConAPS.map(i => i.aps)).size}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Cliente:</span>
-                      <span className="text-zinc-300">{campana?.T0_U_Cliente || '-'}</span>
-                    </div>
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-yellow-300 font-medium">⚠️ Esta acción no se puede deshacer</p>
+                    <p className="text-xs text-yellow-400/70 mt-1">Se creará un Delivery Note en SAP. Verifica que los datos sean correctos antes de enviar.</p>
                   </div>
+                  {previewDeliveryNote && (
+                    <div className="bg-purple-900/20 rounded-lg p-3 space-y-2 text-xs">
+                      {campana && isMigratedCampaign(campana) ? (
+                        <>
+                          <div className="bg-cyan-500/10 border border-cyan-500/30 rounded px-2 py-1 mb-1">
+                            <span className="text-cyan-300 text-[10px] font-medium">POST IMU (Migración INVIAN)</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Campaña:</span>
+                            <span className="text-zinc-300">{campana.nombre}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">BaseType:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.BaseType}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">BaseDocNum (APS):</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.BaseDocNum}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Base SAP:</span>
+                            <span className="text-zinc-300">{campana.sap_database || 'TEST'}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Campaña:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Camp}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">CardCode:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.CardCode}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Razón Social:</span>
+                            <span className="text-zinc-300 text-right max-w-[200px]">{previewDeliveryNote.U_CRM_R_S || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Marca:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Marca || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Series:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.Series}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">APS:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.U_IMU_ART_APS}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Asesor:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Asesor || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Agencia:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Agencia || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Base SAP:</span>
+                            <span className="text-zinc-300">{campana?.sap_database || 'TEST'}</span>
+                          </div>
+                        </>
+                      )}
+                      <hr className="border-purple-800/40" />
+                      <p className="text-zinc-500 font-medium">Líneas ({previewDeliveryNote.DocumentLines.length}):</p>
+                      {previewDeliveryNote.DocumentLines.map((line: any, i: number) => (
+                        <div key={i} className="bg-purple-950/30 rounded p-2 space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Artículo:</span>
+                            <span className="text-zinc-300">{line.ItemCode}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Cantidad:</span>
+                            <span className="text-zinc-300">{line.Quantity}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Tarifa:</span>
+                            <span className="text-zinc-300">${Number(line.UnitPrice).toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Periodo:</span>
+                            <span className="text-zinc-300">{line.U_dscPeriod}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Estatus:</span>
+                            <span className="text-zinc-300">{line.U_dscTAsig}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-3">
                   <button
                     onClick={() => setShowPostSAPModal(false)}
-                    className="px-4 py-2 text-sm font-medium rounded-lg border border-zinc-700 hover:bg-zinc-800 transition-colors"
+                    disabled={postingToSAP}
+                    className="px-4 py-2 text-sm font-medium rounded-lg border border-zinc-700 hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     Cancelar
                   </button>
@@ -3312,13 +3479,6 @@ export function CampanaDetailPage() {
                     <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
                     <p className="text-lg font-medium text-green-400 mb-2">¡Éxito!</p>
                     <p className="text-sm text-zinc-400 mb-4">{postSAPResult.message}</p>
-                    {postSAPResult.data && (
-                      <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 text-left text-xs mb-4">
-                        <pre className="text-green-300 whitespace-pre-wrap overflow-auto max-h-40">
-                          {JSON.stringify(postSAPResult.data, null, 2)}
-                        </pre>
-                      </div>
-                    )}
                   </>
                 ) : (
                   <>

@@ -13,6 +13,9 @@ import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import type { SapDatabase } from '../../store/environmentStore';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
+import { useFormPersist } from '../../hooks/useFormPersist';
+import { uploadsService } from '../../services/uploads.service';
 
 // Tarifa publica lookup map based on ItemCode (full SAP codes with tarifa_publica values)
 const TARIFA_PUBLICA_MAP: Record<string, number> = {
@@ -226,25 +229,107 @@ const COSTO_MAP: Record<string, number> = {
 const getFormatoFromArticulo = (itemName: string): string => {
   if (!itemName) return '';
   const name = itemName.toUpperCase();
-  if (name.includes('PARABUS')) return 'PARABUS';
+
+  // Bajo Puente - detectar ubicación específica del nombre del artículo SAP
+  if (name.includes('BAJO PUENTE')) {
+    if (name.includes('GRAN TERRAZA')) return 'Bajo Puente Gran Terraza';
+    if (name.includes('GEOGRAFOS')) return 'Bajo Puente Circuito Geografos';
+    if (name.includes('DEL PARQUE')) return 'Bajo Puente Circuito del Parque';
+    if (name.includes('FUENTES')) return 'Bajo Puente Fuentes';
+    if (name.includes('COLORINES 1') || name.includes('COLORINES1')) return 'Bajo Puente Colorines Bloque 1';
+    if (name.includes('COLORINES 2') || name.includes('COLORINES2')) return 'Bajo Puente Colorines Bloque 2';
+    if (name.includes('COLORINES 3') || name.includes('COLORINES3')) return 'Bajo Puente Colorines Bloque 3';
+    if (name.includes('COLORINES')) return 'Bajo Puente Colorines Bloque 4';
+    return 'Bajo Puente';
+  }
+
+  // MI MACRO - detectar sub-tipo (antes de PARABUS/MUPI para evitar falsos positivos)
+  if (name.includes('MI MACRO')) {
+    if (name.includes('VIDRIO INTERIOR')) return 'MI MACRO Vidrio Int';
+    if (name.includes('VIDRIO EXTERIOR')) return 'MI MACRO Vidrio Ext';
+    if (name.includes('MUPI')) return 'MI MACRO MUPI Int';
+    if (name.includes('PARABUS')) return 'MI MACRO Parabus';
+    if (name.includes('MODULO')) return 'MI MACRO Modulos';
+    return 'MI MACRO';
+  }
+
+  // Puente Peatonal (antes de checks genéricos)
+  if (name.includes('PUENTE PEATONAL')) return 'Puente Peatonal';
+
+  // Totem
+  if (name.includes('TOTEM')) return 'TOTEM';
+
+  // Kiosco (SAP usa "KIOSKO" con K)
+  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'Kiosco';
+
+  // Formatos estándar
   if (name.includes('CASETA DE TAXIS')) return 'CASETA DE TAXIS';
   if (name.includes('METROPOLITANO PARALELO')) return 'METROPOLITANO PARALELO';
   if (name.includes('METROPOLITANO PERPENDICULAR')) return 'METROPOLITANO PERPENDICULAR';
   if (name.includes('COLUMNA RECARGA')) return 'COLUMNA RECARGA';
   if (name.includes('MUPI DE PIEDRA')) return 'MUPI DE PIEDRA';
   if (name.includes('MUPI')) return 'MUPI';
+  if (name.includes('PARABUS')) return 'PARABUS';
   if (name.includes('COLUMNA')) return 'COLUMNA';
   if (name.includes('BOLERO')) return 'BOLERO';
   return '';
 };
 
+// Mapeo formato → tipo de periodo requerido
+// CATORCENAL: PB y Columna, Digital PB y Columna
+// MENSUAL: Kioscos, Boleros, Mi Macro, Puentes Peatonales, Carteleras Digitales/Unipolares, Bajo Puentes
+// Formatos mensuales (lista fija)
+const FORMATOS_MENSUALES = [
+  'Kiosco',
+  'BOLERO',
+  'MI MACRO',
+  'MI MACRO Vidrio Int',
+  'MI MACRO Vidrio Ext',
+  'MI MACRO MUPI Int',
+  'MI MACRO Parabus',
+  'MI MACRO Modulos',
+  'Puente Peatonal',
+  'Bajo Puente',
+  'Bajo Puente Gran Terraza',
+  'Bajo Puente Circuito Geografos',
+  'Bajo Puente Circuito del Parque',
+  'Bajo Puente Fuentes',
+  'Bajo Puente Colorines Bloque 1',
+  'Bajo Puente Colorines Bloque 2',
+  'Bajo Puente Colorines Bloque 3',
+  'Bajo Puente Colorines Bloque 4',
+  'Cartelera Digital',
+  'Unipolar',
+];
+
+const FORMATOS_MENSUALES_SET = new Set(FORMATOS_MENSUALES);
+
+const getRequiredPeriodoForFormato = (formato: string): 'catorcena' | 'mensual' => {
+  if (FORMATOS_MENSUALES_SET.has(formato)) return 'mensual';
+  return 'catorcena';
+};
+
+const getRequiredPeriodoForArticulo = (itemName: string): 'catorcena' | 'mensual' => {
+  if (!itemName) return 'catorcena';
+  const name = itemName.toUpperCase();
+  // Mensual: Kioscos, Boleros, Mi Macro, Puentes Peatonales, Carteleras/Unipolares, Bajo Puentes
+  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'mensual';
+  if (name.includes('BOLERO')) return 'mensual';
+  if (name.includes('MI MACRO')) return 'mensual';
+  if (name.includes('PEATONAL')) return 'mensual';
+  if (name.includes('BAJO PUENTE')) return 'mensual';
+  if (name.includes('CARTELERA')) return 'mensual';
+  if (name.includes('UNIPOLAR')) return 'mensual';
+  // Catorcenal: PB y Columna, Digital PB y Columna (y todo lo demás)
+  return 'catorcena';
+};
+
 // Tipo auto-detection from article name (Tradicional or Digital)
-const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' | '' => {
-  if (!itemName) return '';
+const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
+  if (!itemName) return 'Tradicional';
   const name = itemName.toUpperCase();
   if (name.includes('DIGITAL') || name.includes('DIG')) return 'Digital';
-  if (name.includes('TRADICIONAL') || name.includes('RENTA')) return 'Tradicional';
-  return '';
+  return 'Tradicional';
 };
 
 // Get tarifa and costo from ItemCode - exact match first, then default calculation
@@ -264,85 +349,73 @@ const getTarifaFromItemCode = (itemCode: string, caras: number = 1): { costo: nu
   return { costo: caras * 650, tarifa_publica: caras * 850 };
 };
 
-// Ciudad -> Estado mapping for auto-selection
-const CIUDAD_ESTADO_MAP: Record<string, string> = {
-  'GUADALAJARA': 'Jalisco',
-  'ZAPOPAN': 'Jalisco',
-  'TLAQUEPAQUE': 'Jalisco',
-  'TONALA': 'Jalisco',
-  'TLAJOMULCO': 'Jalisco',
-  'PUERTO VALLARTA': 'Jalisco',
-  'MONTERREY': 'Nuevo León',
-  'SAN PEDRO': 'Nuevo León',
-  'SAN NICOLAS': 'Nuevo León',
-  'APODACA': 'Nuevo León',
-  'ESCOBEDO': 'Nuevo León',
-  'SANTA CATARINA': 'Nuevo León',
-  'CIUDAD DE MEXICO': 'Ciudad de México',
-  'CDMX': 'Ciudad de México',
-  'ESTADO DE MEXICO': 'Estado de México',
-  'MEXICO': 'Ciudad de México',
-  'DF': 'Ciudad de México',
-  'TIJUANA': 'Baja California',
-  'MEXICALI': 'Baja California',
-  'ENSENADA': 'Baja California',
-  'LEON': 'Guanajuato',
-  'IRAPUATO': 'Guanajuato',
-  'CELAYA': 'Guanajuato',
-  'QUERETARO': 'Querétaro',
-  'PUEBLA': 'Puebla',
-  'MERIDA': 'Yucatán',
-  'CANCUN': 'Quintana Roo',
-  'PLAYA DEL CARMEN': 'Quintana Roo',
-  'CHIHUAHUA': 'Chihuahua',
-  'JUAREZ': 'Chihuahua',
-  'CIUDAD JUAREZ': 'Chihuahua',
-  'HERMOSILLO': 'Sonora',
-  'CULIACAN': 'Sinaloa',
-  'MAZATLAN': 'Sinaloa',
-  'TORREON': 'Coahuila',
-  'SALTILLO': 'Coahuila',
-  'AGUASCALIENTES': 'Aguascalientes',
-  'MORELIA': 'Michoacán',
-  'SAN LUIS POTOSI': 'San Luis Potosí',
-  'TAMPICO': 'Tamaulipas',
-  'REYNOSA': 'Tamaulipas',
-  'VERACRUZ': 'Veracruz',
-  'XALAPA': 'Veracruz',
-  'OAXACA': 'Oaxaca',
-  'TUXTLA': 'Chiapas',
-  'VILLAHERMOSA': 'Tabasco',
-  'CAMPECHE': 'Campeche',
-  'ACAPULCO': 'Guerrero',
-  'CUERNAVACA': 'Morelos',
-  'TOLUCA': 'Estado de México',
-  'PACHUCA': 'Hidalgo',
-  'ZACATECAS': 'Zacatecas',
-  'DURANGO': 'Durango',
-  'TEPIC': 'Nayarit',
-  'COLIMA': 'Colima',
-  'LA PAZ': 'Baja California Sur',
-  'LOS CABOS': 'Baja California Sur',
-};
+// Multi-city auto-fill rules for specific article patterns
+// Order matters: more specific patterns BEFORE generic ones (e.g. PUERTO VALLARTA before GD)
+// All estado/ciudad values MUST match DB inventarios exactly (with accents, municipios in UPPERCASE)
+const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudades: string[] }[] = [
+  { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudades: ['PUERTO VALLARTA'] },
+  { pattern: /\bGD\b|\bGUADALAJARA\b|\bGDL\b/, estado: 'Jalisco', ciudades: ['GUADALAJARA', 'ZAPOPAN', 'SAN PEDRO TLAQUEPAQUE'] },
+  { pattern: /\bMTY\b|\bMONTERREY\b|\bMY\b/, estado: 'Nuevo León', ciudades: ['MONTERREY', 'GUADALUPE', 'SAN NICOLÁS DE LOS GARZA', 'SANTA CATARINA'] },
+  { pattern: /\bBOCA DEL RIO\b/, estado: 'Veracruz', ciudades: ['BOCA DEL RIO'] },
+  { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudades: ['VERACRUZ', 'ALVARADO', 'BOCA DEL RIO'] },
+  { pattern: /\bCHOLULA\b/, estado: 'Puebla', ciudades: ['SAN ANDRES CHOLULA', 'SAN PEDRO CHOLULA'] },
+  { pattern: /\bPUEBLA\b|\bPB\b/, estado: 'Puebla', ciudades: ['PUEBLA', 'SAN ANDRES CHOLULA', 'SAN PEDRO CHOLULA'] },
+  { pattern: /\bMERIDA\b|\bMR\b/, estado: 'Yucatán', ciudades: ['MÉRIDA'] },
+  { pattern: /\bLEON\b|\bLEN\b/, estado: 'Guanajuato', ciudades: ['LEÓN'] },
+  { pattern: /\bSALAMANCA\b/, estado: 'Guanajuato', ciudades: ['SALAMANCA'] },
+  { pattern: /\bCELAYA\b/, estado: 'Guanajuato', ciudades: ['CELAYA'] },
+  { pattern: /\bIRAPUATO\b/, estado: 'Guanajuato', ciudades: ['IRAPUATO'] },
+  { pattern: /\bGUANAJUATO\b|\bGTO\b/, estado: 'Guanajuato', ciudades: [] },
+  { pattern: /\bOAXACA\b|\bOAX\b/, estado: 'Oaxaca de Juárez', ciudades: ['OAXACA DE JUÁREZ'] },
+  { pattern: /\bAGS\b|\bAGUASCALIENTES\b/, estado: 'Aguascalientes', ciudades: ['AGUASCALIENTES'] },
+  { pattern: /\bCULIACAN\b/, estado: 'Sinaloa', ciudades: ['CULIACÁN'] },
+  { pattern: /\bMAZATLAN\b|\bMZ\b/, estado: 'Sinaloa', ciudades: ['MAZATLÁN'] },
+  { pattern: /\bSLP\b|\bSAN LUIS POTOSI\b/, estado: 'San Luis Potosí', ciudades: ['SAN LUIS POTOSÍ'] },
+  { pattern: /\bTIJUANA\b|\bTJ\b/, estado: 'Baja California', ciudades: ['TIJUANA'] },
+  { pattern: /\bACAPULCO\b|\bAC\b/, estado: 'Guerrero', ciudades: ['ACAPULCO DE JUÁREZ'] },
+  { pattern: /\bPACHUCA\b|\bPH\b/, estado: 'Hidalgo', ciudades: ['PACHUCA DE SOTO'] },
+  { pattern: /\bTOLUCA\b|\bTL\b/, estado: 'Estado de México', ciudades: ['TOLUCA', 'METEPEC', 'LERMA', 'SAN MATEO ATENCO'] },
+  { pattern: /\bCUERNAVACA\b|\bCV\b/, estado: 'Morelos', ciudades: ['CUERNAVACA'] },
+  { pattern: /\bTAMPICO\b|\bTM\b/, estado: 'Tamaulipas', ciudades: ['TAMPICO'] },
+  { pattern: /\bTORREON\b|\bTR\b/, estado: 'Coahuila', ciudades: ['TORREON'] },
+  { pattern: /\bQUERETARO\b|\bQR\b/, estado: 'Querétaro', ciudades: ['QUERÉTARO'] },
+  { pattern: /\bTUXTLA\b|\bTG\b/, estado: 'Chiapas', ciudades: ['TUXTLA GUTIERREZ'] },
+  { pattern: /\bTABASCO\b|\bVILLAHERMOSA\b|\bTB\b/, estado: 'Tabasco', ciudades: ['VILLAHERMOSA'] },
+  { pattern: /\bMORELIA\b/, estado: 'Michoacán', ciudades: ['MORELIA'] },
+  { pattern: /\bCANCUN\b/, estado: 'Quintana Roo', ciudades: ['BENITO JUÁREZ'] },
+  { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b|\bMEXICO\b(?!\s*(Y\s*AM|WI-?FI))|\bMX\b/, estado: 'Ciudad de México', ciudades: [] },
+  { pattern: /\bNAUC\b/, estado: 'Estado de México', ciudades: ['NAUCALPAN'] },
+  { pattern: /\bEM\b/, estado: 'Estado de México', ciudades: [] },
+];
 
-// Some entries are state-level (no specific ciudad should be set)
-const STATE_LEVEL_ENTRIES = ['CDMX', 'CIUDAD DE MEXICO', 'DF', 'ESTADO DE MEXICO', 'MEXICO'];
-
-// Extract city from article name and return estado/ciudad
-const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string | null } | null => {
+// Extract city from article name and return estado/ciudades
+const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudades: string[] } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
-  for (const [ciudad, estado] of Object.entries(CIUDAD_ESTADO_MAP)) {
-    if (name.includes(ciudad)) {
-      // If this is a state-level entry, don't return a ciudad
-      if (STATE_LEVEL_ENTRIES.includes(ciudad)) {
-        return { estado, ciudad: null };
-      }
-      return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
+  // Check multi-city rules (order matters)
+  for (const rule of MULTI_CITY_RULES) {
+    if (rule.pattern.test(name)) {
+      return { estado: rule.estado, ciudades: rule.ciudades };
     }
   }
   return null;
+};
+
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const STATIC_URL = API_URL.replace(/\/api$/, '');
+
+const getFilePreviewUrl = (url: string | null): string | null => {
+  if (!url) return null;
+  if (url.startsWith('blob:')) return url;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
+  if (url.startsWith('/uploads')) return `${STATIC_URL}${url}`;
+  return url;
 };
 
 interface SAPCuicItem {
@@ -422,6 +495,7 @@ function SearchableSelect({
   renderSelected?: (item: any) => React.ReactNode;
   loading?: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -448,14 +522,14 @@ function SearchableSelect({
         onClick={() => setOpen(!open)}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${value
           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600'
+          : isDark ? 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
           }`}
       >
         <span className="truncate text-left flex-1">
           {value && renderSelected ? renderSelected(value) : (displayValue || label)}
         </span>
         {value ? (
-          <X className="h-4 w-4 hover:text-white flex-shrink-0" onClick={(e) => { e.stopPropagation(); onClear(); }} />
+          <X className={`h-4 w-4 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} flex-shrink-0`} onClick={(e) => { e.stopPropagation(); onClear(); }} />
         ) : (
           <ChevronDown className="h-4 w-4 flex-shrink-0" />
         )}
@@ -464,16 +538,16 @@ function SearchableSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-2 border-b border-zinc-800">
+          <div className={`absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                 <input
                   type="text"
                   placeholder={`Buscar ${label.toLowerCase()}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  className={`w-full pl-9 pr-3 py-2 text-sm ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   autoFocus
                   onClick={(e) => e.stopPropagation()}
                 />
@@ -481,9 +555,9 @@ function SearchableSelect({
             </div>
             <div className="max-h-72 overflow-auto">
               {loading ? (
-                <div className="px-3 py-4 text-center text-zinc-500 text-sm">Cargando...</div>
+                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</div>
               ) : filteredOptions.length === 0 ? (
-                <div className="px-3 py-4 text-center text-zinc-500 text-sm">
+                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                   {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
                 </div>
               ) : (
@@ -492,9 +566,9 @@ function SearchableSelect({
                     key={`${option[valueKey]}-${idx}`}
                     type="button"
                     onClick={() => { onChange(option); handleClose(); }}
-                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b border-zinc-800/50 last:border-0 ${value && value[valueKey] === option[valueKey]
+                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} last:border-0 ${value && value[valueKey] === option[valueKey]
                       ? 'bg-purple-500/20 text-purple-300'
-                      : 'text-zinc-300 hover:bg-zinc-800'
+                      : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'
                       }`}
                   >
                     {renderOption ? renderOption(option) : (
@@ -504,7 +578,7 @@ function SearchableSelect({
                 ))
               )}
             </div>
-            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
+            <div className={`px-3 py-1.5 border-t ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'} text-[10px]`}>
               Mostrando {filteredOptions.length} de {options.length} opciones
             </div>
           </div>
@@ -532,6 +606,7 @@ function MultiSelectTags({
   valueKey: string;
   searchKey: string;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -562,7 +637,7 @@ function MultiSelectTags({
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 rounded-lg text-xs hover:border-zinc-600 transition-all"
+          className={`flex items-center gap-1.5 px-3 py-1.5 ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300'} border rounded-lg text-xs transition-all`}
         >
           <Plus className="h-3 w-3" />
           Agregar {label}
@@ -571,15 +646,15 @@ function MultiSelectTags({
         {open && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => { setOpen(false); setSearchTerm(''); }} />
-            <div className="absolute top-full left-0 mt-1 z-50 w-72 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
+            <div className={`absolute top-full left-0 mt-1 z-50 w-72 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
               {/* Search at top */}
-              <div className="p-2 border-b border-zinc-800">
+              <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 <input
                   type="text"
                   placeholder={`Buscar...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  className={`w-full px-3 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   autoFocus
                 />
               </div>
@@ -592,17 +667,17 @@ function MultiSelectTags({
                       key={option[valueKey]}
                       type="button"
                       onClick={() => toggle(option)}
-                      className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${isSelected ? 'bg-purple-500/20 text-purple-300' : 'text-zinc-400 hover:bg-zinc-800'
+                      className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${isSelected ? 'bg-purple-500/20 text-purple-300' : isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-500 hover:bg-gray-100'
                         }`}
                     >
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-purple-500 border-purple-500' : 'border-zinc-600'
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-purple-500 border-purple-500' : isDark ? 'border-zinc-600' : 'border-gray-300'
                         }`}>
                         {isSelected && <Check className="h-3 w-3 text-white" />}
                       </div>
                       <div className="flex-1">
                         <span>{option[displayKey]}</span>
                         {option.area && (
-                          <span className="ml-2 text-[10px] text-zinc-500">({option.area})</span>
+                          <span className={`ml-2 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({option.area})</span>
                         )}
                       </div>
                     </button>
@@ -624,7 +699,7 @@ function MultiSelectTags({
             >
               {item[displayKey]}
               {item.area && <span className="text-[10px] text-purple-400/70">({item.area})</span>}
-              <button type="button" onClick={() => remove(item)} className="hover:text-white">
+              <button type="button" onClick={() => remove(item)} className={isDark ? 'hover:text-white' : 'hover:text-gray-900'}>
                 <X className="h-3 w-3" />
               </button>
             </span>
@@ -637,6 +712,7 @@ function MultiSelectTags({
 
 export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props) {
   const queryClient = useQueryClient();
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const isEditMode = !!editSolicitudId;
 
   // Socket para actualizar usuarios en tiempo real cuando cambian miembros de equipos
@@ -680,10 +756,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const [notas, setNotas] = useState('');
 
   // Dates
+  const [tipoPeriodo, setTipoPeriodo] = useState<'catorcena' | 'mensual'>('catorcena');
   const [yearInicio, setYearInicio] = useState<number | undefined>();
   const [yearFin, setYearFin] = useState<number | undefined>();
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>();
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
+  // Mensual mode: month range
+  const [mesInicio, setMesInicio] = useState<number | undefined>(); // 1-12
+  const [mesFin, setMesFin] = useState<number | undefined>(); // 1-12
 
   // Caras data with full info per entry
   const [caras, setCaras] = useState<CaraEntry[]>([]);
@@ -697,6 +777,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     tipo: '' as 'Tradicional' | 'Digital' | '',
     nse: [] as string[],
     periodo: '',
+    // Custom period dates (mensual mode - per cara dates within month)
+    periodoInicioCustom: '',
+    periodoFinCustom: '',
     renta: 0,
     bonificacion: 0,
     tarifaPublica: 0,
@@ -704,10 +787,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // File
   const [archivo, setArchivo] = useState<string | null>(null);
+  const [archivoFile, setArchivoFile] = useState<File | null>(null);
   const [tipoArchivo, setTipoArchivo] = useState<string | null>(null);
 
   // IMU
   const [imu, setImu] = useState(false);
+
+  // Draft persistence
+  const [restoredFromDraft, setRestoredFromDraft] = useState(false);
+  const { save: saveDraft, load: loadDraft, clear: clearDraft } = useFormPersist('qeb_solicitud_draft');
 
   // Expanded catorcenas in table
   const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
@@ -823,6 +911,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     retry: 1,
   });
 
+  // Filter articulos by current tipoPeriodo
+  const articulosFiltrados = useMemo(() => {
+    if (!articulosData) return [];
+    return articulosData.filter(a => getRequiredPeriodoForArticulo(a.ItemName) === tipoPeriodo);
+  }, [articulosData, tipoPeriodo]);
+
   // Function to force refresh data
   const handleRefreshSap = () => {
     clearSapCache();
@@ -830,11 +924,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     queryClient.invalidateQueries({ queryKey: ['clientes-full-for-solicitud'] });
   };
 
-  // Fetch formatos based on selected ciudades
-  const { data: formatosByCiudades } = useQuery({
-    queryKey: ['formatos-by-ciudades', newCara.ciudades],
-    queryFn: () => solicitudesService.getFormatosByCiudades(newCara.ciudades),
-    enabled: isOpen && newCara.ciudades.length > 0,
+  // Fetch cascade-filtered options (formatos, tipos, NSE) by estado/ciudades
+  const { data: inventarioOptions } = useQuery({
+    queryKey: ['inventario-options', newCara.estado, newCara.ciudades],
+    queryFn: () => solicitudesService.getInventarioOptions(newCara.estado, newCara.ciudades),
+    enabled: isOpen && (!!newCara.estado || newCara.ciudades.length > 0),
+    staleTime: 5 * 60 * 1000,
   });
 
   // Fetch next available ID
@@ -854,9 +949,72 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     };
   }, [isOpen]);
 
+  // Cargar borrador de localStorage al montar (solo en modo crear)
+  useEffect(() => {
+    if (isEditMode) return;
+    const draft = loadDraft<{
+      step: number;
+      selectedCuic: typeof selectedCuic;
+      selectedAsignados: typeof selectedAsignados;
+      nombreCampania: string;
+      descripcion: string;
+      notas: string;
+      yearInicio?: number;
+      yearFin?: number;
+      catorcenaInicio?: number;
+      catorcenaFin?: number;
+      caras: typeof caras;
+      imu: boolean;
+      newCara: typeof newCara;
+    }>();
+    if (!draft) return;
+    const hasData = draft.nombreCampania || draft.selectedCuic || draft.caras?.length > 0;
+    if (!hasData) return;
+    if (draft.step) setStep(draft.step);
+    if (draft.selectedCuic) setSelectedCuic(draft.selectedCuic);
+    if (draft.selectedAsignados?.length) setSelectedAsignados(draft.selectedAsignados);
+    if (draft.nombreCampania) setNombreCampania(draft.nombreCampania);
+    if (draft.descripcion) setDescripcion(draft.descripcion);
+    if (draft.notas) setNotas(draft.notas);
+    if (draft.yearInicio !== undefined) setYearInicio(draft.yearInicio);
+    if (draft.yearFin !== undefined) setYearFin(draft.yearFin);
+    if (draft.catorcenaInicio !== undefined) setCatorcenaInicio(draft.catorcenaInicio);
+    if (draft.catorcenaFin !== undefined) setCatorcenaFin(draft.catorcenaFin);
+    if (draft.caras?.length) setCaras(draft.caras);
+    if (draft.imu !== undefined) setImu(draft.imu);
+    if (draft.newCara) setNewCara(draft.newCara);
+    setRestoredFromDraft(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Guardar borrador en localStorage cuando cambia el estado (solo en modo crear)
+  useEffect(() => {
+    if (isEditMode) return;
+    if (!nombreCampania && !selectedCuic && !caras.length && !descripcion && !notas) {
+      // Si el formulario está vacío, limpiar activamente el borrador
+      clearDraft();
+      return;
+    }
+    saveDraft({
+      step,
+      selectedCuic,
+      selectedAsignados,
+      nombreCampania,
+      descripcion,
+      notas,
+      yearInicio,
+      yearFin,
+      catorcenaInicio,
+      catorcenaFin,
+      caras,
+      imu,
+      newCara,
+    });
+  }, [step, selectedCuic, selectedAsignados, nombreCampania, descripcion, notas, yearInicio, yearFin, catorcenaInicio, catorcenaFin, caras, imu, newCara, isEditMode, saveDraft, clearDraft]);
+
   // Reset form when opening modal in create mode
   useEffect(() => {
-    if (isOpen && !isEditMode) {
+    if (isOpen && !isEditMode && !restoredFromDraft) {
       // Reset all form state for a fresh start
       setStep(1);
       setSelectedCuic(null);
@@ -874,12 +1032,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setNombreCampania('');
       setDescripcion('');
       setNotas('');
+      setTipoPeriodo('catorcena');
       setYearInicio(undefined);
       setYearFin(undefined);
       setCatorcenaInicio(undefined);
       setCatorcenaFin(undefined);
+      setMesInicio(undefined);
+      setMesFin(undefined);
       setCaras([]);
       setArchivo(null);
+      setArchivoFile(null);
       setTipoArchivo(null);
       setImu(false);
       setExpandedCatorcenas(new Set());
@@ -891,17 +1053,20 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tipo: '',
         nse: [],
         periodo: '',
+        periodoInicioCustom: '',
+        periodoFinCustom: '',
         renta: 0,
         bonificacion: 0,
         tarifaPublica: 0,
       });
     }
-  }, [isOpen, isEditMode, currentUser]);
+  }, [isOpen, isEditMode, currentUser, restoredFromDraft]);
 
   // Reset form state when switching between different solicitudes in edit mode
   useEffect(() => {
     if (isOpen && isEditMode && editSolicitudId) {
       // Reset state before loading new solicitud data
+      setRestoredFromDraft(false);
       setSelectedCuic(null);
       setSelectedAsignados([]);
       setNombreCampania('');
@@ -909,6 +1074,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setNotas('');
       setCaras([]);
       setArchivo(null);
+      setArchivoFile(null);
       setTipoArchivo(null);
       setImu(false);
     }
@@ -923,13 +1089,46 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       .filter((c): c is string => !!c);
   }, [inventarioFilters, newCara.estado]);
 
-  // Filter formatos by selected ciudades (from API)
+  // Cascade-filtered formatos/tipos/NSE from inventario-options API
   const filteredFormatos = useMemo(() => {
-    if (newCara.ciudades.length > 0 && formatosByCiudades) {
-      return formatosByCiudades;
-    }
-    return [];
-  }, [formatosByCiudades, newCara.ciudades]);
+    if (inventarioOptions?.formatos) return inventarioOptions.formatos;
+    return inventarioFilters?.formatos || [];
+  }, [inventarioOptions, inventarioFilters]);
+
+  const filteredTipos = useMemo(() => {
+    if (inventarioOptions?.tipos) return inventarioOptions.tipos;
+    return ['Tradicional', 'Digital'];
+  }, [inventarioOptions]);
+
+  const filteredNse = useMemo(() => {
+    if (inventarioOptions?.nse) return inventarioOptions.nse;
+    return inventarioFilters?.nse || [];
+  }, [inventarioOptions, inventarioFilters]);
+
+  // Clear incompatible selections when filtered options change
+  useEffect(() => {
+    if (!inventarioOptions) return;
+    setNewCara(prev => {
+      let changed = false;
+      const updates: Partial<typeof prev> = {};
+      if (prev.formato && !inventarioOptions.formatos.includes(prev.formato)) {
+        updates.formato = '';
+        changed = true;
+      }
+      if (prev.tipo && !inventarioOptions.tipos.includes(prev.tipo)) {
+        updates.tipo = '' as typeof prev.tipo;
+        changed = true;
+      }
+      if (prev.nse.length > 0) {
+        const validNse = prev.nse.filter(n => inventarioOptions.nse.includes(n));
+        if (validNse.length !== prev.nse.length) {
+          updates.nse = validNse;
+          changed = true;
+        }
+      }
+      return changed ? { ...prev, ...updates } : prev;
+    });
+  }, [inventarioOptions]);
 
   // Year options with validation
   const yearInicioOptions = useMemo(() => {
@@ -963,8 +1162,48 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     return cats;
   }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
 
+  // Mes options with validation
+  const mesInicioOptions = useMemo(() => {
+    const all = Array.from({ length: 12 }, (_, i) => i + 1);
+    if (yearInicio && yearFin && yearInicio === yearFin && mesFin !== undefined) {
+      return all.filter(m => m <= mesFin);
+    }
+    return all;
+  }, [yearInicio, yearFin, mesFin]);
+
+  const mesFinOptions = useMemo(() => {
+    const all = Array.from({ length: 12 }, (_, i) => i + 1);
+    if (yearInicio && yearFin && yearInicio === yearFin && mesInicio !== undefined) {
+      return all.filter(m => m >= mesInicio);
+    }
+    return all;
+  }, [yearInicio, yearFin, mesInicio]);
+
   // Get periods from selected range
   const availablePeriods = useMemo(() => {
+    if (tipoPeriodo === 'mensual') {
+      // Generate monthly periods
+      if (!yearInicio || !yearFin || mesInicio === undefined || mesFin === undefined) return [];
+      const periods: { id: number; a_o: number; numero_catorcena: number; fecha_inicio: string; fecha_fin: string; label: string }[] = [];
+      let y = yearInicio, m = mesInicio;
+      while (y < yearFin || (y === yearFin && m <= mesFin)) {
+        const fechaIni = new Date(y, m - 1, 1);
+        const fechaFinMes = new Date(y, m, 0);
+        periods.push({
+          id: y * 100 + m,
+          a_o: y,
+          numero_catorcena: m,
+          fecha_inicio: fechaIni.toISOString().split('T')[0],
+          fecha_fin: fechaFinMes.toISOString().split('T')[0],
+          label: `${MESES[m - 1]} ${y}`,
+        });
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+      return periods;
+    }
+
+    // Catorcena mode
     if (!catorcenasData?.data || !yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
 
     return catorcenasData.data.filter(c => {
@@ -973,31 +1212,57 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       if (c.a_o === yearFin && c.numero_catorcena > catorcenaFin) return false;
       return true;
     });
-  }, [catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+  }, [tipoPeriodo, catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin]);
 
-  // Calculate fecha_inicio and fecha_fin from catorcenas
+  // Calculate fecha_inicio and fecha_fin from catorcenas or months
   const fechaInicio = useMemo(() => {
+    if (tipoPeriodo === 'mensual') {
+      if (!yearInicio || mesInicio === undefined) return '';
+      return new Date(yearInicio, mesInicio - 1, 1).toISOString().split('T')[0];
+    }
     if (!catorcenasData?.data || !yearInicio || !catorcenaInicio) return '';
     const cat = catorcenasData.data.find(c => c.a_o === yearInicio && c.numero_catorcena === catorcenaInicio);
     return cat ? cat.fecha_inicio : '';
-  }, [catorcenasData, yearInicio, catorcenaInicio]);
+  }, [tipoPeriodo, catorcenasData, yearInicio, catorcenaInicio, mesInicio]);
 
   const fechaFin = useMemo(() => {
+    if (tipoPeriodo === 'mensual') {
+      if (!yearFin || mesFin === undefined) return '';
+      return new Date(yearFin, mesFin, 0).toISOString().split('T')[0];
+    }
     if (!catorcenasData?.data || !yearFin || !catorcenaFin) return '';
     const cat = catorcenasData.data.find(c => c.a_o === yearFin && c.numero_catorcena === catorcenaFin);
     return cat ? cat.fecha_fin : '';
-  }, [catorcenasData, yearFin, catorcenaFin]);
+  }, [tipoPeriodo, catorcenasData, yearFin, catorcenaFin, mesFin]);
 
   // Add cara entry
   const handleAddCara = async () => {
-    if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo) return;
+    if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0) return;
 
-    const [yearStr, catStr] = newCara.periodo.split('-');
-    const catorcenaYear = parseInt(yearStr);
-    const catorcenaNum = parseInt(catStr);
+    let catorcenaYear: number;
+    let catorcenaNum: number;
+    let periodoInicioVal: string;
+    let periodoFinVal: string;
 
-    const period = availablePeriods.find(p => p.a_o === catorcenaYear && p.numero_catorcena === catorcenaNum);
-    if (!period) return;
+    if (tipoPeriodo === 'mensual') {
+      // Mensual: month from dropdown + custom dates per cara
+      if (!newCara.periodo || !newCara.periodoInicioCustom || !newCara.periodoFinCustom) return;
+      const [yearStr, mesStr] = newCara.periodo.split('-');
+      catorcenaYear = parseInt(yearStr);
+      catorcenaNum = parseInt(mesStr); // month number (1-12) for grouping
+      periodoInicioVal = newCara.periodoInicioCustom;
+      periodoFinVal = newCara.periodoFinCustom;
+    } else {
+      // Catorcena mode
+      if (!newCara.periodo) return;
+      const [yearStr, catStr] = newCara.periodo.split('-');
+      catorcenaYear = parseInt(yearStr);
+      catorcenaNum = parseInt(catStr);
+      const period = availablePeriods.find(p => p.a_o === catorcenaYear && p.numero_catorcena === catorcenaNum);
+      if (!period) return;
+      periodoInicioVal = period.fecha_inicio;
+      periodoFinVal = period.fecha_fin;
+    }
 
     // Calculate descuento: if renta=100, bonif=10, then descuento is 10/(100+10) = 9.09%
     const totalCaras = newCara.renta + newCara.bonificacion;
@@ -1051,8 +1316,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       nse: newCara.nse,
       catorcenaNum,
       catorcenaYear,
-      periodoInicio: period.fecha_inicio,
-      periodoFin: period.fecha_fin,
+      periodoInicio: periodoInicioVal,
+      periodoFin: periodoFinVal,
       renta: newCara.renta,
       bonificacion: newCara.bonificacion,
       tarifaPublica: newCara.tarifaPublica,
@@ -1078,6 +1343,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setNewCara({
       ...newCara,
       periodo: '',
+      periodoInicioCustom: '',
+      periodoFinCustom: '',
       renta: 0,
       bonificacion: 0,
       // Keep articulo, estado, ciudades, formato, tipo, nse, tarifaPublica
@@ -1094,6 +1361,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tipo: '',
       nse: [],
       periodo: '',
+      periodoInicioCustom: '',
+      periodoFinCustom: '',
       renta: 0,
       bonificacion: 0,
       tarifaPublica: 0,
@@ -1120,6 +1389,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tipo: cara.tipo as 'Tradicional' | 'Digital' | '',
       nse: cara.nse,
       periodo: `${cara.catorcenaYear}-${cara.catorcenaNum}`,
+      periodoInicioCustom: tipoPeriodo === 'mensual' ? cara.periodoInicio : '',
+      periodoFinCustom: tipoPeriodo === 'mensual' ? cara.periodoFin : '',
       renta: cara.renta,
       bonificacion: cara.bonificacion,
       tarifaPublica: cara.tarifaPublica,
@@ -1137,13 +1408,22 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tipo: '',
       nse: [],
       periodo: '',
+      periodoInicioCustom: '',
+      periodoFinCustom: '',
       renta: 0,
       bonificacion: 0,
       tarifaPublica: 0,
     });
   };
 
-  // Group caras by catorcena
+  // Helper to format date for display
+  const formatDateShort = (dateStr: string) => {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  // Group caras by period (catorcena number or month number)
   const groupedCaras = useMemo(() => {
     const groups: Record<string, CaraEntry[]> = {};
     caras.forEach(cara => {
@@ -1151,7 +1431,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       if (!groups[key]) groups[key] = [];
       groups[key].push(cara);
     });
-    // Sort by year and catorcena
     return Object.entries(groups).sort((a, b) => {
       const [yearA, catA] = a[0].split('-').map(Number);
       const [yearB, catB] = b[0].split('-').map(Number);
@@ -1159,6 +1438,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       return catA - catB;
     });
   }, [caras]);
+
+  // Helper to get period label from group key
+  const getPeriodLabel = (key: string) => {
+    const [year, num] = key.split('-');
+    if (tipoPeriodo === 'mensual') {
+      const m = parseInt(num);
+      return `${MESES[m - 1] || `Mes ${num}`} ${year}`;
+    }
+    return `Cat ${num} / ${year}`;
+  };
 
   // Toggle catorcena expansion
   const toggleCatorcena = (key: string) => {
@@ -1178,19 +1467,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const totalCarasAll = totalRenta + totalBonificacion;
     // Tarifa Efectiva = Inversión Total / Total Caras (renta + bonificación)
     const tarifaEfectiva = totalCarasAll > 0 ? totalPrecio / totalCarasAll : 0;
-    return { totalRenta, totalBonificacion, totalCaras: totalRenta, totalPrecio, tarifaEfectiva };
+    // Regla: si el total global es impar, todas requieren autorización DG
+    const totalCarasImpar = totalCarasAll > 0 && totalCarasAll % 2 !== 0;
+    return { totalRenta, totalBonificacion, totalCaras: totalRenta, totalPrecio, tarifaEfectiva, totalCarasImpar };
   }, [caras]);
 
   // Handle file upload
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setArchivo(reader.result as string);
-        setTipoArchivo(file.type);
-      };
-      reader.readAsDataURL(file);
+      setArchivoFile(file);
+      setArchivo(file.name);
     }
   };
 
@@ -1237,27 +1524,48 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Reset form
   const resetForm = () => {
+    clearDraft();
+    setRestoredFromDraft(false);
     setStep(1);
     setSelectedCuic(null);
     setSelectedAsignados([]);
     setNombreCampania('');
     setDescripcion('');
     setNotas('');
+    setTipoPeriodo('catorcena');
     setYearInicio(undefined);
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
+    setMesInicio(undefined);
+    setMesFin(undefined);
     setCaras([]);
+    if (archivo && archivo.startsWith('blob:')) {
+      URL.revokeObjectURL(archivo);
+    }
     setArchivo(null);
+    setArchivoFile(null);
     setTipoArchivo(null);
     setImu(false);
     setExpandedCatorcenas(new Set());
   };
 
   // Handle submit
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedCuic || caras.length === 0 || !fechaInicio || !fechaFin || selectedAsignados.length === 0) {
       return;
+    }
+
+    // Si hay archivo nuevo (File), subirlo primero a Spaces
+    let archivoUrl = archivo;
+    if (archivoFile) {
+      try {
+        const uploaded = await uploadsService.uploadFile(archivoFile, 'solicitudes');
+        archivoUrl = uploaded.url;
+      } catch (err) {
+        showToast('Error al subir el archivo', 'error');
+        return;
+      }
     }
 
     const data = {
@@ -1283,7 +1591,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       asignados: selectedAsignados.map(u => ({ id: u.id, nombre: u.nombre })),
       fecha_inicio: fechaInicio,
       fecha_fin: fechaFin,
-      archivo: archivo || undefined,
+      tipo_periodo: tipoPeriodo,
+      archivo: archivoUrl || undefined,
       tipo_archivo: tipoArchivo || undefined,
       IMU: imu,
       caras: caras.map(c => ({
@@ -1351,34 +1660,45 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // Load archivo from solicitud
       if (sol.archivo) {
         setArchivo(sol.archivo);
+        setArchivoFile(null);
         setTipoArchivo(sol.tipo_archivo || null);
       }
 
-      // Load catorcenas from cotizacion dates (like ViewSolicitudModal does)
+      // Load period type and dates from cotizacion
       const cotizacion = editSolicitudData.cotizacion;
+      const loadedTipoPeriodo = (cotizacion as any)?.tipo_periodo || 'catorcena';
+      setTipoPeriodo(loadedTipoPeriodo);
+
       if (cotizacion?.fecha_inicio && cotizacion?.fecha_fin) {
         const fechaInicioDate = new Date(cotizacion.fecha_inicio);
         const fechaFinDate = new Date(cotizacion.fecha_fin);
 
-        const inicioCat = catorcenasData.data.find(c => {
-          const cInicio = new Date(c.fecha_inicio);
-          const cFin = new Date(c.fecha_fin);
-          return fechaInicioDate >= cInicio && fechaInicioDate <= cFin;
-        });
+        if (loadedTipoPeriodo === 'mensual') {
+          setYearInicio(fechaInicioDate.getFullYear());
+          setYearFin(fechaFinDate.getFullYear());
+          setMesInicio(fechaInicioDate.getMonth() + 1);
+          setMesFin(fechaFinDate.getMonth() + 1);
+        } else {
+          const inicioCat = catorcenasData.data.find(c => {
+            const cInicio = new Date(c.fecha_inicio);
+            const cFin = new Date(c.fecha_fin);
+            return fechaInicioDate >= cInicio && fechaInicioDate <= cFin;
+          });
 
-        const finCat = catorcenasData.data.find(c => {
-          const cInicio = new Date(c.fecha_inicio);
-          const cFin = new Date(c.fecha_fin);
-          return fechaFinDate >= cInicio && fechaFinDate <= cFin;
-        });
+          const finCat = catorcenasData.data.find(c => {
+            const cInicio = new Date(c.fecha_inicio);
+            const cFin = new Date(c.fecha_fin);
+            return fechaFinDate >= cInicio && fechaFinDate <= cFin;
+          });
 
-        if (inicioCat) {
-          setYearInicio(inicioCat.a_o);
-          setCatorcenaInicio(inicioCat.numero_catorcena);
-        }
-        if (finCat) {
-          setYearFin(finCat.a_o);
-          setCatorcenaFin(finCat.numero_catorcena);
+          if (inicioCat) {
+            setYearInicio(inicioCat.a_o);
+            setCatorcenaInicio(inicioCat.numero_catorcena);
+          }
+          if (finCat) {
+            setYearFin(finCat.a_o);
+            setCatorcenaFin(finCat.numero_catorcena);
+          }
         }
       }
 
@@ -1390,37 +1710,39 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             ItemName: cara.articulo || ''
           };
 
-          // Find matching catorcena from catorcenasData by matching dates
+          // Find matching catorcena/month from dates
           let catNum = 1;
           let catYear = new Date().getFullYear();
           if (cara.inicio_periodo) {
             const initDate = new Date(cara.inicio_periodo);
             if (!isNaN(initDate.getTime())) {
-              // Normalize date to compare (remove time component)
-              const initDateStr = initDate.toISOString().split('T')[0];
-
-              // Find catorcena that matches this period
-              const matchingCat = catorcenasData.data.find(cat => {
-                const catStartStr = new Date(cat.fecha_inicio).toISOString().split('T')[0];
-                return catStartStr === initDateStr;
-              });
-
-              if (matchingCat) {
-                catNum = matchingCat.numero_catorcena;
-                catYear = matchingCat.a_o;
+              if (loadedTipoPeriodo === 'mensual') {
+                // Mensual mode: month number for grouping
+                catYear = initDate.getFullYear();
+                catNum = initDate.getMonth() + 1; // 1-12
               } else {
-                // Fallback: find catorcena where date falls within range
-                const matchingRange = catorcenasData.data.find(cat => {
-                  const catStart = new Date(cat.fecha_inicio);
-                  const catEnd = new Date(cat.fecha_fin);
-                  return initDate >= catStart && initDate <= catEnd;
+                // Catorcena mode: find matching catorcena
+                const initDateStr = initDate.toISOString().split('T')[0];
+                const matchingCat = catorcenasData.data.find(cat => {
+                  const catStartStr = new Date(cat.fecha_inicio).toISOString().split('T')[0];
+                  return catStartStr === initDateStr;
                 });
-                if (matchingRange) {
-                  catNum = matchingRange.numero_catorcena;
-                  catYear = matchingRange.a_o;
+
+                if (matchingCat) {
+                  catNum = matchingCat.numero_catorcena;
+                  catYear = matchingCat.a_o;
                 } else {
-                  // Last fallback: use year from date
-                  catYear = initDate.getFullYear();
+                  const matchingRange = catorcenasData.data.find(cat => {
+                    const catStart = new Date(cat.fecha_inicio);
+                    const catEnd = new Date(cat.fecha_fin);
+                    return initDate >= catStart && initDate <= catEnd;
+                  });
+                  if (matchingRange) {
+                    catNum = matchingRange.numero_catorcena;
+                    catYear = matchingRange.a_o;
+                  } else {
+                    catYear = initDate.getFullYear();
+                  }
                 }
               }
             }
@@ -1471,18 +1793,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-5xl max-h-[95vh] h-[95vh] bg-zinc-900 rounded-2xl border border-zinc-700 shadow-2xl overflow-hidden flex flex-col">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+      <div className={`relative w-full max-w-5xl max-h-[95vh] h-[95vh] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} rounded-2xl border shadow-2xl overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold text-white">
+            <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
               {isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud'}
             </h2>
             {/* Articulos status */}
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-800 rounded-lg text-[10px]">
-                <span className="text-zinc-500">Art:</span>
+              <div className={`flex items-center gap-1.5 px-2 py-1 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} rounded-lg text-[10px]`}>
+                <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Art:</span>
                 <span className={articulosData && articulosData.length > 0 ? 'text-emerald-400' : 'text-red-400'}>
                   {articulosData?.length || 0}
                 </span>
@@ -1491,20 +1813,20 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 type="button"
                 onClick={handleRefreshSap}
                 disabled={articulosFetching}
-                className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
+                className={`p-1.5 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors disabled:opacity-50`}
                 title="Refrescar artículos SAP"
               >
-                <RefreshCw className={`h-4 w-4 text-zinc-400 ${articulosFetching ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${articulosFetching ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-            <X className="h-5 w-5 text-zinc-400" />
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
           </button>
         </div>
 
         {/* Progress steps */}
-        <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/50">
+        <div className={`px-6 py-3 border-b ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
           <div className="flex items-center gap-2">
             {[
               { num: 1, label: 'Cliente', icon: Building2 },
@@ -1519,17 +1841,31 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
                     : step > s.num
                       ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50'
+                      : isDark ? 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50' : 'bg-gray-50 text-gray-400 border border-gray-200'
                     }`}
                 >
                   <s.icon className="h-4 w-4" />
                   {s.label}
                 </button>
-                {i < 3 && <div className="flex-1 h-px bg-zinc-700" />}
+                {i < 3 && <div className={`flex-1 h-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'}`} />}
               </React.Fragment>
             ))}
           </div>
         </div>
+
+        {/* Banner de borrador restaurado */}
+        {restoredFromDraft && !isEditMode && (
+          <div className="mx-4 mt-2 mb-1 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
+            <span>Borrador restaurado. Puedes continuar donde lo dejaste.</span>
+            <button
+              type="button"
+              onClick={() => { clearDraft(); resetForm(); }}
+              className="ml-3 underline hover:text-amber-100 transition-colors whitespace-nowrap"
+            >
+              Descartar
+            </button>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-6">
@@ -1538,7 +1874,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <div className="space-y-6">
               {/* CUIC Select - Shows Marca first, then CUIC + Producto */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
                   <Building2 className="h-4 w-4 text-purple-400" />
                   CUIC / Cliente
                 </label>
@@ -1555,13 +1891,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           : db === 'CIMU' ? 'bg-blue-600 text-white border-blue-500'
                           : db === 'TEST' ? 'bg-amber-600 text-white border-amber-500'
                           : 'bg-emerald-600 text-white border-emerald-500'
-                          : 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'
+                          : isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100 hover:text-gray-700'
                       }`}
                     >
                       {db === 'ALL' ? 'Todos' : db}
                     </button>
                   ))}
-                  <span className="text-[10px] text-zinc-500 ml-2">
+                  <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} ml-2`}>
                     {cuicData?.length || 0} clientes
                   </span>
                 </div>
@@ -1578,17 +1914,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   renderOption={(item) => (
                     <div className="flex items-center gap-2">
                       <div className="flex-1">
-                        <div className="font-medium text-white">{item.T2_U_Marca || 'Sin marca'}</div>
-                        <div className="text-xs text-zinc-500">
+                        <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.T2_U_Marca || 'Sin marca'}</div>
+                        <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           {item.CUIC} | {item.T2_U_Producto || 'Sin producto'}
                         </div>
                       </div>
                       {item.sap_database && (
                         <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${
-                          item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                          item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                          item.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
-                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                          item.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
+                          item.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
+                          item.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
                         }`}>{item.sap_database}</span>
                       )}
                     </div>
@@ -1597,14 +1933,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <div className="text-left flex items-center gap-2">
                       <div className="flex-1">
                         <div className="font-medium">{item.T2_U_Marca || 'Sin marca'}</div>
-                        <div className="text-[10px] text-zinc-500">{item.CUIC} | {item.T2_U_Producto || ''}</div>
+                        <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.CUIC} | {item.T2_U_Producto || ''}</div>
                       </div>
                       {item.sap_database && (
                         <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${
-                          item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                          item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                          item.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
-                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                          item.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
+                          item.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
+                          item.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
                         }`}>{item.sap_database}</span>
                       )}
                     </div>
@@ -1614,9 +1950,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
               {/* Selected client info - Complete */}
               {selectedCuic && (
-                <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                <div className={`p-4 ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
                   {/* Header con CUIC destacado */}
-                  <div className="flex items-start justify-between mb-3 pb-3 border-b border-zinc-700/50">
+                  <div className={`flex items-start justify-between mb-3 pb-3 border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
                     <div className="flex items-center gap-3">
                       <div>
                         <span className="text-[10px] text-purple-400 uppercase tracking-wider">CUIC</span>
@@ -1624,15 +1960,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       </div>
                       {selectedCuic.sap_database && (
                         <span className={`text-[10px] font-semibold px-2 py-1 rounded-lg border ${
-                          selectedCuic.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                          selectedCuic.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                          selectedCuic.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
-                          'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+                          selectedCuic.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
+                          selectedCuic.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
+                          selectedCuic.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
                         }`}>{selectedCuic.sap_database}</span>
                       )}
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Categoría</span>
+                      <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider`}>Categoría</span>
                       <div className="text-sm font-medium text-amber-400">{selectedCuic.T2_U_Categoria || '-'}</div>
                     </div>
                   </div>
@@ -1640,32 +1976,32 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   {/* Grid de información 2 columnas */}
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Marca:</span>
-                      <span className="text-white font-medium">{selectedCuic.T2_U_Marca || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Marca:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{selectedCuic.T2_U_Marca || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Producto:</span>
-                      <span className="text-white">{selectedCuic.T2_U_Producto || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Producto:</span>
+                      <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T2_U_Producto || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Cliente:</span>
-                      <span className="text-white">{selectedCuic.T0_U_Cliente || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Cliente:</span>
+                      <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T0_U_Cliente || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Razón Social:</span>
-                      <span className="text-white truncate max-w-[180px]" title={selectedCuic.T0_U_RazonSocial || '-'}>{selectedCuic.T0_U_RazonSocial || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Razón Social:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} truncate max-w-[180px]`} title={selectedCuic.T0_U_RazonSocial || '-'}>{selectedCuic.T0_U_RazonSocial || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Asesor:</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Asesor:</span>
                       <span className="text-emerald-400 font-medium">{selectedCuic.ASESOR_U_Asesor || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500">Agencia:</span>
-                      <span className="text-white">{selectedCuic.T0_U_Agencia || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Agencia:</span>
+                      <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T0_U_Agencia || '-'}</span>
                     </div>
                     <div className="flex justify-between col-span-2">
-                      <span className="text-zinc-500">Unidad de Negocio:</span>
-                      <span className="text-white">{selectedCuic.T1_U_UnidadNegocio || '-'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Unidad de Negocio:</span>
+                      <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T1_U_UnidadNegocio || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -1674,7 +2010,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               {/* Asignados with tags - search at bottom */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                  <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
                     <Users className="h-4 w-4 text-purple-400" />
                     Asignados
                   </label>
@@ -1705,120 +2041,232 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           {/* Step 2: Campaña */}
           {step === 2 && (
             <div className="space-y-6">
-              {/* Campaign name and notas */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-300">Nombre de Campaña</label>
-                  <input
-                    type="text"
-                    value={nombreCampania}
-                    onChange={(e) => setNombreCampania(e.target.value)}
-                    placeholder="Nombre de la campaña..."
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-300">Notas</label>
-                  <input
-                    type="text"
-                    value={notas}
-                    onChange={(e) => setNotas(e.target.value)}
-                    placeholder="Notas breves..."
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                  />
-                </div>
+              {/* Campaign name */}
+              <div className="space-y-2">
+                <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Nombre de Campaña</label>
+                <input
+                  type="text"
+                  value={nombreCampania}
+                  onChange={(e) => setNombreCampania(e.target.value)}
+                  placeholder="Nombre de la campaña..."
+                  className={`w-full px-4 py-3 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
+                />
               </div>
 
               {/* Date range */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-purple-400" />
-                  Rango de Fechas
-                </label>
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Años */}
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="text-xs text-zinc-500">Año Inicio</label>
-                      <select
-                        value={yearInicio || ''}
-                        onChange={(e) => {
-                          setYearInicio(e.target.value ? parseInt(e.target.value) : undefined);
-                          setCatorcenaInicio(undefined);
-                        }}
-                        className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {yearInicioOptions.map(y => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-zinc-500">Año Fin</label>
-                      <select
-                        value={yearFin || ''}
-                        onChange={(e) => {
-                          setYearFin(e.target.value ? parseInt(e.target.value) : undefined);
-                          setCatorcenaFin(undefined);
-                        }}
-                        className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {yearFinOptions.map(y => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Catorcenas */}
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="text-xs text-zinc-500">Catorcena Inicio</label>
-                      <select
-                        value={catorcenaInicio || ''}
-                        onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                        disabled={!yearInicio}
-                        className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {catorcenasInicioOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>
-                            Catorcena {c.numero_catorcena} / {c.a_o}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-zinc-500">Catorcena Fin</label>
-                      <select
-                        value={catorcenaFin || ''}
-                        onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                        disabled={!yearFin}
-                        className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {catorcenasFinOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>
-                            Catorcena {c.numero_catorcena} / {c.a_o}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                <div className="flex items-center justify-between">
+                  <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
+                    <Calendar className="h-4 w-4 text-purple-400" />
+                    Rango de Fechas
+                  </label>
+                  {/* Toggle Catorcena / Mensual */}
+                  <div className={`flex items-center ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-100 border-gray-200'} rounded-lg border p-0.5`}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTipoPeriodo('catorcena');
+                        setMesInicio(undefined);
+                        setMesFin(undefined);
+                        setCaras([]);
+                        // Clear articulo/formato if incompatible with new period type
+                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'catorcena') {
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                        } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'catorcena') {
+                          setNewCara(prev => ({ ...prev, formato: '' }));
+                        }
+                      }}
+                      className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'catorcena' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      Catorcena
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTipoPeriodo('mensual');
+                        setCatorcenaInicio(undefined);
+                        setCatorcenaFin(undefined);
+                        setCaras([]);
+                        // Clear articulo/formato if incompatible with new period type
+                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'mensual') {
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                        } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'mensual') {
+                          setNewCara(prev => ({ ...prev, formato: '' }));
+                        }
+                      }}
+                      className={`px-3 py-1 text-xs rounded-md transition-all ${tipoPeriodo === 'mensual' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40' : isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      Mensual
+                    </button>
                   </div>
                 </div>
+
+                {tipoPeriodo === 'catorcena' ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Años */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Año Inicio</label>
+                        <select
+                          value={yearInicio || ''}
+                          onChange={(e) => {
+                            setYearInicio(e.target.value ? parseInt(e.target.value) : undefined);
+                            setCatorcenaInicio(undefined);
+                          }}
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearInicioOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Año Fin</label>
+                        <select
+                          value={yearFin || ''}
+                          onChange={(e) => {
+                            setYearFin(e.target.value ? parseInt(e.target.value) : undefined);
+                            setCatorcenaFin(undefined);
+                          }}
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearFinOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    {/* Catorcenas */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Cat. Inicio</label>
+                        <select
+                          value={catorcenaInicio || ''}
+                          onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearInicio}
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                        >
+                          <option value="">Seleccionar</option>
+                          {catorcenasInicioOptions.map(c => (
+                            <option key={c.id} value={c.numero_catorcena}>
+                              Cat {c.numero_catorcena} / {c.a_o}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Cat. Fin</label>
+                        <select
+                          value={catorcenaFin || ''}
+                          onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearFin}
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                        >
+                          <option value="">Seleccionar</option>
+                          {catorcenasFinOptions.map(c => (
+                            <option key={c.id} value={c.numero_catorcena}>
+                              Cat {c.numero_catorcena} / {c.a_o}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Años */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Año Inicio</label>
+                        <select
+                          value={yearInicio || ''}
+                          onChange={(e) => {
+                            setYearInicio(e.target.value ? parseInt(e.target.value) : undefined);
+                            setMesInicio(undefined);
+                          }}
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearInicioOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Año Fin</label>
+                        <select
+                          value={yearFin || ''}
+                          onChange={(e) => {
+                            setYearFin(e.target.value ? parseInt(e.target.value) : undefined);
+                            setMesFin(undefined);
+                          }}
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearFinOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    {/* Meses */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Mes Inicio</label>
+                        <select
+                          value={mesInicio || ''}
+                          onChange={(e) => setMesInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearInicio}
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                        >
+                          <option value="">Seleccionar</option>
+                          {mesInicioOptions.map(m => (
+                            <option key={m} value={m}>{MESES[m - 1]}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Mes Fin</label>
+                        <select
+                          value={mesFin || ''}
+                          onChange={(e) => setMesFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearFin}
+                          className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                        >
+                          <option value="">Seleccionar</option>
+                          {mesFinOptions.map(m => (
+                            <option key={m} value={m}>{MESES[m - 1]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Descripción (large) */}
+              {/* Descripción */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Descripción</label>
+                <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Descripción Trafico</label>
                 <textarea
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
                   placeholder="Descripción detallada de la campaña..."
                   rows={4}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+                  className={`w-full px-4 py-3 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none`}
+                />
+              </div>
+
+              {/* Notas */}
+              <div className="space-y-2">
+                <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Notas Dirección</label>
+                <textarea
+                  value={notas}
+                  onChange={(e) => setNotas(e.target.value)}
+                  placeholder="Notas breves..."
+                  rows={4}
+                  className={`w-full px-4 py-3 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none`}
                 />
               </div>
             </div>
@@ -1831,57 +2279,62 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/30">
                 <div className="grid grid-cols-4 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-white">{totals.totalRenta}</div>
-                    <div className="text-xs text-zinc-400">Renta</div>
+                    <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totals.totalRenta}</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Renta</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-emerald-400">{totals.totalBonificacion}</div>
-                    <div className="text-xs text-zinc-400">Bonificación</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Bonificación</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-400">{totals.totalRenta + totals.totalBonificacion}</div>
-                    <div className="text-xs text-zinc-400">Total Caras</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Total Caras</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-amber-400">{formatCurrency(totals.totalPrecio)}</div>
-                    <div className="text-xs text-zinc-400">Inversión</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Inversión</div>
                   </div>
                 </div>
               </div>
 
               {/* Add cara form */}
-              <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
-                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+              <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4 flex items-center gap-2`}>
                   <Plus className="h-4 w-4 text-purple-400" />
                   Agregar Cara
                 </h3>
 
                 {/* Row 1: Articulo SAP */}
                 <div className="mb-4">
-                  <label className="text-xs text-zinc-500 flex items-center gap-1">
+                  <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'} flex items-center gap-1`}>
                     <Package className="h-3 w-3" />
                     Artículo SAP
                   </label>
                   <SearchableSelect
                     label="Seleccionar artículo"
-                    options={articulosData || []}
+                    options={articulosFiltrados}
                     value={newCara.articulo}
                     onChange={(item) => {
                       // Auto-set tarifa publica from ItemCode mapping
                       const tarifa = getTarifaFromItemCode(item.ItemCode);
-                      // Auto-set estado and ciudad from ItemName
+                      // Auto-set estado and ciudades from ItemName
                       const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
                       // Auto-set formato from ItemName
                       const formato = getFormatoFromArticulo(item.ItemName);
                       // Auto-set tipo from ItemName
                       const tipo = getTipoFromName(item.ItemName);
+                      // Detect CT (cortesia) articles
+                      const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
+                      const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
+                      const isTarifaCero = isCortesia || isIntercambio;
 
                       setNewCara({
                         ...newCara,
                         articulo: item,
-                        tarifaPublica: tarifa.tarifa_publica,
+                        tarifaPublica: isTarifaCero ? 0 : tarifa.tarifa_publica,
+                        renta: isCortesia ? 0 : newCara.renta,
                         estado: ciudadEstado?.estado || newCara.estado,
-                        ciudades: ciudadEstado?.ciudad ? [ciudadEstado.ciudad] : newCara.ciudades,
+                        ciudades: ciudadEstado?.ciudades && ciudadEstado.ciudades.length > 0 ? ciudadEstado.ciudades : newCara.ciudades,
                         formato: formato || newCara.formato,
                         tipo: tipo || newCara.tipo,
                       });
@@ -1893,14 +2346,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     loading={articulosLoading}
                     renderOption={(item) => (
                       <div>
-                        <div className="font-medium text-white">{item.ItemCode}</div>
-                        <div className="text-xs text-zinc-500">{item.ItemName}</div>
+                        <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.ItemCode}</div>
+                        <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.ItemName}</div>
                       </div>
                     )}
                     renderSelected={(item) => (
                       <div className="text-left">
                         <div className="font-medium text-sm">{item.ItemCode}</div>
-                        <div className="text-[10px] text-zinc-500">{item.ItemName}</div>
+                        <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.ItemName}</div>
                       </div>
                     )}
                   />
@@ -1910,11 +2363,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 <div className="grid grid-cols-4 gap-3 mb-4">
                   {/* Estado */}
                   <div>
-                    <label className="text-xs text-zinc-500">Estado</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Estado</label>
                     <select
                       value={newCara.estado}
                       onChange={(e) => setNewCara({ ...newCara, estado: e.target.value, ciudades: [] })}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                     >
                       <option value="">Seleccionar</option>
                       {inventarioFilters?.estados.map(e => (
@@ -1925,7 +2378,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                   {/* Ciudad (opcional) */}
                   <div>
-                    <label className="text-xs text-zinc-500">Ciudad (opcional)</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Ciudad (opcional)</label>
                     <MultiSelectTags
                       label="ciudad"
                       options={filteredCiudades.map(c => ({ ciudad: c }))}
@@ -1939,107 +2392,169 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                   {/* Formato */}
                   <div>
-                    <label className="text-xs text-zinc-500">Formato</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Formato</label>
                     <select
                       value={newCara.formato}
                       onChange={(e) => setNewCara({ ...newCara, formato: e.target.value })}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                     >
                       <option value="">Seleccionar</option>
-                      {filteredFormatos.map(f => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
-                      {inventarioFilters?.formatos.filter(f => !filteredFormatos.includes(f)).map(f => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
+                      {tipoPeriodo === 'mensual' ? (
+                        FORMATOS_MENSUALES.map(f => (
+                          <option key={f} value={f}>{f}</option>
+                        ))
+                      ) : (
+                        <>
+                          {filteredFormatos.map(f => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </>
+                      )}
                     </select>
                   </div>
 
                   {/* Tipo (selector con autocompletado) */}
                   <div>
-                    <label className="text-xs text-zinc-500">Tipo</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tipo</label>
                     <select
                       value={newCara.tipo}
                       onChange={(e) => setNewCara({ ...newCara, tipo: e.target.value as 'Tradicional' | 'Digital' | '' })}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                     >
                       <option value="">Seleccionar</option>
-                      <option value="Tradicional">Tradicional</option>
-                      <option value="Digital">Digital</option>
+                      {filteredTipos.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
 
                 {/* Row 3: Periodo, Renta, Bonificación, Tarifa Pública */}
-                <div className="grid grid-cols-4 gap-3 mb-4">
+                <div className={`grid ${tipoPeriodo === 'mensual' ? 'grid-cols-6' : 'grid-cols-4'} gap-3 mb-4`}>
                   {/* Periodo */}
-                  <div>
-                    <label className="text-xs text-zinc-500">Periodo</label>
-                    <select
-                      value={newCara.periodo}
-                      onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value })}
-                      disabled={availablePeriods.length === 0}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                    >
-                      <option value="">Seleccionar</option>
-                      {availablePeriods.map(p => (
-                        <option key={`${p.a_o}-${p.numero_catorcena}`} value={`${p.a_o}-${p.numero_catorcena}`}>
-                          Catorcena {p.numero_catorcena} / {p.a_o}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {tipoPeriodo === 'mensual' ? (
+                    <>
+                      <div>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Mes</label>
+                        <select
+                          value={newCara.periodo}
+                          onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value, periodoInicioCustom: '', periodoFinCustom: '' })}
+                          disabled={availablePeriods.length === 0}
+                          className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                        >
+                          <option value="">Seleccionar</option>
+                          {availablePeriods.map(p => (
+                            <option key={`${p.a_o}-${p.numero_catorcena}`} value={`${p.a_o}-${p.numero_catorcena}`}>
+                              {MESES[p.numero_catorcena - 1]} {p.a_o}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Fecha Inicio</label>
+                        <input
+                          type="date"
+                          value={newCara.periodoInicioCustom}
+                          onChange={(e) => setNewCara({ ...newCara, periodoInicioCustom: e.target.value })}
+                          disabled={!newCara.periodo}
+                          min={availablePeriods.length > 0 ? availablePeriods[0].fecha_inicio : undefined}
+                          max={newCara.periodoFinCustom || (availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined)}
+                          className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Fecha Fin</label>
+                        <input
+                          type="date"
+                          value={newCara.periodoFinCustom}
+                          onChange={(e) => setNewCara({ ...newCara, periodoFinCustom: e.target.value })}
+                          disabled={!newCara.periodo}
+                          min={newCara.periodoInicioCustom || (availablePeriods.length > 0 ? availablePeriods[0].fecha_inicio : undefined)}
+                          max={availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined}
+                          className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Periodo</label>
+                      <select
+                        value={newCara.periodo}
+                        onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value })}
+                        disabled={availablePeriods.length === 0}
+                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                      >
+                        <option value="">Seleccionar</option>
+                        {availablePeriods.map(p => (
+                          <option key={`${p.a_o}-${p.numero_catorcena}`} value={`${p.a_o}-${p.numero_catorcena}`}>
+                            Cat {p.numero_catorcena} / {p.a_o}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {/* Renta */}
                   <div>
-                    <label className="text-xs text-zinc-500">Renta</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                      Renta
+                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && (
+                        <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
+                      )}
+                    </label>
                     <input
                       type="number"
                       min={0}
-                      value={newCara.renta}
+                      value={newCara.renta || ''}
                       onChange={(e) => setNewCara({ ...newCara, renta: parseInt(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      placeholder='0'
+                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT')}
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     />
                   </div>
 
                   {/* Bonificacion */}
                   <div>
-                    <label className="text-xs text-zinc-500">Bonificación</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
+                    </label>
                     <input
                       type="number"
                       min={0}
-                      max={newCara.renta}
-                      value={newCara.bonificacion}
+                      max={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? undefined : newCara.renta}
+                      value={newCara.bonificacion || ''}
                       onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      placeholder='0'
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                     />
                   </div>
 
                   {/* Tarifa Publica - Editable */}
                   <div>
-                    <label className="text-xs text-zinc-500">Tarifa Pública</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa Pública</label>
                     <input
                       type="number"
                       value={newCara.tarifaPublica || ''}
                       onChange={(e) => setNewCara({ ...newCara, tarifaPublica: parseFloat(e.target.value) || 0 })}
                       placeholder="0"
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-emerald-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN')}
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-100 border-gray-200'} border rounded-lg text-emerald-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     />
                   </div>
                 </div>
 
                 {/* Row 4: NSE */}
                 <div className="mb-4">
-                  <label className="text-xs text-zinc-500">Nivel Socioeconómico</label>
+                  <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Nivel Socioeconómico</label>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {inventarioFilters?.nse.map(n => (
+                    {filteredNse.map(n => (
                       <button
                         key={n}
                         type="button"
                         onClick={() => toggleNse(n)}
                         className={`px-3 py-1 rounded-full text-xs transition-all ${newCara.nse.includes(n)
                           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                          : 'bg-zinc-700/50 text-zinc-400 border border-zinc-600/50 hover:border-zinc-500'
+                          : isDark ? 'bg-zinc-700/50 text-zinc-400 border border-zinc-600/50 hover:border-zinc-500' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
                           }`}
                       >
                         {n}
@@ -2048,24 +2563,34 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   </div>
                 </div>
 
+                {/* Preview: Cortesia info */}
+                {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && newCara.bonificacion > 0 && (
+                  <div className="mt-4 p-3 bg-cyan-500/10 rounded-lg border border-cyan-500/20 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-cyan-300 font-medium">Cortesía</span>
+                      <span className="text-cyan-300">{newCara.bonificacion} caras (sin costo)</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Preview calculation */}
                 {newCara.renta > 0 && newCara.tarifaPublica > 0 && (
-                  <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/30 space-y-2">
+                  <div className={`mt-4 p-3 ${isDark ? 'bg-zinc-800/50 border-zinc-700/30' : 'bg-gray-50 border-gray-200'} rounded-lg border space-y-2`}>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400">Inversión (Tarifa Cliente):</span>
-                      <span className="text-zinc-300">
+                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inversión (Tarifa Cliente):</span>
+                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
                         {newCara.renta} caras × {formatCurrency(newCara.tarifaPublica)} = <span className="text-emerald-400 font-medium">{formatCurrency(newCara.renta * newCara.tarifaPublica)}</span>
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400">Caras Totales:</span>
-                      <span className="text-zinc-300">
+                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras Totales:</span>
+                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
                         {newCara.renta} caras + {newCara.bonificacion} bonif. = <span className="text-blue-400 font-medium">{newCara.renta + newCara.bonificacion} caras totales</span>
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400">Tarifa Efectiva:</span>
-                      <span className="text-zinc-300">
+                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Tarifa Efectiva:</span>
+                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
                         {formatCurrency(newCara.renta * newCara.tarifaPublica)} ÷ {newCara.renta + newCara.bonificacion} = <span className="text-purple-400 font-medium">{formatCurrency((newCara.renta * newCara.tarifaPublica) / (newCara.renta + newCara.bonificacion))}</span>
                       </span>
                     </div>
@@ -2076,8 +2601,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <button
                     type="button"
                     onClick={handleAddCara}
-                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo}
-                    className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors`}
+                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom))}
+                    className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg text-sm font-medium transition-colors`}
                   >
                     {editingCaraId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                     {editingCaraId ? 'Actualizar Cara' : 'Agregar Cara'}
@@ -2086,7 +2611,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <button
                       type="button"
                       onClick={handleCancelEdit}
-                      className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
+                      className={`flex items-center gap-2 px-4 py-2 ${isDark ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'} rounded-lg text-sm font-medium transition-colors`}
                     >
                       <X className="h-4 w-4" />
                       Cancelar Edición
@@ -2095,7 +2620,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <button
                       type="button"
                       onClick={handleClearNewCara}
-                      className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-sm font-medium transition-colors"
+                      className={`flex items-center gap-2 px-4 py-2 ${isDark ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'} rounded-lg text-sm font-medium transition-colors`}
                     >
                       <RefreshCw className="h-4 w-4" />
                       Limpiar Campos
@@ -2105,15 +2630,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               </div>
 
               {/* Caras table - grouped by catorcena */}
-              <div className="rounded-xl border border-zinc-700/50 overflow-hidden">
+              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
                 {groupedCaras.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-zinc-500 text-sm">
+                  <div className={`px-4 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                     No hay caras agregadas
                   </div>
                 ) : (
                   <div>
                     {groupedCaras.map(([key, items]) => {
-                      const [year, cat] = key.split('-');
                       const isExpanded = expandedCatorcenas.has(key);
                       const groupTotal = items.reduce((acc, c) => acc + c.precioTotal, 0);
                       const groupRenta = items.reduce((acc, c) => acc + c.renta, 0);
@@ -2121,19 +2645,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                       return (
                         <div key={key}>
-                          {/* Catorcena header */}
+                          {/* Period header */}
                           <button
                             type="button"
                             onClick={() => toggleCatorcena(key)}
-                            className="w-full flex items-center justify-between px-4 py-3 bg-zinc-800/50 hover:bg-zinc-800 transition-colors border-b border-zinc-700/50"
+                            className={`w-full flex items-center justify-between px-4 py-3 ${isDark ? 'bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700/50' : 'bg-gray-50 hover:bg-gray-100 border-gray-200'} transition-colors border-b`}
                           >
                             <div className="flex items-center gap-3">
-                              {isExpanded ? <ChevronDown className="h-4 w-4 text-zinc-400" /> : <ChevronRight className="h-4 w-4 text-zinc-400" />}
-                              <span className="font-medium text-white">Catorcena {cat} / {year}</span>
-                              <span className="text-xs text-zinc-500">({items.length} caras)</span>
+                              {isExpanded ? <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} /> : <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />}
+                              <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{getPeriodLabel(key)}</span>
+                              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({items.length} caras)</span>
                             </div>
                             <div className="flex items-center gap-4 text-sm">
-                              <span className="text-zinc-400">{groupRenta} renta</span>
+                              <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{groupRenta} renta</span>
                               <span className="text-emerald-400">{groupBonif} bonif.</span>
                               <span className="text-amber-400 font-medium">{formatCurrency(groupTotal)}</span>
                             </div>
@@ -2141,21 +2665,21 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                           {/* Expanded items */}
                           {isExpanded && (
-                            <div className="bg-zinc-900/50 overflow-x-auto">
+                            <div className={`${isDark ? 'bg-zinc-900/50' : 'bg-white'} overflow-x-auto`}>
                               <table className="w-full min-w-[1000px]">
                                 <thead>
-                                  <tr className="bg-zinc-800/30">
-                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Artículo</th>
-                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Ciudad</th>
-                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Tipo</th>
-                                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-500">Formato</th>
-                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Caras</th>
-                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Bonif.</th>
-                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Total</th>
-                                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Tarifa Púb.</th>
-                                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-500">Precio Total</th>
-                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500">Estado</th>
-                                    <th className="px-2 py-2 text-center text-[10px] font-semibold text-zinc-500"></th>
+                                  <tr className={isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}>
+                                    <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Artículo</th>
+                                    <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Ciudad</th>
+                                    <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tipo</th>
+                                    <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Formato</th>
+                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Caras</th>
+                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Bonif.</th>
+                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Total</th>
+                                    <th className={`px-2 py-2 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa Púb.</th>
+                                    <th className={`px-2 py-2 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Precio Total</th>
+                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Estado</th>
+                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}></th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -2166,12 +2690,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                     const descuento = totalCaras > 0 ? ((cara.bonificacion / totalCaras) * 100) : 0;
 
                                     return (
-                                      <tr key={cara.id} className="border-t border-zinc-800/50 hover:bg-zinc-800/20">
-                                        <td className="px-2 py-2 text-xs text-white max-w-[140px]" title={`${cara.articulo.ItemCode} - ${cara.articulo.ItemName}`}>
+                                      <tr key={cara.id} className={`border-t ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/20' : 'border-gray-100 hover:bg-gray-50'}`}>
+                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-white' : 'text-gray-900'} max-w-[140px]`} title={`${cara.articulo.ItemCode} - ${cara.articulo.ItemName}`}>
                                           <div className="truncate font-medium">{cara.articulo.ItemCode}</div>
-                                          <div className="truncate text-[10px] text-zinc-500">{cara.articulo.ItemName}</div>
+                                          <div className={`truncate text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{cara.articulo.ItemName}</div>
                                         </td>
-                                        <td className="px-2 py-2 text-xs text-zinc-300 max-w-[80px] truncate" title={`${cara.estado} - ${cara.ciudades.join(', ')}`}>
+                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={`${cara.estado} - ${cara.ciudades.join(', ')}`}>
                                           {cara.ciudades.join(', ')}
                                         </td>
                                         <td className="px-2 py-2">
@@ -2180,45 +2704,47 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             {cara.tipo}
                                           </span>
                                         </td>
-                                        <td className="px-2 py-2 text-xs text-zinc-300">{cara.formato}</td>
-                                        <td className="px-2 py-2 text-xs text-center text-white">{cara.renta}</td>
+                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.formato}</td>
+                                        <td className={`px-2 py-2 text-xs text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>{cara.renta}</td>
                                         <td className="px-2 py-2 text-xs text-center text-emerald-400">{cara.bonificacion}</td>
-                                        <td className="px-2 py-2 text-xs text-center text-white font-medium">{totalCaras}</td>
-                                        <td className="px-2 py-2 text-xs text-right text-zinc-300">{formatCurrency(cara.tarifaPublica)}</td>
+                                        <td className={`px-2 py-2 text-xs text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{totalCaras}</td>
+                                        <td className={`px-2 py-2 text-xs text-right ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{formatCurrency(cara.tarifaPublica)}</td>
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
-                                          <div className="flex flex-col gap-0.5">
-                                            {/* Si ambos están aprobados, mostrar "Aprobado" */}
-                                            {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
-                                                Aprobado
-                                              </span>
-                                            )}
-                                            {/* Si cualquiera está rechazado */}
-                                            {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">
-                                                Rechazado
-                                              </span>
-                                            )}
-                                            {/* Si DG está pendiente (y ninguno rechazado) */}
-                                            {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dcm !== 'rechazado' && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
-                                                Pend. DG
-                                              </span>
-                                            )}
-                                            {/* Si DCM está pendiente (y ninguno rechazado) */}
-                                            {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
-                                                Pend. DCM
-                                              </span>
-                                            )}
-                                            {/* Si ninguno tiene estado */}
-                                            {!cara.autorizacion_dg && !cara.autorizacion_dcm && (
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-600/30 text-zinc-400">
-                                                Por evaluar
-                                              </span>
-                                            )}
-                                          </div>
+                                          {(() => {
+                                            // Si total global es impar, todas requieren DG
+                                            const dgEfectivo = totals.totalCarasImpar ? 'pendiente' : cara.autorizacion_dg;
+                                            const dcmEfectivo = cara.autorizacion_dcm;
+                                            return (
+                                              <div className="flex flex-col gap-0.5">
+                                                {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                                                    Aprobado
+                                                  </span>
+                                                )}
+                                                {(dgEfectivo === 'rechazado' || dcmEfectivo === 'rechazado') && (
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">
+                                                    Rechazado
+                                                  </span>
+                                                )}
+                                                {dgEfectivo === 'pendiente' && dcmEfectivo !== 'rechazado' && (
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title={totals.totalCarasImpar ? 'Total de caras impar - Requiere autorización DG' : 'Requiere autorización DG'}>
+                                                    Pend. DG
+                                                  </span>
+                                                )}
+                                                {dcmEfectivo === 'pendiente' && dgEfectivo !== 'rechazado' && (
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
+                                                    Pend. DCM
+                                                  </span>
+                                                )}
+                                                {!dgEfectivo && !dcmEfectivo && (
+                                                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-zinc-600/30 text-zinc-400' : 'bg-gray-100 text-gray-500'}`}>
+                                                    Por evaluar
+                                                  </span>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
                                         </td>
                                         <td className="px-2 py-2 text-center">
                                           <div className="flex items-center justify-center gap-1">
@@ -2252,15 +2778,21 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     })}
 
                     {/* Totals footer */}
-                    <div className="px-4 py-3 bg-zinc-800/30 border-t border-zinc-700/50">
+                    <div className={`px-4 py-3 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border-t`}>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-zinc-400">Totales:</span>
+                        <span className={`text-sm font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Totales:</span>
                         <div className="flex items-center gap-6 text-sm">
-                          <span className="text-white">{totals.totalRenta} renta</span>
+                          <span className={isDark ? 'text-white' : 'text-gray-900'}>{totals.totalRenta} renta</span>
                           <span className="text-emerald-400">{totals.totalBonificacion} bonif.</span>
                           <span className="text-amber-400 font-bold">{formatCurrency(totals.totalPrecio)}</span>
                         </div>
                       </div>
+                      {totals.totalCarasImpar && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded px-3 py-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                          <span>Total de caras impar ({totals.totalRenta + totals.totalBonificacion}) — Todas las caras requieren autorización DG</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2273,38 +2805,38 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <div className="space-y-6">
               {/* Summary cards */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
-                  <h3 className="text-sm font-semibold text-zinc-400 mb-3">Cliente</h3>
+                <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-3`}>Cliente</h3>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">CUIC:</span>
-                      <span className="text-white text-sm">{selectedCuic?.CUIC || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>CUIC:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{selectedCuic?.CUIC || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Marca:</span>
-                      <span className="text-white text-sm">{selectedCuic?.T2_U_Marca || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Marca:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{selectedCuic?.T2_U_Marca || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Producto:</span>
-                      <span className="text-white text-sm">{selectedCuic?.T2_U_Producto || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Producto:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{selectedCuic?.T2_U_Producto || '-'}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
-                  <h3 className="text-sm font-semibold text-zinc-400 mb-3">Campaña</h3>
+                <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-3`}>Campaña</h3>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Nombre:</span>
-                      <span className="text-white text-sm">{nombreCampania || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Nombre:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{nombreCampania || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Caras:</span>
-                      <span className="text-white text-sm">{caras.length}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Caras:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{caras.length}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Fechas:</span>
-                      <span className="text-white text-sm">
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Fechas:</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>
                         {fechaInicio && fechaFin ? `${new Date(fechaInicio).toLocaleDateString()} - ${new Date(fechaFin).toLocaleDateString()}` : '-'}
                       </span>
                     </div>
@@ -2316,45 +2848,44 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/30">
                 <div className="grid grid-cols-4 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-white">{totals.totalRenta}</div>
-                    <div className="text-xs text-zinc-400">Renta</div>
+                    <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totals.totalRenta}</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Renta</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-emerald-400">{totals.totalBonificacion}</div>
-                    <div className="text-xs text-zinc-400">Bonificación</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Bonificación</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-400">{totals.totalRenta + totals.totalBonificacion}</div>
-                    <div className="text-xs text-zinc-400">Total Caras</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Total Caras</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-amber-400">{formatCurrency(totals.totalPrecio)}</div>
-                    <div className="text-xs text-zinc-400">Inversión</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Inversión</div>
                   </div>
                 </div>
               </div>
 
               {/* Resumen de Catorcenas y Artículos */}
-              <div className="rounded-xl border border-zinc-700/50 overflow-hidden">
-                <div className="px-4 py-3 bg-zinc-800/50 border-b border-zinc-700/50">
-                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
+                <div className={`px-4 py-3 ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border-b`}>
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                     <Calendar className="h-4 w-4 text-purple-400" />
                     Desglose por Catorcenas
                   </h3>
                 </div>
                 {groupedCaras.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-zinc-500 text-sm">
+                  <div className={`px-4 py-6 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                     No hay caras agregadas
                   </div>
                 ) : (
-                  <div className="divide-y divide-zinc-700/50">
+                  <div className={`divide-y ${isDark ? 'divide-zinc-700/50' : 'divide-gray-200'}`}>
                     {groupedCaras.map(([key, items]) => {
-                      const [year, cat] = key.split('-');
                       const groupTotal = items.reduce((acc, c) => acc + c.precioTotal, 0);
                       const groupRenta = items.reduce((acc, c) => acc + c.renta, 0);
                       const groupBonif = items.reduce((acc, c) => acc + c.bonificacion, 0);
 
-                      // Group by articulo within this catorcena
+                      // Group by articulo within this period
                       const byArticulo = items.reduce((acc, cara) => {
                         const artKey = cara.articulo.ItemCode;
                         if (!acc[artKey]) {
@@ -2374,15 +2905,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       }, {} as Record<string, { articulo: any; renta: number; bonificacion: number; precioTotal: number; items: any[] }>);
 
                       return (
-                        <div key={key} className="bg-zinc-900/30">
-                          {/* Catorcena header */}
-                          <div className="flex items-center justify-between px-4 py-3 bg-zinc-800/30">
+                        <div key={key} className={isDark ? 'bg-zinc-900/30' : 'bg-white'}>
+                          {/* Period header */}
+                          <div className={`flex items-center justify-between px-4 py-3 ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}`}>
                             <div className="flex items-center gap-2">
-                              <span className="font-medium text-white">Catorcena {cat} / {year}</span>
-                              <span className="text-xs text-zinc-500">({Object.keys(byArticulo).length} artículos)</span>
+                              <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{getPeriodLabel(key)}</span>
+                              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({Object.keys(byArticulo).length} artículos)</span>
                             </div>
                             <div className="flex items-center gap-4 text-sm">
-                              <span className="text-zinc-400">{groupRenta} renta</span>
+                              <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{groupRenta} renta</span>
                               <span className="text-emerald-400">{groupBonif} bonif.</span>
                               <span className="text-amber-400 font-medium">{formatCurrency(groupTotal)}</span>
                             </div>
@@ -2390,13 +2921,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           {/* Artículos dentro de esta catorcena */}
                           <div className="px-4 py-2 space-y-1">
                             {Object.entries(byArticulo).map(([artCode, data]) => (
-                              <div key={artCode} className="flex items-center justify-between py-1.5 px-3 bg-zinc-800/20 rounded-lg">
+                              <div key={artCode} className={`flex items-center justify-between py-1.5 px-3 ${isDark ? 'bg-zinc-800/20' : 'bg-gray-50'} rounded-lg`}>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-purple-400 font-medium">{data.articulo.ItemCode}</span>
-                                  <span className="text-xs text-zinc-400 truncate max-w-[200px]">{data.articulo.ItemName}</span>
+                                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate max-w-[200px]`}>{data.articulo.ItemName}</span>
                                 </div>
                                 <div className="flex items-center gap-3 text-xs">
-                                  <span className="text-white">{data.renta} renta</span>
+                                  <span className={isDark ? 'text-white' : 'text-gray-900'}>{data.renta} renta</span>
                                   <span className="text-emerald-400">{data.bonificacion} bonif.</span>
                                   <span className="text-amber-400">{formatCurrency(data.precioTotal)}</span>
                                 </div>
@@ -2411,11 +2942,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               </div>
 
               {/* Asignados */}
-              <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
-                <h3 className="text-sm font-semibold text-zinc-400 mb-3">Asignados</h3>
+              <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-3`}>Asignados</h3>
                 <div className="flex flex-wrap gap-2">
                   {selectedAsignados.map(u => (
-                    <span key={u.id} className="px-3 py-1 bg-zinc-700/50 text-white text-xs rounded-full">
+                    <span key={u.id} className={`px-3 py-1 ${isDark ? 'bg-zinc-700/50 text-white' : 'bg-gray-200 text-gray-700'} text-xs rounded-full`}>
                       {u.nombre}
                     </span>
                   ))}
@@ -2424,26 +2955,26 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
               {/* File upload */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
                   <Upload className="h-4 w-4 text-purple-400" />
                   Archivo (opcional)
                 </label>
                 {archivo ? (
-                  <div className="flex items-center gap-3 p-3 bg-zinc-800 border border-emerald-500/30 rounded-xl">
+                  <div className={`flex items-center gap-3 p-3 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border border-emerald-500/30 rounded-xl`}>
                     {tipoArchivo?.startsWith('image/') ? (
-                      <img src={archivo} alt="Preview" className="w-16 h-16 object-cover rounded-lg" />
+                      <img src={getFilePreviewUrl(archivo) || ''} alt="Preview" className="w-16 h-16 object-cover rounded-lg" />
                     ) : (
-                      <div className="w-16 h-16 flex items-center justify-center bg-zinc-700 rounded-lg">
-                        <FileText className="h-6 w-6 text-zinc-400" />
+                      <div className={`w-16 h-16 flex items-center justify-center ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} rounded-lg`}>
+                        <FileText className={`h-6 w-6 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
                       </div>
                     )}
                     <div className="flex-1">
                       <div className="text-sm text-emerald-400 font-medium">Archivo cargado</div>
-                      <div className="text-xs text-zinc-500">{tipoArchivo}</div>
+                      <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{tipoArchivo}</div>
                     </div>
                     <button
                       type="button"
-                      onClick={() => { setArchivo(null); setTipoArchivo(null); }}
+                      onClick={() => { setArchivo(null); setArchivoFile(null); setTipoArchivo(null); }}
                       className="p-2 hover:bg-red-500/20 rounded-lg text-red-400"
                       title="Eliminar archivo"
                     >
@@ -2454,7 +2985,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <input
                     type="file"
                     onChange={handleFileChange}
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-500 file:text-white hover:file:bg-purple-600"
+                    className={`w-full px-4 py-3 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-xl file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-500 file:text-white hover:file:bg-purple-600`}
                   />
                 )}
               </div>
@@ -2467,18 +2998,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   onChange={(e) => setImu(e.target.checked)}
                   className="checkbox-purple w-5 h-5"
                 />
-                <span className="text-sm text-zinc-300">IMU (Impresión  IMU)</span>
+                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>IMU (Impresión  IMU)</span>
               </label>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800 bg-zinc-900/50">
+        <div className={`flex items-center justify-between px-6 py-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
           <button
             type="button"
             onClick={() => step > 1 ? setStep(step - 1) : onClose()}
-            className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-700 transition-colors"
+            className={`px-4 py-2 ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} rounded-lg text-sm font-medium transition-colors`}
           >
             {step === 1 ? 'Cancelar' : 'Anterior'}
           </button>
@@ -2496,7 +3027,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               type="button"
               onClick={handleSubmit}
               disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0}
-              className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:bg-zinc-700 disabled:text-zinc-500 transition-colors flex items-center gap-2"
+              className={`px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} transition-colors flex items-center gap-2`}
               title={selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
             >
               {(isEditMode ? updateMutation.isPending : createMutation.isPending) ? (

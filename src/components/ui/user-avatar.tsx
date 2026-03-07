@@ -29,7 +29,7 @@ export function UserAvatar({ nombre, foto_perfil, size = 'md', className }: User
   if (foto_perfil && !imageError) {
     return (
       <img
-        src={`${STATIC_URL}${foto_perfil}`}
+        src={foto_perfil.startsWith('http') ? foto_perfil : `${STATIC_URL}${foto_perfil}`}
         alt={nombre || 'Usuario'}
         className={cn(
           'rounded-full object-cover flex-shrink-0',

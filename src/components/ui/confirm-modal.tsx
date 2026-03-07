@@ -72,12 +72,12 @@ export function ConfirmModal({
       />
 
       {/* Modal */}
-      <div className="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative bg-popover border border-border rounded-xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
         {/* Close button */}
         <button
           onClick={onClose}
           disabled={isLoading}
-          className="absolute top-3 right-3 p-1 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors disabled:opacity-50"
+          className="absolute top-3 right-3 p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
         >
           <X className="h-4 w-4" />
         </button>
@@ -89,12 +89,12 @@ export function ConfirmModal({
           </div>
 
           {/* Title */}
-          <h3 className="text-lg font-semibold text-white text-center mb-2">
+          <h3 className="text-lg font-semibold text-foreground text-center mb-2">
             {title}
           </h3>
 
           {/* Message */}
-          <p className="text-sm text-zinc-400 text-center mb-6">
+          <p className="text-sm text-muted-foreground text-center mb-6">
             {message}
           </p>
 

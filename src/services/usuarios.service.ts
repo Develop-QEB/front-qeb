@@ -30,6 +30,7 @@ export interface UsuarioAdmin {
 
 export interface UpdateUsuarioInput {
   nombre?: string;
+  correo_electronico?: string;
   area?: string;
   puesto?: string;
   rol?: string;
@@ -74,6 +75,13 @@ export const usuariosService = {
     }
 
     return response.data.data;
+  },
+
+  async adminResetPassword(id: number, nuevaPassword: string): Promise<void> {
+    const response = await api.patch<ApiResponse<null>>(`/usuarios/${id}/reset-password`, { nuevaPassword });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al restablecer contraseña');
+    }
   },
 
   async deleteMany(ids: number[]): Promise<void> {

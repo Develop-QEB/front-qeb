@@ -1,6 +1,13 @@
 import api from '../lib/api';
 import { Inventario, InventarioMapItem, InventarioStats, PaginatedResponse, ApiResponse } from '../types';
 
+export interface BulkCreateResult {
+  insertados: number;
+  duplicados: number;
+  errores: { fila: number; campo: string; mensaje: string }[];
+  total: number;
+}
+
 export interface InventariosParams {
   page?: number;
   limit?: number;
@@ -59,8 +66,13 @@ export const inventariosService = {
     return response.data.data;
   },
 
-  async getStats(): Promise<InventarioStats> {
-    const response = await api.get<ApiResponse<InventarioStats>>('/inventarios/stats');
+  async getStats(params?: {
+    search?: string;
+    tipo?: string;
+    estatus?: string;
+    plaza?: string;
+  }): Promise<InventarioStats> {
+    const response = await api.get<ApiResponse<InventarioStats>>('/inventarios/stats', { params });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener estadisticas');
     }
@@ -217,6 +229,42 @@ export const inventariosService = {
     }>>('/inventarios/espacios/poblar');
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al poblar espacios');
+    }
+    return response.data.data;
+  },
+
+  // Bulk create inventarios from CSV
+  async bulkCreate(inventarios: Record<string, unknown>[]): Promise<BulkCreateResult> {
+    const response = await api.post<ApiResponse<BulkCreateResult>>('/inventarios/bulk', { inventarios });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear inventarios masivamente');
+    }
+    return response.data.data;
+  },
+
+  // Create inventario
+  async create(data: Record<string, unknown>): Promise<Inventario> {
+    const response = await api.post<ApiResponse<Inventario>>('/inventarios', data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear inventario');
+    }
+    return response.data.data;
+  },
+
+  // Update inventario
+  async update(id: number, data: Record<string, unknown>): Promise<Inventario> {
+    const response = await api.put<ApiResponse<Inventario>>(`/inventarios/${id}`, data);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar inventario');
+    }
+    return response.data.data;
+  },
+
+  // Toggle block/unblock
+  async toggleBlock(id: number): Promise<Inventario> {
+    const response = await api.patch<ApiResponse<Inventario>>(`/inventarios/${id}/toggle-block`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al bloquear/desbloquear inventario');
     }
     return response.data.data;
   },

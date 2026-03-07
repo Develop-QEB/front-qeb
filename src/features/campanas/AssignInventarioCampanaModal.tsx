@@ -17,6 +17,7 @@ import { useSocketEquipos, useSocketCampana } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
 import { usePermissions } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
+import { useThemeStore } from '../../store/themeStore';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
@@ -130,12 +131,11 @@ const getFormatoFromArticulo = (itemName: string): string => {
 };
 
 // Tipo auto-detection from article name
-const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' | '' => {
-  if (!itemName) return '';
+const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
+  if (!itemName) return 'Tradicional';
   const name = itemName.toUpperCase();
   if (name.includes('DIGITAL') || name.includes('DIG')) return 'Digital';
-  if (name.includes('TRADICIONAL') || name.includes('RENTA')) return 'Tradicional';
-  return '';
+  return 'Tradicional';
 };
 
 // Get tarifa from ItemCode
@@ -145,17 +145,30 @@ const getTarifaFromItemCode = (itemCode: string): number => {
   return TARIFA_PUBLICA_MAP[code] || 850;
 };
 
+// Multi-city auto-fill rules for specific article patterns
+const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = [
+  { pattern: /\bMTY\b|\bMONTERREY\b|\bMY\b/, estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
+  { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
+  { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
+  { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
+];
+
 // Extract city/state from article name (sorted by length to avoid false positives)
 const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
+  // Check multi-city rules first
+  for (const rule of MULTI_CITY_RULES) {
+    if (rule.pattern.test(name)) {
+      return { estado: rule.estado, ciudad: rule.ciudad };
+    }
+  }
+
   // Sort cities by length (longest first) to match more specific names before generic ones
-  // This prevents "MEXICO" from matching before "CIUDAD DE MEXICO"
   const sortedCities = Object.entries(CIUDAD_ESTADO_MAP).sort((a, b) => b[0].length - a[0].length);
 
   for (const [ciudad, estado] of sortedCities) {
-    // Use word boundary check - city must be preceded and followed by non-letter chars
     const regex = new RegExp(`(^|[^A-Z])${ciudad.replace(/\s+/g, '\\s+')}([^A-Z]|$)`, 'i');
     if (regex.test(name)) {
       return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
@@ -205,7 +218,7 @@ const FILTER_FIELDS_RESERVAS: FilterFieldConfig[] = [
   { field: 'tipo', label: 'Tipo', type: 'string' },
   { field: 'plaza', label: 'Plaza', type: 'string' },
   { field: 'formato', label: 'Formato', type: 'string' },
-  { field: 'catorcena', label: 'Catorcena', type: 'number' },
+  { field: 'catorcena', label: 'Periodo', type: 'number' },
   { field: 'anio', label: 'Año', type: 'number' },
 ];
 
@@ -229,7 +242,7 @@ interface GroupConfigReservas {
 }
 
 const AVAILABLE_GROUPINGS_RESERVAS: GroupConfigReservas[] = [
-  { field: 'catorcena', label: 'Catorcena' },
+  { field: 'catorcena', label: 'Periodo' },
   { field: 'grupo', label: 'Grupo Completo' },
   { field: 'articulo', label: 'Artículo' },
   { field: 'plaza', label: 'Plaza' },
@@ -290,6 +303,7 @@ interface MultiSelectProps {
 }
 
 function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Seleccionar...' }: MultiSelectProps) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -316,19 +330,19 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Selec
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex items-center justify-between"
+        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex items-center justify-between`}
       >
-        <span className={selected.length === 0 ? 'text-zinc-500' : ''}>
+        <span className={selected.length === 0 ? (isDark ? 'text-zinc-500' : 'text-gray-400') : ''}>
           {selected.length === 0 ? placeholder : selected.length === 1 ? selected[0] : `${selected.length} seleccionados`}
         </span>
-        <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'} transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+        <div className={`absolute z-50 mt-1 w-full ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-200'} border rounded-lg shadow-xl max-h-48 overflow-y-auto`}>
           {options.map(option => (
             <label
               key={option}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 cursor-pointer text-sm text-white"
+              className={`flex items-center gap-2 px-3 py-2 ${isDark ? 'hover:bg-zinc-700 text-white' : 'hover:bg-gray-100 text-gray-900'} cursor-pointer text-sm`}
             >
               <input
                 type="checkbox"
@@ -340,7 +354,7 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Selec
             </label>
           ))}
           {options.length === 0 && (
-            <div className="px-3 py-2 text-zinc-500 text-sm">Sin opciones</div>
+            <div className={`px-3 py-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Sin opciones</div>
           )}
         </div>
       )}
@@ -406,6 +420,7 @@ function SearchableSelect({
   renderSelected?: (item: any) => React.ReactNode;
   loading?: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -431,14 +446,14 @@ function SearchableSelect({
         onClick={() => setOpen(!open)}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all ${value
           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600'
+          : isDark ? 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
           }`}
       >
         <span className="truncate text-left flex-1">
           {value && renderSelected ? renderSelected(value) : (displayValue || label)}
         </span>
         {value ? (
-          <X className="h-4 w-4 hover:text-white flex-shrink-0" onClick={(e) => { e.stopPropagation(); onClear(); }} />
+          <X className={`h-4 w-4 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} flex-shrink-0`} onClick={(e) => { e.stopPropagation(); onClear(); }} />
         ) : (
           <ChevronDown className="h-4 w-4 flex-shrink-0" />
         )}
@@ -447,16 +462,16 @@ function SearchableSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-2 border-b border-zinc-800">
+          <div className={`absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                 <input
                   type="text"
                   placeholder={`Buscar ${label.toLowerCase()}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  className={`w-full pl-9 pr-3 py-2 text-sm ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   autoFocus
                   onClick={(e) => e.stopPropagation()}
                 />
@@ -464,9 +479,9 @@ function SearchableSelect({
             </div>
             <div className="max-h-72 overflow-auto">
               {loading ? (
-                <div className="px-3 py-4 text-center text-zinc-500 text-sm">Cargando...</div>
+                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</div>
               ) : filteredOptions.length === 0 ? (
-                <div className="px-3 py-4 text-center text-zinc-500 text-sm">
+                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                   {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
                 </div>
               ) : (
@@ -475,9 +490,9 @@ function SearchableSelect({
                     key={`${option[valueKey]}-${idx}`}
                     type="button"
                     onClick={() => { onChange(option); handleClose(); }}
-                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b border-zinc-800/50 last:border-0 ${value && value[valueKey] === option[valueKey]
+                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} last:border-0 ${value && value[valueKey] === option[valueKey]
                       ? 'bg-purple-500/20 text-purple-300'
-                      : 'text-zinc-300 hover:bg-zinc-800'
+                      : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'
                       }`}
                   >
                     {renderOption ? renderOption(option) : (
@@ -487,7 +502,7 @@ function SearchableSelect({
                 ))
               )}
             </div>
-            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
+            <div className={`px-3 py-1.5 border-t ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'} text-[10px]`}>
               Mostrando {filteredOptions.length} de {options.length} opciones
             </div>
           </div>
@@ -499,10 +514,14 @@ function SearchableSelect({
 
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
+const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const permissions = usePermissions(user?.rol);
+  const tipoPeriodo = (campana as any)?.tipo_periodo || 'catorcena';
 
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
@@ -574,6 +593,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [reservadosSearchTerm, setReservadosSearchTerm] = useState('');
   const [editingReserva, setEditingReserva] = useState<ReservaItem | null>(null);
   const [editingFormato, setEditingFormato] = useState('');
+  const [editingPlaza, setEditingPlaza] = useState('');
   const [reservadosTipoFilter, setReservadosTipoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo' | 'Bonificacion'>('Todos');
   const [reservadosSortColumn, setReservadosSortColumn] = useState<'codigo' | 'tipo' | 'formato' | 'ciudad'>('ciudad');
   // Reservas summary states - Advanced Filter System
@@ -1254,20 +1274,34 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const carasGroupedByCatorcena = useMemo(() => {
     const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
     caras.forEach(cara => {
-      const periodo = cara.inicio_periodo || 'Sin periodo';
+      let periodo = cara.inicio_periodo || 'Sin periodo';
+      let parsedMonth: number | undefined;
+      let parsedYear: number | undefined;
+      if (tipoPeriodo === 'mensual' && cara.inicio_periodo) {
+        // Parse date string directly to avoid timezone shifts with new Date()
+        const parts = cara.inicio_periodo.split('-');
+        if (parts.length >= 2) {
+          parsedYear = parseInt(parts[0]);
+          parsedMonth = parseInt(parts[1]);
+          periodo = `${parsedYear}-${String(parsedMonth).padStart(2, '0')}-01`;
+        }
+      }
       if (!groups[periodo]) {
-        // Try to find catorcena number from catorcenasData
-        const catorcenaInfo = catorcenasData?.data?.find(c => c.fecha_inicio === periodo);
-        groups[periodo] = {
-          caras: [],
-          catorcenaNum: catorcenaInfo?.numero_catorcena,
-          year: catorcenaInfo?.a_o
-        };
+        if (tipoPeriodo === 'mensual' && parsedMonth !== undefined && parsedYear !== undefined) {
+          groups[periodo] = { caras: [], catorcenaNum: parsedMonth, year: parsedYear };
+        } else if (tipoPeriodo === 'mensual') {
+          // Fallback: parse from periodo key directly
+          const parts = periodo.split('-');
+          groups[periodo] = { caras: [], catorcenaNum: parseInt(parts[1]) || undefined, year: parseInt(parts[0]) || undefined };
+        } else {
+          const catorcenaInfo = catorcenasData?.data?.find(c => c.fecha_inicio === periodo);
+          groups[periodo] = { caras: [], catorcenaNum: catorcenaInfo?.numero_catorcena, year: catorcenaInfo?.a_o };
+        }
       }
       groups[periodo].caras.push(cara);
     });
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [caras, catorcenasData]);
+  }, [caras, catorcenasData, tipoPeriodo]);
 
   // Years options (filtered like EditSolicitudModal)
   const yearInicioOptions = useMemo(() => {
@@ -2455,7 +2489,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const hierarchy: Level0 = {};
 
     filteredReservados.forEach(r => {
-      const catorcenaKey = `Cat ${r.catorcena}/${r.anio}`;
+      const catorcenaKey = tipoPeriodo === 'mensual' && r.catorcena >= 1 && r.catorcena <= 12
+        ? `${MESES_LABEL[r.catorcena - 1]} ${r.anio}`
+        : `Cat ${r.catorcena} / ${r.anio}`;
       const articuloKey = r.articulo || 'Sin Artículo';
       const plazaKey = r.plaza || 'Sin Plaza';
       const formatoKey = r.formato || 'Sin Formato';
@@ -2469,7 +2505,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
 
     return hierarchy;
-  }, [filteredReservados]);
+  }, [filteredReservados, tipoPeriodo]);
 
   // Helper to get type breakdown for reservados tab
   const getReservadosBreakdown = (items: ReservaItem[]) => {
@@ -2627,24 +2663,27 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const handleEditReserva = (reserva: ReservaItem) => {
     setEditingReserva(reserva);
     setEditingFormato(reserva.formato || '');
+    setEditingPlaza(reserva.plaza || '');
   };
 
-  // Save edited formato
+  // Save edited formato and plaza
   const handleSaveFormato = () => {
     if (!editingReserva) return;
     setReservas(prev => prev.map(r =>
       r.id === editingReserva.id
-        ? { ...r, formato: editingFormato }
+        ? { ...r, formato: editingFormato, plaza: editingPlaza }
         : r
     ));
     setEditingReserva(null);
     setEditingFormato('');
+    setEditingPlaza('');
   };
 
   // Cancel edit
   const handleCancelEdit = () => {
     setEditingReserva(null);
     setEditingFormato('');
+    setEditingPlaza('');
   };
 
   if (!isOpen || !campana) return null;
@@ -3625,8 +3664,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         </span>
                       </div>
                       <div>
-                        <label className="block text-xs text-zinc-500 mb-1">Plaza</label>
-                        <p className="text-sm text-zinc-300">{editingReserva.plaza || '-'}</p>
+                        <label className="block text-xs text-zinc-500 mb-1.5">Plaza</label>
+                        <input
+                          type="text"
+                          value={editingPlaza}
+                          onChange={(e) => setEditingPlaza(e.target.value)}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          placeholder="Ej: CDMX, GDL, MTY..."
+                        />
                       </div>
                       <div>
                         <label className="block text-xs text-zinc-500 mb-1">Ubicación</label>
@@ -3910,62 +3955,85 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </div>
 
                   {/* Period - Same style as EditSolicitudModal */}
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Año Inicio</label>
-                      <select
-                        value={yearInicio || ''}
-                        onChange={(e) => { setYearInicio(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaInicio(undefined); }}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {yearInicioOptions.map(y => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
+                  {tipoPeriodo === 'mensual' ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Fecha Inicio</label>
+                        <input
+                          type="date"
+                          value={campana.fecha_inicio || ''}
+                          readOnly
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none cursor-default opacity-80"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Fecha Fin</label>
+                        <input
+                          type="date"
+                          value={campana.fecha_fin || ''}
+                          readOnly
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none cursor-default opacity-80"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Cat. Inicio</label>
-                      <select
-                        value={catorcenaInicio || ''}
-                        onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                        disabled={!yearInicio}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {catorcenasInicioOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
-                        ))}
-                      </select>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Año Inicio</label>
+                        <select
+                          value={yearInicio || ''}
+                          onChange={(e) => { setYearInicio(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaInicio(undefined); }}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearInicioOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Cat. Inicio</label>
+                        <select
+                          value={catorcenaInicio || ''}
+                          onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearInicio}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {catorcenasInicioOptions.map(c => (
+                            <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Año Fin</label>
+                        <select
+                          value={yearFin || ''}
+                          onChange={(e) => { setYearFin(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaFin(undefined); }}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {yearFinOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Cat. Fin</label>
+                        <select
+                          value={catorcenaFin || ''}
+                          onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                          disabled={!yearFin}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
+                        >
+                          <option value="">Seleccionar</option>
+                          {catorcenasFinOptions.map(c => (
+                            <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Año Fin</label>
-                      <select
-                        value={yearFin || ''}
-                        onChange={(e) => { setYearFin(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaFin(undefined); }}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {yearFinOptions.map(y => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Cat. Fin</label>
-                      <select
-                        value={catorcenaFin || ''}
-                        onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                        disabled={!yearFin}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                      >
-                        <option value="">Seleccionar</option>
-                        {catorcenasFinOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Notes and Description */}
                   <div className="grid grid-cols-2 gap-4">
@@ -4177,12 +4245,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       />
                     </div>
 
-                    {/* Catorcena - solo una, filtrada por rango de campana */}
+                    {/* Periodo - catorcena o mes, filtrada por rango de campana */}
                     <div className="mb-4">
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">
-                          Catorcena
-                          {campana.catorcena_inicio_num && campana.catorcena_inicio_anio && campana.catorcena_fin_num && campana.catorcena_fin_anio && (
+                          Periodo
+                          {tipoPeriodo !== 'mensual' && campana.catorcena_inicio_num && campana.catorcena_inicio_anio && campana.catorcena_fin_num && campana.catorcena_fin_anio && (
                             <span className="text-zinc-600 ml-1">
                               (Rango: {campana.catorcena_inicio_num}/{campana.catorcena_inicio_anio} - {campana.catorcena_fin_num}/{campana.catorcena_fin_anio})
                             </span>
@@ -4193,16 +4261,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           onChange={(e) => {
                             if (e.target.value) {
                               const [year, cat] = e.target.value.split('-').map(Number);
-                              const period = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
-                              setNewCara({
-                                ...newCara,
-                                catorcena_inicio: cat,
-                                anio_inicio: year,
-                                catorcena_fin: cat,
-                                anio_fin: year,
-                                inicio_periodo: period?.fecha_inicio || '',
-                                fin_periodo: period?.fecha_fin || ''
-                              });
+                              if (tipoPeriodo === 'mensual') {
+                                const fechaIni = new Date(year, cat - 1, 1);
+                                const fechaFin = new Date(year, cat, 0);
+                                setNewCara({
+                                  ...newCara,
+                                  catorcena_inicio: cat,
+                                  anio_inicio: year,
+                                  catorcena_fin: cat,
+                                  anio_fin: year,
+                                  inicio_periodo: fechaIni.toISOString().split('T')[0],
+                                  fin_periodo: fechaFin.toISOString().split('T')[0]
+                                });
+                              } else {
+                                const period = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
+                                setNewCara({
+                                  ...newCara,
+                                  catorcena_inicio: cat,
+                                  anio_inicio: year,
+                                  catorcena_fin: cat,
+                                  anio_fin: year,
+                                  inicio_periodo: period?.fecha_inicio || '',
+                                  fin_periodo: period?.fecha_fin || ''
+                                });
+                              }
                             } else {
                               setNewCara({
                                 ...newCara,
@@ -4217,23 +4299,43 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           }}
                           className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
                         >
-                          <option value="">Seleccionar catorcena</option>
-                          {catorcenasData?.data
-                            .filter(c => {
-                              // Filtrar solo catorcenas dentro del rango de la campana
-                              if (!campana.catorcena_inicio_num || !campana.catorcena_inicio_anio || !campana.catorcena_fin_num || !campana.catorcena_fin_anio) {
-                                return true; // Si no hay rango, mostrar todas
+                          <option value="">{tipoPeriodo === 'mensual' ? 'Seleccionar mes' : 'Seleccionar catorcena'}</option>
+                          {tipoPeriodo === 'mensual' ? (
+                            (() => {
+                              const options: { year: number; month: number }[] = [];
+                              if (campana.fecha_inicio && campana.fecha_fin) {
+                                const start = new Date(campana.fecha_inicio);
+                                const end = new Date(campana.fecha_fin);
+                                let y = start.getFullYear(), m = start.getMonth() + 1;
+                                const endY = end.getFullYear(), endM = end.getMonth() + 1;
+                                while (y < endY || (y === endY && m <= endM)) {
+                                  options.push({ year: y, month: m });
+                                  m++;
+                                  if (m > 12) { m = 1; y++; }
+                                }
                               }
-                              const catValue = c.a_o * 100 + c.numero_catorcena;
-                              const minValue = campana.catorcena_inicio_anio * 100 + campana.catorcena_inicio_num;
-                              const maxValue = campana.catorcena_fin_anio * 100 + campana.catorcena_fin_num;
-                              return catValue >= minValue && catValue <= maxValue;
-                            })
-                            .map(c => (
-                              <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
-                                Catorcena {c.numero_catorcena} / {c.a_o}
-                              </option>
-                            ))}
+                              return options.map(o => (
+                                <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>
+                                  {MESES_LABEL[o.month - 1]} {o.year}
+                                </option>
+                              ));
+                            })()
+                          ) : (
+                            catorcenasData?.data
+                              .filter(c => {
+                                if (!campana.catorcena_inicio_num || !campana.catorcena_inicio_anio || !campana.catorcena_fin_num || !campana.catorcena_fin_anio) {
+                                  return true;
+                                }
+                                const catValue = c.a_o * 100 + c.numero_catorcena;
+                                const minValue = campana.catorcena_inicio_anio * 100 + campana.catorcena_inicio_num;
+                                const maxValue = campana.catorcena_fin_anio * 100 + campana.catorcena_fin_num;
+                                return catValue >= minValue && catValue <= maxValue;
+                              })
+                              .map(c => (
+                                <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
+                                  Cat {c.numero_catorcena} / {c.a_o}
+                                </option>
+                            )))}
                         </select>
                       </div>
                     </div>
@@ -4367,9 +4469,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   ) : (
                     carasGroupedByCatorcena.map(([periodo, groupData]) => {
                       const isCatorcenaExpanded = expandedCatorcenas.has(periodo);
-                      const catorcenaLabel = groupData.catorcenaNum
-                        ? `Catorcena #${groupData.catorcenaNum}${groupData.year ? ` - ${groupData.year}` : ''}`
-                        : `Periodo: ${new Date(periodo).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}`;
+                      const catorcenaLabel = tipoPeriodo === 'mensual' && groupData.catorcenaNum
+                        ? `${MESES_LABEL[groupData.catorcenaNum - 1]} ${groupData.year || ''}`
+                        : groupData.catorcenaNum
+                        ? `Cat ${groupData.catorcenaNum} / ${groupData.year || ''}`
+                        : (() => {
+                            // Parse date string directly to avoid timezone issues
+                            const parts = periodo.split('-');
+                            if (parts.length >= 2) {
+                              const m = parseInt(parts[1]);
+                              return `${MESES_LABEL[m - 1] || periodo} ${parts[0]}`;
+                            }
+                            return `Periodo: ${periodo}`;
+                          })();
 
                       return (
                         <div key={periodo}>
@@ -4554,7 +4666,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 // Helper to get group key based on field
                 const getFieldValue = (r: ReservaItem, field: GroupByFieldReservas): string => {
                   switch (field) {
-                    case 'catorcena': return `Cat ${r.catorcena}/${r.anio}`;
+                    case 'catorcena': return tipoPeriodo === 'mensual' && r.catorcena >= 1 && r.catorcena <= 12 ? `${MESES_LABEL[r.catorcena - 1]} ${r.anio}` : `Cat ${r.catorcena} / ${r.anio}`;
                     case 'tipo': return r.tipo;
                     case 'plaza': return r.plaza || 'Sin Plaza';
                     case 'formato': return r.formato || 'Sin Formato';
