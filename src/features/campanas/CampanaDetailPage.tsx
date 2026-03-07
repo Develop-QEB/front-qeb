@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, HistorialItem } from '../../services/campanas.service';
+import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, isMigratedCampaign, HistorialItem } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import { Badge } from '../../components/ui/badge';
@@ -3353,42 +3353,68 @@ export function CampanaDetailPage() {
                   </div>
                   {previewDeliveryNote && (
                     <div className="bg-purple-900/20 rounded-lg p-3 space-y-2 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Campaña:</span>
-                        <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Camp}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">CardCode:</span>
-                        <span className="text-zinc-300">{previewDeliveryNote.CardCode}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Razón Social:</span>
-                        <span className="text-zinc-300 text-right max-w-[200px]">{previewDeliveryNote.U_CRM_R_S || '-'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Marca:</span>
-                        <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Marca || '-'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Series:</span>
-                        <span className="text-zinc-300">{previewDeliveryNote.Series}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">APS:</span>
-                        <span className="text-zinc-300">{previewDeliveryNote.U_IMU_ART_APS}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Asesor:</span>
-                        <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Asesor || '-'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Agencia:</span>
-                        <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Agencia || '-'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Base SAP:</span>
-                        <span className="text-zinc-300">{campana?.sap_database || 'TEST'}</span>
-                      </div>
+                      {campana && isMigratedCampaign(campana) ? (
+                        <>
+                          <div className="bg-cyan-500/10 border border-cyan-500/30 rounded px-2 py-1 mb-1">
+                            <span className="text-cyan-300 text-[10px] font-medium">POST IMU (Migración INVIAN)</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Campaña:</span>
+                            <span className="text-zinc-300">{campana.nombre}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">BaseType:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.BaseType}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">BaseDocNum (APS):</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.BaseDocNum}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Base SAP:</span>
+                            <span className="text-zinc-300">{campana.sap_database || 'TEST'}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Campaña:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Camp}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">CardCode:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.CardCode}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Razón Social:</span>
+                            <span className="text-zinc-300 text-right max-w-[200px]">{previewDeliveryNote.U_CRM_R_S || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Marca:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Marca || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Series:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.Series}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">APS:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.U_IMU_ART_APS}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Asesor:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Asesor || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Agencia:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Agencia || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Base SAP:</span>
+                            <span className="text-zinc-300">{campana?.sap_database || 'TEST'}</span>
+                          </div>
+                        </>
+                      )}
                       <hr className="border-purple-800/40" />
                       <p className="text-zinc-500 font-medium">Líneas ({previewDeliveryNote.DocumentLines.length}):</p>
                       {previewDeliveryNote.DocumentLines.map((line: any, i: number) => (
