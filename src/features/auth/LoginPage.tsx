@@ -164,22 +164,7 @@ export function LoginPage() {
               )}
             </Button>
 
-            {/* Link to register */}
-            <div className="text-center pt-2">
-              <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                ¿No estás registrado?{' '}
-                <Link
-                  to="/register"
-                  className={`transition-colors ${
-                    isDark
-                      ? 'text-purple-300 hover:text-purple-200'
-                      : 'text-purple-600 hover:text-purple-500'
-                  }`}
-                >
-                  Regístrate aquí
-                </Link>
-              </p>
-            </div>
+            {/* Link to register - oculto temporalmente */}
           </form>
         </div>
 
