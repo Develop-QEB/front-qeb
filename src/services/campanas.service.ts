@@ -50,6 +50,12 @@ export interface SAPDeliveryNote {
   DocumentLines: SAPDocumentLine[];
 }
 
+export interface SAPDeliveryNoteMigrated {
+  BaseType: number;
+  BaseDocNum: string;
+  DocumentLines: SAPDocumentLine[];
+}
+
 export interface SAPPostResponse {
   success: boolean;
   data?: {
@@ -339,12 +345,17 @@ export interface ComentarioRevisionArte {
   fecha: string;
 }
 
+// Detectar si es campaña migrada desde INVIAN
+export function isMigratedCampaign(campana: CampanaWithComments): boolean {
+  return campana.comentario_cambio_status === 'Migrado desde INVIAN';
+}
+
 // Función para construir el payload de DeliveryNote para SAP
 export function buildDeliveryNote(
   campana: CampanaWithComments,
   inventarioAPS: InventarioConAPS[],
   sapDatabase?: string | null
-): SAPDeliveryNote {
+): SAPDeliveryNote | SAPDeliveryNoteMigrated {
   // Obtener valores únicos de APS
   const uniqueAPS = [...new Set(inventarioAPS.map(item => item.aps))];
 
@@ -381,7 +392,16 @@ export function buildDeliveryNote(
     };
   });
 
-  // Construir el objeto DeliveryNote completo
+  // Si es campaña migrada desde INVIAN, JSON simplificado
+  if (isMigratedCampaign(campana)) {
+    return {
+      BaseType: 17,
+      BaseDocNum: campana.id?.toString() || '',
+      DocumentLines: documentLines,
+    };
+  }
+
+  // Construir el objeto DeliveryNote completo (campañas QEB)
   const series = sapDatabase ? getSeriesForSapDatabase(sapDatabase as SapDatabase) : 162;
   const deliveryNote: SAPDeliveryNote = {
     Series: series,
@@ -410,7 +430,7 @@ export function buildDeliveryNote(
 }
 
 // Función para hacer POST a SAP
-export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote, sapDatabase?: string | null): Promise<SAPPostResponse> {
+export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote | SAPDeliveryNoteMigrated, sapDatabase?: string | null): Promise<SAPPostResponse> {
   try {
     const endpoint = sapDatabase
       ? getDeliveryNotesEndpoint(sapDatabase as SapDatabase)

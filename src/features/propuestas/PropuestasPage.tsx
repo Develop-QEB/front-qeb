@@ -1333,7 +1333,18 @@ export function PropuestasPage() {
           <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm truncate max-w-[250px] block`} title={item.campana_nombre || item.nombre_campania || '-'}>{item.campana_nombre || item.nombre_campania || '-'}</span>
         </td>
         <td className="px-4 py-3">
-          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{item.asignado || 'Sin asignar'}</span>
+          {item.asignado ? (() => {
+            const names = item.asignado.split(',').map((n: string) => n.trim()).filter(Boolean);
+            const preview = names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '');
+            return (
+              <span
+                className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs cursor-default`}
+                title={names.join(', ')}
+              >
+                {preview}
+              </span>
+            );
+          })() : <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Sin asignar</span>}
         </td>
         <td className="px-4 py-3">
           <span className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{formatCurrency(item.inversion)}</span>
