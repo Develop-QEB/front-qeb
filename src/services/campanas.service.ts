@@ -1064,6 +1064,8 @@ export interface ReservaModalItem {
   grupo_completo_id: number | null;
   solicitud_cara_id: number;
   aps: number | null;
+  isla?: string | null;
+  articulo?: string;
 }
 
 export interface CaraUpdateData {
