@@ -1163,8 +1163,8 @@ export function PropuestasPage() {
         p.descripcion?.toLowerCase().includes(searchLower) ||
         p.asignado?.toLowerCase().includes(searchLower) ||
         p.cliente_nombre?.toLowerCase().includes(searchLower) ||
-        p.razon_social?.toLowerCase().includes(searchLower) ||
-        p.marca?.toLowerCase().includes(searchLower)
+        p.nombre_comercial?.toLowerCase().includes(searchLower) ||
+        p.marca_nombre?.toLowerCase().includes(searchLower)
       );
     }
 
