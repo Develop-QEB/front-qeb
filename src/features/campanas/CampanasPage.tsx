@@ -1042,6 +1042,11 @@ export function CampanasPage() {
       subgroups?: { name: string; campanas: Campana[] }[];
     }> = {};
 
+    // Build sorted catorcena list for range expansion
+    const catorcenasList = (catorcenasData?.data || [])
+      .map(c => ({ num: c.numero_catorcena, anio: c.a_o }))
+      .sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.num - b.num);
+
     filteredData.forEach(item => {
       const isMensual = (item as any).tipo_periodo === 'mensual';
       if (isMensual && item.fecha_inicio) {
@@ -1058,17 +1063,32 @@ export function CampanasPage() {
         }
         groups[key].campanas.push(item);
       } else if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
-        // Esta vista es "por periodo de inicio": cada campaña debe aparecer solo una vez.
-        const num = item.catorcena_inicio_num;
-        const anio = item.catorcena_inicio_anio;
-        const key = `${anio}-${String(num).padStart(2, '0')}`;
-        if (!groups[key]) {
-          groups[key] = {
-            catorcena: { num, anio },
-            campanas: []
-          };
+        // Expandir campaña a TODAS las catorcenas que abarca (de inicio a fin)
+        const startNum = item.catorcena_inicio_num;
+        const startAnio = item.catorcena_inicio_anio;
+        const endNum = item.catorcena_fin_num || startNum;
+        const endAnio = item.catorcena_fin_anio || startAnio;
+
+        const startIdx = catorcenasList.findIndex(c => c.num === startNum && c.anio === startAnio);
+        const endIdx = catorcenasList.findIndex(c => c.num === endNum && c.anio === endAnio);
+
+        if (startIdx >= 0 && endIdx >= 0) {
+          for (let i = startIdx; i <= endIdx; i++) {
+            const { num, anio } = catorcenasList[i];
+            const key = `${anio}-${String(num).padStart(2, '0')}`;
+            if (!groups[key]) {
+              groups[key] = { catorcena: { num, anio }, campanas: [] };
+            }
+            groups[key].campanas.push(item);
+          }
+        } else {
+          // Fallback: solo catorcena de inicio
+          const key = `${startAnio}-${String(startNum).padStart(2, '0')}`;
+          if (!groups[key]) {
+            groups[key] = { catorcena: { num: startNum, anio: startAnio }, campanas: [] };
+          }
+          groups[key].campanas.push(item);
         }
-        groups[key].campanas.push(item);
       }
     });
 
@@ -1096,7 +1116,7 @@ export function CampanasPage() {
         }
         return { key, ...value };
       });
-  }, [filteredData, activeGroupings]);
+  }, [filteredData, activeGroupings, catorcenasData]);
 
   // Estadísticas para gráfica de Status — from global stats
   const statusChartData = useMemo(() => {
@@ -2162,7 +2182,14 @@ export function CampanasPage() {
                     const PERIOD_COLORS_LOCAL = getPeriodColors(isDark);
                     const periodColor = PERIOD_COLORS_LOCAL[periodStatus] || getDefaultStatusColor(isDark);
                     const isExpanded = expandedCampanas.has(campana.id);
-                    const inventarios = campanaInventarios[campana.id] || [];
+                    const allInventarios = campanaInventarios[campana.id] || [];
+                    // Filtrar inventarios por la catorcena del grupo actual
+                    const inventarios = allInventarios.filter(inv => {
+                      const invCat = (inv as any).numero_catorcena;
+                      const invAnio = (inv as any).anio_catorcena;
+                      if (invCat == null || invAnio == null) return true;
+                      return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
+                    });
                     const isLoadingInv = loadingInventarios.has(campana.id);
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
 
