@@ -2235,11 +2235,11 @@ export function CampanasPage() {
                           )}
                           {/* Resumen de campaña: circuitos (grupos), bonificación, inversión */}
                           {(() => {
-                            // Priorizar el campo de campana para mantener valor estable aun con grupo cerrado.
-                            const circuitosCampana = Number((campana as any).circuitos ?? (campana as any).circuito ?? 0) || 0;
-                            // Fallback: contar grupos reales renderizados (APS + Sin APS).
+                            // Contar circuitos desde inventarios filtrados por catorcena
                             const circuitosDesdeGrupos = apsAgrupados.reduce((sum, apsGroup) => sum + apsGroup.grupos.length, 0);
-                            const circuitosCount = circuitosCampana > 0 ? circuitosCampana : circuitosDesdeGrupos;
+                            // Fallback al campo de campaña solo si no hay inventarios cargados
+                            const circuitosCampana = Number((campana as any).circuitos ?? (campana as any).circuito ?? 0) || 0;
+                            const circuitosCount = circuitosDesdeGrupos > 0 ? circuitosDesdeGrupos : circuitosCampana;
                             return (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`} title="Circuitos (grupos)">
                                 <Layers className="h-3 w-3" /> Circuitos {circuitosCount}
@@ -2251,14 +2251,31 @@ export function CampanasPage() {
                               <Gift className="h-3 w-3" /> {campana.bonificacion}
                             </span>
                           )}
-                          {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0) > 0 && (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
-                              <MapPin className="h-3 w-3" /> {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0)}
-                            </span>
-                          )}
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
-                            <DollarSign className="h-3 w-3" /> {campana.inversion != null && Number(campana.inversion) > 0 ? `$${Number(campana.inversion).toLocaleString()}` : 'Sin inversión'}
-                          </span>
+                          {(() => {
+                            const carasCatorcena = inventarios.length > 0 ? inventarios.length : (Number(campana.total_caras) || 0);
+                            const bonifCatorcena = inventarios.length > 0
+                              ? inventarios.filter(i => Number((i as any).tarifa_publica_sc) === 0 || Number((i as any).bonificacion_sc) > 0).length
+                              : (Number(campana.bonificacion) || 0);
+                            const carasNetas = Math.max(carasCatorcena - bonifCatorcena, 0);
+                            return carasNetas > 0 ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
+                                <MapPin className="h-3 w-3" /> {carasNetas}
+                              </span>
+                            ) : null;
+                          })()}
+                          {(() => {
+                            // Calcular inversión desde inventarios filtrados por catorcena
+                            const invCatorcena = inventarios.reduce((sum, inv) => {
+                              const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
+                              return sum + tarifa;
+                            }, 0);
+                            const inversionMostrar = invCatorcena > 0 ? invCatorcena : (Number(campana.inversion) || 0);
+                            return (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
+                                <DollarSign className="h-3 w-3" /> {inversionMostrar > 0 ? `$${inversionMostrar.toLocaleString()}` : 'Sin inversión'}
+                              </span>
+                            );
+                          })()}
                           <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => handleOpenCampana(campana.id)}
@@ -2565,7 +2582,20 @@ export function CampanasPage() {
                       )}
                       {/* Inversión total de la catorcena */}
                       {(() => {
-                        const totalInversion = campanas.reduce((s, c) => s + (Number(c.inversion) || 0), 0);
+                        // Sumar inversión solo de inventarios que pertenecen a esta catorcena
+                        const totalInversion = campanas.reduce((s, c) => {
+                          const allInv = campanaInventarios[c.id] || [];
+                          const invFiltrados = allInv.filter(inv => {
+                            const invCat = (inv as any).numero_catorcena;
+                            const invAnio = (inv as any).anio_catorcena;
+                            if (invCat == null || invAnio == null) return true;
+                            return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
+                          });
+                          return s + invFiltrados.reduce((sum, inv) => {
+                            const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
+                            return sum + tarifa;
+                          }, 0);
+                        }, 0);
                         return totalInversion > 0 ? (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión total">
                             <DollarSign className="h-3 w-3" /> {'$'}{totalInversion.toLocaleString()}

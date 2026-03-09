@@ -11377,7 +11377,7 @@ export function TareaSeguimientoPage() {
     }
 
     return {
-      id: item.id.toString(),
+      id: item.grupo ? `${item.id}_${item.grupo}` : item.id.toString(),
       rsv_id: item.rsv_id || item.rsv_ids || item.rsvId || '',
       codigo_unico: item.codigo_unico_display || item.codigo_unico || '',
       tipo_de_cara: item.tipo_de_cara_display || item.tipo_de_cara || '',
