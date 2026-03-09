@@ -4790,19 +4790,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <div className="space-y-1">
                       <label className="text-xs text-zinc-500">Razón Social</label>
                       <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30 truncate">
-                        {campanaDetails?.razon_social || '-'}
+                        {(campanaDetails as any)?.razon_social || '-'}
                       </div>
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs text-zinc-500">Marca</label>
                       <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
-                        {campanaDetails?.marca_nombre || '-'}
+                        {(campanaDetails as any)?.marca_nombre || '-'}
                       </div>
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs text-zinc-500">Asesor</label>
                       <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
-                        {campanaDetails?.asesor || '-'}
+                        {(campanaDetails as any)?.asesor || '-'}
                       </div>
                     </div>
                   </div>
@@ -5176,9 +5176,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">
                           Periodo {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
-                          {tipoPeriodo !== 'mensual' && campana!.catorcena_inicio && campana!.anio_inicio && campana!.catorcena_fin && campana!.anio_fin && (
+                          {tipoPeriodo !== 'mensual' && campana!.catorcena_inicio_num && campana!.catorcena_inicio_anio && campana!.catorcena_fin_num && campana!.catorcena_fin_anio && (
                             <span className="text-zinc-600 ml-1">
-                              (Rango: {campana!.catorcena_inicio}/{campana!.anio_inicio} - {campana!.catorcena_fin}/{campana!.anio_fin})
+                              (Rango: {campana!.catorcena_inicio_num}/{campana!.catorcena_inicio_anio} - {campana!.catorcena_fin_num}/{campana!.catorcena_fin_anio})
                             </span>
                           )}
                         </label>
@@ -5252,12 +5252,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           ) : (
                             catorcenasData?.data
                               .filter(c => {
-                                if (!campana!.catorcena_inicio || !campana!.anio_inicio || !campana!.catorcena_fin || !campana!.anio_fin) {
+                                if (!campana!.catorcena_inicio_num || !campana!.catorcena_inicio_anio || !campana!.catorcena_fin_num || !campana!.catorcena_fin_anio) {
                                   return true;
                                 }
                                 const catValue = c.a_o * 100 + c.numero_catorcena;
-                                const minValue = campana!.anio_inicio * 100 + campana!.catorcena_inicio;
-                                const maxValue = campana!.anio_fin * 100 + campana!.catorcena_fin;
+                                const minValue = campana!.catorcena_inicio_anio * 100 + campana!.catorcena_inicio_num;
+                                const maxValue = campana!.catorcena_fin_anio * 100 + campana!.catorcena_fin_num;
                                 return catValue >= minValue && catValue <= maxValue;
                               })
                               .map(c => (
