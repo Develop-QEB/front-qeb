@@ -51,10 +51,13 @@ const getFileUrl = (url: string | undefined | null): string | null => {
 // Helper to check if URL is an image
 const isImageUrl = (url: string | null | undefined): boolean => {
   if (!url) return false;
-  // Data URLs for images
   if (url.startsWith('data:image/')) return true;
-  const ext = url.split(/[?#]/)[0].split('.').pop()?.toLowerCase();
-  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext || '');
+  const lower = url.toLowerCase();
+  const ext = lower.split(/[?#]/)[0].split('.').pop();
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext || '')) return true;
+  // Common image hosting patterns
+  if (lower.includes('googleusercontent.com') || lower.includes('imgur.com') || lower.includes('cloudinary.com')) return true;
+  return false;
 };
 
 // Digital Gallery Modal for Órdenes de Montaje
@@ -2025,8 +2028,10 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
           }
           if (arteUrl && isImageUrl(item.ArteUrl)) {
             return (
-              <button
-                onClick={() => onOpenGallery(item)}
+              <a
+                href={arteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="cursor-pointer"
                 title="Ver imagen"
               >
@@ -2036,18 +2041,20 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
                   className={`w-10 h-[30px] object-cover rounded border ${isDark ? 'border-zinc-700' : 'border-gray-200'} hover:border-purple-400 transition-colors`}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
-              </button>
+              </a>
             );
           }
           if (arteUrl) {
             return (
-              <button
-                onClick={() => onOpenGallery(item)}
+              <a
+                href={arteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
-                title="Ver arte"
+                title="Abrir arte"
               >
                 <Image className="h-3.5 w-3.5" />
-              </button>
+              </a>
             );
           }
           return <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>-</span>;

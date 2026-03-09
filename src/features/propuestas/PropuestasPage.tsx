@@ -565,9 +565,9 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
       const flujoReservado = caraReservas.filter(r => r.tipo_de_cara === 'A' || r.tipo_de_cara === 'Flujo').length;
       const contraflujoReservado = caraReservas.filter(r => r.tipo_de_cara === 'B' || r.tipo_de_cara === 'Contraflujo').length;
       const bonificacionReservado = caraReservas.filter(r => r.tipo_de_cara === 'Bonificacion').length;
-      const flujoRequerido = cara.caras_flujo || 0;
-      const contraflujoRequerido = cara.caras_contraflujo || 0;
-      const bonificacionRequerido = cara.bonificacion || 0;
+      const flujoRequerido = Number(cara.caras_flujo) || 0;
+      const contraflujoRequerido = Number(cara.caras_contraflujo) || 0;
+      const bonificacionRequerido = Number(cara.bonificacion) || 0;
       return flujoReservado !== flujoRequerido || contraflujoReservado !== contraflujoRequerido || bonificacionReservado !== bonificacionRequerido;
     });
   }, [caras, reservas]);
