@@ -326,6 +326,7 @@ export interface Campana {
   salesperson_code?: number | null;
   sap_database?: string | null;
   posted_to_sap?: boolean;
+  posted_aps?: number[];
 }
 
 export interface CampanaStats {

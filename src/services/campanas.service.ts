@@ -561,6 +561,11 @@ export const campanasService = {
     await api.post(`/campanas/${id}/mark-posted-sap`);
   },
 
+  async markPostedAPS(id: number, aps: number[]): Promise<number[]> {
+    const response = await api.post<{ success: boolean; posted_aps: number[] }>(`/campanas/${id}/mark-posted-aps`, { aps });
+    return response.data.posted_aps;
+  },
+
   async getInventarioConAPS(id: number): Promise<InventarioConAPS[]> {
     const response = await api.get<ApiResponse<InventarioConAPS[]>>(`/campanas/${id}/inventario-aps`);
     if (!response.data.success || !response.data.data) {

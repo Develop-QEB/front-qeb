@@ -53,6 +53,7 @@ export const SOCKET_EVENTS = {
   CAMPANA_ELIMINADA: 'campana:eliminada',
   CAMPANA_STATUS_CHANGED: 'campana:status:changed',
   CAMPANA_COMENTARIO_CREADO: 'campana:comentario:creado',
+  CAMPANA_APS_POSTED: 'campana:aps:posted',
 
   // Clientes
   CLIENTE_CREADO: 'cliente:creado',
@@ -235,6 +236,14 @@ export function useSocketCampana(campanaId: number | null) {
       });
     };
 
+    const handleAPSPosted = (data: { campanaId: number; posted_aps: number[] }) => {
+      console.log('[Socket] APS posteados:', data);
+      queryClient.setQueryData(['campana', data.campanaId], (old: any) => {
+        if (!old) return old;
+        return { ...old, posted_aps: data.posted_aps };
+      });
+    };
+
     // Suscribirse a eventos
     socket.on(SOCKET_EVENTS.TAREA_CREADA, handleTareaCreada);
     socket.on(SOCKET_EVENTS.TAREA_ACTUALIZADA, handleTareaActualizada);
@@ -246,6 +255,7 @@ export function useSocketCampana(campanaId: number | null) {
     socket.on(SOCKET_EVENTS.CAMPANA_COMENTARIO_CREADO, handleComentarioCreado);
     socket.on(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobadaCampana);
     socket.on(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazadaCampana);
+    socket.on(SOCKET_EVENTS.CAMPANA_APS_POSTED, handleAPSPosted);
 
     return () => {
       // Limpiar listeners al desmontar
@@ -259,6 +269,7 @@ export function useSocketCampana(campanaId: number | null) {
       socket.off(SOCKET_EVENTS.CAMPANA_COMENTARIO_CREADO, handleComentarioCreado);
       socket.off(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobadaCampana);
       socket.off(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazadaCampana);
+      socket.off(SOCKET_EVENTS.CAMPANA_APS_POSTED, handleAPSPosted);
     };
   }, [campanaId, queryClient]);
 
