@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -1035,17 +1035,18 @@ export function CampanasPage() {
   };
 
   // Auto-cargar inventarios de campañas visibles en vista catorcena
+  const loadingRef = useRef(new Set<number>());
   useEffect(() => {
     if (activeView !== 'catorcena' || !filteredData.length) return;
     const idsToLoad = filteredData
-      .filter(c => !campanaInventarios[c.id] && !loadingInventarios.has(c.id))
+      .filter(c => !campanaInventarios[c.id] && !loadingRef.current.has(c.id))
       .map(c => c.id);
     if (idsToLoad.length === 0) return;
 
-    // Cargar en lotes para no saturar
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 10;
     const batch = idsToLoad.slice(0, BATCH_SIZE);
-    batch.forEach(id => setLoadingInventarios(prev => new Set(prev).add(id)));
+    batch.forEach(id => loadingRef.current.add(id));
+    setLoadingInventarios(new Set(loadingRef.current));
 
     Promise.all(batch.map(async (id) => {
       try {
@@ -1064,13 +1065,10 @@ export function CampanasPage() {
         results.forEach(r => { next[r.id] = r.data; });
         return next;
       });
-      setLoadingInventarios(prev => {
-        const next = new Set(prev);
-        batch.forEach(id => next.delete(id));
-        return next;
-      });
+      batch.forEach(id => loadingRef.current.delete(id));
+      setLoadingInventarios(new Set(loadingRef.current));
     });
-  }, [activeView, filteredData, campanaInventarios, loadingInventarios]);
+  }, [activeView, filteredData, campanaInventarios]);
 
   // Agrupar campañas por catorcena para la vista alternativa (con soporte para subagrupaciones)
   const campanasPorCatorcena = useMemo(() => {
@@ -2302,6 +2300,11 @@ export function CampanasPage() {
                             </span>
                           )}
                           {/* Resumen de campaña: circuitos (grupos), bonificación, inversión */}
+                          {!hasInventarios && isLoadingInv && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/15 text-zinc-400' : 'bg-gray-100 text-gray-400'} border border-zinc-500/25 flex items-center gap-1`}>
+                              <Loader2 className="h-3 w-3 animate-spin" /> Cargando...
+                            </span>
+                          )}
                           {(() => {
                             // Contar circuitos desde inventarios filtrados por catorcena
                             const circuitosDesdeGrupos = apsAgrupados.reduce((sum, apsGroup) => sum + apsGroup.grupos.length, 0);
