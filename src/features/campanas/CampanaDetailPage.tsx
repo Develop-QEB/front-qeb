@@ -1622,7 +1622,11 @@ export function CampanaDetailPage() {
               {/*<InfoItem label="NSE" value={campana.nivel_socioeconomico ? [...new Set(campana.nivel_socioeconomico.split(",").map(s => s.trim()))].join(", ") : null} type="category" isDark={isDark} />*/}
               <InfoItem label="Bonificacion" value={campana.bonificacion} type="default" isDark={isDark} />
               <InfoItem label="Descuento" value={campana.descuento ? `${campana.descuento}%` : null} type="percent" isDark={isDark} />
-              <InfoItem label="Inversion" value={typeof campana.inversion === "string" ? parseFloat(campana.inversion) : campana.inversion} type="amount" isDark={isDark} />
+              <InfoItem label="Inversion" value={(() => {
+                const getTarifa = (i: InventarioReservado) => Number(i.tarifa_publica_sc) || Number(i.tarifa_publica) || 0;
+                const total = [...inventarioReservado, ...inventarioConAPS].reduce((s, i) => s + getTarifa(i) * (Number(i.caras_totales) || 0), 0);
+                return total || (typeof campana.inversion === "string" ? parseFloat(campana.inversion) : campana.inversion);
+              })()} type="amount" isDark={isDark} />
               {/*<InfoItem label="Precio" value={typeof campana.precio === "string" ? parseFloat(campana.precio) : campana.precio} type="amount" /> */}
             </div>
           </div>
