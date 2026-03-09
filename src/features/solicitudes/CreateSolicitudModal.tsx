@@ -990,6 +990,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Guardar borrador en localStorage cuando cambia el estado (solo en modo crear)
   useEffect(() => {
     if (isEditMode) return;
+    if (!isOpen) return; // No guardar cuando el modal está cerrado (evita re-guardar tras submit)
     if (!nombreCampania && !selectedCuic && !caras.length && !descripcion && !notas) {
       // Si el formulario está vacío, limpiar activamente el borrador
       clearDraft();
@@ -1010,7 +1011,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       imu,
       newCara,
     });
-  }, [step, selectedCuic, selectedAsignados, nombreCampania, descripcion, notas, yearInicio, yearFin, catorcenaInicio, catorcenaFin, caras, imu, newCara, isEditMode, saveDraft, clearDraft]);
+  }, [isOpen, step, selectedCuic, selectedAsignados, nombreCampania, descripcion, notas, yearInicio, yearFin, catorcenaInicio, catorcenaFin, caras, imu, newCara, isEditMode, saveDraft, clearDraft]);
 
   // Reset form when opening modal in create mode
   useEffect(() => {
