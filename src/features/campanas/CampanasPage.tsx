@@ -2192,6 +2192,16 @@ export function CampanasPage() {
                     });
                     const isLoadingInv = loadingInventarios.has(campana.id);
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
+                    const hasInventarios = allInventarios.length > 0;
+                    // Calcular cuántas catorcenas abarca esta campaña para dividir valores totales
+                    const numCatorcenasCampana = (() => {
+                      const cats = (catorcenasData?.data || [])
+                        .map(c => ({ num: c.numero_catorcena, anio: c.a_o }))
+                        .sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.num - b.num);
+                      const startIdx = cats.findIndex(c => c.num === campana.catorcena_inicio_num && c.anio === campana.catorcena_inicio_anio);
+                      const endIdx = cats.findIndex(c => c.num === (campana.catorcena_fin_num || campana.catorcena_inicio_num) && c.anio === (campana.catorcena_fin_anio || campana.catorcena_inicio_anio));
+                      return startIdx >= 0 && endIdx >= 0 ? Math.max(endIdx - startIdx + 1, 1) : 1;
+                    })();
 
                     return (
                       <div key={campana.id} className={`border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
@@ -2237,26 +2247,32 @@ export function CampanasPage() {
                           {(() => {
                             // Contar circuitos desde inventarios filtrados por catorcena
                             const circuitosDesdeGrupos = apsAgrupados.reduce((sum, apsGroup) => sum + apsGroup.grupos.length, 0);
-                            // Fallback al campo de campaña solo si no hay inventarios cargados
+                            // Fallback: dividir total de campaña entre número de catorcenas
                             const circuitosCampana = Number((campana as any).circuitos ?? (campana as any).circuito ?? 0) || 0;
-                            const circuitosCount = circuitosDesdeGrupos > 0 ? circuitosDesdeGrupos : circuitosCampana;
+                            const circuitosCount = hasInventarios ? circuitosDesdeGrupos : Math.round(circuitosCampana / numCatorcenasCampana);
                             return (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`} title="Circuitos (grupos)">
                                 <Layers className="h-3 w-3" /> Circuitos {circuitosCount}
                               </span>
                             );
                           })()}
-                          {Number(campana.bonificacion) > 0 && (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25 flex items-center gap-1`} title="Bonificación">
-                              <Gift className="h-3 w-3" /> {campana.bonificacion}
-                            </span>
-                          )}
                           {(() => {
-                            const carasCatorcena = inventarios.length > 0 ? inventarios.length : (Number(campana.total_caras) || 0);
-                            const bonifCatorcena = inventarios.length > 0
+                            const bonifTotal = Number(campana.bonificacion) || 0;
+                            const bonifCatorcena = hasInventarios
+                              ? inventarios.filter(i => Number((i as any).bonificacion_sc) > 0 || (Number((i as any).tarifa_publica_sc) === 0 && Number((i as any).aps) > 0)).length
+                              : Math.round(bonifTotal / numCatorcenasCampana);
+                            return bonifCatorcena > 0 ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25 flex items-center gap-1`} title="Bonificación">
+                                <Gift className="h-3 w-3" /> {bonifCatorcena}
+                              </span>
+                            ) : null;
+                          })()}
+                          {(() => {
+                            const carasCatorcena = hasInventarios ? inventarios.length : Math.round((Number(campana.total_caras) || 0) / numCatorcenasCampana);
+                            const bonifCatorcenaCalc = hasInventarios
                               ? inventarios.filter(i => Number((i as any).tarifa_publica_sc) === 0 || Number((i as any).bonificacion_sc) > 0).length
-                              : (Number(campana.bonificacion) || 0);
-                            const carasNetas = Math.max(carasCatorcena - bonifCatorcena, 0);
+                              : Math.round((Number(campana.bonificacion) || 0) / numCatorcenasCampana);
+                            const carasNetas = Math.max(carasCatorcena - bonifCatorcenaCalc, 0);
                             return carasNetas > 0 ? (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
                                 <MapPin className="h-3 w-3" /> {carasNetas}
@@ -2269,7 +2285,7 @@ export function CampanasPage() {
                               const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
                               return sum + tarifa;
                             }, 0);
-                            const inversionMostrar = invCatorcena > 0 ? invCatorcena : (Number(campana.inversion) || 0);
+                            const inversionMostrar = hasInventarios ? invCatorcena : Math.round((Number(campana.inversion) || 0) / numCatorcenasCampana);
                             return (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
                                 <DollarSign className="h-3 w-3" /> {inversionMostrar > 0 ? `$${inversionMostrar.toLocaleString()}` : 'Sin inversión'}
