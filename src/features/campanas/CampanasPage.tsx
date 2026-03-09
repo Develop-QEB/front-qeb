@@ -1063,31 +1063,57 @@ export function CampanasPage() {
         }
         groups[key].campanas.push(item);
       } else if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
-        // Expandir campaña a TODAS las catorcenas que abarca (de inicio a fin)
-        const startNum = item.catorcena_inicio_num;
-        const startAnio = item.catorcena_inicio_anio;
-        const endNum = item.catorcena_fin_num || startNum;
-        const endAnio = item.catorcena_fin_anio || startAnio;
+        // Usar catorcenas reales con contenido si el backend las proporciona
+        const catContenido = (item as any).catorcenas_con_contenido as string | null;
+        if (catContenido) {
+          // Formato: "num:anio,num:anio,..."
+          const catorcenasReales = catContenido.split(',').map(entry => {
+            const [num, anio] = entry.split(':').map(Number);
+            return { num, anio };
+          }).filter(c => !isNaN(c.num) && !isNaN(c.anio));
 
-        const startIdx = catorcenasList.findIndex(c => c.num === startNum && c.anio === startAnio);
-        const endIdx = catorcenasList.findIndex(c => c.num === endNum && c.anio === endAnio);
-
-        if (startIdx >= 0 && endIdx >= 0) {
-          for (let i = startIdx; i <= endIdx; i++) {
-            const { num, anio } = catorcenasList[i];
-            const key = `${anio}-${String(num).padStart(2, '0')}`;
+          if (catorcenasReales.length > 0) {
+            catorcenasReales.forEach(({ num, anio }) => {
+              const key = `${anio}-${String(num).padStart(2, '0')}`;
+              if (!groups[key]) {
+                groups[key] = { catorcena: { num, anio }, campanas: [] };
+              }
+              groups[key].campanas.push(item);
+            });
+          } else {
+            // Fallback: solo catorcena de inicio
+            const key = `${item.catorcena_inicio_anio}-${String(item.catorcena_inicio_num).padStart(2, '0')}`;
             if (!groups[key]) {
-              groups[key] = { catorcena: { num, anio }, campanas: [] };
+              groups[key] = { catorcena: { num: item.catorcena_inicio_num, anio: item.catorcena_inicio_anio }, campanas: [] };
             }
             groups[key].campanas.push(item);
           }
         } else {
-          // Fallback: solo catorcena de inicio
-          const key = `${startAnio}-${String(startNum).padStart(2, '0')}`;
-          if (!groups[key]) {
-            groups[key] = { catorcena: { num: startNum, anio: startAnio }, campanas: [] };
+          // Sin dato de catorcenas reales: expandir por rango de fechas (fallback)
+          const startNum = item.catorcena_inicio_num;
+          const startAnio = item.catorcena_inicio_anio;
+          const endNum = item.catorcena_fin_num || startNum;
+          const endAnio = item.catorcena_fin_anio || startAnio;
+
+          const startIdx = catorcenasList.findIndex(c => c.num === startNum && c.anio === startAnio);
+          const endIdx = catorcenasList.findIndex(c => c.num === endNum && c.anio === endAnio);
+
+          if (startIdx >= 0 && endIdx >= 0) {
+            for (let i = startIdx; i <= endIdx; i++) {
+              const { num, anio } = catorcenasList[i];
+              const key = `${anio}-${String(num).padStart(2, '0')}`;
+              if (!groups[key]) {
+                groups[key] = { catorcena: { num, anio }, campanas: [] };
+              }
+              groups[key].campanas.push(item);
+            }
+          } else {
+            const key = `${startAnio}-${String(startNum).padStart(2, '0')}`;
+            if (!groups[key]) {
+              groups[key] = { catorcena: { num: startNum, anio: startAnio }, campanas: [] };
+            }
+            groups[key].campanas.push(item);
           }
-          groups[key].campanas.push(item);
         }
       }
     });
