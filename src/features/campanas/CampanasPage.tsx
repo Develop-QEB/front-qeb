@@ -5,7 +5,8 @@ import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, Layers,
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
-  ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera
+  ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2,
+  Image, FileText, DollarSign, Hash, Gift
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -20,24 +21,26 @@ import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { OrdenesMontajeModal } from './OrdenesMontajeModal';
 import { StatusCampanaModal } from './StatusCampanaModal';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampanas } from '../../hooks/useSocket';
 
 // Colors for dynamic tags
-const TAG_COLORS = [
-  { bg: 'bg-cyan-500/15', text: 'text-cyan-300', border: 'border-cyan-500/30' },
-  { bg: 'bg-fuchsia-500/15', text: 'text-fuchsia-300', border: 'border-fuchsia-500/30' },
-  { bg: 'bg-amber-500/15', text: 'text-amber-300', border: 'border-amber-500/30' },
-  { bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  { bg: 'bg-rose-500/15', text: 'text-rose-300', border: 'border-rose-500/30' },
-  { bg: 'bg-sky-500/15', text: 'text-sky-300', border: 'border-sky-500/30' },
-  { bg: 'bg-violet-500/15', text: 'text-violet-300', border: 'border-violet-500/30' },
-  { bg: 'bg-orange-500/15', text: 'text-orange-300', border: 'border-orange-500/30' },
-  { bg: 'bg-teal-500/15', text: 'text-teal-300', border: 'border-teal-500/30' },
-  { bg: 'bg-pink-500/15', text: 'text-pink-300', border: 'border-pink-500/30' },
+const getTagColors = (isDark: boolean) => [
+  { bg: isDark ? 'bg-cyan-500/15' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
+  { bg: isDark ? 'bg-fuchsia-500/15' : 'bg-fuchsia-50', text: isDark ? 'text-fuchsia-300' : 'text-fuchsia-700', border: 'border-fuchsia-500/30' },
+  { bg: isDark ? 'bg-amber-500/15' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+  { bg: isDark ? 'bg-emerald-500/15' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
+  { bg: isDark ? 'bg-rose-500/15' : 'bg-rose-50', text: isDark ? 'text-rose-300' : 'text-rose-700', border: 'border-rose-500/30' },
+  { bg: isDark ? 'bg-sky-500/15' : 'bg-sky-50', text: isDark ? 'text-sky-300' : 'text-sky-700', border: 'border-sky-500/30' },
+  { bg: isDark ? 'bg-violet-500/15' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30' },
+  { bg: isDark ? 'bg-orange-500/15' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: 'border-orange-500/30' },
+  { bg: isDark ? 'bg-teal-500/15' : 'bg-teal-50', text: isDark ? 'text-teal-300' : 'text-teal-700', border: 'border-teal-500/30' },
+  { bg: isDark ? 'bg-pink-500/15' : 'bg-pink-50', text: isDark ? 'text-pink-300' : 'text-pink-700', border: 'border-pink-500/30' },
 ];
 
-function getTagColor(name: string) {
+function getTagColor(name: string, isDark: boolean = true) {
+  const TAG_COLORS = getTagColors(isDark);
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -45,52 +48,69 @@ function getTagColor(name: string) {
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
 }
 
-// Status Colors - colores únicos por cada tipo de status
-const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Aprobada': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  'inactiva': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
-  'finalizada': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
-  'por iniciar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'en curso': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
-  'pendiente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
-  'cancelada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
-  'pausada': { bg: 'bg-yellow-500/20', text: 'text-yellow-300', border: 'border-yellow-500/30' },
-};
+const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MESES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
-
-// Colores para estatus de artes
-const ESTATUS_ARTE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Carga Artes': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
-  'Revision Artes': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Artes Aprobados': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  'En Impresion': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
-  'Artes Recibidos': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
-  'Instalado': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
-};
-
-function getEstatusArteColor(estatus: string | null | undefined) {
-  if (!estatus) return DEFAULT_STATUS_COLOR;
-  return ESTATUS_ARTE_COLORS[estatus] || DEFAULT_STATUS_COLOR;
+function getMonthLabel(dateStr: string): string {
+  const d = new Date(dateStr);
+  return !isNaN(d.getTime()) ? `${MESES_FULL[d.getMonth()]} ${d.getFullYear()}` : '-';
 }
 
-function getStatusColor(status: string | null | undefined) {
-  if (!status) return DEFAULT_STATUS_COLOR;
+function getMonthShort(dateStr: string): string {
+  const d = new Date(dateStr);
+  return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : '-';
+}
+
+// Status Colors - colores únicos por cada tipo de status
+const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
+  'Aprobada': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
+  'inactiva': { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: isDark ? 'border-zinc-500/30' : 'border-zinc-300' },
+  'finalizada': { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
+  'por iniciar': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+  'en curso': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
+  'pendiente': { bg: isDark ? 'bg-orange-500/20' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: 'border-orange-500/30' },
+  'cancelada': { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
+  'pausada': { bg: isDark ? 'bg-yellow-500/20' : 'bg-yellow-50', text: isDark ? 'text-yellow-300' : 'text-yellow-700', border: 'border-yellow-500/30' },
+});
+
+const getDefaultStatusColor = (isDark: boolean) => ({ bg: isDark ? 'bg-violet-500/20' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30' });
+
+// Colores para estatus de artes
+const getEstatusArteColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
+  'Carga Artes': { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: isDark ? 'border-zinc-500/30' : 'border-zinc-300' },
+  'Revision Artes': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+  'Artes Aprobados': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
+  'En Impresion': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
+  'Artes Recibidos': { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
+  'Instalado': { bg: isDark ? 'bg-green-500/20' : 'bg-green-50', text: isDark ? 'text-green-300' : 'text-green-700', border: 'border-green-500/30' },
+});
+
+function getEstatusArteColor(estatus: string | null | undefined, isDark: boolean = true) {
+  const DEFAULT = getDefaultStatusColor(isDark);
+  if (!estatus) return DEFAULT;
+  const COLORS = getEstatusArteColors(isDark);
+  return COLORS[estatus] || DEFAULT;
+}
+
+function getStatusColor(status: string | null | undefined, isDark: boolean = true) {
+  const DEFAULT = getDefaultStatusColor(isDark);
+  const STATUS_COLORS = getStatusColors(isDark);
+  if (!status) return DEFAULT;
   const trimmed = status.trim();
   // Buscar match exacto primero, luego lowercase
   if (STATUS_COLORS[trimmed]) return STATUS_COLORS[trimmed];
   const normalized = trimmed.toLowerCase();
   if (STATUS_COLORS[normalized]) return STATUS_COLORS[normalized];
   // Si no, generar un color dinámico basado en el nombre
-  return getTagColor(status);
+  return getTagColor(status, isDark);
 }
 
 // Period badge colors
-const PERIOD_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Pasada': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
-  'En curso': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  'Futura': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-};
+const getPeriodColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
+  'Pasada': { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: isDark ? 'border-zinc-500/30' : 'border-zinc-300' },
+  'En curso': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
+  'Futura': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+});
 
 // Colores para gráficas
 const CHART_COLORS = {
@@ -179,7 +199,7 @@ interface GroupConfig {
 const AVAILABLE_GROUPINGS: GroupConfig[] = [
   { field: 'status', label: 'Estatus' },
   { field: 'cliente_nombre', label: 'Cliente' },
-  { field: 'catorcena_inicio', label: 'Catorcena Inicio' },
+  { field: 'catorcena_inicio', label: 'Fecha Inicio' },
 ];
 
 // Campos disponibles para ordenar
@@ -238,13 +258,15 @@ function FilterChip({
   options,
   value,
   onChange,
-  onClear
+  onClear,
+  isDark = true
 }: {
   label: string;
   options: string[];
   value: string;
   onChange: (value: string) => void;
   onClear: () => void;
+  isDark?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -266,13 +288,15 @@ function FilterChip({
       <button
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${value
-          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+          ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
+          : isDark
+            ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+            : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
           }`}
       >
         <span>{value || label}</span>
         {value ? (
-          <X className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); onClear(); }} />
+          <X className={`h-3 w-3 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`} onClick={(e) => { e.stopPropagation(); onClear(); }} />
         ) : (
           <ChevronDown className="h-3 w-3" />
         )}
@@ -281,21 +305,21 @@ function FilterChip({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-2 border-b border-zinc-800">
+          <div className={`absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <input
                 type="text"
                 placeholder={`Buscar ${label.toLowerCase()}...`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50"
+                className={`w-full px-3 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50`}
                 autoFocus
                 onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div className="max-h-52 overflow-auto">
               {filteredOptions.length === 0 ? (
-                <div className="px-3 py-3 text-xs text-zinc-500 text-center">
+                <div className={`px-3 py-3 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-center`}>
                   {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
                 </div>
               ) : (
@@ -304,8 +328,10 @@ function FilterChip({
                     key={option}
                     onClick={() => { onChange(option); handleClose(); }}
                     className={`w-full px-3 py-2 text-left text-xs transition-colors ${value === option
-                      ? 'bg-purple-500/20 text-purple-300'
-                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                      ? isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-50 text-purple-700'
+                      : isDark
+                        ? 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
                       }`}
                   >
                     {option}
@@ -313,7 +339,7 @@ function FilterChip({
                 ))
               )}
             </div>
-            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
+            <div className={`px-3 py-1.5 border-t ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'} text-[10px]`}>
               {filteredOptions.length} de {options.length} opciones
             </div>
           </div>
@@ -331,7 +357,8 @@ function PeriodFilterPopover({
   catorcenaInicio,
   catorcenaFin,
   onApply,
-  onClear
+  onClear,
+  isDark = true
 }: {
   catorcenasData: { years: number[]; data: Catorcena[] } | undefined;
   yearInicio: number | undefined;
@@ -340,6 +367,7 @@ function PeriodFilterPopover({
   catorcenaFin: number | undefined;
   onApply: (yearInicio: number, yearFin: number, catorcenaInicio?: number, catorcenaFin?: number) => void;
   onClear: () => void;
+  isDark?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [tempYearInicio, setTempYearInicio] = useState<number | undefined>(yearInicio);
@@ -417,14 +445,16 @@ function PeriodFilterPopover({
       <button
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${isActive
-          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+          ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
+          : isDark
+            ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
+            : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
           }`}
       >
         <Calendar className="h-3 w-3" />
         <span>{getDisplayText()}</span>
         {isActive ? (
-          <X className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); handleClear(); }} />
+          <X className={`h-3 w-3 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`} onClick={(e) => { e.stopPropagation(); handleClear(); }} />
         ) : (
           <ChevronDown className="h-3 w-3" />
         )}
@@ -433,19 +463,19 @@ function PeriodFilterPopover({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-3 border-b border-zinc-800">
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-purple-400" />
+          <div className={`absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`p-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
+                <Calendar className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                 Filtro de Periodo
               </h3>
-              <p className="text-[10px] text-zinc-500 mt-1">Selecciona año inicio y fin (obligatorios)</p>
+              <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-1`}>Selecciona año inicio y fin (obligatorios)</p>
             </div>
 
             <div className="p-3 space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Año Inicio *</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Año Inicio *</label>
                   <select
                     value={tempYearInicio || ''}
                     onChange={(e) => {
@@ -457,7 +487,7 @@ function PeriodFilterPopover({
                         setTempCatorcenaFin(undefined);
                       }
                     }}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   >
                     <option value="">Seleccionar</option>
                     {yearInicioOptions.map(y => (
@@ -466,7 +496,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Inicio</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Cat. Inicio</label>
                   <select
                     value={tempCatorcenaInicio || ''}
                     onChange={(e) => {
@@ -477,7 +507,7 @@ function PeriodFilterPopover({
                       }
                     }}
                     disabled={!tempYearInicio}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50`}
                   >
                     <option value="">Todas</option>
                     {catorcenasInicioOptions.map(c => (
@@ -489,7 +519,7 @@ function PeriodFilterPopover({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Año Fin *</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Año Fin *</label>
                   <select
                     value={tempYearFin || ''}
                     onChange={(e) => {
@@ -501,7 +531,7 @@ function PeriodFilterPopover({
                         setTempCatorcenaInicio(undefined);
                       }
                     }}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   >
                     <option value="">Seleccionar</option>
                     {yearFinOptions.map(y => (
@@ -510,7 +540,7 @@ function PeriodFilterPopover({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 mb-1 block">Catorcena Fin</label>
+                  <label className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Cat. Fin</label>
                   <select
                     value={tempCatorcenaFin || ''}
                     onChange={(e) => {
@@ -521,7 +551,7 @@ function PeriodFilterPopover({
                       }
                     }}
                     disabled={!tempYearFin}
-                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50"
+                    className={`w-full px-2 py-1.5 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50`}
                   >
                     <option value="">Todas</option>
                     {catorcenasFinOptions.map(c => (
@@ -532,17 +562,17 @@ function PeriodFilterPopover({
               </div>
             </div>
 
-            <div className="p-3 border-t border-zinc-800 flex items-center justify-between gap-2">
+            <div className={`p-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex items-center justify-between gap-2`}>
               <button
                 onClick={handleClear}
-                className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+                className={`px-3 py-1.5 text-xs ${isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'} transition-colors`}
               >
                 Limpiar
               </button>
               <button
                 onClick={handleApply}
                 disabled={!canApply}
-                className="px-4 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-colors"
+                className={`px-4 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg font-medium transition-colors`}
               >
                 Aplicar Filtro
               </button>
@@ -560,28 +590,30 @@ function GroupHeader({
   count,
   expanded,
   onToggle,
-  colSpan
+  colSpan,
+  isDark = true
 }: {
   groupName: string;
   count: number;
   expanded: boolean;
   onToggle: () => void;
   colSpan: number;
+  isDark?: boolean;
 }) {
   return (
     <tr
       onClick={onToggle}
-      className="bg-purple-500/10 border-b border-purple-500/20 cursor-pointer hover:bg-purple-500/20 transition-colors"
+      className={`${isDark ? 'bg-purple-500/10 border-b border-purple-500/20 hover:bg-purple-500/20' : 'bg-purple-50 border-b border-purple-200 hover:bg-purple-100'} cursor-pointer transition-colors`}
     >
       <td colSpan={colSpan} className="px-4 py-3">
         <div className="flex items-center gap-2">
           {expanded ? (
-            <ChevronDown className="h-4 w-4 text-purple-400" />
+            <ChevronDown className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
           ) : (
-            <ChevronRight className="h-4 w-4 text-purple-400" />
+            <ChevronRight className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
           )}
-          <span className="font-semibold text-white">{groupName || 'Sin asignar'}</span>
-          <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">
+          <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupName || 'Sin asignar'}</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs ${isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'}`}>
             {count} campañas
           </span>
         </div>
@@ -597,6 +629,7 @@ export function CampanasPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const permissions = getPermissions(user?.rol);
 
   // WebSocket para actualizaciones en tiempo real
@@ -615,6 +648,7 @@ export function CampanasPage() {
   }, [searchParams, setSearchParams]);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
+  const [tipoPeriodo, setTipoPeriodo] = useState('');
   const [yearInicio, setYearInicio] = useState<number | undefined>(undefined);
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
@@ -629,6 +663,7 @@ export function CampanasPage() {
   // Estados para filtros expandibles
   const [showFilters, setShowFilters] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [comboboxOpen, setComboboxOpen] = useState<string | null>(null);
   const [selectedCatorcenaInicio, setSelectedCatorcenaInicio] = useState('');
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedCampana, setSelectedCampana] = useState<Campana | null>(null);
@@ -662,17 +697,38 @@ export function CampanasPage() {
     queryFn: () => solicitudesService.getCatorcenas(),
   });
 
+  // When grouping, advanced filters, sorting, or catorcena filter are active, fetch ALL data
+  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio;
+  const effectiveLimit = needsAllData ? 9999 : limit;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, debouncedSearch],
+    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, debouncedSearch, tipoPeriodo, needsAllData],
     queryFn: () =>
       campanasService.getAll({
-        page,
-        limit,
+        page: needsAllData ? 1 : page,
+        limit: effectiveLimit,
         status: status || undefined,
+        search: debouncedSearch || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,
         catorcenaFin,
+        tipoPeriodo: tipoPeriodo || undefined,
+      }),
+  });
+
+  // Stats query — global KPIs with same filters
+  const { data: statsData, isLoading: isLoadingStats } = useQuery({
+    queryKey: ['campanas-stats', status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
+    queryFn: () =>
+      campanasService.getStats({
+        status: status || undefined,
+        search: debouncedSearch || undefined,
+        yearInicio,
+        yearFin,
+        catorcenaInicio,
+        catorcenaFin,
+        tipoPeriodo: tipoPeriodo || undefined,
       }),
   });
 
@@ -700,7 +756,7 @@ export function CampanasPage() {
         if (b.a_o !== a.a_o) return b.a_o - a.a_o;
         return b.numero_catorcena - a.numero_catorcena;
       })
-      .map(c => `Catorcena ${c.numero_catorcena}, ${c.a_o}`);
+      .map(c => `Cat ${c.numero_catorcena} / ${c.a_o}`);
   }, [catorcenasData]);
 
   // Filter data locally for search and catorcena inicio
@@ -721,8 +777,8 @@ export function CampanasPage() {
 
     // Filter by catorcena inicio
     if (selectedCatorcenaInicio && items.length > 0) {
-      // Parse "Catorcena X, YYYY" format
-      const match = selectedCatorcenaInicio.match(/Catorcena (\d+), (\d+)/);
+      // Parse "Cat X / YYYY" format
+      const match = selectedCatorcenaInicio.match(/Cat (\d+) \/ (\d+)/);
       if (match) {
         const catNum = parseInt(match[1]);
         const catYear = parseInt(match[2]);
@@ -781,9 +837,12 @@ export function CampanasPage() {
 
   const getGroupValue = (item: Campana, field: GroupByField): string => {
     if (field === 'catorcena_inicio') {
+      if ((item as any).tipo_periodo === 'mensual' && item.fecha_inicio) {
+        return getMonthLabel(item.fecha_inicio);
+      }
       return item.catorcena_inicio_num && item.catorcena_inicio_anio
-        ? `Catorcena ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
-        : 'Sin catorcena';
+        ? `Cat ${item.catorcena_inicio_num} / ${item.catorcena_inicio_anio}`
+        : 'Sin periodo';
     } else if (field === 'status') {
       return item.status || 'Sin status';
     } else if (field === 'cliente_nombre') {
@@ -984,11 +1043,28 @@ export function CampanasPage() {
     }> = {};
 
     filteredData.forEach(item => {
-      if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
-        const key = `${item.catorcena_inicio_anio}-${String(item.catorcena_inicio_num).padStart(2, '0')}`;
+      const isMensual = (item as any).tipo_periodo === 'mensual';
+      if (isMensual && item.fecha_inicio) {
+        // For mensual campaigns, group by month derived from fecha_inicio
+        const parts = item.fecha_inicio.split('-');
+        const anio = parseInt(parts[0]);
+        const mes = parseInt(parts[1]); // 1-12
+        const key = `${anio}-${String(mes).padStart(2, '0')}`;
         if (!groups[key]) {
           groups[key] = {
-            catorcena: { num: item.catorcena_inicio_num, anio: item.catorcena_inicio_anio },
+            catorcena: { num: mes, anio, isMensual: true } as any,
+            campanas: []
+          };
+        }
+        groups[key].campanas.push(item);
+      } else if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
+        // Esta vista es "por periodo de inicio": cada campaña debe aparecer solo una vez.
+        const num = item.catorcena_inicio_num;
+        const anio = item.catorcena_inicio_anio;
+        const key = `${anio}-${String(num).padStart(2, '0')}`;
+        if (!groups[key]) {
+          groups[key] = {
+            catorcena: { num, anio },
             campanas: []
           };
         }
@@ -1022,21 +1098,16 @@ export function CampanasPage() {
       });
   }, [filteredData, activeGroupings]);
 
-  // Estadísticas para gráfica de Status
+  // Estadísticas para gráfica de Status — from global stats
   const statusChartData = useMemo(() => {
-    const counts: Record<string, number> = {};
-
-    filteredData.forEach(item => {
-      const status = item.status?.toLowerCase() || 'sin status';
-      counts[status] = (counts[status] || 0) + 1;
-    });
+    if (!statsData?.byStatus) return [];
 
     let fallbackIndex = 0;
-    return Object.entries(counts)
+    return Object.entries(statsData.byStatus)
       .map(([name, value]) => {
-        let color = CHART_COLORS.status[name as keyof typeof CHART_COLORS.status];
+        const key = name.toLowerCase();
+        let color = CHART_COLORS.status[key as keyof typeof CHART_COLORS.status];
         if (!color) {
-          // Usar color del array fallback para estatus no definidos
           color = CHART_COLORS.statusFallback[fallbackIndex % CHART_COLORS.statusFallback.length];
           fallbackIndex++;
         }
@@ -1047,7 +1118,7 @@ export function CampanasPage() {
         };
       })
       .sort((a, b) => b.value - a.value);
-  }, [filteredData]);
+  }, [statsData]);
 
   // Estadísticas para gráfica de Categoría de Mercado
   const categoryChartData = useMemo(() => {
@@ -1166,6 +1237,7 @@ export function CampanasPage() {
   const clearAllFilters = () => {
     setSearch('');
     setStatus('');
+    setTipoPeriodo('');
     setYearInicio(undefined);
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
@@ -1184,16 +1256,16 @@ export function CampanasPage() {
     if (!filteredData.length) return;
 
     const headers = [
-      'Periodo', 'Creador', 'Campaña', 'Cliente', 'Estatus', 'Actividad', 'Catorcena Inicio', 'Catorcena Fin', 'APS'
+      'Periodo', 'Creador', 'Campaña', 'Cliente', 'Estatus', 'Actividad', 'Periodo Inicio', 'Periodo Fin', 'APS'
     ];
     const rows = filteredData.map(c => {
       const periodStatus = getPeriodStatus(c.fecha_inicio, c.fecha_fin);
-      const catIni = c.catorcena_inicio_num && c.catorcena_inicio_anio
-        ? `Cat ${c.catorcena_inicio_num} ${c.catorcena_inicio_anio}`
-        : '-';
-      const catFin = c.catorcena_fin_num && c.catorcena_fin_anio
-        ? `Cat ${c.catorcena_fin_num} ${c.catorcena_fin_anio}`
-        : '-';
+      const catIni = (c as any).tipo_periodo === 'mensual'
+        ? getMonthShort(c.fecha_inicio)
+        : (c.catorcena_inicio_num && c.catorcena_inicio_anio ? `Cat ${c.catorcena_inicio_num} ${c.catorcena_inicio_anio}` : '-');
+      const catFin = (c as any).tipo_periodo === 'mensual'
+        ? getMonthShort(c.fecha_fin)
+        : (c.catorcena_fin_num && c.catorcena_fin_anio ? `Cat ${c.catorcena_fin_num} ${c.catorcena_fin_anio}` : '-');
       return [
         periodStatus,
         c.creador_nombre || '',
@@ -1236,22 +1308,28 @@ export function CampanasPage() {
   };
 
   const renderCampanaRow = (item: Campana, index: number) => {
-    const statusColor = getStatusColor(item.status);
+    const statusColor = getStatusColor(item.status, isDark);
     const periodStatus = getPeriodStatus(item.fecha_inicio, item.fecha_fin);
-    const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
+    const PERIOD_COLORS = getPeriodColors(isDark);
+    const periodColor = PERIOD_COLORS[periodStatus] || getDefaultStatusColor(isDark);
 
-    const catIni = item.catorcena_inicio_num && item.catorcena_inicio_anio
-      ? `Cat ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
-      : '-';
-    const catFin = item.catorcena_fin_num && item.catorcena_fin_anio
-      ? `Cat ${item.catorcena_fin_num}, ${item.catorcena_fin_anio}`
-      : '-';
+    const isMensual = (item as any).tipo_periodo === 'mensual';
+    const catIni = isMensual && item.fecha_inicio
+      ? getMonthShort(item.fecha_inicio)
+      : item.catorcena_inicio_num && item.catorcena_inicio_anio
+        ? `Cat ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
+        : '-';
+    const catFin = isMensual && item.fecha_fin
+      ? getMonthShort(item.fecha_fin)
+      : item.catorcena_fin_num && item.catorcena_fin_anio
+        ? `Cat ${item.catorcena_fin_num}, ${item.catorcena_fin_anio}`
+        : '-';
 
     return (
-      <tr key={`campana-${item.id}-${index}`} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+      <tr key={`campana-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
         {/* ID */}
         <td className="px-4 py-3">
-          <span className="font-mono text-xs px-2 py-1 rounded-md bg-purple-500/10 text-purple-300">#{item.id}</span>
+          <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.id}</span>
         </td>
         {/* Periodo */}
         <td className="px-4 py-3">
@@ -1263,78 +1341,97 @@ export function CampanasPage() {
         <td className="px-4 py-3">
           {item.creador_nombre ? (
             <div className="flex items-center gap-1.5">
-              <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center">
-                <User className="h-3 w-3 text-purple-400" />
+              <div className={`w-6 h-6 rounded-full ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'} flex items-center justify-center`}>
+                <User className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
               </div>
-              <span className="text-zinc-300 text-sm">{item.creador_nombre}</span>
+              <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{item.creador_nombre}</span>
             </div>
           ) : (
-            <span className="text-zinc-500 text-xs">-</span>
+            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
           )}
         </td>
         {/* Campaña */}
         <td className="px-4 py-3">
-          <span className="font-medium text-white text-sm">{item.nombre}</span>
+          <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{item.nombre}</span>
         </td>
         {/* Cliente/Marca */}
         <td className="px-4 py-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-zinc-300 text-sm max-w-[180px] truncate" title={item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}>
+            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm max-w-[180px] truncate`} title={item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}>
               {item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}
             </span>
             {item.sap_database && (
               <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
-                item.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                item.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                item.sap_database === 'CIMU'
+                  ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700') + ' border-blue-500/30'
+                  : item.sap_database === 'TEST'
+                    ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border-amber-500/30'
+                    : (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border-emerald-500/30'
               }`}>{item.sap_database}</span>
             )}
           </div>
         </td>
         {/* Status */}
         <td className="px-4 py-3">
-          <button
-            onClick={() => {
-              setStatusCampana(item);
-              setStatusModalOpen(true);
-            }}
-            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
-          >
-            {item.status}
-          </button>
+          <div className="flex flex-col gap-1 items-start">
+            <button
+              onClick={() => {
+                setStatusCampana(item);
+                setStatusModalOpen(true);
+              }}
+              className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+            >
+              {item.status}
+            </button>
+            {item.caras_ultima_cat != null && Number(item.caras_ultima_cat) > 0 && Number(item.reservas_count_ultima_cat) < Number(item.caras_ultima_cat) && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}>
+                Incompleta
+              </span>
+            )}
+          </div>
         </td>
         {/* Actividad */}
         <td className="px-4 py-3">
           {item.has_aps ? (
-            <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} border border-emerald-500/30`}>
               Activa
             </span>
           ) : (
-            <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-300 border border-zinc-500/30">
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/20 text-zinc-300' : 'bg-zinc-50 text-zinc-700'} border ${isDark ? 'border-zinc-500/30' : 'border-zinc-300'}`}>
               Inactiva
             </span>
           )}
         </td>
-        {/* Cat. Inicio - Badge style */}
+        {/* Cat. Inicio / Periodo Inicio - Badge style */}
         <td className="px-4 py-3">
-          {item.catorcena_inicio_num && item.catorcena_inicio_anio ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-xs border border-cyan-500/20">
+          {isMensual && item.fecha_inicio ? (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} text-xs border border-cyan-500/20`}>
               <Calendar className="h-3 w-3" />
-              {item.catorcena_inicio_num}/{item.catorcena_inicio_anio}
+              {getMonthShort(item.fecha_inicio)}
+            </span>
+          ) : item.catorcena_inicio_num && item.catorcena_inicio_anio ? (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} text-xs border border-cyan-500/20`}>
+              <Calendar className="h-3 w-3" />
+              Cat {item.catorcena_inicio_num} / {item.catorcena_inicio_anio}
             </span>
           ) : (
-            <span className="text-zinc-500 text-xs">-</span>
+            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
           )}
         </td>
-        {/* Cat. Fin - Badge style */}
+        {/* Cat. Fin / Periodo Fin - Badge style */}
         <td className="px-4 py-3">
-          {item.catorcena_fin_num && item.catorcena_fin_anio ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-xs border border-amber-500/20">
+          {isMensual && item.fecha_fin ? (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-700'} text-xs border border-amber-500/20`}>
               <Calendar className="h-3 w-3" />
-              {item.catorcena_fin_num}/{item.catorcena_fin_anio}
+              {getMonthShort(item.fecha_fin)}
+            </span>
+          ) : item.catorcena_fin_num && item.catorcena_fin_anio ? (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-700'} text-xs border border-amber-500/20`}>
+              <Calendar className="h-3 w-3" />
+              Cat {item.catorcena_fin_num} / {item.catorcena_fin_anio}
             </span>
           ) : (
-            <span className="text-zinc-500 text-xs">-</span>
+            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
           )}
         </td>
         {/* APS */}
@@ -1344,8 +1441,8 @@ export function CampanasPage() {
               <Check className="h-3.5 w-3.5 text-emerald-400" />
             </span>
           ) : (
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-zinc-800">
-              <Minus className="h-3.5 w-3.5 text-zinc-600" />
+            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-gray-100'}`}>
+              <Minus className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
             </span>
           )}
         </td>
@@ -1354,19 +1451,32 @@ export function CampanasPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => handleOpenCampana(item.id)}
-              className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border border-purple-500/20 hover:border-purple-500/40 transition-all"
+              className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/40' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 hover:text-purple-700 border-purple-200 hover:border-purple-300'} border transition-all`}
               title="Abrir campaña"
             >
               <Eye className="h-3.5 w-3.5" />
             </button>
+            {item.propuesta_id && (
+              <button
+                onClick={() => navigate(`/propuestas/compartir/${item.propuesta_id}`)}
+                className={`p-2 rounded-lg ${isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 hover:text-cyan-700 border-cyan-200 hover:border-cyan-300'} border transition-all`}
+                title="Compartir campaña"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+              </button>
+            )}
             {permissions.canEditCampanas && (
               <button
                 onClick={() => handleEditCampana(item)}
                 disabled={isEditDisabled(item)}
                 className={`p-2 rounded-lg border transition-all ${
                   isEditDisabled(item)
-                    ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                    : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
+                    ? isDark
+                      ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                      : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                    : isDark
+                      ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
+                      : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 border-gray-200 hover:border-gray-300'
                 }`}
                 title={isEditDisabled(item) ? 'No editable (tiene APS o status no permite edición)' : 'Editar campaña'}
               >
@@ -1394,24 +1504,24 @@ export function CampanasPage() {
         {/* Dashboard KPIs Grid - Same style as Solicitudes/Propuestas */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Main KPI: Total Campañas */}
-          <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none group-hover:bg-purple-500/20 transition-all duration-500" />
+          <div className={`col-span-1 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
+            <div className={`absolute top-0 right-0 w-32 h-32 ${isDark ? 'bg-purple-500/10 group-hover:bg-purple-500/20' : 'bg-purple-200/20 group-hover:bg-purple-200/30'} rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none transition-all duration-500`} />
             <div>
-              <p className="text-zinc-400 text-sm font-medium mb-1">Total Campañas</p>
-              <h3 className="text-4xl font-bold text-white tracking-tight">
-                {isLoading ? '...' : filteredData.length.toLocaleString()}
+              <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Total Campañas</p>
+              <h3 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
+                {isLoadingStats ? '...' : (statsData?.total ?? 0).toLocaleString()}
               </h3>
             </div>
             <div className="mt-4 flex items-center gap-2">
-              <span className="text-xs px-2 py-1 rounded-full bg-zinc-800/80 text-zinc-300 border border-zinc-700/50">
+              <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-zinc-800/80 text-zinc-300 border-zinc-700/50' : 'bg-gray-100 text-gray-700 border-gray-200'} border`}>
                 {hasActiveFilters ? 'Filtrado' : 'Todas'}
               </span>
             </div>
           </div>
 
           {/* Chart Card: Status Distribution */}
-          <div className="col-span-1 md:col-span-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-4 flex items-center relative overflow-hidden">
-            {!isLoading && statusChartData.length > 0 ? (
+          <div className={`col-span-1 md:col-span-2 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-4 flex items-center relative overflow-hidden`}>
+            {!isLoadingStats && statusChartData.length > 0 ? (
               <div className="w-full h-[140px] flex items-center">
                 <div className="h-full min-w-[140px]">
                   <ResponsiveContainer width="100%" height="100%">
@@ -1432,12 +1542,12 @@ export function CampanasPage() {
                       </Pie>
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: '#18181b',
-                          border: '1px solid rgba(139, 92, 246, 0.3)',
+                          backgroundColor: isDark ? '#18181b' : '#ffffff',
+                          border: `1px solid ${isDark ? 'rgba(139, 92, 246, 0.3)' : 'rgba(229, 231, 235, 1)'}`,
                           borderRadius: '12px',
                           fontSize: '12px',
-                          color: '#fff',
-                          boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
+                          color: isDark ? '#fff' : '#111827',
+                          boxShadow: isDark ? '0 10px 40px rgba(0,0,0,0.5)' : '0 10px 40px rgba(0,0,0,0.1)'
                         }}
                         formatter={(value: number, _name: string, props: { payload?: { name?: string } }) => [
                           `${value} campañas`,
@@ -1450,66 +1560,66 @@ export function CampanasPage() {
                 {/* Legend / List */}
                 <div className="flex-1 flex flex-wrap gap-2 content-center pl-4 h-full overflow-y-auto scrollbar-thin">
                   {statusChartData.slice(0, 6).map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-zinc-800/30 border border-zinc-800/50 min-w-[100px]">
+                    <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border min-w-[100px]`}>
                       <div className="w-2 h-8 rounded-full" style={{ backgroundColor: item.color }} />
                       <div>
-                        <div className="text-sm font-bold text-white">{item.value}</div>
-                        <div className="text-[10px] text-zinc-400 uppercase tracking-wide truncate max-w-[70px]" title={item.name}>{item.name}</div>
+                        <div className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.value}</div>
+                        <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wide truncate max-w-[70px]`} title={item.name}>{item.name}</div>
                       </div>
                     </div>
                   ))}
                   {statusChartData.length > 6 && (
-                    <div className="flex items-center justify-center p-2 rounded-lg bg-zinc-800/30 border border-zinc-800/50 text-xs text-zinc-500">
+                    <div className={`flex items-center justify-center p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                       +{statusChartData.length - 6} más
                     </div>
                   )}
                 </div>
               </div>
             ) : (
-              <div className="w-full h-[140px] flex items-center justify-center text-zinc-500 text-sm">
-                {isLoading ? 'Cargando...' : 'Sin datos'}
+              <div className={`w-full h-[140px] flex items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
+                {isLoadingStats ? 'Cargando...' : 'Sin datos'}
               </div>
             )}
           </div>
 
           {/* KPI: APS Status */}
-          <div className="col-span-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group">
+          <div className={`col-span-1 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl -mr-5 -mb-5 pointer-events-none group-hover:bg-emerald-500/20 transition-all duration-500" />
             <div>
-              <p className="text-zinc-400 text-sm font-medium mb-1">Con APS</p>
+              <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Con APS</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-bold text-emerald-400">
-                  {isLoading ? '...' : filteredData.filter(c => c.has_aps).length.toLocaleString()}
+                  {isLoadingStats ? '...' : (statsData?.conAps ?? 0).toLocaleString()}
                 </h3>
                 <span className="text-xs text-emerald-500/80 font-medium">asignados</span>
               </div>
             </div>
             {/* Progress bar visual */}
-            <div className="mt-4 w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+            <div className={`mt-4 w-full h-1.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} rounded-full overflow-hidden`}>
               <div
                 className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500"
-                style={{ width: `${filteredData.length ? (filteredData.filter(c => c.has_aps).length / filteredData.length) * 100 : 0}%` }}
+                style={{ width: `${statsData?.total ? ((statsData.conAps / statsData.total) * 100) : 0}%` }}
               />
             </div>
-            <div className="mt-2 flex justify-between text-[10px] text-zinc-500">
-              <span>Sin APS: {filteredData.filter(c => !c.has_aps).length}</span>
-              <span>{filteredData.length ? Math.round((filteredData.filter(c => c.has_aps).length / filteredData.length) * 100) : 0}%</span>
+            <div className={`mt-2 flex justify-between text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+              <span>Sin APS: {statsData?.sinAps ?? 0}</span>
+              <span>{statsData?.total ? Math.round((statsData.conAps / statsData.total) * 100) : 0}%</span>
             </div>
           </div>
         </div>
 
         {/* Control Bar */}
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-4 relative z-30">
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
               {/* Search */}
               <div className="relative flex-1 w-full lg:max-w-xl">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
+                <Search className={`absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
                 <input
                   type="search"
                   placeholder="Buscar campaña, articulo, cliente..."
-                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40"
+                  className={`w-full pl-11 pr-4 py-3 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'border-purple-200 bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40`}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -1519,8 +1629,10 @@ export function CampanasPage() {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
-                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                  : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
+                  ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
+                  : isDark
+                    ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
+                    : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'
                   }`}
               >
                 <SlidersHorizontal className="h-4 w-4" />
@@ -1533,7 +1645,7 @@ export function CampanasPage() {
               {/* Export CSV */}
               <button
                 onClick={handleExportCSV}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200 transition-all"
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'} border transition-all`}
               >
                 <Download className="h-4 w-4" />
                 Exportar CSV
@@ -1543,7 +1655,7 @@ export function CampanasPage() {
               {permissions.canSeeOrdenesMontajeButton && (
                 <button
                   onClick={() => setOrdenesMontajeModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30 transition-all"
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200'} border transition-all`}
                 >
                   <ClipboardList className="h-4 w-4" />
                   Órdenes de Montaje
@@ -1553,7 +1665,7 @@ export function CampanasPage() {
 
             {/* Filters Row (Expandable) */}
             {showFilters && (
-              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-zinc-800/50 relative z-50">
+              <div className={`flex flex-wrap items-center gap-2 pt-3 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} relative z-50`}>
                 {/* Advanced Filter Button with Dropdown */}
                 <div className="relative">
                   <button
@@ -1561,40 +1673,40 @@ export function CampanasPage() {
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                       advancedFilters.length > 0
                         ? 'bg-purple-600 text-white'
-                        : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300'
+                        : isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300' : 'bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700'
                     }`}
                     title="Filtros avanzados"
                   >
                     <Filter className="h-3.5 w-3.5" />
                     <span>Filtrar</span>
                     {advancedFilters.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-purple-800 text-[10px]">
+                      <span className={`px-1.5 py-0.5 rounded ${isDark ? 'bg-purple-800' : 'bg-purple-200'} text-[10px]`}>
                         {advancedFilters.length}
                       </span>
                     )}
                   </button>
                   {showAdvancedFilters && (
-                    <div className="absolute left-0 top-full mt-1 z-[100] w-[520px] bg-zinc-900 border border-purple-500/30 rounded-xl shadow-2xl p-4">
+                    <div className={`absolute left-0 top-full mt-1 z-[100] w-[520px] ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-xl shadow-2xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-medium text-purple-300">Filtros avanzados</span>
+                        <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros avanzados</span>
                         <button
                           onClick={() => setShowAdvancedFilters(false)}
-                          className="text-zinc-500 hover:text-white"
+                          className={`${isDark ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}
                         >
                           <X className="h-4 w-4" />
                         </button>
                       </div>
-                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                      <div className="space-y-2 max-h-[300px] overflow-visible pr-1">
                         {advancedFilters.map((filter, index) => (
                           <div key={filter.id} className="flex items-center gap-2">
                             {index > 0 && (
-                              <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>
+                              <span className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-600'} font-medium w-8`}>AND</span>
                             )}
                             {index === 0 && <span className="w-8"></span>}
                             <select
                               value={filter.field}
                               onChange={(e) => updateFilter(filter.id, { field: e.target.value })}
-                              className="w-[120px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                              className={`w-[120px] text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                             >
                               {CAMPANA_FILTER_FIELDS.map((f) => (
                                 <option key={f.field} value={f.field}>{f.label}</option>
@@ -1603,22 +1715,51 @@ export function CampanasPage() {
                             <select
                               value={filter.operator}
                               onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
-                              className="w-[100px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                              className={`w-[100px] text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                             >
                               {FILTER_OPERATORS.map((op) => (
                                 <option key={op.value} value={op.value}>{op.label}</option>
                               ))}
                             </select>
-                            <select
-                              value={filter.value}
-                              onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-                              className="flex-1 text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
-                            >
-                              <option value="">Seleccionar...</option>
-                              {getUniqueFieldValues[filter.field]?.map((val) => (
-                                <option key={val} value={val}>{val}</option>
-                              ))}
-                            </select>
+                            <div className="flex-1 relative">
+                              <input
+                                type="text"
+                                value={filter.value}
+                                placeholder="Escribir o seleccionar..."
+                                onChange={(e) => {
+                                  updateFilter(filter.id, { value: e.target.value });
+                                  setComboboxOpen(filter.id);
+                                }}
+                                onClick={() => setComboboxOpen(filter.id)}
+                                onFocus={() => setComboboxOpen(filter.id)}
+                                onBlur={() => setTimeout(() => setComboboxOpen(null), 200)}
+                                className={`w-full text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded px-2 py-1.5`}
+                              />
+                              {comboboxOpen === filter.id && (() => {
+                                const allOptions = getUniqueFieldValues[filter.field] || [];
+                                const filtered = filter.value
+                                  ? allOptions.filter(val => val.toLowerCase().includes(filter.value.toLowerCase()))
+                                  : allOptions;
+                                return filtered.length > 0 ? (
+                                  <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] overflow-y-auto z-[300] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
+                                    {filtered.map((val) => (
+                                      <button
+                                        key={val}
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => {
+                                          updateFilter(filter.id, { value: val });
+                                          setComboboxOpen(null);
+                                        }}
+                                        className={`w-full text-left px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${isDark ? 'text-white hover:bg-purple-600/40' : 'text-gray-900 hover:bg-purple-50'} ${filter.value === val ? (isDark ? 'bg-purple-600/30 font-medium' : 'bg-purple-100 font-medium') : ''}`}
+                                      >
+                                        {val}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null;
+                              })()}
+                            </div>
                             <button
                               onClick={() => removeFilter(filter.id)}
                               className="text-red-400 hover:text-red-300 p-1"
@@ -1628,12 +1769,12 @@ export function CampanasPage() {
                           </div>
                         ))}
                         {advancedFilters.length === 0 && (
-                          <p className="text-xs text-zinc-500 text-center py-4">
+                          <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-center py-4`}>
                             Sin filtros avanzados. Haz clic en "Añadir" para crear uno.
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
+                      <div className={`flex items-center justify-between mt-3 pt-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                         <button
                           onClick={addFilter}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
@@ -1644,14 +1785,14 @@ export function CampanasPage() {
                         <button
                           onClick={clearFilters}
                           disabled={advancedFilters.length === 0}
-                          className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 border border-red-500/30 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          className={`px-3 py-1.5 text-xs font-medium ${isDark ? 'text-red-400 hover:text-red-300 hover:bg-red-900/30 border-red-500/30' : 'text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200'} border rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors`}
                         >
                           Limpiar
                         </button>
                       </div>
                       {advancedFilters.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-zinc-800">
-                          <span className="text-[10px] text-zinc-500">
+                        <div className={`mt-2 pt-2 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                             {filteredData.length} de {data?.data?.length || 0} registros
                           </span>
                         </div>
@@ -1660,28 +1801,42 @@ export function CampanasPage() {
                   )}
                 </div>
 
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} mx-1`} />
 
                 {/* Status Filter */}
-                <span className="text-xs text-zinc-500 mr-1">Status:</span>
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Status:</span>
                 <FilterChip
                   label="Status"
                   options={allStatuses}
                   value={status}
                   onChange={(val) => { setStatus(val); setPage(1); }}
                   onClear={() => { setStatus(''); setPage(1); }}
+                  isDark={isDark}
                 />
 
-                <div className="h-4 w-px bg-zinc-700 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} mx-1`} />
+
+                {/* Tipo Periodo Filter */}
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Periodo:</span>
+                <FilterChip
+                  label="Tipo Periodo"
+                  options={['catorcena', 'mensual']}
+                  value={tipoPeriodo}
+                  onChange={(val) => { setTipoPeriodo(val); setPage(1); }}
+                  onClear={() => { setTipoPeriodo(''); setPage(1); }}
+                  isDark={isDark}
+                />
+
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} mx-1`} />
 
                 {/* Current Catorcena Indicator */}
                 {currentCatorcena && (
                   <>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs">
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} border text-xs`}>
                       <Clock className="h-3 w-3" />
                       <span>Actual: Cat. {currentCatorcena.numero_catorcena} / {currentCatorcena.a_o}</span>
                     </div>
-                    <div className="h-4 w-px bg-zinc-700 mx-1" />
+                    <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} mx-1`} />
                   </>
                 )}
 
@@ -1709,10 +1864,10 @@ export function CampanasPage() {
                 />
 
                 {/* Divider */}
-                <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-300'} mx-1`} />
 
                 {/* Sort Options */}
-                <span className="text-xs text-zinc-500 mr-1">
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>
                   <ArrowUpDown className="h-3 w-3 inline mr-1" />
                   Ordenar:
                 </span>
@@ -1722,16 +1877,17 @@ export function CampanasPage() {
                   value={sortField || ''}
                   onChange={(val) => { setSortField(val); setPage(1); }}
                   onClear={() => { setSortField(null); setPage(1); }}
+                  isDark={isDark}
                 />
                 <button
                   onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
-                  className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 transition-all"
+                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border-gray-200 hover:border-gray-300'} border transition-all`}
                 >
                   {sortDirection === 'asc' ? '↑ Asc' : '↓ Desc'}
                 </button>
 
                 {/* Divider */}
-                <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-300'} mx-1`} />
 
                 {/* Group By */}
                 <FilterChip
@@ -1745,10 +1901,10 @@ export function CampanasPage() {
                 {/* Clear All */}
                 {hasActiveFilters && (
                   <>
-                    <div className="h-4 w-px bg-zinc-700/50 mx-1" />
+                    <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-300'} mx-1`} />
                     <button
                       onClick={clearAllFilters}
-                      className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                      className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'} border transition-all`}
                     >
                       <X className="h-3 w-3" />
                       Limpiar todo
@@ -1765,11 +1921,14 @@ export function CampanasPage() {
           <button
             onClick={() => {
               setActiveView('tabla');
+              // Limpiar agrupaciones del versionario al volver a tabla
+              setActiveGroupings([]);
+              setExpandedGroups(new Set());
             }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeView === 'tabla'
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'
+                ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
+                : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
             }`}
           >
             <List className="h-4 w-4" />
@@ -1785,8 +1944,8 @@ export function CampanasPage() {
             }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeView === 'catorcena'
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'
+                ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
+                : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
             }`}
           >
             <LayoutGrid className="h-4 w-4" />
@@ -1797,16 +1956,16 @@ export function CampanasPage() {
         {/* Info Badge */}
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs">
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${isDark ? 'bg-purple-500/10 border border-purple-500/20 text-purple-300' : 'bg-purple-50 border border-purple-200 text-purple-700'} text-xs`}>
               <Filter className="h-3.5 w-3.5" />
               {filteredData.length} resultados
               {activeGroupings.length > 0 && (
-                <span className="text-zinc-500">
+                <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>
                   | Agrupado por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
                 </span>
               )}
               {sortField && (
-                <span className="text-zinc-500">| Ordenado por {SORT_FIELDS.find(f => f.field === sortField)?.label} ({sortDirection === 'asc' ? '↑' : '↓'})</span>
+                <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>| Ordenado por {SORT_FIELDS.find(f => f.field === sortField)?.label} ({sortDirection === 'asc' ? '↑' : '↓'})</span>
               )}
             </div>
           </div>
@@ -1814,7 +1973,7 @@ export function CampanasPage() {
 
         {/* Vista de Tabla */}
         {activeView === 'tabla' && (
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5">
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 shadow-xl shadow-purple-500/5' : 'border-purple-200 bg-white shadow-lg shadow-purple-100/30'} backdrop-blur-xl overflow-hidden`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -1824,18 +1983,18 @@ export function CampanasPage() {
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">ID</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Periodo</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Creador</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Estatus</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Actividad</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Inicio</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Cat. Fin</th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-purple-300 uppercase tracking-wider">APS</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">Acciones</th>
+                    <tr className={`border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30' : 'border-purple-200 bg-purple-50'}`}>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>ID</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Periodo</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Creador</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Campaña</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Marca</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Estatus</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Actividad</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Fecha Inicio</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Fecha Fin</th>
+                      <th className={`px-4 py-3 text-center text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>APS</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1859,17 +2018,17 @@ export function CampanasPage() {
                                   {/* Level 2 Header */}
                                   <tr
                                     onClick={() => toggleGroup(`${group.name}|${subgroup.name}`)}
-                                    className="bg-fuchsia-500/5 border-b border-fuchsia-500/10 cursor-pointer hover:bg-fuchsia-500/10 transition-colors"
+                                    className={`${isDark ? 'bg-fuchsia-500/5 border-b border-fuchsia-500/10 hover:bg-fuchsia-500/10' : 'bg-fuchsia-50 border-b border-fuchsia-200 hover:bg-fuchsia-100'} cursor-pointer transition-colors`}
                                   >
                                     <td colSpan={11} className="px-4 py-2.5 pl-10">
                                       <div className="flex items-center gap-2">
                                         {expandedGroups.has(`${group.name}|${subgroup.name}`) ? (
-                                          <ChevronDown className="h-4 w-4 text-fuchsia-400" />
+                                          <ChevronDown className={`h-4 w-4 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
                                         ) : (
-                                          <ChevronRight className="h-4 w-4 text-fuchsia-400" />
+                                          <ChevronRight className={`h-4 w-4 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
                                         )}
-                                        <span className="font-semibold text-zinc-200 text-sm">{subgroup.name || 'Sin asignar'}</span>
-                                        <span className="px-2 py-0.5 rounded-full text-xs bg-fuchsia-500/20 text-fuchsia-300">
+                                        <span className={`font-semibold ${isDark ? 'text-zinc-200' : 'text-gray-700'} text-sm`}>{subgroup.name || 'Sin asignar'}</span>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
                                           {subgroup.items.length} campañas
                                         </span>
                                       </div>
@@ -1895,10 +2054,10 @@ export function CampanasPage() {
                       <tr>
                         <td colSpan={11} className="px-4 py-12 text-center">
                           <div className="flex flex-col items-center gap-3">
-                            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-purple-500/10">
-                              <Megaphone className="w-6 h-6 text-purple-400" />
+                            <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'}`}>
+                              <Megaphone className={`w-6 h-6 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                             </div>
-                            <span className="text-zinc-500 text-sm">No se encontraron campañas</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>No se encontraron campañas</span>
                           </div>
                         </td>
                       </tr>
@@ -1909,23 +2068,23 @@ export function CampanasPage() {
 
               {/* Pagination */}
               {activeGroupings.length === 0 && data?.pagination && totalPages > 1 && (
-                <div className="flex items-center justify-between border-t border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20 px-4 py-3">
-                  <span className="text-sm text-purple-300/70">
-                    Página <span className="font-semibold text-purple-300">{page}</span> de <span className="font-semibold text-purple-300">{totalPages}</span>
-                    <span className="text-purple-300/50 ml-2">({total} total)</span>
+                <div className={`flex items-center justify-between border-t ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-200 bg-purple-50/50'} px-4 py-3`}>
+                  <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-600/70'}`}>
+                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
+                    <span className={`${isDark ? 'text-purple-300/50' : 'text-purple-500/50'} ml-2`}>({total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
-                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Anterior
                     </button>
                     <button
                       onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                       disabled={page === totalPages}
-                      className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Siguiente
                     </button>
@@ -1935,8 +2094,8 @@ export function CampanasPage() {
 
               {/* Grouped data info */}
               {activeGroupings.length > 0 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/20">
-                  <span className="text-xs text-zinc-500">
+                <div className={`flex items-center justify-between px-4 py-3 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
+                  <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                     Mostrando {filteredData.length} campañas agrupadas por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
                   </span>
                 </div>
@@ -1948,28 +2107,28 @@ export function CampanasPage() {
 
         {/* Vista por Catorcena */}
         {activeView === 'catorcena' && (
-          <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm overflow-hidden">
+          <div className={`rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm overflow-hidden`}>
             {/* Header de la vista */}
-            <div className="px-5 py-4 border-b border-zinc-800/50 bg-gradient-to-r from-purple-900/20 via-fuchsia-900/10 to-purple-900/20">
+            <div className={`px-5 py-4 border-b ${isDark ? 'border-zinc-800/50 bg-gradient-to-r from-purple-900/20 via-fuchsia-900/10 to-purple-900/20' : 'border-gray-200 bg-purple-50/50'}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                    <Calendar className="h-5 w-5 text-purple-400" />
+                  <div className={`w-10 h-10 rounded-xl ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'} flex items-center justify-center`}>
+                    <Calendar className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-white">Vista por Catorcena</h3>
-                    <p className="text-xs text-zinc-500">Campañas agrupadas por periodo de inicio</p>
+                    <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Vista por Catorcena</h3>
+                    <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Campañas agrupadas por periodo de inicio</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-white">{campanasPorCatorcena.length}</p>
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Catorcenas</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{campanasPorCatorcena.length}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide`}>Catorcenas</p>
                   </div>
-                  <div className="w-px h-10 bg-zinc-800" />
+                  <div className={`w-px h-10 ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`} />
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-purple-400">{filteredData.length}</p>
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Campañas</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>{filteredData.length}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide`}>Campañas</p>
                   </div>
                 </div>
               </div>
@@ -1981,13 +2140,13 @@ export function CampanasPage() {
               </div>
             ) : campanasPorCatorcena.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
-                  <Calendar className="w-8 h-8 text-purple-400" />
+                <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} mb-4`}>
+                  <Calendar className={`w-8 h-8 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                 </div>
-                <p className="text-zinc-500">No hay campañas agrupadas por catorcena</p>
+                <p className={isDark ? 'text-zinc-500' : 'text-gray-400'}>No hay campañas agrupadas por catorcena</p>
               </div>
             ) : (
-              <div className="divide-y divide-zinc-800/30">
+              <div className={`divide-y ${isDark ? 'divide-zinc-800/30' : 'divide-gray-200'}`}>
                 {campanasPorCatorcena.map(({ key, catorcena, campanas, subgroups }) => {
                   const isCurrentCatorcena = currentCatorcena &&
                     currentCatorcena.numero_catorcena === catorcena.num &&
@@ -2000,28 +2159,29 @@ export function CampanasPage() {
                   const renderCampana = (campana: Campana, indent: number = 0) => {
                     const statusColor = getStatusColor(campana.status);
                     const periodStatus = getPeriodStatus(campana.fecha_inicio, campana.fecha_fin);
-                    const periodColor = PERIOD_COLORS[periodStatus] || DEFAULT_STATUS_COLOR;
+                    const PERIOD_COLORS_LOCAL = getPeriodColors(isDark);
+                    const periodColor = PERIOD_COLORS_LOCAL[periodStatus] || getDefaultStatusColor(isDark);
                     const isExpanded = expandedCampanas.has(campana.id);
                     const inventarios = campanaInventarios[campana.id] || [];
                     const isLoadingInv = loadingInventarios.has(campana.id);
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
 
                     return (
-                      <div key={campana.id} className="border-t border-zinc-800/30">
+                      <div key={campana.id} className={`border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
                         <button
                           onClick={() => toggleCampana(campana.id)}
-                          className="w-full flex items-center gap-3 px-6 py-3 hover:bg-zinc-800/30 transition-all"
+                          className={`w-full flex items-center gap-3 px-6 py-3 ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'} transition-all`}
                           style={{ paddingLeft: `${24 + indent * 16}px` }}
                         >
                           {isLoadingInv ? (
-                            <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
+                            <Loader2 className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'} animate-spin`} />
                           ) : isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-zinc-400" />
+                            <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
                           ) : (
-                            <ChevronRight className="h-4 w-4 text-zinc-400" />
+                            <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
                           )}
-                          <Megaphone className="h-4 w-4 text-zinc-500" />
-                          <span className="font-medium text-white text-sm flex-1 text-left truncate">
+                          <Megaphone className={`h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                          <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} text-sm flex-1 text-left truncate`}>
                             {campana.nombre}
                           </span>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
@@ -2038,30 +2198,65 @@ export function CampanasPage() {
                             {campana.status}
                           </span>
                           {campana.has_aps ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} border border-emerald-500/30 flex items-center gap-1`}>
                               <Check className="h-3 w-3" /> APS
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-500/20 text-zinc-400 border border-zinc-500/30 flex items-center gap-1">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' : 'bg-gray-100 text-gray-500 border-gray-300'} border flex items-center gap-1`}>
                               <Minus className="h-3 w-3" /> Sin APS
                             </span>
                           )}
+                          {/* Resumen de campaña: circuitos (grupos), bonificación, inversión */}
+                          {(() => {
+                            // Priorizar el campo de campana para mantener valor estable aun con grupo cerrado.
+                            const circuitosCampana = Number((campana as any).circuitos ?? (campana as any).circuito ?? 0) || 0;
+                            // Fallback: contar grupos reales renderizados (APS + Sin APS).
+                            const circuitosDesdeGrupos = apsAgrupados.reduce((sum, apsGroup) => sum + apsGroup.grupos.length, 0);
+                            const circuitosCount = circuitosCampana > 0 ? circuitosCampana : circuitosDesdeGrupos;
+                            return (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`} title="Circuitos (grupos)">
+                                <Layers className="h-3 w-3" /> Circuitos {circuitosCount}
+                              </span>
+                            );
+                          })()}
+                          {Number(campana.bonificacion) > 0 && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25 flex items-center gap-1`} title="Bonificación">
+                              <Gift className="h-3 w-3" /> {campana.bonificacion}
+                            </span>
+                          )}
+                          {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0) > 0 && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
+                              <MapPin className="h-3 w-3" /> {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0)}
+                            </span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
+                            <DollarSign className="h-3 w-3" /> {campana.inversion != null && Number(campana.inversion) > 0 ? `$${Number(campana.inversion).toLocaleString()}` : 'Sin inversión'}
+                          </span>
                           <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => handleOpenCampana(campana.id)}
-                              className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all"
+                              className={`p-1.5 rounded-lg ${isDark ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border-purple-500/20' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-200'} border transition-all`}
                               title="Ver campaña"
                             >
                               <Eye className="h-3 w-3" />
                             </button>
+                            {campana.propuesta_id && (
+                              <button
+                                onClick={() => navigate(`/propuestas/compartir/${campana.propuesta_id}`)}
+                                className={`p-1.5 rounded-lg ${isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border-cyan-500/20' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 border-cyan-200'} border transition-all`}
+                                title="Compartir campaña"
+                              >
+                                <Share2 className="h-3 w-3" />
+                              </button>
+                            )}
                             {permissions.canEditCampanas && (
                               <button
                                 onClick={() => handleEditCampana(campana)}
                                 disabled={isEditDisabled(campana)}
                                 className={`p-1.5 rounded-lg border transition-all ${
                                   isEditDisabled(campana)
-                                    ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                                    : 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20'
+                                    ? isDark ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                    : isDark ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20' : 'bg-gray-50 text-gray-500 hover:bg-gray-100 border-gray-200'
                                 }`}
                                 title={isEditDisabled(campana) ? 'No editable' : 'Editar campaña'}
                               >
@@ -2072,32 +2267,32 @@ export function CampanasPage() {
                         </button>
                         {/* Contenido expandible - inventario */}
                         {isExpanded && (
-                          <div className="bg-zinc-950/50 px-8 py-3" style={{ marginLeft: `${indent * 16}px` }}>
+                          <div className={`${isDark ? 'bg-zinc-950/50' : 'bg-gray-50'} px-8 py-3`} style={{ marginLeft: `${indent * 16}px` }}>
                             {isLoadingInv ? (
-                              <div className="flex items-center gap-2 text-zinc-500 text-sm">
+                              <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                                 <Loader2 className="h-4 w-4 animate-spin" />
                                 Cargando inventario...
                               </div>
                             ) : inventarios.length === 0 ? (
-                              <p className="text-sm text-zinc-500">No hay inventario con APS</p>
+                              <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay inventario con APS</p>
                             ) : (
                               <div className="space-y-2">
                                 {apsAgrupados.map(apsGroup => {
                                   const apsKey = `${campana.id}-${apsGroup.aps ?? 'sin-aps'}`;
                                   const isAPSExpanded = expandedAPS.has(apsKey);
                                   return (
-                                    <div key={apsGroup.aps ?? 'sin-aps'} className="border border-zinc-800/50 rounded-lg overflow-hidden">
+                                    <div key={apsGroup.aps ?? 'sin-aps'} className={`border ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} rounded-lg overflow-hidden`}>
                                       <button
                                         onClick={() => toggleAPS(campana.id, apsGroup.aps)}
-                                        className="w-full flex items-center gap-2 px-3 py-2 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all"
+                                        className={`w-full flex items-center gap-2 px-3 py-2 ${isDark ? 'bg-zinc-800/30 hover:bg-zinc-800/50' : 'bg-gray-100 hover:bg-gray-200'} transition-all`}
                                       >
-                                        {isAPSExpanded ? <ChevronDown className="h-3 w-3 text-zinc-400" /> : <ChevronRight className="h-3 w-3 text-zinc-400" />}
-                                        <Package className="h-3 w-3 text-emerald-400" />
-                                        <span className="text-xs text-white font-medium">{apsGroup.aps ? `APS ${apsGroup.aps}` : 'Sin APS'}</span>
-                                        <span className="text-[10px] text-zinc-500">{apsGroup.totalItems} ubicaciones</span>
+                                        {isAPSExpanded ? <ChevronDown className={`h-3 w-3 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} /> : <ChevronRight className={`h-3 w-3 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />}
+                                        <Package className={`h-3 w-3 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                                        <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{apsGroup.aps ? `APS ${apsGroup.aps}` : 'Sin APS'}</span>
+                                        <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{apsGroup.totalItems} ubicaciones</span>
                                       </button>
                                       {isAPSExpanded && (
-                                        <div className="px-3 py-2 space-y-1 bg-zinc-900/50">
+                                        <div className={`px-3 py-2 space-y-1 ${isDark ? 'bg-zinc-900/50' : 'bg-white'}`}>
                                           {apsGroup.grupos.map(grupo => {
                                             const grupoKey = `${apsKey}-${grupo.key}`;
                                             const isGrupoExpanded = expandedGrupos.has(grupoKey);
@@ -2108,17 +2303,23 @@ export function CampanasPage() {
                                               estatusCount[estatus] = (estatusCount[estatus] || 0) + 1;
                                             });
                                             const estatusPredominante = Object.entries(estatusCount).sort((a, b) => b[1] - a[1])[0];
-                                            const estatusGrupoColor = estatusPredominante ? getEstatusArteColor(estatusPredominante[0]) : DEFAULT_STATUS_COLOR;
+                                            const estatusGrupoColor = estatusPredominante ? getEstatusArteColor(estatusPredominante[0]) : getDefaultStatusColor(isDark);
                                             return (
-                                              <div key={grupo.key} className="border-l-2 border-zinc-700 pl-2">
+                                              <div key={grupo.key} className={`border-l-2 ${isDark ? 'border-zinc-700' : 'border-gray-300'} pl-2`}>
                                                 <button
                                                   onClick={() => toggleGrupo(campana.id, apsGroup.aps, grupo.key)}
-                                                  className="w-full flex items-center gap-2 py-1 text-left hover:bg-zinc-800/30 rounded px-1"
+                                                  className={`w-full flex items-center gap-2 py-1 text-left ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'} rounded px-1 flex-wrap`}
                                                 >
-                                                  {isGrupoExpanded ? <ChevronDown className="h-3 w-3 text-zinc-500" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
-                                                  <ClipboardList className="h-3 w-3 text-purple-400" />
-                                                  <span className="text-[11px] text-zinc-300">{grupo.key}</span>
-                                                  <span className="text-[10px] text-zinc-600">({grupo.items.length})</span>
+                                                  {isGrupoExpanded ? <ChevronDown className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} /> : <ChevronRight className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />}
+                                                  <ClipboardList className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                                                  <span className={`text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                                                    {[
+                                                      (grupo.items[0] as any)?.formato,
+                                                      grupo.items[0]?.plaza,
+                                                      grupo.items[0]?.articulo
+                                                    ].filter(Boolean).join(' · ') || grupo.key}
+                                                  </span>
+                                                  <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>({grupo.items.length} caras)</span>
                                                   {/* 5 iconos de etapas de Gestión de Artes */}
                                                   {(() => {
                                                     const total = grupo.items.length;
@@ -2141,10 +2342,10 @@ export function CampanasPage() {
                                                       { icon: Camera, label: 'Validar Instalación', done: countAtOrPast(5) },
                                                     ];
                                                     return (
-                                                      <span className="inline-flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full bg-zinc-800/60 border border-zinc-700/40">
+                                                      <span className={`inline-flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full ${isDark ? 'bg-zinc-800/60 border-zinc-700/40' : 'bg-gray-100 border-gray-200'} border`}>
                                                         {tabs.map(({ icon: Icon, label, done }, idx) => (
                                                           <React.Fragment key={label}>
-                                                            {idx > 0 && <span className="w-px h-3 bg-zinc-700/60" />}
+                                                            {idx > 0 && <span className={`w-px h-3 ${isDark ? 'bg-zinc-700/60' : 'bg-gray-300'}`} />}
                                                             <span title={`${label}: ${done}/${total}`}>
                                                               <Icon className={`h-3.5 w-3.5 ${done === total ? 'text-green-400' : 'text-red-400/60'}`} />
                                                             </span>
@@ -2158,22 +2359,124 @@ export function CampanasPage() {
                                                       {estatusPredominante[0]}
                                                     </span>
                                                   )}
+                                                  {(() => {
+                                                    const plazas = [...new Set(grupo.items.map(i => i.plaza).filter(Boolean))];
+                                                    const formato = (grupo.items[0] as any)?.formato || null;
+                                                    const carasTotales = grupo.items.length;
+                                                    const tarifasGrupo = grupo.items
+                                                      .map(i => Number((i as any).tarifa_publica_sc) || 0)
+                                                      .filter(v => v > 0);
+                                                    // Tarifa: valor publico por cara (normalmente constante por grupo).
+                                                    const tarifaPublica = tarifasGrupo.length > 0 ? tarifasGrupo[0] : 0;
+                                                    // bonificacion_sc viene repetida por fila en algunos inventarios.
+                                                    // Para evitar inflar (ej. 50 filas x 50 = 2500), usar el valor de campaña;
+                                                    // si no existe, tomar el mayor valor reportado en el grupo.
+                                                    const bonifCampana = Number(campana.bonificacion) || 0;
+                                                    const bonifGrupoFallback = grupo.items.reduce((max, i) => {
+                                                      const val = Number((i as any).bonificacion_sc) || 0;
+                                                      return val > max ? val : max;
+                                                    }, 0);
+                                                    const sumBonif = Math.min(carasTotales, (bonifCampana > 0 ? bonifCampana : bonifGrupoFallback));
+                                                    const sumNormales = Math.max(carasTotales - sumBonif, 0);
+                                                    // Inversion: tarifa por cara * caras rentadas (excluye bonificadas).
+                                                    const inversionTotal = tarifaPublica * sumNormales;
+                                                    const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
+                                                    return (
+                                                      <>
+                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`} title="Caras totales">
+                                                          <Hash className="h-2.5 w-2.5" /> {carasTotales} caras
+                                                        </span>
+                                                        {plazas.length > 0 && (
+                                                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Plaza(s)">
+                                                            <MapPin className="h-2.5 w-2.5" /> {plazas.join(', ')}
+                                                          </span>
+                                                        )}
+                                                        {formato && (
+                                                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-violet-500/15 text-violet-300' : 'bg-violet-50 text-violet-700'} border border-violet-500/25`} title="Formato">
+                                                            {formato}
+                                                          </span>
+                                                        )}
+                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25`} title="Tarifa pública">
+                                                          {tarifaPublica > 0 ? <>Tarifa: {'$'}{tarifaPublica.toLocaleString()}</> : 'Sin tarifa'}
+                                                        </span>
+                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} border border-emerald-500/25`} title="Inversión total (tarifa)">
+                                                          {inversionTotal > 0 ? <>Inversión: {'$'}{inversionTotal.toLocaleString()}</> : 'Sin inversión'}
+                                                        </span>
+                                                        {sumBonif > 0 && (
+                                                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25`} title="Bonificación">
+                                                            Bonif: {sumBonif}
+                                                          </span>
+                                                        )}
+                                                        {sumNormales > 0 && (
+                                                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
+                                                            <MapPin className="h-2.5 w-2.5" /> {sumNormales}
+                                                          </span>
+                                                        )}
+                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-indigo-500/15 text-indigo-300' : 'bg-indigo-50 text-indigo-700'} border border-indigo-500/25 flex items-center gap-1`} title="Artes subidos">
+                                                          <Image className="h-2.5 w-2.5" /> {artesSubidos}/{carasTotales}
+                                                        </span>
+                                                      </>
+                                                    );
+                                                  })()}
                                                 </button>
                                                 {isGrupoExpanded && (
                                                   <div className="pl-5 py-1 space-y-0.5">
+                                                    {/* Resumen del grupo */}
+                                                    {(() => {
+                                                      // Indicaciones de programación/instalación del grupo
+                                                      const conIndicacionesProg = grupo.items.filter(i => (i as any).indicaciones_programacion).length;
+                                                      const conIndicacionesInst = grupo.items.filter(i => (i as any).indicaciones_instalacion).length;
+                                                      return (
+                                                        <div className={`flex flex-wrap items-center gap-2 py-1.5 px-1 mb-1 border-b ${isDark ? 'border-zinc-800/40' : 'border-gray-200'}`}>
+                                                          {conIndicacionesProg > 0 && (
+                                                            <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-orange-500/15 text-orange-300' : 'bg-orange-50 text-orange-700'} border border-orange-500/25 flex items-center gap-1`} title="Con indicaciones de programación">
+                                                              <FileText className="h-2.5 w-2.5" /> Prog: {conIndicacionesProg}
+                                                            </span>
+                                                          )}
+                                                          {conIndicacionesInst > 0 && (
+                                                            <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-rose-500/15 text-rose-300' : 'bg-rose-50 text-rose-700'} border border-rose-500/25 flex items-center gap-1`} title="Con indicaciones de instalación">
+                                                              <FileText className="h-2.5 w-2.5" /> Inst: {conIndicacionesInst}
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      );
+                                                    })()}
                                                     {grupo.items.map(inv => {
                                                       const estatusArteColor = getEstatusArteColor((inv as any).estatus_arte);
+                                                      const hasArte = inv.archivo != null && inv.archivo !== '';
+                                                      const indicacionesProg = (inv as any).indicaciones_programacion;
+                                                      const indicacionesInst = (inv as any).indicaciones_instalacion;
                                                       return (
-                                                        <div key={inv.id} className="flex items-center gap-2 text-[10px] text-zinc-500 py-0.5">
-                                                          <MapPin className="h-2.5 w-2.5 text-zinc-600" />
-                                                          <span className="text-zinc-400 font-mono">{inv.codigo_unico}</span>
+                                                        <div key={inv.id} className={`flex items-center gap-2 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} py-0.5 flex-wrap`}>
+                                                          <MapPin className={`h-2.5 w-2.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
+                                                          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono`}>{inv.codigo_unico}</span>
+                                                          <span title={hasArte ? 'Arte subido' : 'Sin arte'} className="flex items-center gap-0.5">
+                                                            <Image className={`h-2.5 w-2.5 ${hasArte ? 'text-green-400' : isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
+                                                            {hasArte && <span className="text-green-400/70">Arte</span>}
+                                                          </span>
                                                           {(inv as any).estatus_arte && (
                                                             <span className={`px-1.5 py-0.5 rounded text-[9px] ${estatusArteColor.bg} ${estatusArteColor.text} border ${estatusArteColor.border}`}>
                                                               {(inv as any).estatus_arte}
                                                             </span>
                                                           )}
-                                                          <span className="text-zinc-600">•</span>
+                                                          <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>•</span>
                                                           <span>{inv.plaza || 'Sin plaza'}</span>
+                                                          {indicacionesProg && (
+                                                            <>
+                                                              <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>•</span>
+                                                              <span className={`${isDark ? 'text-orange-300/80' : 'text-orange-600'} flex items-center gap-0.5`} title="Indicaciones de programación">
+                                                                <FileText className="h-2.5 w-2.5" /> Prog: {indicacionesProg}
+                                                              </span>
+                                                            </>
+                                                          )}
+                                                          {indicacionesInst && (
+                                                            <>
+                                                              <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>•</span>
+                                                              <span className={`${isDark ? 'text-rose-300/80' : 'text-rose-600'} flex items-center gap-0.5`} title="Indicaciones de instalación">
+                                                                <FileText className="h-2.5 w-2.5" /> Inst: {indicacionesInst}
+                                                              </span>
+                                                            </>
+                                                          )}
                                                         </div>
                                                       );
                                                     })}
@@ -2202,24 +2505,26 @@ export function CampanasPage() {
                       onClick={() => toggleCatorcena(key)}
                       className={`w-full flex items-center gap-3 px-5 py-4 transition-all ${
                         isCurrentCatorcena
-                          ? 'bg-gradient-to-r from-emerald-900/30 via-teal-900/20 to-emerald-900/30 hover:from-emerald-900/40 hover:via-teal-900/30 hover:to-emerald-900/40'
-                          : 'bg-zinc-800/30 hover:bg-zinc-800/50'
+                          ? isDark ? 'bg-gradient-to-r from-emerald-900/30 via-teal-900/20 to-emerald-900/30 hover:from-emerald-900/40 hover:via-teal-900/30 hover:to-emerald-900/40' : 'bg-emerald-50 hover:bg-emerald-100'
+                          : isDark ? 'bg-zinc-800/30 hover:bg-zinc-800/50' : 'bg-gray-50 hover:bg-gray-100'
                       }`}
                     >
                       {expandedCatorcenas.has(key) ? (
-                        <ChevronDown className="h-5 w-5 text-purple-400" />
+                        <ChevronDown className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                       ) : (
-                        <ChevronRight className="h-5 w-5 text-purple-400" />
+                        <ChevronRight className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                       )}
-                      <Calendar className="h-5 w-5 text-purple-400" />
-                      <span className="font-semibold text-white text-sm">
-                        Catorcena {catorcena.num}, {catorcena.anio}
+                      <Calendar className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                      <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>
+                        {(catorcena as any).isMensual
+                          ? `${MESES_FULL[catorcena.num - 1]} ${catorcena.anio}`
+                          : `Cat ${catorcena.num} / ${catorcena.anio}`}
                       </span>
-                      <span className="px-2.5 py-1 rounded-full text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      <span className={`px-2.5 py-1 rounded-full text-xs ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200'} border`}>
                         {campanas.length} campañas
                       </span>
                       {secondGroupingLabel && subgroups && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30' : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200'} border`}>
                           {subgroups.length} {secondGroupingLabel}
                         </span>
                       )}
@@ -2227,42 +2532,55 @@ export function CampanasPage() {
                       {currentCatorcena &&
                        currentCatorcena.numero_catorcena === catorcena.num &&
                        currentCatorcena.a_o === catorcena.anio && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} border border-emerald-500/30`}>
                           En curso
                         </span>
                       )}
+                      {/* Inversión total de la catorcena */}
+                      {(() => {
+                        const totalInversion = campanas.reduce((s, c) => s + (Number(c.inversion) || 0), 0);
+                        return totalInversion > 0 ? (
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión total">
+                            <DollarSign className="h-3 w-3" /> {'$'}{totalInversion.toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/15 text-zinc-400 border-zinc-500/25' : 'bg-gray-100 text-gray-500 border-gray-300'} border flex items-center gap-1`} title="Sin inversión registrada">
+                            Sin inversión
+                          </span>
+                        );
+                      })()}
                     </button>
 
                     {/* Contenido expandible de catorcena */}
                     {expandedCatorcenas.has(key) && (
-                      <div className="bg-zinc-900/50">
+                      <div className={isDark ? 'bg-zinc-900/50' : 'bg-white'}>
                         {/* Si hay subgrupos, mostrar agrupado por la segunda columna */}
                         {subgroups && subgroups.length > 0 ? (
                           subgroups.map(subgroup => {
                             const subgroupKey = `${key}-${subgroup.name}`;
                             const isSubgroupExpanded = expandedGroups.has(subgroupKey);
-                            const subgroupColor = getTagColor(subgroup.name);
+                            const subgroupColor = getTagColor(subgroup.name, isDark);
                             return (
-                              <div key={subgroupKey} className="border-t border-zinc-800/30">
+                              <div key={subgroupKey} className={`border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
                                 <button
                                   onClick={() => toggleGroup(subgroupKey)}
-                                  className="w-full flex items-center gap-3 px-6 py-2.5 hover:bg-zinc-800/30 transition-all bg-zinc-800/20"
+                                  className={`w-full flex items-center gap-3 px-6 py-2.5 ${isDark ? 'hover:bg-zinc-800/30 bg-zinc-800/20' : 'hover:bg-gray-100 bg-gray-50'} transition-all`}
                                 >
                                   {isSubgroupExpanded ? (
-                                    <ChevronDown className="h-4 w-4 text-fuchsia-400" />
+                                    <ChevronDown className={`h-4 w-4 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
                                   ) : (
-                                    <ChevronRight className="h-4 w-4 text-fuchsia-400" />
+                                    <ChevronRight className={`h-4 w-4 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
                                   )}
-                                  <Layers className="h-4 w-4 text-fuchsia-400" />
+                                  <Layers className={`h-4 w-4 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
                                   <span className={`px-2 py-0.5 rounded text-xs ${subgroupColor.bg} ${subgroupColor.text} border ${subgroupColor.border}`}>
                                     {subgroup.name}
                                   </span>
-                                  <span className="text-xs text-zinc-500">
+                                  <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                                     {subgroup.campanas.length} campañas
                                   </span>
                                 </button>
                                 {isSubgroupExpanded && (
-                                  <div className="bg-zinc-900/30">
+                                  <div className={isDark ? 'bg-zinc-900/30' : 'bg-white'}>
                                     {subgroup.campanas.map(campana => renderCampana(campana, 1))}
                                   </div>
                                 )}
@@ -2285,18 +2603,18 @@ export function CampanasPage() {
 
         {/* Footer de vista catorcena - información */}
         {activeView === 'catorcena' && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-800/50 bg-zinc-900/30 text-xs text-zinc-500">
+          <div className={`flex items-center justify-between px-5 py-3 border-t ${isDark ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-400'} text-xs`}>
             <span>
               {campanasPorCatorcena.length} catorcenas · {filteredData.length} campañas
               {activeGroupings.length > 1 && (
-                <span className="text-fuchsia-400 ml-2">
+                <span className={`${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'} ml-2`}>
                   · Subagrupado por {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}
                 </span>
               )}
             </span>
             {currentCatorcena && (
-              <span className="text-xs text-emerald-400 flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className={`text-xs ${isDark ? 'text-emerald-400' : 'text-emerald-600'} flex items-center gap-1.5`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-emerald-400' : 'bg-emerald-500'} animate-pulse`} />
                 Catorcena actual: {currentCatorcena.numero_catorcena}/{currentCatorcena.a_o}
               </span>
             )}

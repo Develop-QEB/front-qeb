@@ -8,6 +8,7 @@ import {
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { useThemeStore } from '../../store/themeStore';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
@@ -58,6 +59,7 @@ interface InventarioReservado {
   tarifa_publica: number | null;
   numero_catorcena?: number | null;
   anio_catorcena?: number | null;
+  inicio_periodo?: string | null;
 }
 
 interface PublicPropuestaData {
@@ -141,9 +143,18 @@ interface ResumenCatorcenaGroup {
   totalInversion: number;
 }
 
-function formatInicioPeriodo(item: InventarioReservado): string {
+const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+    const parts = item.inicio_periodo.split('-');
+    if (parts.length >= 2) {
+      const m = parseInt(parts[1]);
+      return `${MESES_LABEL[m - 1]} ${parts[0]}`;
+    }
+  }
   if (item.numero_catorcena && item.anio_catorcena) {
-    return `Catorcena ${item.numero_catorcena}, ${item.anio_catorcena}`;
+    return `Cat ${item.numero_catorcena} / ${item.anio_catorcena}`;
   }
   return 'Sin asignar';
 }
@@ -184,6 +195,7 @@ async function fetchPublicPropuesta(id: number): Promise<PublicPropuestaData> {
 }
 
 export function ClientePropuestaPage() {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const { id } = useParams<{ id: string }>();
   const propuestaId = id ? parseInt(id, 10) : 0;
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -215,6 +227,7 @@ export function ClientePropuestaPage() {
   });
 
   const inventario = data?.inventario || [];
+  const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
   // Computed data
   const kpis = useMemo(() => {
@@ -260,7 +273,7 @@ export function ClientePropuestaPage() {
     const catorcenaMap = new Map<string, Map<string, InventarioReservado[]>>();
 
     filteredInventario.forEach(item => {
-      const catKey = formatInicioPeriodo(item);
+      const catKey = formatInicioPeriodo(item, tipoPeriodo);
       const artKey = item.articulo || 'Sin articulo';
       if (!catorcenaMap.has(catKey)) catorcenaMap.set(catKey, new Map());
       const artMap = catorcenaMap.get(catKey)!;
@@ -315,25 +328,32 @@ export function ClientePropuestaPage() {
     return { lat: avgLat, lng: avgLng };
   }, [inventario]);
 
-  // Catorcena period display helpers
+  // Period display helpers
   const periodoInicio = useMemo(() => {
-    if (data?.propuesta?.catorcena_inicio && data?.propuesta?.anio_inicio) {
-      return `Catorcena ${data.propuesta.catorcena_inicio}, ${data.propuesta.anio_inicio}`;
+    if (tipoPeriodo === 'mensual' && data?.cotizacion?.fecha_inicio) {
+      const parts = data.cotizacion.fecha_inicio.split('-');
+      if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
     }
-    // Fallback: compute from inventario
+    if (data?.propuesta?.catorcena_inicio && data?.propuesta?.anio_inicio) {
+      return `Cat ${data.propuesta.catorcena_inicio} / ${data.propuesta.anio_inicio}`;
+    }
     const catorcenas = inventario
       .filter(i => i.numero_catorcena && i.anio_catorcena)
       .map(i => ({ num: i.numero_catorcena!, year: i.anio_catorcena! }));
     if (catorcenas.length > 0) {
       const sorted = catorcenas.sort((a, b) => a.year !== b.year ? a.year - b.year : a.num - b.num);
-      return `Catorcena ${sorted[0].num}, ${sorted[0].year}`;
+      return `Cat ${sorted[0].num} / ${sorted[0].year}`;
     }
     return 'N/A';
-  }, [data, inventario]);
+  }, [data, inventario, tipoPeriodo]);
 
   const periodoFin = useMemo(() => {
+    if (tipoPeriodo === 'mensual' && data?.cotizacion?.fecha_fin) {
+      const parts = data.cotizacion.fecha_fin.split('-');
+      if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
+    }
     if (data?.propuesta?.catorcena_fin && data?.propuesta?.anio_fin) {
-      return `Catorcena ${data.propuesta.catorcena_fin}, ${data.propuesta.anio_fin}`;
+      return `Cat ${data.propuesta.catorcena_fin} / ${data.propuesta.anio_fin}`;
     }
     const catorcenas = inventario
       .filter(i => i.numero_catorcena && i.anio_catorcena)
@@ -341,17 +361,17 @@ export function ClientePropuestaPage() {
     if (catorcenas.length > 0) {
       const sorted = catorcenas.sort((a, b) => a.year !== b.year ? a.year - b.year : a.num - b.num);
       const last = sorted[sorted.length - 1];
-      return `Catorcena ${last.num}, ${last.year}`;
+      return `Cat ${last.num} / ${last.year}`;
     }
     return 'N/A';
-  }, [data, inventario]);
+  }, [data, inventario, tipoPeriodo]);
 
   // Handlers
   const handleDownloadCSV = () => {
     const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Articulo', 'Caras', 'Tarifa', 'Periodo'];
     const rows = inventario.map(i => [
       i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.tipo_de_mueble, i.articulo,
-      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i)
+      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo)
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -482,8 +502,8 @@ export function ClientePropuestaPage() {
     // Period
     y = addSectionTitle('PERIODO DE CAMPAÑA', y);
     y = createFieldRow([
-      { label: 'Catorcena de Inicio', value: periodoInicio },
-      { label: 'Catorcena de Fin', value: periodoFin },
+      { label: tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Fecha Inicio', value: periodoInicio },
+      { label: tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Fecha Fin', value: periodoFin },
     ], y);
     y += 5;
 
@@ -514,7 +534,7 @@ export function ClientePropuestaPage() {
     if (inventario.length > 0) {
       const grouped: Record<string, Record<string, typeof inventario>> = {};
       inventario.forEach(item => {
-        const catKey = formatInicioPeriodo(item);
+        const catKey = formatInicioPeriodo(item, tipoPeriodo);
         const artKey = item.articulo || 'Sin articulo';
         if (!grouped[catKey]) grouped[catKey] = {};
         if (!grouped[catKey][artKey]) grouped[catKey][artKey] = [];
@@ -539,20 +559,22 @@ export function ClientePropuestaPage() {
           doc.setFontSize(8);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(255, 255, 255);
+          const groupTarifaUnit = items.length > 0 ? (Number(items[0].tarifa_publica) || 0) : 0;
           doc.text(`${articulo}`, marginX + 10, y + 4);
           doc.setFont('helvetica', 'normal');
-          doc.text(`Caras: ${groupCaras}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
+          doc.text(`Caras: ${groupCaras}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
           y += 8;
 
           autoTable(doc, {
-            head: [['Ciudad', 'Ubicacion', 'Formato', 'Orientacion', 'Caras', 'Periodo']],
+            head: [['Ciudad', 'Ubicacion', 'Formato', 'Caras', 'Latitud', 'Longitud', 'Periodo']],
             body: items.map(i => [
               i.plaza || '-',
               (i.ubicacion || '-').substring(0, 50),
               i.tipo_de_mueble || '-',
-              i.tipo_de_cara || '-',
               String(i.caras_totales || 0),
-              formatInicioPeriodo(i),
+              i.latitud?.toFixed(6) || '-',
+              i.longitud?.toFixed(6) || '-',
+              formatInicioPeriodo(i, tipoPeriodo),
             ]),
             startY: y,
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -560,10 +582,13 @@ export function ClientePropuestaPage() {
             headStyles: { fillColor: [230, 240, 250], textColor: [PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]], fontStyle: 'bold', fontSize: 7 },
             alternateRowStyles: { fillColor: [250, 252, 255] },
             columnStyles: {
-              0: { cellWidth: 35 },
-              1: { cellWidth: 80 },
-              4: { halign: 'center', cellWidth: 20 },
-              5: { cellWidth: 45 },
+              0: { cellWidth: 30 },
+              1: { cellWidth: 65 },
+              2: { cellWidth: 30 },
+              3: { halign: 'center', cellWidth: 18 },
+              4: { cellWidth: 28 },
+              5: { cellWidth: 28 },
+              6: { cellWidth: 40 },
             },
           });
 
@@ -627,11 +652,11 @@ export function ClientePropuestaPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-white via-blue-50 to-green-50">
+      <div className={`flex items-center justify-center h-screen ${isDark ? 'bg-zinc-900' : 'bg-gradient-to-br from-white via-blue-50 to-green-50'}`}>
         <div className="text-center">
           <img src="/logo-grupo-imu.png" alt="IMU" className="h-20 w-auto mx-auto mb-4 animate-pulse" />
           <Loader2 className="h-8 w-8 animate-spin text-[#0054A6] mx-auto" />
-          <p className="text-gray-500 mt-2">Cargando propuesta...</p>
+          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-2`}>Cargando propuesta...</p>
         </div>
       </div>
     );
@@ -639,7 +664,7 @@ export function ClientePropuestaPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-white via-blue-50 to-green-50">
+      <div className={`flex items-center justify-center h-screen ${isDark ? 'bg-zinc-900' : 'bg-gradient-to-br from-white via-blue-50 to-green-50'}`}>
         <div className="text-center">
           <img src="/logo-grupo-imu.png" alt="IMU" className="h-16 w-auto mx-auto mb-4" />
           <p className="text-red-600 font-medium">Error al cargar la propuesta</p>
@@ -649,21 +674,21 @@ export function ClientePropuestaPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-blue-50/30 to-green-50/30 text-gray-800">
+    <div className={`min-h-screen ${isDark ? 'bg-zinc-900 text-white' : 'bg-gradient-to-br from-white via-blue-50/30 to-green-50/30 text-gray-800'}`}>
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur shadow-md border-b border-gray-200">
+      <header className={`sticky top-0 z-50 backdrop-blur shadow-md border-b ${isDark ? 'bg-zinc-900/95 border-zinc-700' : 'bg-white/95 border-gray-200'}`}>
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center justify-center">
               <img src="/logo-grupo-imu.png" alt="IMU" className="h-14 w-auto object-contain" />
             </div>
-            <div className="border-l border-gray-300 pl-4">
+            <div className={`border-l pl-4 ${isDark ? 'border-zinc-700' : 'border-gray-300'}`}>
               <h1 className="text-xl font-bold text-[#0054A6]">Propuesta de Campaña</h1>
-              <p className="text-sm text-gray-500">Referencia #{propuestaId}</p>
+              <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Referencia #{propuestaId}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={handleDownloadKML} className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-sm font-medium shadow-sm transition-colors">
+            <button onClick={handleDownloadKML} className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium shadow-sm transition-colors ${isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700' : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'}`}>
               <MapIcon className="h-4 w-4" /> KML
             </button>
             <button onClick={handleGeneratePDF} className="flex items-center gap-2 px-4 py-2 bg-[#0054A6] hover:bg-[#003B71] text-white rounded-lg text-sm font-medium shadow-sm transition-colors">
@@ -675,25 +700,25 @@ export function ClientePropuestaPage() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Campaign Header */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+        <div className={`rounded-2xl p-6 shadow-sm border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-200'}`}>
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-2xl font-bold mb-2 text-[#0054A6]">
                 {data?.cotizacion?.nombre_campania || 'Propuesta'}
               </h2>
-              <p className="text-gray-600">{data?.propuesta?.descripcion || ''}</p>
+               {/* <p className="text-gray-600">{data?.propuesta?.descripcion || ''}</p> */}
             </div>
             <div className="bg-[#7AB800]/10 text-[#7AB800] px-3 py-1 rounded-full text-sm font-medium">
               {data?.propuesta?.status || 'Propuesta'}
             </div>
           </div>
-          <div className="flex gap-6 mt-4 text-sm text-gray-500 border-t border-gray-100 pt-4">
+          <div className={`flex gap-6 mt-4 text-sm border-t pt-4 ${isDark ? 'text-zinc-400 border-zinc-700' : 'text-gray-500 border-gray-100'}`}>
             <span className="flex items-center gap-1">
-              <span className="font-medium text-gray-700">Inicio:</span>
+              <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Inicio:</span>
               <span className="text-[#0054A6] font-medium">{periodoInicio}</span>
             </span>
             <span className="flex items-center gap-1">
-              <span className="font-medium text-gray-700">Fin:</span>
+              <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Fin:</span>
               <span className="text-[#0054A6] font-medium">{periodoFin}</span>
             </span>
           </div>
@@ -707,8 +732,8 @@ export function ClientePropuestaPage() {
             { label: 'Marca', value: data?.solicitud?.marca_nombre },
             { label: 'Asesor', value: data?.solicitud?.asesor },
           ].map(({ label, value }) => (
-            <div key={label} className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</p>
+            <div key={label} className={`rounded-xl p-4 border shadow-sm hover:shadow-md transition-shadow ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-200'}`}>
+              <p className={`text-xs uppercase tracking-wide mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{label}</p>
               <p className="text-sm font-semibold truncate text-[#0054A6]">{value || 'N/A'}</p>
             </div>
           ))}
@@ -730,14 +755,14 @@ export function ClientePropuestaPage() {
         </div>
 
         {/* Resumen de Caras - Tabla principal */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className={`rounded-2xl shadow-sm border overflow-hidden ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-200'}`}>
           {/* Toolbar */}
-          <div className="px-5 py-4 border-b border-gray-200 bg-gradient-to-r from-[#0054A6]/5 to-[#7AB800]/5">
+          <div className={`px-5 py-4 border-b ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-gray-200 bg-gradient-to-r from-[#0054A6]/5 to-[#7AB800]/5'}`}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-[#0054A6] flex items-center gap-2">
                 <Layers className="h-4 w-4" />
                 Resumen de Caras
-                <span className="text-xs text-gray-400 font-normal">({filteredInventario.length} inventarios)</span>
+                <span className={`text-xs font-normal ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({filteredInventario.length} inventarios)</span>
               </h3>
               <div className="flex items-center gap-2">
                 <button onClick={handleDownloadCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7AB800] hover:bg-[#5FA800] text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
@@ -747,19 +772,19 @@ export function ClientePropuestaPage() {
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
-                <Filter className="h-3.5 w-3.5 text-gray-400" />
+                <Filter className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                 <input
                   type="text"
                   placeholder="Buscar..."
                   value={filterText}
                   onChange={(e) => setFilterText(e.target.value)}
-                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#0054A6] focus:border-transparent w-44"
+                  className={`px-3 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#0054A6] focus:border-transparent w-44 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder-zinc-500' : 'bg-white border-gray-300 text-gray-800'}`}
                 />
                 <button
                   onClick={() => setShowFilters(!showFilters)}
                   className={`px-2.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1 ${showFilters || filters.length > 0
                     ? 'bg-[#0054A6] text-white'
-                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                    : isDark ? 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
                   }`}
                 >
                   <Filter className="h-3 w-3" />
@@ -767,8 +792,8 @@ export function ClientePropuestaPage() {
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                <ArrowUpDown className="h-3.5 w-3.5 text-gray-400" />
-                <select value={sortField} onChange={(e) => setSortField(e.target.value)} className="px-2 py-1.5 bg-white border border-gray-300 rounded text-xs text-gray-700">
+                <ArrowUpDown className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                <select value={sortField} onChange={(e) => setSortField(e.target.value)} className={`px-2 py-1.5 border rounded text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : 'bg-white border-gray-300 text-gray-700'}`}>
                   <option value="">Sin ordenar</option>
                   <option value="codigo_unico">Codigo</option>
                   <option value="plaza">Plaza</option>
@@ -777,7 +802,7 @@ export function ClientePropuestaPage() {
                 </select>
                 <button
                   onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                  className="px-2 py-1.5 bg-gray-200 hover:bg-gray-300 rounded text-xs text-gray-600"
+                  className={`px-2 py-1.5 rounded text-xs ${isDark ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`}
                 >
                   {sortOrder === 'asc' ? '↑' : '↓'}
                 </button>
@@ -795,7 +820,7 @@ export function ClientePropuestaPage() {
 
           {/* Advanced Filters Panel */}
           {showFilters && (
-            <div className="p-4 border-b border-gray-200 bg-blue-50/30">
+            <div className={`p-4 border-b ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-gray-200 bg-blue-50/30'}`}>
               <div className="flex flex-wrap gap-2 mb-3">
                 {filters.map(filter => {
                   const fieldConfig = FILTER_FIELDS.find(f => f.field === filter.field);
@@ -803,9 +828,9 @@ export function ClientePropuestaPage() {
                   return (
                     <div key={filter.id} className="flex items-center gap-1 px-2 py-1 bg-[#0054A6]/10 rounded-lg text-xs">
                       <span className="text-[#0054A6]">{fieldConfig?.label || filter.field}</span>
-                      <span className="text-gray-400">{operatorConfig?.label || filter.operator}</span>
-                      <span className="text-gray-800 font-medium">{filter.value}</span>
-                      <button onClick={() => setFilters(filters.filter(f => f.id !== filter.id))} className="ml-1 text-gray-400 hover:text-red-500">
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>{operatorConfig?.label || filter.operator}</span>
+                      <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-800'}`}>{filter.value}</span>
+                      <button onClick={() => setFilters(filters.filter(f => f.id !== filter.id))} className={`ml-1 hover:text-red-500 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                         <X className="h-3 w-3" />
                       </button>
                     </div>
@@ -813,14 +838,14 @@ export function ClientePropuestaPage() {
                 })}
               </div>
               <div className="flex items-center gap-2">
-                <select id="filter-field-client" className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700" defaultValue="">
+                <select id="filter-field-client" className={`px-2 py-1 border rounded text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : 'bg-white border-gray-300 text-gray-700'}`} defaultValue="">
                   <option value="" disabled>Campo</option>
                   {FILTER_FIELDS.map(f => (<option key={f.field} value={f.field}>{f.label}</option>))}
                 </select>
-                <select id="filter-operator-client" className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700" defaultValue="=">
+                <select id="filter-operator-client" className={`px-2 py-1 border rounded text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : 'bg-white border-gray-300 text-gray-700'}`} defaultValue="=">
                   {FILTER_OPERATORS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
                 </select>
-                <input id="filter-value-client" type="text" placeholder="Valor" className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700 w-32" />
+                <input id="filter-value-client" type="text" placeholder="Valor" className={`px-2 py-1 border rounded text-xs w-32 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300 placeholder-zinc-500' : 'bg-white border-gray-300 text-gray-700'}`} />
                 <button
                   onClick={() => {
                     const field = (document.getElementById('filter-field-client') as HTMLSelectElement).value;
@@ -834,7 +859,7 @@ export function ClientePropuestaPage() {
                   className="px-3 py-1 bg-[#0054A6] hover:bg-[#003B71] text-white rounded text-xs"
                 >Agregar</button>
                 {filters.length > 0 && (
-                  <button onClick={() => setFilters([])} className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded text-xs">Limpiar</button>
+                  <button onClick={() => setFilters([])} className={`px-3 py-1 rounded text-xs ${isDark ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`}>Limpiar</button>
                 )}
               </div>
             </div>
@@ -898,6 +923,7 @@ export function ClientePropuestaPage() {
                               </div>
                               <div className="flex items-center gap-3 text-xs">
                                 <span className="text-gray-400">Caras: <span className="text-gray-700 font-medium">{artGroup.totalCaras}</span></span>
+                                <span className="text-amber-600">Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
                                 <span className="text-[#7AB800]">{formatCurrency(artGroup.totalInversion)}</span>
                               </div>
                             </button>
@@ -910,12 +936,6 @@ export function ClientePropuestaPage() {
                                     <span className="text-xs text-gray-400">Formatos:</span>
                                     {artGroup.formatos.map(f => (
                                       <span key={f} className="px-2 py-0.5 bg-blue-50 text-[#0054A6] rounded text-[10px] font-medium border border-blue-100">{f}</span>
-                                    ))}
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-xs text-gray-400">Tipos:</span>
-                                    {artGroup.tipos.map(t => (
-                                      <span key={t} className="px-2 py-0.5 bg-green-50 text-[#7AB800] rounded text-[10px] font-medium border border-green-100">{t}</span>
                                     ))}
                                   </div>
                                   <div className="flex items-center gap-1.5">
@@ -932,8 +952,9 @@ export function ClientePropuestaPage() {
                                       <tr className="bg-[#0054A6]/5">
                                         <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Plaza</th>
                                         <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Formato</th>
-                                        <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Tipo</th>
                                         <th className="px-3 py-2 text-center text-xs font-semibold text-[#0054A6]">Caras</th>
+                                        <th className="px-3 py-2 text-right text-xs font-semibold text-[#0054A6]">Lat</th>
+                                        <th className="px-3 py-2 text-right text-xs font-semibold text-[#0054A6]">Long</th>
                                         <th className="px-3 py-2 text-right text-xs font-semibold text-amber-600">Tarifa</th>
                                         <th className="px-3 py-2 text-right text-xs font-semibold text-[#7AB800]">Inversion</th>
                                       </tr>
@@ -945,8 +966,9 @@ export function ClientePropuestaPage() {
                                           <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
                                             <td className="px-3 py-2 text-gray-700 text-xs">{item.plaza || '-'}</td>
                                             <td className="px-3 py-2 text-gray-600 text-xs">{item.tipo_de_mueble || '-'}</td>
-                                            <td className="px-3 py-2 text-gray-600 text-xs">{item.tipo_de_cara || '-'}</td>
                                             <td className="px-3 py-2 text-center font-semibold text-gray-800 text-xs">{item.caras_totales}</td>
+                                            <td className="px-3 py-2 text-right text-gray-400 text-xs font-mono">{item.latitud?.toFixed(6) || '-'}</td>
+                                            <td className="px-3 py-2 text-right text-gray-400 text-xs font-mono">{item.longitud?.toFixed(6) || '-'}</td>
                                             <td className="px-3 py-2 text-right text-amber-600 text-xs">{formatCurrency(item.tarifa_publica || 0)}</td>
                                             <td className="px-3 py-2 text-right text-[#7AB800] font-medium text-xs">{formatCurrency(inv)}</td>
                                           </tr>
@@ -1091,7 +1113,7 @@ export function ClientePropuestaPage() {
                         <p><strong>Caras:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(selectedMarker.tarifa_publica || 0)}</p>
                         {selectedMarker.numero_catorcena && (
-                          <p><strong>Periodo:</strong> Catorcena {selectedMarker.numero_catorcena}, {selectedMarker.anio_catorcena}</p>
+                          <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const parts = selectedMarker.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`; })() : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`}</p>
                         )}
                       </div>
                     </div>

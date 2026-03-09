@@ -93,8 +93,12 @@ export interface RolePermissions {
   canOnlyOpenImpresionTasks: boolean; // Solo puede abrir tareas de tipo Impresión (oculta botón Abrir para otros tipos)
   canOnlyOpenRecepcionTasks: boolean; // Solo puede abrir tareas de tipo Recepción, Instalación, Testigo y Programación (para Operaciones)
   canOnlyOpenCorreccionTasks: boolean; // Solo puede abrir tareas de tipo Corrección
+  canOnlyOpenOrdenProgramacionTasks: boolean; // Solo puede abrir tareas de tipo Orden de Programación (para Tráfico)
   cannotOpenCorreccionTasks: boolean; // No puede abrir tareas de tipo Corrección (para Diseñadores)
   canOpenTasks: boolean; // Puede abrir/ver detalle de tareas (false = solo visualización de la lista)
+  canCreateOrdenProgramacion: boolean; // Puede crear tareas de Orden de Programación (para Tráfico)
+  canCreateOrdenInstalacion: boolean; // Puede crear tareas de Orden de Instalación (para Tráfico)
+  canOnlyOpenOrdenInstalacionTasks: boolean; // Solo puede abrir tareas de tipo Orden de Instalación (para Tráfico)
   canCreateInstalacionFromRecibido: boolean; // Crear tareas de Instalación desde tab Impresiones con estado recibido (Operaciones)
 
   // Inventarios
@@ -161,8 +165,12 @@ const defaultPermissions: RolePermissions = {
   canOnlyOpenImpresionTasks: false,
   canOnlyOpenRecepcionTasks: false,
   canOnlyOpenCorreccionTasks: false,
+  canOnlyOpenOrdenProgramacionTasks: false,
   cannotOpenCorreccionTasks: false,
   canOpenTasks: true,
+  canCreateOrdenProgramacion: false,
+  canCreateOrdenInstalacion: false,
+  canOnlyOpenOrdenInstalacionTasks: false,
   canCreateInstalacionFromRecibido: false, // Default false - solo Operaciones
 
   canCreateInventarios: true,
@@ -241,7 +249,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // canEditGestionArtes: true (por defecto)
     canResolveProduccionTasks: false,
     canResolveCorreccionTasks: true, // SÍ puede resolver tareas de corrección de artes
-    canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de tipo Corrección
+    canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de tipo Corrección e Instalación
+    canOpenTasks: true,
+    canCreateTareasGestionArtes: true, // Puede crear tareas de Instalación
 
     // Inventarios: Oculto (ya se oculta con canSeeInventarios: false)
     canCreateInventarios: false,
@@ -690,7 +700,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canResolveRevisionArtesTasks: false,
     canResolveCorreccionTasks: true, // SÍ puede resolver tareas de corrección de artes
     canCreateTareasGestionArtes: true, // Puede crear tareas de Revisión de artes después de subir artes
-    canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de corrección
+    canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de corrección e Instalación
+    canOpenTasks: true,
 
     canCreateInventarios: false,
     canEditInventarios: false,
@@ -970,28 +981,32 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
-    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
     canCompartirPropuesta: true, // Puede ver y usar botón compartir
     canBuscarInventarioEnModal: true,
 
-    // Campañas - pueden hacer todo excepto detalle
+    // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
-    canEditDetalleCampana: false, // Solo visualización en detalle
+    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
-    // Tabs de gestión de artes - solo visualización
+    // Tabs de gestión de artes
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: false,
     canSeeTabSubirArtes: false,
-    canSeeTabRevisarAprobar: false,
+    canSeeTabRevisarAprobar: true, // Necesitan ver artes aprobados para seleccionar
     canSeeTabTestigos: false,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false,
-    canOpenTasks: false,
+    canOpenTasks: true,
+    canCreateOrdenProgramacion: true,
+    canCreateOrdenInstalacion: true,
+    canOnlyOpenOrdenProgramacionTasks: true,
+    canOnlyOpenOrdenInstalacionTasks: true,
 
     // Inventarios - solo visualización
     canCreateInventarios: false,
@@ -1031,28 +1046,32 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
-    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
     canCompartirPropuesta: true, // Puede ver y usar botón compartir
     canBuscarInventarioEnModal: true,
 
-    // Campañas - pueden hacer todo excepto detalle
+    // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
-    canEditDetalleCampana: false, // Solo visualización en detalle
+    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
-    // Tabs de gestión de artes - solo visualización
+    // Tabs de gestión de artes
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: false,
     canSeeTabSubirArtes: false,
-    canSeeTabRevisarAprobar: false,
+    canSeeTabRevisarAprobar: true, // Necesitan ver artes aprobados para seleccionar
     canSeeTabTestigos: false,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false,
-    canOpenTasks: false,
+    canOpenTasks: true,
+    canCreateOrdenProgramacion: true,
+    canCreateOrdenInstalacion: true,
+    canOnlyOpenOrdenProgramacionTasks: true,
+    canOnlyOpenOrdenInstalacionTasks: true,
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -1095,28 +1114,32 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
-    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
     canCompartirPropuesta: true, // Puede ver y usar botón compartir
     canBuscarInventarioEnModal: true,
 
-    // Campañas - pueden hacer todo excepto detalle
+    // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
-    canEditDetalleCampana: false, // Solo visualización en detalle
+    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
-    // Tabs de gestión de artes - solo visualización
+    // Tabs de gestión de artes
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: false,
     canSeeTabSubirArtes: false,
-    canSeeTabRevisarAprobar: false,
+    canSeeTabRevisarAprobar: true, // Necesitan ver artes aprobados para seleccionar
     canSeeTabTestigos: false,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false,
-    canOpenTasks: false,
+    canOpenTasks: true,
+    canCreateOrdenProgramacion: true,
+    canCreateOrdenInstalacion: true,
+    canOnlyOpenOrdenProgramacionTasks: true,
+    canOnlyOpenOrdenInstalacionTasks: true,
 
     // Inventarios - oculto
     canCreateInventarios: false,
@@ -1159,28 +1182,32 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Abierto', 'Atendido'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
-    canEditResumenPropuesta: false, // Solo visualización en Resumen de Propuesta
+    canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
     canCompartirPropuesta: true, // Puede ver y usar botón compartir
     canBuscarInventarioEnModal: true,
 
-    // Campañas - pueden hacer todo excepto detalle
+    // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
-    canEditDetalleCampana: false, // Solo visualización en detalle
+    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
 
-    // Tabs de gestión de artes - solo visualización
+    // Tabs de gestión de artes
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: false,
     canSeeTabSubirArtes: false,
-    canSeeTabRevisarAprobar: false,
+    canSeeTabRevisarAprobar: true, // Necesitan ver artes aprobados para seleccionar
     canSeeTabTestigos: false,
     canSeeTabValidacionInstalacion: true,
     canCreateTareasGestionArtes: false,
-    canOpenTasks: false,
+    canOpenTasks: true,
+    canCreateOrdenProgramacion: true,
+    canCreateOrdenInstalacion: true,
+    canOnlyOpenOrdenProgramacionTasks: true,
+    canOnlyOpenOrdenInstalacionTasks: true,
 
     // Inventarios - oculto
     canCreateInventarios: false,

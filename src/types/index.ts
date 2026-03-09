@@ -131,6 +131,7 @@ export interface Inventario {
   orientacion: string | null;
   tarifa_piso: number | null;
   tarifa_publica: number | null;
+  estatus_real?: string | null;
 }
 
 // Inventario para mapa (campos reducidos)
@@ -158,6 +159,8 @@ export interface InventarioStats {
   disponibles: number;
   ocupados: number;
   mantenimiento: number;
+  reservados: number;
+  bloqueados: number;
   porTipo: { tipo: string; cantidad: number }[];
   porPlaza: { plaza: string; cantidad: number }[];
 }
@@ -193,6 +196,7 @@ export interface Solicitud {
   card_code?: string | null;
   salesperson_code?: number | null;
   sap_database?: string | null;
+  nombre_campania?: string | null;
 }
 
 export interface SolicitudStats {
@@ -230,6 +234,9 @@ export interface Propuesta {
   anio_inicio?: number | null;
   catorcena_fin?: number | null;
   anio_fin?: number | null;
+  tipo_periodo?: string | null;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
 }
 
 export interface PropuestaStats {
@@ -307,17 +314,27 @@ export interface Campana {
   catorcena_inicio_anio: number | null;
   catorcena_fin_num: number | null;
   catorcena_fin_anio: number | null;
+  tipo_periodo: string | null;
   has_aps: boolean | number | null;
+  reservas_count?: number | null;
+  reservas_count_ultima_cat?: number | null;
+  caras_ultima_cat?: number | null;
+  incompleteness_detail?: { catorcena: number; anio: number; caras_esperadas: number; reservas_count: number; completa: boolean }[];
+  propuesta_id: number | null;
   // SAP integration fields
   card_code?: string | null;
   salesperson_code?: number | null;
   sap_database?: string | null;
+  posted_to_sap?: boolean;
 }
 
 export interface CampanaStats {
   total: number;
   activas: number;
   inactivas: number;
+  byStatus: Record<string, number>;
+  conAps: number;
+  sinAps: number;
 }
 
 export interface CampanaWithComments extends Campana {

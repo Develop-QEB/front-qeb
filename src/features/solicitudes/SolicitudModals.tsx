@@ -12,6 +12,7 @@ import { notificacionesService, ResumenAutorizacion } from '../../services/notif
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { UserAvatar } from '../../components/ui/user-avatar';
+import { useThemeStore } from '../../store/themeStore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -41,16 +42,25 @@ const loadImageAsBase64 = (url: string): Promise<string> => {
 };
 
 // Status badge colors
-const STATUS_COLORS: Record<string, { bg: string; text: string; border: string; gradient: string }> = {
-  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30', gradient: 'from-amber-600 to-orange-600' },
-  'Aprobada': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30', gradient: 'from-emerald-600 to-green-600' },
-  'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30', gradient: 'from-red-600 to-rose-600' },
-  'Atendida': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30', gradient: 'from-cyan-600 to-blue-600' },
-  'Desactivada': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30', gradient: 'from-zinc-600 to-gray-600' },
-  'Ajustar': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30', gradient: 'from-orange-600 to-amber-600' },
-};
+const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string; gradient: string }> => ({
+  'Pendiente': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30', gradient: 'from-amber-600 to-orange-600' },
+  'Aprobada': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30', gradient: 'from-emerald-600 to-green-600' },
+  'Rechazada': { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30', gradient: 'from-red-600 to-rose-600' },
+  'Atendida': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30', gradient: 'from-cyan-600 to-blue-600' },
+  'Desactivada': { bg: isDark ? 'bg-zinc-500/20' : 'bg-gray-50', text: isDark ? 'text-zinc-300' : 'text-gray-700', border: isDark ? 'border-zinc-500/30' : 'border-gray-300', gradient: 'from-zinc-600 to-gray-600' },
+  'Ajustar': { bg: isDark ? 'bg-orange-500/20' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: 'border-orange-500/30', gradient: 'from-orange-600 to-amber-600' },
+});
 
-const DEFAULT_STATUS_COLOR = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30', gradient: 'from-violet-600 to-purple-600' };
+const getDefaultStatusColor = (isDark: boolean) => ({ bg: isDark ? 'bg-violet-500/20' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30', gradient: 'from-violet-600 to-purple-600' });
+
+const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+// Helper to get month label from date
+function getMonthLabel(dateStr: string): string {
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return formatDate(dateStr);
+  return `${MESES_LABEL[date.getMonth()]} ${date.getFullYear()}`;
+}
 
 // Helper to convert date to catorcena format
 function dateToCatorcena(dateStr: string, catorcenas: Catorcena[]): { catorcena: string; year: number } | null {
@@ -62,22 +72,28 @@ function dateToCatorcena(dateStr: string, catorcenas: Catorcena[]): { catorcena:
     return date >= inicio && date <= fin;
   });
   if (catorcena) {
-    return { catorcena: `Catorcena ${catorcena.numero_catorcena}`, year: catorcena.a_o };
+    return { catorcena: `Cat ${catorcena.numero_catorcena}`, year: catorcena.a_o };
   }
   return null;
 }
 
-// Helper to get catorcena display string
-function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[]): string {
+// Helper to get catorcena display string (falls back to month name)
+function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[], tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual') return getMonthLabel(dateStr);
   const result = dateToCatorcena(dateStr, catorcenas);
   if (result) {
-    return `${result.catorcena} - ${result.year}`;
+    return `${result.catorcena} / ${result.year}`;
   }
-  return formatDate(dateStr);
+  return getMonthLabel(dateStr);
 }
 
 // Helper to get catorcena range for display
-function getCatorcenaRange(fechaInicio: string, fechaFin: string, catorcenas: Catorcena[]): string {
+function getCatorcenaRange(fechaInicio: string, fechaFin: string, catorcenas: Catorcena[], tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual') {
+    const ini = getMonthLabel(fechaInicio);
+    const fin = getMonthLabel(fechaFin);
+    return ini === fin ? ini : `${ini} a ${fin}`;
+  }
   const inicio = dateToCatorcena(fechaInicio, catorcenas);
   const fin = dateToCatorcena(fechaFin, catorcenas);
 
@@ -87,7 +103,7 @@ function getCatorcenaRange(fechaInicio: string, fechaFin: string, catorcenas: Ca
     }
     return `${inicio.catorcena} (${inicio.year}) a ${fin.catorcena} (${fin.year})`;
   }
-  return `${formatDate(fechaInicio)} al ${formatDate(fechaFin)}`;
+  return `${getMonthLabel(fechaInicio)} a ${getMonthLabel(fechaFin)}`;
 }
 
 // Group caras by catorcena (parent) and articulo (nested)
@@ -107,12 +123,17 @@ interface CatorcenaGroup {
   totalInversion: number;
 }
 
-function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Catorcena[]): CatorcenaGroup[] {
+function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Catorcena[], tipoPeriodo?: string): CatorcenaGroup[] {
   const catorcenaMap: Map<string, Map<string, SolicitudCara[]>> = new Map();
 
   caras.forEach(cara => {
-    const catorcenaResult = dateToCatorcena(cara.inicio_periodo, catorcenas);
-    const catorcenaStr = catorcenaResult ? `${catorcenaResult.catorcena} - ${catorcenaResult.year}` : formatDate(cara.inicio_periodo);
+    let catorcenaStr: string;
+    if (tipoPeriodo === 'mensual') {
+      catorcenaStr = getMonthLabel(cara.inicio_periodo);
+    } else {
+      const catorcenaResult = dateToCatorcena(cara.inicio_periodo, catorcenas);
+      catorcenaStr = catorcenaResult ? `${catorcenaResult.catorcena} / ${catorcenaResult.year}` : getMonthLabel(cara.inicio_periodo);
+    }
     const articulo = cara.articulo || 'Sin artículo';
 
     if (!catorcenaMap.has(catorcenaStr)) {
@@ -177,6 +198,7 @@ interface ViewSolicitudModalProps {
 }
 
 export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAtender, onStatus, canEdit = true, canAtender = false }: ViewSolicitudModalProps) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // WebSocket para actualizaciones en tiempo real
@@ -207,11 +229,12 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
   });
 
   const catorcenas = catorcenasData?.data || [];
+  const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
   const groupedCaras = useMemo(() => {
     if (!data?.caras) return [];
-    return groupCarasByCatorcenaAndArticulo(data.caras, catorcenas);
-  }, [data?.caras, catorcenas]);
+    return groupCarasByCatorcenaAndArticulo(data.caras, catorcenas, tipoPeriodo);
+  }, [data?.caras, catorcenas, tipoPeriodo]);
 
   const toggleGroup = (key: string) => {
     setExpandedGroups(prev => {
@@ -324,8 +347,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
     const fechaInicio = data.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : '-';
     const fechaFin = data.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : '-';
-    const catInicio = data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas) : '';
-    const catFin = data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas) : '';
+    const catInicio = data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '';
+    const catFin = data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '';
 
     doc.setTextColor(...imuBlue);
     doc.setFont('helvetica', 'bold');
@@ -574,7 +597,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 isolate">
-      <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative z-50">
+      <div className={`${isDark ? 'bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border-zinc-800/50' : 'bg-white border-gray-200'} border rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative z-50`}>
         {/* Header - Estilo violeta consistente */}
         <div className="relative px-6 py-5 border-b border-violet-500/20 bg-gradient-to-r from-violet-600/20 via-purple-600/15 to-fuchsia-600/10">
           <div className="flex items-center justify-between">
@@ -584,13 +607,13 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-white">Solicitud</h2>
+                  <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Solicitud</h2>
                   {data && (
                     <span className="text-violet-300 font-semibold">#{data.solicitud.id}</span>
                   )}
                 </div>
                 {data?.cotizacion?.nombre_campania && (
-                  <p className="text-zinc-400 text-sm">{data.cotizacion.nombre_campania}</p>
+                  <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{data.cotizacion.nombre_campania}</p>
                 )}
               </div>
             </div>
@@ -599,7 +622,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                 <button
                   onClick={() => { onClose(); onEdit(); }}
                   disabled={!canEdit}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 text-zinc-300 text-xs font-medium hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-zinc-700"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200'} text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all border`}
                   title={canEdit ? 'Editar solicitud' : 'No editable en este estatus'}
                 >
                   <Edit2 className="h-3.5 w-3.5" />
@@ -610,7 +633,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                 <button
                   onClick={() => { onClose(); onAtender(); }}
                   disabled={!canAtender}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-medium hover:bg-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-emerald-500/30"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl ${isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'} text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all border`}
                   title={canAtender ? 'Atender solicitud' : 'Solo disponible para solicitudes aprobadas'}
                 >
                   <PlayCircle className="h-3.5 w-3.5" />
@@ -620,7 +643,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
               {onStatus && (
                 <button
                   onClick={() => { onClose(); onStatus(); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 text-xs font-medium hover:bg-amber-500/30 transition-all border border-amber-500/30"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl ${isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'} text-xs font-medium transition-all border`}
                   title="Ver estatus y comentarios"
                 >
                   <MessageSquare className="h-3.5 w-3.5" />
@@ -630,13 +653,13 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
               <button
                 onClick={generatePDF}
                 disabled={isLoading || !data}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500/20 text-violet-300 text-sm font-medium hover:bg-violet-500/30 disabled:opacity-50 transition-all border border-violet-500/30"
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl ${isDark ? 'bg-violet-500/20 text-violet-300 border-violet-500/30 hover:bg-violet-500/30' : 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'} text-sm font-medium disabled:opacity-50 transition-all border`}
               >
                 <Download className="h-4 w-4" />
                 PDF
               </button>
-              <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-xl transition-colors">
-                <X className="h-5 w-5 text-zinc-400" />
+              <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-xl transition-colors`}>
+                <X className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
               </button>
             </div>
           </div>
@@ -648,7 +671,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
             <div className="flex items-center justify-center h-64">
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
-                <span className="text-zinc-500 text-sm">Cargando...</span>
+                <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</span>
               </div>
             </div>
           ) : data ? (
@@ -657,20 +680,20 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
               <div className="bg-gradient-to-r from-violet-600/10 via-purple-600/10 to-fuchsia-600/10 rounded-2xl p-5 border border-violet-500/20">
                 <div className="grid grid-cols-4 gap-6">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-white">{totalCaras}</p>
-                    <p className="text-xs text-zinc-400 mt-1">Total Caras</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalCaras}</p>
+                    <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Total Caras</p>
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-violet-400">{totalRenta}</p>
-                    <p className="text-xs text-zinc-400 mt-1">En Renta</p>
+                    <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>En Renta</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-white">{totalBonificacion}</p>
-                    <p className="text-xs text-zinc-400 mt-1">Bonificación</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalBonificacion}</p>
+                    <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Bonificación</p>
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-amber-400">{formatCurrency(inversion)}</p>
-                    <p className="text-xs text-zinc-400 mt-1">Inversión</p>
+                    <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Inversión</p>
                   </div>
                 </div>
               </div>
@@ -678,65 +701,71 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
               {/* Two Column Layout */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {/* Campaña Info */}
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
                     Campaña
                   </h3>
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Nombre</span>
-                      <span className="text-white text-sm font-medium">{data.cotizacion?.nombre_campania || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Nombre</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-medium`}>{data.cotizacion?.nombre_campania || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Período</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Período</span>
                       <span className="text-violet-300 text-sm font-medium">
-                        {data.cotizacion ? getCatorcenaRange(data.cotizacion.fecha_inicio, data.cotizacion.fecha_fin, catorcenas) : '-'}
+                        {data.cotizacion ? getCatorcenaRange(data.cotizacion.fecha_inicio, data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Catorcena Inicio</span>
-                      <span className="text-white text-sm">{data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas) : '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>{tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Fecha Inicio'}</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Catorcena Fin</span>
-                      <span className="text-white text-sm">{data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas) : '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>{tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Fecha Fin'}</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}</span>
                     </div>
                     {data.solicitud.descripcion && (
-                      <div className="pt-2 border-t border-zinc-700/50">
-                        <span className="text-zinc-500 text-sm block mb-1">Descripción</span>
-                        <span className="text-zinc-300 text-sm">{data.solicitud.descripcion}</span>
+                      <div className={`pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
+                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm block mb-1`}>Descripción Trafico</span>
+                        <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{data.solicitud.descripcion}</span>
+                      </div>
+                    )}
+                    {data.solicitud.notas && (
+                      <div className={`pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
+                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm block mb-1`}>Notas Dirección</span>
+                        <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{data.solicitud.notas}</span>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Cliente Info */}
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
                     Cliente
                   </h3>
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">CUIC</span>
-                      <span className="text-white text-sm font-mono">{data.solicitud.cuic || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>CUIC</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{data.solicitud.cuic || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Razón Social</span>
-                      <span className="text-white text-sm font-medium truncate ml-4">{data.solicitud.razon_social || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Razón Social</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-medium truncate ml-4`}>{data.solicitud.razon_social || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Marca</span>
-                      <span className="text-white text-sm">{data.solicitud.marca_nombre || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Marca</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.solicitud.marca_nombre || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Categoría</span>
-                      <span className="text-white text-sm">{data.solicitud.categoria_nombre || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Categoría</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.solicitud.categoria_nombre || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-500 text-sm">Agencia</span>
-                      <span className="text-white text-sm">{data.solicitud.agencia || '-'}</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Agencia</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.solicitud.agencia || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -744,23 +773,23 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
               {/* More Info Row */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
                     <User className="h-4 w-4" />
                     Asesor
                   </h3>
-                  <p className="text-white font-medium">{data.solicitud.asesor || '-'}</p>
-                  <p className="text-zinc-500 text-xs mt-1">Asesor comercial</p>
+                  <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{data.solicitud.asesor || '-'}</p>
+                  <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs mt-1`}>Asesor comercial</p>
                 </div>
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
                     <Package className="h-4 w-4" />
                     Producto
                   </h3>
-                  <p className="text-white font-medium">{data.solicitud.producto_nombre || '-'}</p>
-                  <p className="text-zinc-500 text-xs mt-1">Producto/Servicio</p>
+                  <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{data.solicitud.producto_nombre || '-'}</p>
+                  <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs mt-1`}>Producto/Servicio</p>
                 </div>
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
                     <User className="h-4 w-4" />
                     Asignados
@@ -770,12 +799,12 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                       {data.solicitud.asignado.split(',').map((nombre, idx) => (
                         <li key={idx} className="flex items-center gap-2">
                           <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />
-                          <span className="text-white text-sm">{nombre.trim()}</span>
+                          <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{nombre.trim()}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-zinc-500 text-sm">Sin asignar</p>
+                    <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Sin asignar</p>
                   )}
                 </div>
               </div>
@@ -806,22 +835,22 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                             <span className="px-3 py-1 rounded-lg bg-violet-500/30 text-violet-200 text-xs font-medium border border-violet-400/30">
                               {catorcenaGroup.catorcena}
                             </span>
-                            <span className="text-zinc-500 text-xs">
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>
                               ({catorcenaGroup.articulos.length} artículo{catorcenaGroup.articulos.length > 1 ? 's' : ''})
                             </span>
                           </div>
                           <div className="flex items-center gap-4">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-zinc-400 text-xs">Renta:</span>
-                              <span className="text-white text-sm font-semibold">{catorcenaGroup.totalCaras}</span>
+                              <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>Renta:</span>
+                              <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-semibold`}>{catorcenaGroup.totalCaras}</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <span className="text-zinc-400 text-xs">Bonif:</span>
-                              <span className="text-white text-sm font-semibold">{catorcenaGroup.totalBonificacion}</span>
+                              <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>Bonif:</span>
+                              <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-semibold`}>{catorcenaGroup.totalBonificacion}</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <span className="text-zinc-400 text-xs">Total:</span>
-                              <span className="text-white text-sm font-bold">{catorcenaGroup.totalCaras + catorcenaGroup.totalBonificacion}</span>
+                              <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>Total:</span>
+                              <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-bold`}>{catorcenaGroup.totalCaras + catorcenaGroup.totalBonificacion}</span>
                             </div>
                             <div className="flex items-center gap-1.5 pl-2 border-l border-violet-500/30">
                               <span className="text-emerald-400 text-xs">Inversión:</span>
@@ -850,33 +879,33 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                       <span className="px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-200 text-xs font-medium border border-purple-400/20">
                                         {articuloGroup.articulo}
                                       </span>
-                                      <span className="text-zinc-500 text-xs">
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>
                                         ({articuloGroup.caras.length} cara{articuloGroup.caras.length > 1 ? 's' : ''})
                                       </span>
                                     </div>
                                     <div className="flex items-center gap-3 text-xs">
-                                      <span className="text-zinc-400">R: <span className="text-white font-medium">{articuloGroup.totalCaras}</span></span>
-                                      <span className="text-zinc-400">B: <span className="text-white font-medium">{articuloGroup.totalBonificacion}</span></span>
+                                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>R: <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{articuloGroup.totalCaras}</span></span>
+                                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>B: <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{articuloGroup.totalBonificacion}</span></span>
                                       <span className="text-emerald-400">{formatCurrency(articuloGroup.totalInversion)}</span>
                                     </div>
                                   </button>
 
                                   {expandedGroups.has(articuloKey) && (
                                     <div className="px-4 pb-3">
-                                      <div className="overflow-x-auto rounded-xl border border-violet-500/20 bg-zinc-900/50">
+                                      <div className={`overflow-x-auto rounded-xl border border-violet-500/20 ${isDark ? 'bg-zinc-900/50' : 'bg-white'}`}>
                                         <table className="w-full text-sm">
                                           <thead>
-                                            <tr className="bg-violet-600/20">
-                                              <th className="px-3 py-2 text-left text-xs font-semibold text-violet-200">Ciudad</th>
-                                              <th className="px-3 py-2 text-left text-xs font-semibold text-violet-200">Estado</th>
-                                              <th className="px-3 py-2 text-left text-xs font-semibold text-violet-200">Formato</th>
-                                              <th className="px-3 py-2 text-left text-xs font-semibold text-violet-200">Tipo</th>
-                                              <th className="px-3 py-2 text-center text-xs font-semibold text-violet-200">Renta</th>
-                                              <th className="px-3 py-2 text-center text-xs font-semibold text-violet-200">Bonif</th>
-                                              <th className="px-3 py-2 text-center text-xs font-semibold text-white">Total</th>
-                                              <th className="px-3 py-2 text-right text-xs font-semibold text-amber-300">Tarifa</th>
-                                              <th className="px-3 py-2 text-right text-xs font-semibold text-emerald-300">Inversión</th>
-                                              <th className="px-3 py-2 text-center text-xs font-semibold text-violet-200">Autorización</th>
+                                            <tr className={isDark ? 'bg-violet-600/20' : 'bg-violet-50'}>
+                                              <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Ciudad</th>
+                                              <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Estado</th>
+                                              <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Formato</th>
+                                              <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Tipo</th>
+                                              <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Renta</th>
+                                              <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Bonif</th>
+                                              <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total</th>
+                                              <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Tarifa</th>
+                                              <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>Inversión</th>
+                                              <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Autorización</th>
                                             </tr>
                                           </thead>
                                           <tbody className="divide-y divide-violet-500/10">
@@ -892,7 +921,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                               if (authDg === 'rechazado' || authDcm === 'rechazado') {
                                                 authBadges.push({
                                                   label: 'Rechazado',
-                                                  color: { bg: 'bg-zinc-500/20', text: 'text-zinc-400', border: 'border-zinc-500/30' }
+                                                  color: { bg: isDark ? 'bg-zinc-500/20' : 'bg-gray-100', text: isDark ? 'text-zinc-400' : 'text-gray-500', border: isDark ? 'border-zinc-500/30' : 'border-gray-200' }
                                                 });
                                               } else if (authDg === 'aprobado' && authDcm === 'aprobado') {
                                                 authBadges.push({
@@ -916,15 +945,15 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
                                               return (
                                                 <tr key={idx} className="hover:bg-violet-600/10 transition-colors">
-                                                  <td className="px-3 py-2 text-zinc-200">{cara.ciudad || '-'}</td>
-                                                  <td className="px-3 py-2 text-zinc-300">{cara.estados || '-'}</td>
-                                                  <td className="px-3 py-2 text-zinc-300">{cara.formato || '-'}</td>
-                                                  <td className="px-3 py-2 text-zinc-300">{cara.tipo || '-'}</td>
-                                                  <td className="px-3 py-2 text-center text-white font-medium">{Number(cara.caras) || 0}</td>
-                                                  <td className="px-3 py-2 text-center text-white font-medium">{Number(cara.bonificacion) || 0}</td>
-                                                  <td className="px-3 py-2 text-center text-white font-bold">{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
-                                                  <td className="px-3 py-2 text-right text-amber-300 font-medium">{formatCurrency(cara.tarifa_publica || 0)}</td>
-                                                  <td className="px-3 py-2 text-right text-emerald-300 font-medium">{formatCurrency(inversion)}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{cara.ciudad || '-'}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.estados || '-'}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.formato || '-'}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.tipo || '-'}</td>
+                                                  <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(cara.caras) || 0}</td>
+                                                  <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(cara.bonificacion) || 0}</td>
+                                                  <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-bold`}>{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
+                                                  <td className={`px-3 py-2 text-right ${isDark ? 'text-amber-300' : 'text-amber-700'} font-medium`}>{formatCurrency(cara.tarifa_publica || 0)}</td>
+                                                  <td className={`px-3 py-2 text-right ${isDark ? 'text-emerald-300' : 'text-emerald-700'} font-medium`}>{formatCurrency(inversion)}</td>
                                                   <td className="px-3 py-2 text-center">
                                                     <div className="flex flex-col gap-0.5 items-center">
                                                       {authBadges.map((badge, badgeIdx) => (
@@ -955,8 +984,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
               {/* Archivo Adjunto - Con preview */}
               {data.solicitud.archivo && (
-                <div className="bg-zinc-800/30 rounded-2xl border border-zinc-800/50 overflow-hidden">
-                  <div className="px-5 py-3 border-b border-zinc-800/50 flex items-center justify-between">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl border overflow-hidden`}>
+                  <div className={`px-5 py-3 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} flex items-center justify-between`}>
                     <h3 className="text-sm font-semibold text-violet-400 flex items-center gap-2">
                       <FileText className="h-4 w-4" />
                       Archivo Adjunto
@@ -964,7 +993,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     <a
                       href={data.solicitud.archivo}
                       download
-                      className="px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-300 text-xs font-medium hover:bg-violet-500/30 transition-colors flex items-center gap-1.5 border border-violet-500/30"
+                      className={`px-3 py-1.5 rounded-lg ${isDark ? 'bg-violet-500/20 text-violet-300 border-violet-500/30 hover:bg-violet-500/30' : 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'} text-xs font-medium transition-colors flex items-center gap-1.5 border`}
                     >
                       <Download className="h-3.5 w-3.5" />
                       Descargar
@@ -972,7 +1001,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                   </div>
                   <div className="p-4">
                     {data.solicitud.tipo_archivo?.startsWith('image/') ? (
-                      <div className="relative rounded-xl overflow-hidden bg-zinc-900/50 border border-zinc-700/50">
+                      <div className={`relative rounded-xl overflow-hidden ${isDark ? 'bg-zinc-900/50 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} border`}>
                         <img
                           src={data.solicitud.archivo}
                           alt="Archivo adjunto"
@@ -980,13 +1009,13 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                         />
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 p-4 bg-zinc-900/50 rounded-xl border border-zinc-700/50">
+                      <div className={`flex items-center gap-3 p-4 ${isDark ? 'bg-zinc-900/50 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} rounded-xl border`}>
                         <div className="w-12 h-12 rounded-xl bg-violet-500/20 flex items-center justify-center">
                           <FileText className="h-6 w-6 text-violet-400" />
                         </div>
                         <div>
-                          <p className="text-sm text-white font-medium">Documento</p>
-                          <p className="text-xs text-zinc-500">{data.solicitud.tipo_archivo || 'Archivo adjunto'}</p>
+                          <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>Documento</p>
+                          <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{data.solicitud.tipo_archivo || 'Archivo adjunto'}</p>
                         </div>
                       </div>
                     )}
@@ -996,7 +1025,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
               {/* Historial - Compacto */}
               {data.historial && data.historial.length > 0 && (
-                <div className="bg-zinc-800/30 rounded-2xl p-5 border border-zinc-800/50">
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} rounded-2xl p-5 border`}>
                   <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
                     <Clock className="h-4 w-4" />
                     Historial
@@ -1005,9 +1034,9 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     {data.historial.slice(0, 5).map((h, idx) => (
                       <div key={idx} className="flex items-center gap-3 text-sm">
                         <div className="w-2 h-2 rounded-full bg-violet-500" />
-                        <span className="text-zinc-400">{formatDate(h.fecha_hora)}</span>
+                        <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{formatDate(h.fecha_hora)}</span>
                         <span className="px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 text-xs">{h.accion}</span>
-                        <span className="text-zinc-500 truncate flex-1">{h.detalles}</span>
+                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} truncate flex-1`}>{h.detalles}</span>
                       </div>
                     ))}
                   </div>
@@ -1015,8 +1044,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
-              <XCircle className="h-12 w-12 mb-3 text-zinc-600" />
+            <div className={`flex flex-col items-center justify-center h-64 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+              <XCircle className={`h-12 w-12 mb-3 ${isDark ? 'text-zinc-600' : 'text-gray-300'}`} />
               <p>No se pudo cargar la información</p>
             </div>
           )}
@@ -1028,6 +1057,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
 // Helper components
 function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: string; color: string }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const colors: Record<string, { bg: string; text: string; icon: string }> = {
     violet: { bg: 'bg-violet-500/10', text: 'text-violet-400', icon: 'text-violet-400' },
     cyan: { bg: 'bg-cyan-500/10', text: 'text-cyan-400', icon: 'text-cyan-400' },
@@ -1037,10 +1067,10 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any; label: strin
   const c = colors[color] || colors.violet;
 
   return (
-    <div className={`${c.bg} rounded-2xl p-4 border border-zinc-800`}>
+    <div className={`${c.bg} rounded-2xl p-4 border ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
       <div className="flex items-center gap-2 mb-2">
         <Icon className={`h-4 w-4 ${c.icon}`} />
-        <span className="text-zinc-400 text-xs">{label}</span>
+        <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>{label}</span>
       </div>
       <p className={`text-lg font-bold ${c.text}`}>{value}</p>
     </div>
@@ -1048,10 +1078,11 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any; label: strin
 }
 
 function InfoRow({ label, value, mono = false, highlight = false }: { label: string; value?: string | null; mono?: boolean; highlight?: boolean }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   return (
     <div>
-      <span className="text-zinc-500 text-xs block mb-0.5">{label}</span>
-      <span className={`text-sm ${mono ? 'font-mono' : ''} ${highlight ? 'text-violet-400 font-medium' : 'text-white'}`}>
+      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs block mb-0.5`}>{label}</span>
+      <span className={`text-sm ${mono ? 'font-mono' : ''} ${highlight ? 'text-violet-400 font-medium' : isDark ? 'text-white' : 'text-gray-900'}`}>
         {value || '-'}
       </span>
     </div>
@@ -1068,6 +1099,7 @@ interface StatusModalProps {
 }
 
 export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, statusReadOnly = false }: StatusModalProps) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
@@ -1158,35 +1190,36 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
 
   if (!isOpen || !solicitud) return null;
 
-  const statusColor = STATUS_COLORS[solicitud.status] || DEFAULT_STATUS_COLOR;
+  const STATUS_COLORS = getStatusColors(isDark);
+  const statusColor = STATUS_COLORS[solicitud.status] || getDefaultStatusColor(isDark);
   const statusOptions = ['Pendiente', 'Aprobada', 'Rechazada', 'Desactivada', 'Ajustar'];
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+      <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-3">
             <MessageSquare className="h-5 w-5 text-purple-400" />
-            <h2 className="text-lg font-semibold text-white">Estado y Comentarios</h2>
+            <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Estado y Comentarios</h2>
             <span className={`px-2 py-1 rounded-full text-xs ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
               {solicitud.status}
             </span>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-            <X className="h-5 w-5 text-zinc-400" />
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
           </button>
         </div>
 
         {/* Status Selector */}
-        <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-800/30">
+        <div className={`px-6 py-4 border-b ${isDark ? 'border-zinc-800 bg-zinc-800/30' : 'border-gray-200 bg-gray-50'}`}>
           {/* Alerta de autorización pendiente */}
           {tienePendientes && (
             <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm text-amber-200 font-medium">Autorización pendiente</p>
-                <p className="text-xs text-amber-300/70 mt-1">
+                <p className={`text-sm ${isDark ? 'text-amber-200' : 'text-amber-800'} font-medium`}>Autorización pendiente</p>
+                <p className={`text-xs ${isDark ? 'text-amber-300/70' : 'text-amber-700'} mt-1`}>
                   Esta solicitud tiene {(autorizacionResumen?.pendientesDg || 0) + (autorizacionResumen?.pendientesDcm || 0)} cara(s) pendientes de autorización.
                   {autorizacionResumen?.pendientesDg ? ` DG: ${autorizacionResumen.pendientesDg}.` : ''}
                   {autorizacionResumen?.pendientesDcm ? ` DCM: ${autorizacionResumen.pendientesDcm}.` : ''}
@@ -1197,19 +1230,19 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
           )}
           {statusReadOnly ? (
             <>
-              <label className="block text-sm text-zinc-400 mb-2">Estado actual:</label>
-              <div className="px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700 text-white text-sm">
+              <label className={`block text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2`}>Estado actual:</label>
+              <div className={`px-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800/50 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border text-sm`}>
                 {solicitud.status}
               </div>
             </>
           ) : (
             <>
-              <label className="block text-sm text-zinc-400 mb-2">Cambiar estado a:</label>
+              <label className={`block text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2`}>Cambiar estado a:</label>
               <div className="flex items-center gap-3">
                 <select
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  className={`flex-1 px-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                 >
                   {statusOptions.map(s => (
                     <option
@@ -1247,7 +1280,7 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
               <CommentBubble key={comment.id} comment={comment} />
             ))
           ) : (
-            <div className="text-center text-zinc-500 py-8">
+            <div className={`text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} py-8`}>
               No hay comentarios aún
             </div>
           )}
@@ -1255,14 +1288,14 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
         </div>
 
         {/* New Comment Input */}
-        <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-800/30">
+        <div className={`px-6 py-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-800/30' : 'border-gray-200 bg-gray-50'}`}>
           <div className="flex items-end gap-3">
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               placeholder="Escribe un comentario..."
               rows={2}
-              className="flex-1 px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+              className={`flex-1 px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none`}
             />
             <button
               onClick={handleAddComment}
@@ -1283,13 +1316,14 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
 }
 
 function CommentBubble({ comment }: { comment: Comentario }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   return (
     <div className="flex gap-3">
       <UserAvatar nombre={comment.autor_nombre} foto_perfil={comment.autor_foto} size="lg" />
       <div className="flex-1">
         <div className="flex items-center gap-2 mb-1">
-          <span className="font-medium text-white text-sm">{comment.autor_nombre}</span>
-          <span className="text-xs text-zinc-500">
+          <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{comment.autor_nombre}</span>
+          <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
             {new Date(comment.creado_en).toLocaleDateString('es-ES', {
               day: 'numeric',
               month: 'short',
@@ -1298,7 +1332,7 @@ function CommentBubble({ comment }: { comment: Comentario }) {
             })}
           </span>
         </div>
-        <div className="bg-zinc-800/50 rounded-xl px-4 py-3 text-sm text-zinc-300">
+        <div className={`${isDark ? 'bg-zinc-800/50 text-zinc-300' : 'bg-gray-100 text-gray-700'} rounded-xl px-4 py-3 text-sm`}>
           {comment.comentario}
         </div>
       </div>
@@ -1315,6 +1349,7 @@ interface AtenderModalProps {
 }
 
 export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderModalProps) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [selectedAsignados, setSelectedAsignados] = useState<{ id: number; nombre: string }[]>([]);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [userSearch, setUserSearch] = useState('');
@@ -1425,25 +1460,25 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md p-6">
+      <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-md p-6`}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-12 h-12 rounded-full bg-cyan-500/20 flex items-center justify-center">
             <PlayCircle className="h-6 w-6 text-cyan-400" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white">Atender Solicitud</h3>
-            <p className="text-sm text-zinc-400">#{solicitud.id}</p>
+            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Atender Solicitud</h3>
+            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>#{solicitud.id}</p>
           </div>
         </div>
 
         {/* Asignados Section */}
         <div className="mb-4">
-          <label className="block text-sm font-medium text-zinc-300 mb-2">
+          <label className={`block text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'} mb-2`}>
             <Users className="h-4 w-4 inline mr-1.5 text-cyan-400" />
             Asignados
           </label>
           <div className="relative" ref={dropdownRef}>
-            <div className="flex flex-wrap gap-2 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700 min-h-[48px]">
+            <div className={`flex flex-wrap gap-2 p-3 rounded-lg ${isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-gray-50 border-gray-200'} border min-h-[48px]`}>
               {selectedAsignados.map(asignado => (
                 <span
                   key={asignado.id}
@@ -1468,28 +1503,28 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
                 }}
                 onFocus={() => setShowUserDropdown(true)}
                 placeholder={selectedAsignados.length === 0 ? "Buscar usuarios..." : ""}
-                className="flex-1 min-w-[120px] bg-transparent text-white text-sm placeholder:text-zinc-500 focus:outline-none"
+                className={`flex-1 min-w-[120px] bg-transparent ${isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none`}
               />
             </div>
             {showUserDropdown && filteredUsers.length > 0 && (
-              <div className="absolute z-20 mt-1 w-full max-h-48 overflow-auto rounded-lg bg-zinc-800 border border-zinc-700 shadow-lg">
+              <div className={`absolute z-20 mt-1 w-full max-h-48 overflow-auto rounded-lg ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-200'} border shadow-lg`}>
                 {filteredUsers.map(user => (
                   <button
                     key={user.id}
                     type="button"
                     onClick={() => handleAddUser(user)}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-700 transition-colors"
+                    className={`w-full px-3 py-2 text-left text-sm ${isDark ? 'hover:bg-zinc-700' : 'hover:bg-gray-100'} transition-colors`}
                   >
-                    <span className="text-white">{user.nombre}</span>
+                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{user.nombre}</span>
                     {user.area && (
-                      <span className="text-zinc-500 text-xs ml-2">({user.area})</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs ml-2`}>({user.area})</span>
                     )}
                   </button>
                 ))}
               </div>
             )}
           </div>
-          <p className="text-xs text-zinc-500 mt-1.5">
+          <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-1.5`}>
             Los asignados serán responsables de dar seguimiento a la propuesta
           </p>
         </div>
@@ -1498,8 +1533,8 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-amber-300 text-sm font-medium mb-1">¿Estás seguro?</p>
-              <p className="text-amber-200/80 text-xs">
+              <p className={`${isDark ? 'text-amber-300' : 'text-amber-800'} text-sm font-medium mb-1`}>¿Estás seguro?</p>
+              <p className={`${isDark ? 'text-amber-200/80' : 'text-amber-700'} text-xs`}>
                 Al atender esta solicitud, se creará una propuesta activa y se notificará al equipo asignado.
                 Esta acción no se puede deshacer.
               </p>
@@ -1507,18 +1542,18 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
           </div>
         </div>
 
-        <div className="bg-zinc-800/50 rounded-xl p-4 mb-6">
-          <h4 className="text-sm text-zinc-400 mb-2">Lo que sucederá:</h4>
+        <div className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} rounded-xl p-4 mb-6`}>
+          <h4 className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2`}>Lo que sucederá:</h4>
           <ul className="space-y-2 text-sm">
-            <li className="flex items-center gap-2 text-zinc-300">
+            <li className={`flex items-center gap-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
               El status cambiará a "Atendida"
             </li>
-            <li className="flex items-center gap-2 text-zinc-300">
+            <li className={`flex items-center gap-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
               La propuesta se activará con status "Abierto"
             </li>
-            <li className="flex items-center gap-2 text-zinc-300">
+            <li className={`flex items-center gap-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
               Se crearán tareas de seguimiento
             </li>
@@ -1528,7 +1563,7 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
         <div className="flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 border border-zinc-700"
+            className={`px-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200'} text-sm border`}
           >
             Cancelar
           </button>

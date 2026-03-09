@@ -84,6 +84,12 @@ export const authService = {
     }
   },
 
+  forgotPassword: (correo: string) =>
+  api.post('/auth/forgot-password', { correo }),
+
+  resetPassword: (correo: string, codigo: string, nuevaPassword: string) =>
+  api.post('/auth/reset-password', { correo, codigo, nuevaPassword }),
+
   async uploadPhoto(file: File): Promise<User> {
     const formData = new FormData();
     formData.append('foto', file);

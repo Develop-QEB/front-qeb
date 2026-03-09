@@ -5,6 +5,7 @@ import {
   Check, Ban, LocateFixed, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { InventarioDisponible } from '../../services/inventarios.service';
+import { useThemeStore } from '../../store/themeStore';
 
 // Dark map styles
 const DARK_MAP_STYLES = [
@@ -49,6 +50,7 @@ export function AdvancedMapComponent({
   mapCenter,
   onFilterByPOI,
 }: Props) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const mapRef = useRef<google.maps.Map | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
 
@@ -81,6 +83,19 @@ export function AdvancedMapComponent({
 
   // Panel collapsed
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+
+  const [mapBounds, setMapBounds] = useState<google.maps.LatLngBounds | null>(null);
+  const [mapZoom, setMapZoom] = useState(13);
+
+  const MIN_ZOOM_FOR_PINS = 11;
+
+  const visibleInventarios = useMemo(() => {
+    if (mapZoom < MIN_ZOOM_FOR_PINS || !mapBounds) return [];
+    return inventarios.filter(inv =>
+      inv.latitud && inv.longitud &&
+      mapBounds.contains({ lat: inv.latitud, lng: inv.longitud })
+    );
+  }, [inventarios, mapBounds, mapZoom]);
 
   // Calculate location groups to determine if Flujo and Contraflujo are at same position
   const locationFlowMap = useMemo(() => {
@@ -344,8 +359,8 @@ export function AdvancedMapComponent({
   // Color constants for consistency
   const COLORS = {
     // Traffic direction
-    flujo: '#3b82f6',        // Blue - Flujo/Contraflujo (same color)
-    contraflujo: '#3b82f6',  // Blue - same as flujo (no differentiation)
+    flujo: '#3b82f6',        // Blue - Flujo
+    contraflujo: '#06b6d4',  // Cyan - Contraflujo
     ambos: '#a855f7',        // Purple - Completos (F+C juntos)
     // Status
     seleccionado: '#facc15', // Yellow - Seleccionado
@@ -369,7 +384,8 @@ export function AdvancedMapComponent({
       return COLORS.ambos;  // Purple for complete pairs
     }
 
-    // Default: same color for Flujo and Contraflujo
+    // Differentiate Flujo vs Contraflujo
+    if (inv.tipo_de_cara === 'Contraflujo') return COLORS.contraflujo;
     return COLORS.flujo;
   };
 
@@ -441,13 +457,13 @@ export function AdvancedMapComponent({
   return (
     <div className="relative w-full h-full flex">
       {/* Side Panel */}
-      <div className={`bg-zinc-900 border-r border-zinc-800 flex flex-col transition-all ${panelCollapsed ? 'w-10' : 'w-72'}`}>
+      <div className={`${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'} border-r flex flex-col transition-all ${panelCollapsed ? 'w-10' : 'w-72'}`}>
         {/* Panel Header */}
-        <div className="flex items-center justify-between p-2 border-b border-zinc-800">
-          {!panelCollapsed && <span className="text-xs font-medium text-zinc-400">Filtros de Ubicación</span>}
+        <div className={`flex items-center justify-between p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          {!panelCollapsed && <span className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Filtros de Ubicación</span>}
           <button
             onClick={() => setPanelCollapsed(!panelCollapsed)}
-            className="p-1 text-zinc-500 hover:text-white rounded"
+            className={`p-1 ${isDark ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'} rounded`}
           >
             {panelCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4 rotate-90" />}
           </button>
@@ -456,7 +472,7 @@ export function AdvancedMapComponent({
         {!panelCollapsed && (
           <>
             {/* Tabs */}
-            <div className="flex border-b border-zinc-800">
+            <div className={`flex border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               {tabs.map(({ id, icon: Icon, label }) => (
                 <button
                   key={id}
@@ -464,7 +480,7 @@ export function AdvancedMapComponent({
                   className={`flex-1 flex flex-col items-center gap-0.5 py-2 text-xs transition-colors ${
                     activeMode === id
                       ? 'text-purple-400 bg-purple-500/10 border-b-2 border-purple-500'
-                      : 'text-zinc-500 hover:text-zinc-300'
+                      : isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-700'
                   }`}
                 >
                   <Icon className="h-4 w-4" />
@@ -474,14 +490,14 @@ export function AdvancedMapComponent({
             </div>
 
             {/* Search Form */}
-            <div className="p-3 space-y-3 border-b border-zinc-800">
+            <div className={`p-3 space-y-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               {/* Range selector */}
               <div className="flex items-center gap-2">
-                <label className="text-xs text-zinc-500">Radio:</label>
+                <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Radio:</label>
                 <select
                   value={searchRange}
                   onChange={(e) => setSearchRange(parseInt(e.target.value))}
-                  className="flex-1 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-white"
+                  className={`flex-1 px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-xs`}
                 >
                   <option value={100}>100m</option>
                   <option value={200}>200m</option>
@@ -505,7 +521,7 @@ export function AdvancedMapComponent({
                       onChange={(e) => setPoiSearch(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSearchPOI()}
                       placeholder="Buscar: escuelas, oxxo, walmart..."
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500`}
                     />
                   </Autocomplete>
                   <button
@@ -531,7 +547,7 @@ export function AdvancedMapComponent({
                       onChange={(e) => setAddressSearch(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSearchAddress()}
                       placeholder="Av. Reforma 222, CDMX..."
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500`}
                     />
                   </Autocomplete>
                   <button
@@ -553,7 +569,7 @@ export function AdvancedMapComponent({
                       onChange={(e) => setCustomLat(e.target.value)}
                       placeholder="Latitud"
                       step="any"
-                      className="px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500"
+                      className={`px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg text-sm`}
                     />
                     <input
                       type="number"
@@ -561,7 +577,7 @@ export function AdvancedMapComponent({
                       onChange={(e) => setCustomLng(e.target.value)}
                       placeholder="Longitud"
                       step="any"
-                      className="px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500"
+                      className={`px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg text-sm`}
                     />
                   </div>
                   <input
@@ -569,7 +585,7 @@ export function AdvancedMapComponent({
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}
                     placeholder="Nombre (opcional)"
-                    className="w-full px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500"
+                    className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg text-sm`}
                   />
                   <button
                     onClick={handleAddCustomPin}
@@ -584,12 +600,12 @@ export function AdvancedMapComponent({
 
               {activeMode === 'kml' && (
                 <div className="space-y-2">
-                  <p className="text-xs text-zinc-500">Sube un archivo KML con puntos de interés</p>
+                  <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Sube un archivo KML con puntos de interés</p>
                   <input
                     type="file"
                     accept=".kml"
                     onChange={handleKMLUpload}
-                    className="w-full text-xs text-zinc-400 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 file:cursor-pointer file:w-full"
+                    className={`w-full text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 file:cursor-pointer file:w-full`}
                   />
                 </div>
               )}
@@ -598,26 +614,26 @@ export function AdvancedMapComponent({
             {/* Pins List */}
             {poiMarkers.length > 0 && (
               <div className="flex-1 overflow-auto">
-                <div className="p-2 border-b border-zinc-800 flex items-center justify-between">
-                  <span className="text-xs text-zinc-400">{poiMarkers.length} pines</span>
+                <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex items-center justify-between`}>
+                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{poiMarkers.length} pines</span>
                   <button onClick={handleClearAll} className="text-xs text-red-400 hover:text-red-300">
                     Limpiar todos
                   </button>
                 </div>
-                <div className="divide-y divide-zinc-800/50">
+                <div className={`divide-y ${isDark ? 'divide-zinc-800/50' : 'divide-gray-200'}`}>
                   {poiMarkers.map(marker => (
-                    <div key={marker.id} className="flex items-center gap-2 p-2 hover:bg-zinc-800/30">
+                    <div key={marker.id} className={`flex items-center gap-2 p-2 ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-100'}`}>
                       <div
                         className="w-3 h-3 rounded-full flex-shrink-0"
                         style={{ backgroundColor: getMarkerColor(marker.type) }}
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-white truncate">{marker.name}</p>
-                        <p className="text-[10px] text-zinc-500">{marker.range}m</p>
+                        <p className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{marker.name}</p>
+                        <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{marker.range}m</p>
                       </div>
                       <button
                         onClick={() => handleRemoveMarker(marker.id)}
-                        className="p-1 text-zinc-500 hover:text-red-400"
+                        className={`p-1 ${isDark ? 'text-zinc-500' : 'text-gray-400'} hover:text-red-400`}
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -629,7 +645,7 @@ export function AdvancedMapComponent({
 
             {/* Action Buttons */}
             {poiMarkers.length > 0 && onFilterByPOI && (
-              <div className="p-3 border-t border-zinc-800 space-y-2">
+              <div className={`p-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} space-y-2`}>
                 <button
                   onClick={handleConservarConPOIs}
                   disabled={inRangeSet.size === 0}
@@ -641,7 +657,7 @@ export function AdvancedMapComponent({
                 <button
                   onClick={handleConservarSinPOIs}
                   disabled={outOfRangeSet.size === 0}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 ${isDark ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-gray-200 hover:bg-gray-300'} disabled:opacity-50 ${isDark ? 'text-white' : 'text-gray-900'} rounded-lg text-sm font-medium`}
                 >
                   <Ban className="h-4 w-4" />
                   Conservar sin POIs ({outOfRangeSet.size})
@@ -650,7 +666,7 @@ export function AdvancedMapComponent({
             )}
 
             {/* Stats */}
-            <div className="p-3 border-t border-zinc-800 text-xs text-zinc-500">
+            <div className={`p-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
               <div className="flex items-center justify-between">
                 <span>Total inventarios:</span>
                 <span className="text-purple-400 font-medium">{inventarios.length}</span>
@@ -663,7 +679,7 @@ export function AdvancedMapComponent({
                   </div>
                   <div className="flex items-center justify-between mt-1">
                     <span>Fuera de rango:</span>
-                    <span className="text-zinc-400 font-medium">{outOfRangeSet.size}</span>
+                    <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>{outOfRangeSet.size}</span>
                   </div>
                 </>
               )}
@@ -677,15 +693,15 @@ export function AdvancedMapComponent({
         {/* Center button */}
         <button
           onClick={handleCenterOnInventory}
-          className="absolute top-3 right-3 z-10 p-2 bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors"
+          className={`absolute top-3 right-3 z-10 p-2 ${isDark ? 'bg-zinc-800/90 hover:bg-zinc-700 border-zinc-700 text-zinc-400 hover:text-white' : 'bg-white/90 hover:bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'} border rounded-lg transition-colors`}
           title="Centrar en inventarios"
         >
           <LocateFixed className="h-5 w-5" />
         </button>
 
         {/* Color Legend */}
-        <div className="absolute bottom-4 right-3 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-3 text-xs max-w-[220px]">
-          <div className="text-zinc-300 font-semibold mb-2 flex items-center gap-1.5">
+        <div className={`absolute bottom-4 right-3 z-10 ${isDark ? 'bg-zinc-900/95 border-zinc-700' : 'bg-white/95 border-gray-200'} border rounded-lg p-3 text-xs max-w-[220px]`}>
+          <div className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} font-semibold mb-2 flex items-center gap-1.5`}>
             <MapPin className="h-3.5 w-3.5 text-purple-400" />
             Leyenda del Mapa
           </div>
@@ -693,18 +709,20 @@ export function AdvancedMapComponent({
           {/* Tipo de cara - solo mostrar cuando NO hay POIs activos */}
           {poiMarkers.length === 0 && (
             <div className="space-y-1.5 mb-2">
-              <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Dirección del tráfico</div>
+              <div className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px] uppercase tracking-wide`}>Dirección del tráfico</div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
-                <div>
-                  <span className="text-zinc-300">Flujo / Contraflujo</span>
-                </div>
+                <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>Flujo</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-cyan-500 ring-1 ring-cyan-400/30" />
+                <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>Contraflujo</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
                 <div>
-                  <span className="text-zinc-300">Completo</span>
-                  <span className="text-zinc-500 text-[10px] ml-1">(F+C)</span>
+                  <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>Completo</span>
+                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px] ml-1`}>(F+C)</span>
                 </div>
               </div>
             </div>
@@ -713,39 +731,39 @@ export function AdvancedMapComponent({
           {/* POI mode legend */}
           {poiMarkers.length > 0 && (
             <div className="space-y-1.5 mb-2">
-              <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Proximidad a POIs</div>
+              <div className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px] uppercase tracking-wide`}>Proximidad a POIs</div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
                 <div>
-                  <span className="text-zinc-300">En rango</span>
-                  <span className="text-zinc-500 text-[10px] ml-1">({inRangeSet.size})</span>
+                  <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>En rango</span>
+                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px] ml-1`}>({inRangeSet.size})</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-gray-500 ring-1 ring-gray-400/30" />
                 <div>
-                  <span className="text-zinc-300">Fuera de rango</span>
-                  <span className="text-zinc-500 text-[10px] ml-1">({outOfRangeSet.size})</span>
+                  <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>Fuera de rango</span>
+                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px] ml-1`}>({outOfRangeSet.size})</span>
                 </div>
               </div>
             </div>
           )}
 
           {/* Estado de selección */}
-          <div className="border-t border-zinc-700/70 pt-2 space-y-1.5">
-            <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Estado</div>
+          <div className={`border-t ${isDark ? 'border-zinc-700/70' : 'border-gray-200'} pt-2 space-y-1.5`}>
+            <div className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px] uppercase tracking-wide`}>Estado</div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-yellow-400 ring-2 ring-yellow-300/50" />
               <div>
-                <span className="text-zinc-300">Seleccionado</span>
-                <span className="text-zinc-500 text-[10px] ml-1">({selectedInventory.size})</span>
+                <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>Seleccionado</span>
+                <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px] ml-1`}>({selectedInventory.size})</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-green-500 ring-1 ring-green-400/30" />
               <div>
-                <span className="text-zinc-300">Ya reservado</span>
-                <span className="text-zinc-500 text-[10px] ml-1">(otra cara)</span>
+                <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>Ya reservado</span>
+                <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px] ml-1`}>(otra cara)</span>
               </div>
             </div>
           </div>
@@ -756,12 +774,18 @@ export function AdvancedMapComponent({
           center={mapCenter}
           zoom={13}
           options={{
-            styles: DARK_MAP_STYLES,
+            styles: isDark ? DARK_MAP_STYLES : [],
             disableDefaultUI: true,
             zoomControl: true,
             zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_CENTER },
           }}
           onLoad={handleMapLoad}
+          onIdle={() => {
+            if (mapRef.current) {
+              setMapBounds(mapRef.current.getBounds() ?? null);
+              setMapZoom(mapRef.current.getZoom() ?? 0);
+            }
+          }}
         >
           {/* POI Markers & Circles */}
           {poiMarkers.map(marker => (
@@ -794,10 +818,12 @@ export function AdvancedMapComponent({
           ))}
 
           {/* Inventory Markers */}
-          {inventarios.map(inv => (
+          {mapZoom < MIN_ZOOM_FOR_PINS ? (
+            <div /> 
+          ) : visibleInventarios.map(inv => (
             inv.latitud && inv.longitud && (
               <Marker
-                key={inv.id}
+                key={inv.espacio_id ? `${inv.id}_${inv.espacio_id}` : inv.id}
                 position={{ lat: inv.latitud, lng: inv.longitud }}
                 onClick={() => {
                   onToggleSelection(inv.id);

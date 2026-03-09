@@ -13,6 +13,7 @@ export interface SolicitudesParams {
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   groupBy?: string;
+  tipoPeriodo?: string;
 }
 
 export interface CatorcenasResponse {
@@ -32,6 +33,12 @@ export interface InventarioFilters {
   estados: string[];
   ciudades: { ciudad: string; estado: string }[];
   formatos: string[];
+  nse: string[];
+}
+
+export interface InventarioOptions {
+  formatos: string[];
+  tipos: string[];
   nse: string[];
 }
 
@@ -172,6 +179,17 @@ export const solicitudesService = {
     return response.data.data;
   },
 
+  async getInventarioOptions(estado?: string, ciudades?: string[]): Promise<InventarioOptions> {
+    const params: Record<string, string> = {};
+    if (estado) params.estado = estado;
+    if (ciudades && ciudades.length > 0) params.ciudades = ciudades.join(',');
+    const response = await api.get<ApiResponse<InventarioOptions>>('/solicitudes/inventario-options', { params });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener opciones de inventario');
+    }
+    return response.data.data;
+  },
+
   async getNextId(): Promise<number> {
     const response = await api.get<ApiResponse<{ nextId: number }>>('/solicitudes/next-id');
     if (!response.data.success || !response.data.data) {
@@ -234,6 +252,24 @@ export const solicitudesService = {
         'Content-Type': 'multipart/form-data',
       },
     });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al subir archivo');
+    }
+    return response.data.data;
+  },
+
+  async uploadGenericFile(file: File): Promise<{ url: string; filename: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post<ApiResponse<{ url: string; filename: string; originalName: string; size: number; mimetype: string }>>(
+      '/uploads/arte',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al subir archivo');
     }

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check, Crown, Ticket, Send, Image, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
+import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check, Crown, Ticket, Send, Image, AlertTriangle, Clock, CheckCircle2, KeyRound } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Header } from '../../components/layout/Header';
 import { usuariosService, UsuarioAdmin, UpdateUsuarioInput, CreateUsuarioInput } from '../../services/usuarios.service';
@@ -7,29 +7,31 @@ import { equiposService, Equipo, CreateEquipoInput, MiembroEquipo } from '../../
 import { ticketsService, Ticket as TicketType, CreateTicketInput } from '../../services/tickets.service';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useSocketEquipos } from '../../hooks/useSocket';
+import { useThemeStore } from '../../store/themeStore';
+import { uploadsService } from '../../services/uploads.service';
 
 type TabType = 'usuarios' | 'equipos' | 'tickets';
 
-const inputClasses =
-  'w-full px-4 py-3 rounded-xl bg-zinc-800/80 border border-purple-500/20 text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all hover:border-purple-500/40';
-const labelClasses = 'block text-sm font-medium text-purple-300 mb-2';
+const getInputClasses = (isDark: boolean) =>
+  `w-full px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-800/80' : 'bg-gray-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'text-white' : 'text-gray-900'} ${isDark ? 'placeholder:text-zinc-500' : 'placeholder:text-gray-400'} focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all hover:border-purple-500/40`;
+const getLabelClasses = (isDark: boolean) => `block text-sm font-medium ${isDark ? 'text-purple-300' : 'text-gray-700'} mb-2`;
 
 const AREAS_DISPONIBLES = [
-  'Dirección General',
+  'Direccion General',
   'Comercial',
-  'Dirección Comercial Aeropuerto',
-  'Departamento de Tráfico',
-  'Dirección de Mercadotecnia',
+  'Direccion Comercial Aeropuerto',
+  'Departamento de Trafico',
+  'Direccion de Mercadotecnia',
   'Compras',
   'Operaciones',
-  'Facturación',
+  'Facturacion',
   'Mejora Continua',
   'TI',
 ];
 
-// Mapeo de puestos por área
+// Mapeo de puestos por area
 const PUESTOS_POR_AREA: Record<string, string[]> = {
-  'Dirección General': [
+  'Direccion General': [
     'Director General',
   ],
   'Comercial': [
@@ -39,21 +41,21 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
     'Jefe Digital Comercial',
     'Especialista de BI',
   ],
-  'Dirección Comercial Aeropuerto': [
+  'Direccion Comercial Aeropuerto': [
     'Director Comercial Aeropuerto',
     'Gerente Comercial Aeropuerto',
     'Asesor Comercial (Aeropuerto)',
     'Analista de Aeropuerto',
   ],
-  'Departamento de Tráfico': [
-    'Gerente de Tráfico',
-    'Coordinador de tráfico',
-    'Especialista de tráfico',
-    'Auxiliar de tráfico',
+  'Departamento de Trafico': [
+    'Gerente de Trafico',
+    'Coordinador de trafico',
+    'Especialista de trafico',
+    'Auxiliar de trafico',
   ],
-  'Dirección de Mercadotecnia': [
-    'Coordinador de Diseño',
-    'Diseñadores',
+  'Direccion de Mercadotecnia': [
+    'Coordinador de Diseno',
+    'Disenadores',
   ],
   'Compras': [
     'Compradores',
@@ -67,10 +69,10 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
     'Gerente Digital (Operaciones)',
     'Jefe de Operaciones Digital',
   ],
-  'Facturación': [
-    'Coordinador de Facturación y Cobranza',
+  'Facturacion': [
+    'Coordinador de Facturacion y Cobranza',
     'Mesa de Control',
-    'Analista de Facturación y Cobranza',
+    'Analista de Facturacion y Cobranza',
   ],
   'Mejora Continua': [
     'Mejora Continua',
@@ -80,12 +82,12 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   ],
 };
 
-// Función para obtener puestos según área
+// Funcion para obtener puestos segun area
 const getPuestosPorArea = (area: string): string[] => {
   return PUESTOS_POR_AREA[area] || [];
 };
 
-// Función para obtener roles según área (puestos del área + Administrador)
+// Funcion para obtener roles segun area (puestos del area + Administrador)
 const getRolesPorArea = (area: string): string[] => {
   const puestos = PUESTOS_POR_AREA[area] || [];
   return [...puestos, 'Administrador'];
@@ -96,7 +98,7 @@ const PUESTOS_DISPONIBLES = Object.values(PUESTOS_POR_AREA).flat();
 
 const ROLES_DISPONIBLES = [...PUESTOS_DISPONIBLES, 'Administrador'];
 
-// Modal de Creación
+// Modal de Creacion
 function CreateModal({
   onClose,
   onSubmit,
@@ -108,6 +110,9 @@ function CreateModal({
   loading: boolean;
   error: string | null;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const inputClasses = getInputClasses(isDark);
+  const labelClasses = getLabelClasses(isDark);
   const [form, setForm] = useState<CreateUsuarioInput>({
     nombre: '',
     correo_electronico: '',
@@ -118,11 +123,11 @@ function CreateModal({
     foto_perfil: '',
   });
 
-  // Puestos y roles filtrados según área seleccionada
+  // Puestos y roles filtrados segun area seleccionada
   const puestosDisponibles = form.area ? getPuestosPorArea(form.area) : [];
   const rolesDisponibles = form.area ? getRolesPorArea(form.area) : [];
 
-  // Cuando cambia el área, resetear puesto y rol
+  // Cuando cambia el area, resetear puesto y rol
   const handleAreaChange = (newArea: string) => {
     setForm({ ...form, area: newArea, puesto: '', rol: '' });
   };
@@ -135,19 +140,19 @@ function CreateModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-lg bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40 sticky top-0 z-10">
+      <div className={`relative z-50 w-full max-w-lg ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto`}>
+        <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'} sticky top-0 z-10`}>
           <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-purple-500/20">
-              <Plus className="h-6 w-6 text-purple-300" />
+            <div className={`p-3 rounded-xl ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'}`}>
+              <Plus className={`h-6 w-6 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Nuevo Usuario</h2>
-              <p className="text-sm text-purple-300/70">Completa todos los campos</p>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Nuevo Usuario</h2>
+              <p className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>Completa todos los campos</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-purple-500/20 rounded-xl transition-colors group">
-            <X className="h-5 w-5 text-purple-300 group-hover:text-white transition-colors" />
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-50'} rounded-xl transition-colors group`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-purple-300 group-hover:text-white' : 'text-gray-500 group-hover:text-gray-900'} transition-colors`} />
           </button>
         </div>
 
@@ -160,13 +165,13 @@ function CreateModal({
                 value={form.nombre}
                 onChange={(e) => setForm({ ...form, nombre: e.target.value })}
                 className={inputClasses}
-                placeholder="Ej: Juan Pérez"
+                placeholder="Ej: Juan Perez"
                 required
               />
             </div>
 
             <div>
-              <label className={labelClasses}>Correo electrónico *</label>
+              <label className={labelClasses}>Correo electronico *</label>
               <input
                 type="email"
                 value={form.correo_electronico}
@@ -178,27 +183,27 @@ function CreateModal({
             </div>
 
             <div>
-              <label className={labelClasses}>Contraseña *</label>
+              <label className={labelClasses}>Contrasena *</label>
               <input
                 type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 className={inputClasses}
-                placeholder="••••••••"
+                placeholder="--------"
                 required
                 minLength={6}
               />
             </div>
 
             <div>
-              <label className={labelClasses}>Área *</label>
+              <label className={labelClasses}>Area *</label>
               <select
                 value={form.area}
                 onChange={(e) => handleAreaChange(e.target.value)}
                 className={inputClasses}
                 required
               >
-                <option value="">Seleccionar área...</option>
+                <option value="">Seleccionar area...</option>
                 {AREAS_DISPONIBLES.map((area) => (
                   <option key={area} value={area}>
                     {area}
@@ -216,7 +221,7 @@ function CreateModal({
                 required
                 disabled={!form.area || puestosDisponibles.length === 0}
               >
-                <option value="">{!form.area ? 'Primero selecciona un área...' : puestosDisponibles.length === 0 ? 'Sin puestos disponibles' : 'Seleccionar puesto...'}</option>
+                <option value="">{!form.area ? 'Primero selecciona un area...' : puestosDisponibles.length === 0 ? 'Sin puestos disponibles' : 'Seleccionar puesto...'}</option>
                 {puestosDisponibles.map((puesto) => (
                   <option key={puesto} value={puesto}>
                     {puesto}
@@ -234,7 +239,7 @@ function CreateModal({
                 required
                 disabled={!form.area}
               >
-                <option value="">{!form.area ? 'Primero selecciona un área...' : 'Seleccionar rol...'}</option>
+                <option value="">{!form.area ? 'Primero selecciona un area...' : 'Seleccionar rol...'}</option>
                 {rolesDisponibles.map((rol) => (
                   <option key={rol} value={rol}>
                     {rol}
@@ -257,16 +262,16 @@ function CreateModal({
 
           {/* Error message */}
           {error && (
-            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
+            <div className={`p-4 rounded-xl bg-red-500/10 border border-red-500/30 ${isDark ? 'text-red-300' : 'text-red-700'} text-sm`}>
               {error}
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-purple-500/20">
+          <div className={`flex justify-end gap-3 pt-4 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-purple-300 bg-zinc-800 border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all"
+              className={`px-5 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'text-purple-300' : 'text-gray-700'} ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'hover:bg-purple-500/10' : 'hover:bg-purple-50'} hover:border-purple-500/40 transition-all`}
             >
               Cancelar
             </button>
@@ -285,7 +290,7 @@ function CreateModal({
   );
 }
 
-// Modal de Edición
+// Modal de Edicion
 function EditModal({
   usuario,
   onClose,
@@ -297,18 +302,22 @@ function EditModal({
   onSubmit: (data: UpdateUsuarioInput) => void;
   loading: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const inputClasses = getInputClasses(isDark);
+  const labelClasses = getLabelClasses(isDark);
   const [form, setForm] = useState<UpdateUsuarioInput>({
     nombre: usuario.nombre,
+    correo_electronico: usuario.email,
     area: usuario.area || '',
     puesto: usuario.puesto || '',
     rol: usuario.rol,
   });
 
-  // Puestos y roles filtrados según área seleccionada
+  // Puestos y roles filtrados segun area seleccionada
   const puestosDisponibles = form.area ? getPuestosPorArea(form.area) : [];
   const rolesDisponibles = form.area ? getRolesPorArea(form.area) : [];
 
-  // Cuando cambia el área, resetear puesto y rol
+  // Cuando cambia el area, resetear puesto y rol
   const handleAreaChange = (newArea: string) => {
     setForm({ ...form, area: newArea, puesto: '', rol: '' });
   };
@@ -316,6 +325,7 @@ function EditModal({
   useEffect(() => {
     setForm({
       nombre: usuario.nombre,
+      correo_electronico: usuario.email,
       area: usuario.area || '',
       puesto: usuario.puesto || '',
       rol: usuario.rol,
@@ -330,17 +340,17 @@ function EditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-md bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between p-6 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40">
+      <div className={`relative z-50 w-full max-w-md ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
+        <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'}`}>
           <div className="flex items-center gap-4">
             <UserAvatar nombre={usuario.nombre} foto_perfil={usuario.foto_perfil} size="lg" />
             <div>
-              <h2 className="text-xl font-bold text-white">Editar Usuario</h2>
-              <p className="text-sm text-purple-300/70">{usuario.email}</p>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Editar Usuario</h2>
+              <p className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>{usuario.email}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-purple-500/20 rounded-xl transition-colors group">
-            <X className="h-5 w-5 text-purple-300 group-hover:text-white transition-colors" />
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-50'} rounded-xl transition-colors group`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-purple-300 group-hover:text-white' : 'text-gray-500 group-hover:text-gray-900'} transition-colors`} />
           </button>
         </div>
 
@@ -357,13 +367,28 @@ function EditModal({
           </div>
 
           <div>
-            <label className={labelClasses}>Área</label>
+            <label className={labelClasses}>Correo electronico</label>
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400/50" />
+              <input
+                type="email"
+                value={form.correo_electronico}
+                onChange={(e) => setForm({ ...form, correo_electronico: e.target.value })}
+                className={`${inputClasses} pl-11`}
+                placeholder="correo@ejemplo.com"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelClasses}>Area</label>
             <select
               value={form.area}
               onChange={(e) => handleAreaChange(e.target.value)}
               className={inputClasses}
             >
-              <option value="">Seleccionar área...</option>
+              <option value="">Seleccionar area...</option>
               {AREAS_DISPONIBLES.map((area) => (
                 <option key={area} value={area}>
                   {area}
@@ -380,7 +405,7 @@ function EditModal({
               className={inputClasses}
               disabled={!form.area || puestosDisponibles.length === 0}
             >
-              <option value="">{!form.area ? 'Primero selecciona un área...' : puestosDisponibles.length === 0 ? 'Sin puestos disponibles' : 'Seleccionar puesto...'}</option>
+              <option value="">{!form.area ? 'Primero selecciona un area...' : puestosDisponibles.length === 0 ? 'Sin puestos disponibles' : 'Seleccionar puesto...'}</option>
               {puestosDisponibles.map((puesto) => (
                 <option key={puesto} value={puesto}>
                   {puesto}
@@ -397,7 +422,7 @@ function EditModal({
               className={inputClasses}
               disabled={!form.area}
             >
-              <option value="">{!form.area ? 'Primero selecciona un área...' : 'Seleccionar rol...'}</option>
+              <option value="">{!form.area ? 'Primero selecciona un area...' : 'Seleccionar rol...'}</option>
               {rolesDisponibles.map((rol) => (
                 <option key={rol} value={rol}>
                   {rol}
@@ -406,11 +431,11 @@ function EditModal({
             </select>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-purple-500/20">
+          <div className={`flex justify-end gap-3 pt-4 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-purple-300 bg-zinc-800 border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all"
+              className={`px-5 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'text-purple-300' : 'text-gray-700'} ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'hover:bg-purple-500/10' : 'hover:bg-purple-50'} hover:border-purple-500/40 transition-all`}
             >
               Cancelar
             </button>
@@ -429,7 +454,7 @@ function EditModal({
   );
 }
 
-// Modal de Confirmación de Eliminación
+// Modal de Confirmacion de Eliminacion
 function DeleteConfirmModal({
   count,
   onClose,
@@ -445,19 +470,20 @@ function DeleteConfirmModal({
   title?: string;
   message?: string;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-md bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-red-500/30 rounded-2xl shadow-2xl shadow-red-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className={`relative z-50 w-full max-w-md ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border border-red-500/30 rounded-2xl shadow-2xl shadow-red-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
         <div className="p-6 text-center">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/20 mb-4">
             <Trash2 className="h-8 w-8 text-red-400" />
           </div>
-          <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
-          <p className="text-zinc-400 mb-6">
+          <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>{title}</h3>
+          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>
             {message || (
               <>
-                ¿Estás seguro de eliminar <span className="text-white font-semibold">{count} usuario(s)</span>? Esta acción
+                Estas seguro de eliminar <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-semibold`}>{count} usuario(s)</span>? Esta accion
                 no se puede deshacer.
               </>
             )}
@@ -466,7 +492,7 @@ function DeleteConfirmModal({
             <button
               onClick={onClose}
               disabled={loading}
-              className="px-6 py-3 rounded-xl text-sm font-medium text-purple-300 bg-zinc-800 border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all disabled:opacity-50"
+              className={`px-6 py-3 rounded-xl text-sm font-medium ${isDark ? 'text-purple-300' : 'text-gray-700'} ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'hover:bg-purple-500/10' : 'hover:bg-purple-50'} hover:border-purple-500/40 transition-all disabled:opacity-50`}
             >
               Cancelar
             </button>
@@ -485,6 +511,84 @@ function DeleteConfirmModal({
   );
 }
 
+// Modal para restablecer contraseña (admin)
+function ResetPasswordModal({
+  usuario,
+  onClose,
+  onSubmit,
+  loading,
+}: {
+  usuario: UsuarioAdmin;
+  onClose: () => void;
+  onSubmit: (nuevaPassword: string) => void;
+  loading: boolean;
+}) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const inputClasses = getInputClasses(isDark);
+  const [nuevaPassword, setNuevaPassword] = useState('');
+  const [confirmar, setConfirmar] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (nuevaPassword.length < 6) return setError('Mínimo 6 caracteres');
+    if (nuevaPassword !== confirmar) return setError('Las contraseñas no coinciden');
+    setError(null);
+    onSubmit(nuevaPassword);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <div className={`relative z-50 w-full max-w-md ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
+        <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'}`}>
+          <div className="flex items-center gap-4">
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-purple-500/20">
+              <KeyRound className="h-5 w-5 text-purple-400" />
+            </div>
+            <div>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Restablecer contraseña</h2>
+              <p className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>{usuario.nombre}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-50'} rounded-xl transition-colors group`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-purple-300 group-hover:text-white' : 'text-gray-500 group-hover:text-gray-900'} transition-colors`} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className={`p-3 text-sm rounded-lg border ${isDark ? 'text-red-400 bg-red-500/10 border-red-500/30' : 'text-red-600 bg-red-50 border-red-200'}`}>
+              {error}
+            </div>
+          )}
+          <div>
+            <label className={getLabelClasses(isDark)}>Nueva contraseña</label>
+            <input type="password" value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)}
+              className={inputClasses} placeholder="Mínimo 6 caracteres" required />
+          </div>
+          <div>
+            <label className={getLabelClasses(isDark)}>Confirmar contraseña</label>
+            <input type="password" value={confirmar} onChange={(e) => setConfirmar(e.target.value)}
+              className={inputClasses} placeholder="Repite la contraseña" required />
+          </div>
+          <div className={`flex justify-end gap-3 pt-4 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
+            <button type="button" onClick={onClose}
+              className={`px-5 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'text-purple-300 bg-zinc-800 border-purple-500/20 hover:bg-purple-500/10' : 'text-gray-700 bg-gray-100 border-purple-200 hover:bg-purple-50'} border hover:border-purple-500/40 transition-all`}>
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading}
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-500/25 transition-all flex items-center gap-2">
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {loading ? 'Guardando...' : 'Restablecer'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // Modal para crear/editar equipo
 function EquipoModal({
   equipo,
@@ -497,6 +601,9 @@ function EquipoModal({
   onSubmit: (data: CreateEquipoInput) => void;
   loading: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const inputClasses = getInputClasses(isDark);
+  const labelClasses = getLabelClasses(isDark);
   const [form, setForm] = useState<CreateEquipoInput>({
     nombre: equipo?.nombre || '',
     descripcion: equipo?.descripcion || '',
@@ -522,19 +629,19 @@ function EquipoModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-md bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between p-6 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40">
+      <div className={`relative z-50 w-full max-w-md ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
+        <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'}`}>
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl" style={{ backgroundColor: `${form.color}30` }}>
               <Network className="h-6 w-6" style={{ color: form.color }} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">{equipo ? 'Editar Equipo' : 'Nuevo Equipo'}</h2>
-              <p className="text-sm text-purple-300/70">Define el nombre y color del equipo</p>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{equipo ? 'Editar Equipo' : 'Nuevo Equipo'}</h2>
+              <p className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>Define el nombre y color del equipo</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-purple-500/20 rounded-xl transition-colors group">
-            <X className="h-5 w-5 text-purple-300 group-hover:text-white transition-colors" />
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-50'} rounded-xl transition-colors group`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-purple-300 group-hover:text-white' : 'text-gray-500 group-hover:text-gray-900'} transition-colors`} />
           </button>
         </div>
 
@@ -571,7 +678,7 @@ function EquipoModal({
                   type="button"
                   onClick={() => setForm({ ...form, color })}
                   className={`w-10 h-10 rounded-xl transition-all ${
-                    form.color === color ? 'ring-2 ring-white ring-offset-2 ring-offset-zinc-900 scale-110' : 'hover:scale-105'
+                    form.color === color ? `ring-2 ring-white ring-offset-2 ${isDark ? 'ring-offset-zinc-900' : 'ring-offset-white'} scale-110` : 'hover:scale-105'
                   }`}
                   style={{ backgroundColor: color }}
                 />
@@ -579,11 +686,11 @@ function EquipoModal({
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-purple-500/20">
+          <div className={`flex justify-end gap-3 pt-4 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-purple-300 bg-zinc-800 border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all"
+              className={`px-5 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'text-purple-300' : 'text-gray-700'} ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'hover:bg-purple-500/10' : 'hover:bg-purple-50'} hover:border-purple-500/40 transition-all`}
             >
               Cancelar
             </button>
@@ -614,6 +721,7 @@ function AddMembersModal({
   onSubmit: (usuarioIds: number[]) => void;
   loading: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState('');
 
@@ -653,29 +761,29 @@ function AddMembersModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-lg bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40">
+      <div className={`relative z-50 w-full max-w-lg ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col`}>
+        <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'}`}>
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl" style={{ backgroundColor: `${equipo.color}30` }}>
               <UserPlus className="h-6 w-6" style={{ color: equipo.color || '#8B5CF6' }} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Agregar Miembros</h2>
-              <p className="text-sm text-purple-300/70">a {equipo.nombre}</p>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Agregar Miembros</h2>
+              <p className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>a {equipo.nombre}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-purple-500/20 rounded-xl transition-colors group">
-            <X className="h-5 w-5 text-purple-300 group-hover:text-white transition-colors" />
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-50'} rounded-xl transition-colors group`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-purple-300 group-hover:text-white' : 'text-gray-500 group-hover:text-gray-900'} transition-colors`} />
           </button>
         </div>
 
-        <div className="p-4 border-b border-purple-500/20">
+        <div className={`p-4 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
           <div className="relative">
             <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
             <input
               type="search"
               placeholder="Buscar usuarios..."
-              className="w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+              className={`w-full pl-11 pr-4 py-3 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900/80 text-white' : 'bg-gray-50 text-gray-900'} text-sm ${isDark ? 'placeholder:text-zinc-500' : 'placeholder:text-gray-400'} focus:outline-none focus:ring-2 focus:ring-purple-500/30`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -690,7 +798,7 @@ function AddMembersModal({
           ) : filteredUsers.length === 0 ? (
             <div className="text-center py-10">
               <Users className="h-12 w-12 text-purple-400/50 mx-auto mb-3" />
-              <p className="text-zinc-400">No hay usuarios disponibles</p>
+              <p className={isDark ? 'text-zinc-400' : 'text-gray-500'}>No hay usuarios disponibles</p>
             </div>
           ) : (
             filteredUsers.map((user) => (
@@ -699,14 +807,14 @@ function AddMembersModal({
                 onClick={() => toggleSelect(user.id)}
                 className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
                   selectedIds.has(user.id)
-                    ? 'bg-purple-500/20 border-purple-500/50'
-                    : 'bg-zinc-800/50 border-purple-500/10 hover:border-purple-500/30'
+                    ? `${isDark ? 'bg-purple-500/20' : 'bg-purple-50'} ${isDark ? 'border-purple-500/50' : 'border-purple-300'}`
+                    : `${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} ${isDark ? 'border-purple-500/10' : 'border-gray-200'} ${isDark ? 'hover:border-purple-500/30' : 'hover:border-purple-300'}`
                 }`}
               >
                 <UserAvatar nombre={user.nombre} foto_perfil={user.foto_perfil} size="sm" />
                 <div className="flex-1 text-left">
-                  <p className="text-white font-medium text-sm">{user.nombre}</p>
-                  <p className="text-zinc-500 text-xs">{user.area} - {user.puesto}</p>
+                  <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium text-sm`}>{user.nombre}</p>
+                  <p className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs`}>{user.area} - {user.puesto}</p>
                 </div>
                 {selectedIds.has(user.id) && (
                   <div className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center">
@@ -718,14 +826,14 @@ function AddMembersModal({
           )}
         </div>
 
-        <div className="p-4 border-t border-purple-500/20 flex justify-between items-center">
-          <span className="text-sm text-purple-300">
+        <div className={`p-4 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'} flex justify-between items-center`}>
+          <span className={`text-sm ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>
             {selectedIds.size} usuario(s) seleccionado(s)
           </span>
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-purple-300 bg-zinc-800 border border-purple-500/20 hover:bg-purple-500/10 transition-all"
+              className={`px-5 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'text-purple-300' : 'text-gray-700'} ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'hover:bg-purple-500/10' : 'hover:bg-purple-50'} transition-all`}
             >
               Cancelar
             </button>
@@ -758,11 +866,12 @@ function EquipoCard({
   onAddMembers: () => void;
   onRemoveMember: (userId: number) => void;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [expanded, setExpanded] = useState(false);
 
   return (
     <div
-      className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 overflow-hidden"
+      className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} overflow-hidden`}
       style={{ borderLeftColor: equipo.color || '#8B5CF6', borderLeftWidth: '4px' }}
     >
       <div className="p-5">
@@ -772,30 +881,30 @@ function EquipoCard({
               <Network className="h-5 w-5" style={{ color: equipo.color || '#8B5CF6' }} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">{equipo.nombre}</h3>
+              <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{equipo.nombre}</h3>
               {equipo.descripcion && (
-                <p className="text-sm text-zinc-400 mt-1">{equipo.descripcion}</p>
+                <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>{equipo.descripcion}</p>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onAddMembers}
-              className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all"
+              className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} text-purple-400 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} transition-all`}
               title="Agregar miembros"
             >
               <UserPlus className="h-4 w-4" />
             </button>
             <button
               onClick={onEdit}
-              className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all"
+              className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} text-purple-400 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} transition-all`}
               title="Editar equipo"
             >
               <Pencil className="h-4 w-4" />
             </button>
             <button
               onClick={onDelete}
-              className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all"
+              className={`p-2 rounded-lg ${isDark ? 'bg-red-500/10' : 'bg-red-50'} text-red-400 ${isDark ? 'hover:bg-red-500/20' : 'hover:bg-red-100'} border ${isDark ? 'border-red-500/20' : 'border-red-200'} transition-all`}
               title="Eliminar equipo"
             >
               <Trash2 className="h-4 w-4" />
@@ -804,11 +913,11 @@ function EquipoCard({
         </div>
 
         <div className="mt-4 flex items-center gap-2">
-          <span className="text-sm text-zinc-400">{equipo.miembros.length} miembro(s)</span>
+          <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{equipo.miembros.length} miembro(s)</span>
           {equipo.miembros.length > 0 && (
             <button
               onClick={() => setExpanded(!expanded)}
-              className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
+              className={`text-sm ${isDark ? 'text-purple-400 hover:text-purple-300' : 'text-purple-600 hover:text-purple-500'} transition-colors`}
             >
               {expanded ? 'Ocultar' : 'Ver miembros'}
             </button>
@@ -817,22 +926,22 @@ function EquipoCard({
 
         {/* Lista de miembros (colapsable) */}
         {expanded && equipo.miembros.length > 0 && (
-          <div className="mt-4 space-y-2 border-t border-purple-500/20 pt-4">
+          <div className={`mt-4 space-y-2 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'} pt-4`}>
             {equipo.miembros.map((miembro) => (
               <div
                 key={miembro.id}
-                className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/50 border border-purple-500/10"
+                className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} border ${isDark ? 'border-purple-500/10' : 'border-gray-200'}`}
               >
                 <div className="flex items-center gap-3">
                   <UserAvatar nombre={miembro.nombre} foto_perfil={miembro.foto_perfil} size="sm" />
                   <div>
-                    <p className="text-white font-medium text-sm">{miembro.nombre}</p>
-                    <p className="text-zinc-500 text-xs">{miembro.area} - {miembro.puesto}</p>
+                    <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium text-sm`}>{miembro.nombre}</p>
+                    <p className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs`}>{miembro.area} - {miembro.puesto}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => onRemoveMember(miembro.id)}
-                  className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                  className={`p-1.5 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-400'} hover:text-red-400 hover:bg-red-500/10 transition-all`}
                   title="Remover del equipo"
                 >
                   <X className="h-4 w-4" />
@@ -846,8 +955,9 @@ function EquipoCard({
   );
 }
 
-// Componente de la pestaña Red de Trabajo
+// Componente de la pestana Red de Trabajo
 function RedDeTrabajoTab() {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const [showEquipoModal, setShowEquipoModal] = useState(false);
   const [editingEquipo, setEditingEquipo] = useState<Equipo | null>(null);
@@ -930,11 +1040,11 @@ function RedDeTrabajoTab() {
   return (
     <div className="space-y-5">
       {/* Control Bar */}
-      <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-5">
+      <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} backdrop-blur-xl p-5`}>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-white">Red de Trabajo</h2>
-            <p className="text-sm text-zinc-400">Organiza a los usuarios en equipos de trabajo</p>
+            <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Red de Trabajo</h2>
+            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Organiza a los usuarios en equipos de trabajo</p>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -944,8 +1054,8 @@ function RedDeTrabajoTab() {
               <Plus className="h-4 w-4" />
               Nuevo Equipo
             </button>
-            <div className="px-4 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20">
-              <span className="text-purple-300 text-sm font-medium">{equipos?.length || 0} equipos</span>
+            <div className={`px-4 py-2 rounded-xl ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
+              <span className={`${isDark ? 'text-purple-300' : 'text-purple-600'} text-sm font-medium`}>{equipos?.length || 0} equipos</span>
             </div>
           </div>
         </div>
@@ -955,7 +1065,7 @@ function RedDeTrabajoTab() {
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20">
           <Loader2 className="h-10 w-10 text-purple-400 animate-spin mb-4" />
-          <p className="text-purple-300/70 text-sm">Cargando equipos...</p>
+          <p className={`${isDark ? 'text-purple-300/70' : 'text-gray-500'} text-sm`}>Cargando equipos...</p>
         </div>
       ) : equipos && equipos.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -971,10 +1081,10 @@ function RedDeTrabajoTab() {
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 p-16 text-center">
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-16 text-center`}>
           <Network className="h-16 w-16 text-purple-400/50 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-white mb-2">No hay equipos creados</h3>
-          <p className="text-zinc-400 mb-6">Crea tu primer equipo para organizar a los usuarios</p>
+          <h3 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>No hay equipos creados</h3>
+          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>Crea tu primer equipo para organizar a los usuarios</p>
           <button
             onClick={() => setShowEquipoModal(true)}
             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 transition-all"
@@ -1008,7 +1118,7 @@ function RedDeTrabajoTab() {
         <DeleteConfirmModal
           count={1}
           title="Eliminar Equipo"
-          message={`¿Estás seguro de eliminar el equipo "${deletingEquipo.nombre}"? Los miembros no serán eliminados, solo desvinculados del equipo.`}
+          message={`Estas seguro de eliminar el equipo "${deletingEquipo.nombre}"? Los miembros no seran eliminados, solo desvinculados del equipo.`}
           onClose={() => setDeletingEquipo(null)}
           onConfirm={handleDeleteEquipo}
           loading={deleteMutation.isPending}
@@ -1027,8 +1137,9 @@ function RedDeTrabajoTab() {
   );
 }
 
-// Componente de la pestaña Usuarios (contenido original)
+// Componente de la pestana Usuarios (contenido original)
 function UsuariosTab() {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -1037,6 +1148,7 @@ function UsuariosTab() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [resetPasswordUsuario, setResetPasswordUsuario] = useState<UsuarioAdmin | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1077,6 +1189,12 @@ function UsuariosTab() {
       setSelectedIds(new Set());
       setShowDeleteConfirm(false);
     },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ id, nuevaPassword }: { id: number; nuevaPassword: string }) =>
+      usuariosService.adminResetPassword(id, nuevaPassword),
+    onSuccess: () => setResetPasswordUsuario(null),
   });
 
   const handleCreate = (data: CreateUsuarioInput) => {
@@ -1127,11 +1245,11 @@ function UsuariosTab() {
   const getRolBadgeStyle = (rol: string) => {
     switch (rol) {
       case 'Administrador':
-        return 'bg-purple-500/20 text-purple-300 border-purple-500/30';
+        return isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200';
       case 'Normal':
-        return 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30';
+        return isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-100 text-gray-700 border-gray-300';
       default:
-        return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+        return isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200';
     }
   };
 
@@ -1142,7 +1260,7 @@ function UsuariosTab() {
     <>
       <div className="space-y-5">
         {/* Control Bar */}
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-5">
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} backdrop-blur-xl p-5`}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             {/* Search */}
             <div className="relative flex-1 w-full sm:max-w-md">
@@ -1150,7 +1268,7 @@ function UsuariosTab() {
               <input
                 type="search"
                 placeholder="Buscar usuarios..."
-                className="w-full pl-11 pr-4 py-3 rounded-xl border border-purple-500/20 bg-zinc-900/80 text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40"
+                className={`w-full pl-11 pr-4 py-3 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40`}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -1170,7 +1288,7 @@ function UsuariosTab() {
                 Nuevo Usuario
               </button>
 
-              {/* Delete Button - solo visible cuando hay selección */}
+              {/* Delete Button - solo visible cuando hay seleccion */}
               {someSelected && (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
@@ -1182,52 +1300,52 @@ function UsuariosTab() {
               )}
 
               {/* Stats */}
-              <div className="px-4 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20">
-                <span className="text-purple-300 text-sm font-medium">{usuarios?.length || 0} usuarios</span>
+              <div className={`px-4 py-2 rounded-xl ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
+                <span className={`${isDark ? 'text-purple-300' : 'text-purple-600'} text-sm font-medium`}>{usuarios?.length || 0} usuarios</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Data Table */}
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-xl shadow-purple-500/5">
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} backdrop-blur-xl overflow-hidden shadow-xl ${isDark ? 'shadow-purple-500/5' : 'shadow-gray-200/50'}`}>
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20">
               <Loader2 className="h-10 w-10 text-purple-400 animate-spin mb-4" />
-              <p className="text-purple-300/70 text-sm">Cargando usuarios...</p>
+              <p className={`${isDark ? 'text-purple-300/70' : 'text-gray-500'} text-sm`}>Cargando usuarios...</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30">
+                  <tr className={`border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30' : 'bg-purple-50/50'}`}>
                     <th className="px-5 py-4 text-left">
                       <input
                         type="checkbox"
                         checked={allSelected}
                         onChange={toggleSelectAll}
-                        className="w-4 h-4 rounded border-purple-500/50 bg-zinc-800 text-purple-600 focus:ring-purple-500/50 focus:ring-offset-0 cursor-pointer"
+                        className={`w-4 h-4 rounded border-purple-500/50 ${isDark ? 'bg-zinc-800' : 'bg-white'} text-purple-600 focus:ring-purple-500/50 focus:ring-offset-0 cursor-pointer`}
                       />
                     </th>
-                    <th className="px-5 py-4 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">
+                    <th className={`px-5 py-4 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider`}>
                       Usuario
                     </th>
-                    <th className="px-5 py-4 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider hidden md:table-cell">
+                    <th className={`px-5 py-4 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider hidden md:table-cell`}>
                       Email
                     </th>
-                    <th className="px-5 py-4 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider hidden lg:table-cell">
-                      Área
+                    <th className={`px-5 py-4 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider hidden lg:table-cell`}>
+                      Area
                     </th>
-                    <th className="px-5 py-4 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider hidden lg:table-cell">
+                    <th className={`px-5 py-4 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider hidden lg:table-cell`}>
                       Puesto
                     </th>
-                    <th className="px-5 py-4 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">
+                    <th className={`px-5 py-4 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider`}>
                       Rol
                     </th>
-                    <th className="px-5 py-4 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider hidden xl:table-cell">
+                    <th className={`px-5 py-4 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider hidden xl:table-cell`}>
                       Equipos
                     </th>
-                    <th className="px-5 py-4 text-left text-xs font-semibold text-purple-300 uppercase tracking-wider">
+                    <th className={`px-5 py-4 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'} uppercase tracking-wider`}>
                       Acciones
                     </th>
                   </tr>
@@ -1236,8 +1354,8 @@ function UsuariosTab() {
                   {filteredUsuarios.map((usuario: UsuarioAdmin) => (
                     <tr
                       key={usuario.id}
-                      className={`border-b border-purple-500/10 last:border-0 hover:bg-purple-500/5 transition-all ${
-                        selectedIds.has(usuario.id) ? 'bg-purple-500/10' : ''
+                      className={`border-b ${isDark ? 'border-purple-500/10' : 'border-gray-100'} last:border-0 ${isDark ? 'hover:bg-purple-500/5' : 'hover:bg-purple-50/50'} transition-all ${
+                        selectedIds.has(usuario.id) ? (isDark ? 'bg-purple-500/10' : 'bg-purple-50') : ''
                       }`}
                     >
                       <td className="px-5 py-4">
@@ -1245,34 +1363,34 @@ function UsuariosTab() {
                           type="checkbox"
                           checked={selectedIds.has(usuario.id)}
                           onChange={() => toggleSelect(usuario.id)}
-                          className="w-4 h-4 rounded border-purple-500/50 bg-zinc-800 text-purple-600 focus:ring-purple-500/50 focus:ring-offset-0 cursor-pointer"
+                          className={`w-4 h-4 rounded border-purple-500/50 ${isDark ? 'bg-zinc-800' : 'bg-white'} text-purple-600 focus:ring-purple-500/50 focus:ring-offset-0 cursor-pointer`}
                         />
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <UserAvatar nombre={usuario.nombre} foto_perfil={usuario.foto_perfil} size="md" />
                           <div>
-                            <span className="font-semibold text-white text-sm block">{usuario.nombre}</span>
-                            <span className="text-xs text-zinc-500 md:hidden">{usuario.email}</span>
+                            <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'} text-sm block`}>{usuario.nombre}</span>
+                            <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'} md:hidden`}>{usuario.email}</span>
                           </div>
                         </div>
                       </td>
                       <td className="px-5 py-4 hidden md:table-cell">
                         <div className="flex items-center gap-2">
                           <Mail className="h-4 w-4 text-purple-400/50" />
-                          <span className="text-zinc-300 text-sm">{usuario.email}</span>
+                          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-600'} text-sm`}>{usuario.email}</span>
                         </div>
                       </td>
                       <td className="px-5 py-4 hidden lg:table-cell">
                         <div className="flex items-center gap-2">
                           <Building className="h-4 w-4 text-purple-400/50" />
-                          <span className="text-zinc-400 text-sm">{usuario.area || '-'}</span>
+                          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{usuario.area || '-'}</span>
                         </div>
                       </td>
                       <td className="px-5 py-4 hidden lg:table-cell">
                         <div className="flex items-center gap-2">
                           <Briefcase className="h-4 w-4 text-purple-400/50" />
-                          <span className="text-zinc-400 text-sm">{usuario.puesto || '-'}</span>
+                          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{usuario.puesto || '-'}</span>
                         </div>
                       </td>
                       <td className="px-5 py-4">
@@ -1307,27 +1425,36 @@ function UsuariosTab() {
                             ))}
                           </div>
                         ) : (
-                          <span className="text-zinc-500 text-sm">Sin equipos</span>
+                          <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Sin equipos</span>
                         )}
                       </td>
                       <td className="px-5 py-4">
-                        <button
-                          onClick={() => setEditingUsuario(usuario)}
-                          className="p-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-all"
-                          title="Editar usuario"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setEditingUsuario(usuario)}
+                            className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} text-purple-400 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} transition-all`}
+                            title="Editar usuario"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setResetPasswordUsuario(usuario)}
+                            className={`p-2 rounded-lg ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'} text-amber-400 ${isDark ? 'hover:bg-amber-500/20' : 'hover:bg-amber-100'} border ${isDark ? 'border-amber-500/20' : 'border-amber-200'} transition-all`}
+                            title="Restablecer contraseña"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                   {filteredUsuarios.length === 0 && (
                     <tr>
                       <td colSpan={8} className="px-5 py-16 text-center">
-                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
+                        <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} mb-4`}>
                           <Users className="w-8 h-8 text-purple-400" />
                         </div>
-                        <p className="text-purple-300/70 text-sm">No se encontraron usuarios</p>
+                        <p className={`${isDark ? 'text-purple-300/70' : 'text-gray-500'} text-sm`}>No se encontraron usuarios</p>
                       </td>
                     </tr>
                   )}
@@ -1361,6 +1488,16 @@ function UsuariosTab() {
         />
       )}
 
+      {/* Reset Password Modal */}
+      {resetPasswordUsuario && (
+        <ResetPasswordModal
+          usuario={resetPasswordUsuario}
+          onClose={() => setResetPasswordUsuario(null)}
+          onSubmit={(nuevaPassword) => resetPasswordMutation.mutate({ id: resetPasswordUsuario.id, nuevaPassword })}
+          loading={resetPasswordMutation.isPending}
+        />
+      )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <DeleteConfirmModal
@@ -1374,8 +1511,9 @@ function UsuariosTab() {
   );
 }
 
-// Componente de la pestaña Tickets
+// Componente de la pestana Tickets
 function TicketsTab() {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
@@ -1404,11 +1542,11 @@ function TicketsTab() {
   return (
     <div className="space-y-5">
       {/* Control Bar */}
-      <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 backdrop-blur-xl p-5">
+      <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} backdrop-blur-xl p-5`}>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-white">Mis Tickets de Soporte</h2>
-            <p className="text-sm text-zinc-400">Reporta problemas o solicita ayuda</p>
+            <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Mis Tickets de Soporte</h2>
+            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Reporta problemas o solicita ayuda</p>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -1418,8 +1556,8 @@ function TicketsTab() {
               <Plus className="h-4 w-4" />
               Nuevo Ticket
             </button>
-            <div className="px-4 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20">
-              <span className="text-purple-300 text-sm font-medium">{tickets.length} tickets</span>
+            <div className={`px-4 py-2 rounded-xl ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
+              <span className={`${isDark ? 'text-purple-300' : 'text-purple-600'} text-sm font-medium`}>{tickets.length} tickets</span>
             </div>
           </div>
         </div>
@@ -1429,7 +1567,7 @@ function TicketsTab() {
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20">
           <Loader2 className="h-10 w-10 text-purple-400 animate-spin mb-4" />
-          <p className="text-purple-300/70 text-sm">Cargando tickets...</p>
+          <p className={`${isDark ? 'text-purple-300/70' : 'text-gray-500'} text-sm`}>Cargando tickets...</p>
         </div>
       ) : tickets.length > 0 ? (
         <div className="space-y-3">
@@ -1441,13 +1579,13 @@ function TicketsTab() {
             return (
               <div
                 key={ticket.id}
-                className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 p-5 hover:border-purple-500/40 transition-all cursor-pointer"
+                className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-5 ${isDark ? 'hover:border-purple-500/40' : 'hover:border-purple-300'} transition-all cursor-pointer`}
                 onClick={() => setSelectedTicket(ticket)}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs text-zinc-500">#{ticket.id}</span>
+                      <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>#{ticket.id}</span>
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${statusConfig.bgColor} ${statusConfig.textColor} ${statusConfig.borderColor}`}>
                         <StatusIcon className="h-3 w-3" />
                         {ticket.status}
@@ -1456,14 +1594,14 @@ function TicketsTab() {
                         {ticket.prioridad}
                       </span>
                     </div>
-                    <h3 className="text-lg font-semibold text-white mb-1">{ticket.titulo}</h3>
-                    <p className="text-sm text-zinc-400 line-clamp-2">{ticket.descripcion}</p>
-                    <p className="text-xs text-zinc-500 mt-2">
+                    <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-1`}>{ticket.titulo}</h3>
+                    <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} line-clamp-2`}>{ticket.descripcion}</p>
+                    <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-2`}>
                       Creado: {new Date(ticket.created_at).toLocaleString('es-MX')}
                     </p>
                   </div>
                   {ticket.imagen && (
-                    <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                    <div className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
                       <Image className="h-5 w-5 text-purple-400" />
                     </div>
                   )}
@@ -1472,9 +1610,9 @@ function TicketsTab() {
                 {ticket.respuesta && (
                   <div className="mt-4 p-3 rounded-xl bg-green-500/10 border border-green-500/20">
                     <p className="text-xs text-green-400 font-medium mb-1">Respuesta:</p>
-                    <p className="text-sm text-zinc-300">{ticket.respuesta}</p>
+                    <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>{ticket.respuesta}</p>
                     {ticket.respondido_por && (
-                      <p className="text-xs text-zinc-500 mt-1">
+                      <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-1`}>
                         Por {ticket.respondido_por} - {ticket.respondido_at && new Date(ticket.respondido_at).toLocaleString('es-MX')}
                       </p>
                     )}
@@ -1485,10 +1623,10 @@ function TicketsTab() {
           })}
         </div>
       ) : (
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 p-16 text-center">
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-16 text-center`}>
           <Ticket className="h-16 w-16 text-purple-400/50 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-white mb-2">No tienes tickets</h3>
-          <p className="text-zinc-400 mb-6">Crea un ticket si necesitas ayuda o quieres reportar un problema</p>
+          <h3 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>No tienes tickets</h3>
+          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>Crea un ticket si necesitas ayuda o quieres reportar un problema</p>
           <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 transition-all"
@@ -1529,6 +1667,9 @@ function CreateTicketModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const isDark = useThemeStore((s) => s.theme === 'dark');
+  const inputClasses = getInputClasses(isDark);
+  const labelClasses = `block text-sm font-medium mb-1.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`;
   const [form, setForm] = useState<CreateTicketInput>({
     titulo: '',
     descripcion: '',
@@ -1548,6 +1689,8 @@ function CreateTicketModal({
     },
   });
 
+  const [imageFile, setImageFile] = useState<File | null>(null);
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -1555,39 +1698,46 @@ function CreateTicketModal({
         setError('La imagen no puede ser mayor a 5MB');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setForm({ ...form, imagen: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      setImageFile(file);
+      setForm({ ...form, imagen: file.name });
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.titulo.trim() || !form.descripcion.trim()) {
       setError('Titulo y descripcion son requeridos');
       return;
     }
-    createMutation.mutate(form);
+    let imagenUrl: string | null = null;
+    if (imageFile) {
+      try {
+        const uploaded = await uploadsService.uploadFile(imageFile, 'tickets');
+        imagenUrl = uploaded.url;
+      } catch (err) {
+        setError('Error al subir la imagen');
+        return;
+      }
+    }
+    createMutation.mutate({ ...form, imagen: imagenUrl });
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-lg bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40 sticky top-0 z-10">
+      <div className={`relative z-50 w-full max-w-lg ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto`}>
+        <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'} sticky top-0 z-10`}>
           <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-purple-500/20">
-              <Ticket className="h-6 w-6 text-purple-300" />
+            <div className={`p-3 rounded-xl ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'}`}>
+              <Ticket className={`h-6 w-6 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Nuevo Ticket</h2>
-              <p className="text-sm text-purple-300/70">Describe tu problema o solicitud</p>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Nuevo Ticket</h2>
+              <p className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>Describe tu problema o solicitud</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-purple-500/20 rounded-xl transition-colors group">
-            <X className="h-5 w-5 text-purple-300 group-hover:text-white transition-colors" />
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-50'} rounded-xl transition-colors group`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-purple-300 group-hover:text-white' : 'text-gray-500 group-hover:text-gray-900'} transition-colors`} />
           </button>
         </div>
 
@@ -1644,7 +1794,7 @@ function CreateTicketModal({
                 <img
                   src={form.imagen}
                   alt="Preview"
-                  className="w-full h-40 object-cover rounded-xl border border-purple-500/20"
+                  className={`w-full h-40 object-cover rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}
                 />
                 <button
                   type="button"
@@ -1658,27 +1808,27 @@ function CreateTicketModal({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full p-4 rounded-xl border-2 border-dashed border-purple-500/30 hover:border-purple-500/50 transition-colors flex flex-col items-center gap-2"
+                className={`w-full p-4 rounded-xl border-2 border-dashed ${isDark ? 'border-purple-500/30 hover:border-purple-500/50' : 'border-purple-200 hover:border-purple-300'} transition-colors flex flex-col items-center gap-2`}
               >
                 <Image className="h-8 w-8 text-purple-400" />
-                <span className="text-sm text-zinc-400">Haz clic para subir una imagen</span>
-                <span className="text-xs text-zinc-500">Max 5MB</span>
+                <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Haz clic para subir una imagen</span>
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Max 5MB</span>
               </button>
             )}
           </div>
 
           {error && (
-            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm flex items-center gap-2">
+            <div className={`p-4 rounded-xl bg-red-500/10 border border-red-500/30 ${isDark ? 'text-red-300' : 'text-red-700'} text-sm flex items-center gap-2`}>
               <AlertTriangle className="h-4 w-4" />
               {error}
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-purple-500/20">
+          <div className={`flex justify-end gap-3 pt-4 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-purple-300 bg-zinc-800 border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500/40 transition-all"
+              className={`px-5 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'text-purple-300' : 'text-gray-700'} ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'hover:bg-purple-500/10' : 'hover:bg-purple-50'} hover:border-purple-500/40 transition-all`}
             >
               Cancelar
             </button>
@@ -1705,6 +1855,7 @@ function ViewTicketModal({
   ticket: TicketType;
   onClose: () => void;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [showImage, setShowImage] = useState(false);
 
   const STATUS_CONFIG: Record<string, { textColor: string; bgColor: string; borderColor: string }> = {
@@ -1719,38 +1870,38 @@ function ViewTicketModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-2xl bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900 border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40 sticky top-0 z-10">
+      <div className={`relative z-50 w-full max-w-2xl ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto`}>
+        <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'} sticky top-0 z-10`}>
           <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-purple-500/20">
-              <Ticket className="h-6 w-6 text-purple-300" />
+            <div className={`p-3 rounded-xl ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'}`}>
+              <Ticket className={`h-6 w-6 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-zinc-500">Ticket #{ticket.id}</span>
+                <span className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Ticket #{ticket.id}</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${statusConfig.bgColor} ${statusConfig.textColor} ${statusConfig.borderColor}`}>
                   {ticket.status}
                 </span>
               </div>
-              <h2 className="text-xl font-bold text-white">{ticket.titulo}</h2>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{ticket.titulo}</h2>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-purple-500/20 rounded-xl transition-colors group">
-            <X className="h-5 w-5 text-purple-300 group-hover:text-white transition-colors" />
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-50'} rounded-xl transition-colors group`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-purple-300 group-hover:text-white' : 'text-gray-500 group-hover:text-gray-900'} transition-colors`} />
           </button>
         </div>
 
         <div className="p-6 space-y-4">
-          <div className="p-4 rounded-xl bg-zinc-800/50 border border-purple-500/10">
-            <h3 className="text-sm font-medium text-purple-300 mb-2">Descripcion</h3>
-            <p className="text-zinc-300 whitespace-pre-wrap">{ticket.descripcion}</p>
+          <div className={`p-4 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} border ${isDark ? 'border-purple-500/10' : 'border-gray-200'}`}>
+            <h3 className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-600'} mb-2`}>Descripcion</h3>
+            <p className={`${isDark ? 'text-zinc-300' : 'text-gray-600'} whitespace-pre-wrap`}>{ticket.descripcion}</p>
           </div>
 
           {ticket.imagen && (
-            <div className="p-4 rounded-xl bg-zinc-800/50 border border-purple-500/10">
+            <div className={`p-4 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} border ${isDark ? 'border-purple-500/10' : 'border-gray-200'}`}>
               <button
                 onClick={() => setShowImage(!showImage)}
-                className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors"
+                className={`flex items-center gap-2 ${isDark ? 'text-purple-400 hover:text-purple-300' : 'text-purple-600 hover:text-purple-500'} transition-colors`}
               >
                 <Image className="h-4 w-4" />
                 <span className="text-sm font-medium">
@@ -1762,7 +1913,7 @@ function ViewTicketModal({
                   <img
                     src={ticket.imagen}
                     alt="Imagen del ticket"
-                    className="max-w-full rounded-lg border border-purple-500/20"
+                    className={`max-w-full rounded-lg border ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}
                   />
                 </div>
               )}
@@ -1772,16 +1923,16 @@ function ViewTicketModal({
           {ticket.respuesta && (
             <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20">
               <h3 className="text-sm font-medium text-green-400 mb-2">Respuesta del equipo</h3>
-              <p className="text-zinc-300 whitespace-pre-wrap">{ticket.respuesta}</p>
+              <p className={`${isDark ? 'text-zinc-300' : 'text-gray-600'} whitespace-pre-wrap`}>{ticket.respuesta}</p>
               {ticket.respondido_por && (
-                <p className="text-xs text-zinc-500 mt-2">
+                <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-2`}>
                   Por {ticket.respondido_por} - {ticket.respondido_at && new Date(ticket.respondido_at).toLocaleString('es-MX')}
                 </p>
               )}
             </div>
           )}
 
-          <div className="flex items-center justify-between text-xs text-zinc-500 pt-4 border-t border-purple-500/20">
+          <div className={`flex items-center justify-between text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} pt-4 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
             <span>Creado: {new Date(ticket.created_at).toLocaleString('es-MX')}</span>
             <span>Actualizado: {new Date(ticket.updated_at).toLocaleString('es-MX')}</span>
           </div>
@@ -1793,6 +1944,7 @@ function ViewTicketModal({
 
 // Componente principal con tabs
 export function UsuariosAdminPage() {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [activeTab, setActiveTab] = useState<TabType>('usuarios');
 
   // WebSocket para actualizar equipos en tiempo real
@@ -1820,7 +1972,9 @@ export function UsuariosAdminPage() {
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   activeTab === tab.key
                     ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-lg shadow-purple-500/25'
-                    : 'bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-purple-500/10'
+                    : isDark
+                      ? 'bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-purple-500/10'
+                      : 'bg-gray-100 text-gray-500 hover:text-gray-900 hover:bg-gray-200 border border-purple-200'
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -1838,7 +1992,9 @@ export function UsuariosAdminPage() {
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   activeTab === tab.key
                     ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-lg shadow-purple-500/25'
-                    : 'bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-purple-500/10'
+                    : isDark
+                      ? 'bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-purple-500/10'
+                      : 'bg-gray-100 text-gray-500 hover:text-gray-900 hover:bg-gray-200 border border-purple-200'
                 }`}
               >
                 <Icon className="h-4 w-4" />

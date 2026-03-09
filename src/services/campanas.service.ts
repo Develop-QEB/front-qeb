@@ -50,6 +50,12 @@ export interface SAPDeliveryNote {
   DocumentLines: SAPDocumentLine[];
 }
 
+export interface SAPDeliveryNoteMigrated {
+  BaseType: number;
+  BaseDocNum: string;
+  DocumentLines: SAPDocumentLine[];
+}
+
 export interface SAPPostResponse {
   success: boolean;
   data?: {
@@ -101,6 +107,12 @@ export interface InventarioReservado {
   numero_catorcena?: number | null;
   anio_catorcena?: number | null;
   tarifa_publica?: number | null;
+  tarifa_publica_sc?: number | null;
+  formato?: string | null;
+  bonificacion_sc?: number | null;
+  renta?: number | null;
+  ancho?: number | null;
+  alto?: number | null;
 }
 
 export interface InventarioConAPS extends InventarioReservado {
@@ -108,6 +120,13 @@ export interface InventarioConAPS extends InventarioReservado {
   arte_aprobado?: string | null;
   instalado?: boolean | null;
   estatus_arte?: 'Carga Artes' | 'Revision Artes' | 'Artes Aprobados' | 'En Impresion' | 'Artes Recibidos' | 'Instalado' | null;
+  formato?: string | null;
+  tarifa_publica_sc?: number | null;
+  bonificacion_sc?: number | null;
+  renta?: number | null;
+  indicaciones_programacion?: string | null;
+  indicaciones_instalacion?: string | null;
+  archivo?: string | null;
 }
 
 export interface InventarioConArte {
@@ -271,7 +290,7 @@ export interface OrdenMontajeCAT {
   unidad_negocio: string | null;
   campania: string | null;
   numero_articulo: string | null;
-  negociacion: 'BONIFICACION' | 'RENTA';
+  negociacion: 'BONIFICACION' | 'RENTA' | 'CORTESIA' | 'INTERCAMBIO';
   caras: number;
   tarifa: number | null;
   monto_total: number | null;
@@ -280,6 +299,7 @@ export interface OrdenMontajeCAT {
   tipo_fila: string | null;
   catorcena_numero: number | null;
   catorcena_year: number | null;
+  tradicional_digital: string | null;
 }
 
 export interface OrdenMontajeINVIAN {
@@ -295,6 +315,7 @@ export interface OrdenMontajeINVIAN {
   Arte: string | null;
   CodigoArte: number | null;
   ArteUrl: string | null;
+  ArteFileName: string | null;
   OrigenArte: string | null;
   Unidad: string | null;
   Cara: string | null;
@@ -306,6 +327,13 @@ export interface OrdenMontajeINVIAN {
   status_campania: string | null;
   catorcena_numero: number | null;
   catorcena_year: number | null;
+  rsv_id?: number | null;
+  tradicional_digital?: string | null;
+  indicaciones?: string | null;
+  num_artes_digitales?: number | null;
+  nombres_artes_digitales?: string | null;
+  cortesia?: number | null;
+  numero_articulo?: string | null;
 }
 
 export interface ComentarioRevisionArte {
@@ -317,12 +345,17 @@ export interface ComentarioRevisionArte {
   fecha: string;
 }
 
+// Detectar si es campaña migrada desde INVIAN
+export function isMigratedCampaign(campana: CampanaWithComments): boolean {
+  return campana.comentario_cambio_status === 'Migrado desde INVIAN';
+}
+
 // Función para construir el payload de DeliveryNote para SAP
 export function buildDeliveryNote(
   campana: CampanaWithComments,
   inventarioAPS: InventarioConAPS[],
   sapDatabase?: string | null
-): SAPDeliveryNote {
+): SAPDeliveryNote | SAPDeliveryNoteMigrated {
   // Obtener valores únicos de APS
   const uniqueAPS = [...new Set(inventarioAPS.map(item => item.aps))];
 
@@ -332,10 +365,8 @@ export function buildDeliveryNote(
     const itemsWithThisAPS = inventarioAPS.filter(item => item.aps === apsValue);
     const firstItem = itemsWithThisAPS[0];
 
-    // Calcular UnitPrice sumando tarifa_publica de todos los items con este APS
-    const totalPrice = itemsWithThisAPS.reduce((total, item) => {
-      return total + (item.tarifa_publica || 0);
-    }, 0);
+    // UnitPrice = tarifa unitaria (no suma)
+    const totalPrice = Number(firstItem.tarifa_publica_sc) || Number(firstItem.tarifa_publica) || 0;
 
     // Construir U_dscPeriod desde numero_catorcena y anio_catorcena
     const dscPeriod = firstItem.numero_catorcena && firstItem.anio_catorcena
@@ -347,7 +378,7 @@ export function buildDeliveryNote(
       ItemCode: firstItem.articulo || '',
       Quantity: itemsWithThisAPS.length.toString(),
       TaxCode: 'A4',
-      UnitPrice: String(campana.precio || 0),
+      UnitPrice: String(totalPrice || 0),
       CostingCode: '02-03-04',
       CostingCode2: '1',
       U_Cod_Sitio: 11,
@@ -361,8 +392,17 @@ export function buildDeliveryNote(
     };
   });
 
-  // Construir el objeto DeliveryNote completo
-  const series = sapDatabase ? getSeriesForSapDatabase(sapDatabase as SapDatabase) : 4;
+  // Si es campaña migrada desde INVIAN, JSON simplificado
+  if (isMigratedCampaign(campana)) {
+    return {
+      BaseType: 17,
+      BaseDocNum: campana.id?.toString() || '',
+      DocumentLines: documentLines,
+    };
+  }
+
+  // Construir el objeto DeliveryNote completo (campañas QEB)
+  const series = sapDatabase ? getSeriesForSapDatabase(sapDatabase as SapDatabase) : 162;
   const deliveryNote: SAPDeliveryNote = {
     Series: series,
     CardCode: campana.card_code || 'IMU00351',
@@ -390,7 +430,7 @@ export function buildDeliveryNote(
 }
 
 // Función para hacer POST a SAP
-export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote, sapDatabase?: string | null): Promise<SAPPostResponse> {
+export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote | SAPDeliveryNoteMigrated, sapDatabase?: string | null): Promise<SAPPostResponse> {
   try {
     const endpoint = sapDatabase
       ? getDeliveryNotesEndpoint(sapDatabase as SapDatabase)
@@ -408,7 +448,7 @@ export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote, sapDa
     console.log('========== SAP RESPONSE ==========');
     console.log('Status:', response.status);
     console.log('Endpoint:', endpoint);
-    console.log('Series:', deliveryNote.Series);
+    console.log('Series:', (deliveryNote as any).Series);
     console.log('Response data:', JSON.stringify(data, null, 2));
     console.log('==================================');
 
@@ -455,10 +495,12 @@ export interface CampanasParams {
   page?: number;
   limit?: number;
   status?: string;
+  search?: string;
   yearInicio?: number;
   yearFin?: number;
   catorcenaInicio?: number;
   catorcenaFin?: number;
+  tipoPeriodo?: string;
 }
 
 export const campanasService = {
@@ -483,8 +525,16 @@ export const campanasService = {
     return response.data.data;
   },
 
-  async getStats(): Promise<CampanaStats> {
-    const response = await api.get<ApiResponse<CampanaStats>>('/campanas/stats');
+  async getStats(params?: {
+    status?: string;
+    search?: string;
+    yearInicio?: number;
+    yearFin?: number;
+    catorcenaInicio?: number;
+    catorcenaFin?: number;
+    tipoPeriodo?: string;
+  }): Promise<CampanaStats> {
+    const response = await api.get<ApiResponse<CampanaStats>>('/campanas/stats', { params });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener estadisticas');
     }
@@ -505,6 +555,10 @@ export const campanasService = {
       throw new Error(response.data.error || 'Error al obtener inventario reservado');
     }
     return response.data.data;
+  },
+
+  async markPostedToSAP(id: number): Promise<void> {
+    await api.post(`/campanas/${id}/mark-posted-sap`);
   },
 
   async getInventarioConAPS(id: number): Promise<InventarioConAPS[]> {
@@ -626,6 +680,14 @@ export const campanasService = {
       throw new Error(response.data.error || 'Error al obtener imágenes digitales');
     }
     return response.data.data;
+  },
+
+  async getReservaArchivo(campanaId: number, reservaId: number): Promise<string | null> {
+    const response = await api.get<ApiResponse<{ archivo: string | null }>>(`/campanas/${campanaId}/reserva-archivo/${reservaId}`);
+    if (!response.data.success || !response.data.data) {
+      return null;
+    }
+    return response.data.data.archivo;
   },
 
   async getDigitalFileSummaries(campanaId: number): Promise<DigitalFileSummary[]> {
@@ -793,6 +855,34 @@ export const campanasService = {
     const response = await api.patch<ApiResponse<TareaCampana>>(`/campanas/${id}/tareas/${tareaId}`, data);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al actualizar tarea');
+    }
+    return response.data.data;
+  },
+
+  async enviarOrdenProgramacion(campanaId: number, tareaId: number): Promise<{
+    orden: { id: number; estatus: string };
+    programacion: { id: number; estatus: string };
+  }> {
+    const response = await api.post<ApiResponse<{
+      orden: { id: number; estatus: string };
+      programacion: { id: number; estatus: string };
+    }>>(`/campanas/${campanaId}/tareas/${tareaId}/enviar-orden-programacion`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al enviar orden de programación');
+    }
+    return response.data.data;
+  },
+
+  async activarOrdenInstalacion(campanaId: number, tareaId: number): Promise<{
+    orden: { id: number; estatus: string };
+    instalacion: { id: number; estatus: string };
+  }> {
+    const response = await api.post<ApiResponse<{
+      orden: { id: number; estatus: string };
+      instalacion: { id: number; estatus: string };
+    }>>(`/campanas/${campanaId}/tareas/${tareaId}/activar-orden-instalacion`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al activar orden de instalación');
     }
     return response.data.data;
   },

@@ -17,6 +17,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketPropuesta, useSocketEquipos } from '../../hooks/useSocket';
+import { useThemeStore } from '../../store/themeStore';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
 
@@ -131,12 +132,11 @@ const getFormatoFromArticulo = (itemName: string): string => {
 };
 
 // Tipo auto-detection from article name
-const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' | '' => {
-  if (!itemName) return '';
+const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
+  if (!itemName) return 'Tradicional';
   const name = itemName.toUpperCase();
   if (name.includes('DIGITAL') || name.includes('DIG')) return 'Digital';
-  if (name.includes('TRADICIONAL') || name.includes('RENTA')) return 'Tradicional';
-  return '';
+  return 'Tradicional';
 };
 
 // Get tarifa from ItemCode
@@ -146,23 +146,34 @@ const getTarifaFromItemCode = (itemCode: string): number => {
   return TARIFA_PUBLICA_MAP[code] || 850;
 };
 
+// Multi-city auto-fill rules for specific article patterns
+const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = [
+  { pattern: /\bMTY\b|\bMONTERREY\b|\bMY\b/, estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
+  { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
+  { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
+  { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
+];
+
 // Extract city/state from article name (sorted by length to avoid false positives)
 const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
+  // Check multi-city rules first
+  for (const rule of MULTI_CITY_RULES) {
+    if (rule.pattern.test(name)) {
+      return { estado: rule.estado, ciudad: rule.ciudad };
+    }
+  }
+
   // Sort cities by length (longest first) to match more specific names before generic ones
-  // This prevents "MEXICO" from matching before "CIUDAD DE MEXICO"
   const sortedCities = Object.entries(CIUDAD_ESTADO_MAP).sort((a, b) => b[0].length - a[0].length);
 
-  // Ciudades que no existen como tal y solo deben poner el estado (Ciudad de México)
   const CIUDADES_SIN_CIUDAD = ['CDMX', 'CIUDAD DE MEXICO', 'MEXICO', 'DF'];
 
   for (const [ciudad, estado] of sortedCities) {
-    // Use word boundary check - city must be preceded and followed by non-letter chars
     const regex = new RegExp(`(^|[^A-Z])${ciudad.replace(/\s+/g, '\\s+')}([^A-Z]|$)`, 'i');
     if (regex.test(name)) {
-      // Si es una ciudad que no existe (CDMX, etc.), solo devolver estado sin ciudad
       if (CIUDADES_SIN_CIUDAD.includes(ciudad)) {
         return { estado, ciudad: '' };
       }
@@ -214,7 +225,7 @@ const FILTER_FIELDS_RESERVAS: FilterFieldConfig[] = [
   { field: 'tipo', label: 'Tipo', type: 'string' },
   { field: 'plaza', label: 'Plaza', type: 'string' },
   { field: 'formato', label: 'Formato', type: 'string' },
-  { field: 'catorcena', label: 'Catorcena', type: 'number' },
+  { field: 'catorcena', label: 'Periodo', type: 'number' },
   { field: 'anio', label: 'Año', type: 'number' },
 ];
 
@@ -238,7 +249,7 @@ interface GroupConfigReservas {
 }
 
 const AVAILABLE_GROUPINGS_RESERVAS: GroupConfigReservas[] = [
-  { field: 'catorcena', label: 'Catorcena' },
+  { field: 'catorcena', label: 'Periodo' },
   { field: 'grupo', label: 'Grupo Completo' },
   { field: 'articulo', label: 'Artículo' },
   { field: 'plaza', label: 'Plaza' },
@@ -511,10 +522,14 @@ function SearchableSelect({
 
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
+const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
 export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = false }: Props) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
+  const tipoPeriodo = (propuesta as any)?.tipo_periodo || 'catorcena';
 
   // WebSocket para escuchar cambios en reservas en tiempo real
   useSocketPropuesta(propuesta?.id || null);
@@ -607,6 +622,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [reservadosSearchTerm, setReservadosSearchTerm] = useState('');
   const [editingReserva, setEditingReserva] = useState<ReservaItem | null>(null);
   const [editingFormato, setEditingFormato] = useState('');
+  const [editingPlaza, setEditingPlaza] = useState('');
   const [reservadosTipoFilter, setReservadosTipoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo' | 'Bonificacion'>('Todos');
   const [showOnlyIslaReservados, setShowOnlyIslaReservados] = useState(false);
   const [showReservasFlatList, setShowReservasFlatList] = useState(false); // Toggle for flat list vs grouped
@@ -1058,9 +1074,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Calculate KPIs for caras
   const carasKPIs = useMemo(() => {
     const totalRenta = caras.reduce((acc, c) => acc + (c.caras || 0), 0);
-    const totalBonificacion = caras.reduce((acc, c) => acc + (c.bonificacion || 0), 0);
+    const totalBonificacion = caras.filter(c => !(c.articulo || '').toUpperCase().startsWith('CT')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
+    const totalCortesia = caras.filter(c => (c.articulo || '').toUpperCase().startsWith('CT')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
     const totalInversion = caras.reduce((acc, c) => acc + ((c.caras || 0) * (c.tarifa_publica || 0)), 0);
-    return { totalRenta, totalBonificacion, totalInversion };
+    return { totalRenta, totalBonificacion, totalCortesia, totalInversion };
   }, [caras]);
 
   // Merge all reservas by grupo_completo_id (for display)
@@ -1319,20 +1336,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const carasGroupedByCatorcena = useMemo(() => {
     const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
     caras.forEach(cara => {
-      const periodo = cara.inicio_periodo || 'Sin periodo';
+      let periodo = cara.inicio_periodo || 'Sin periodo';
+      let parsedMonth: number | undefined;
+      let parsedYear: number | undefined;
+      if (tipoPeriodo === 'mensual' && cara.inicio_periodo) {
+        // Parse date string directly to avoid timezone shifts
+        const parts = cara.inicio_periodo.split('-');
+        if (parts.length >= 2) {
+          parsedYear = parseInt(parts[0]);
+          parsedMonth = parseInt(parts[1]);
+          periodo = `${parsedYear}-${String(parsedMonth).padStart(2, '0')}-01`;
+        }
+      }
       if (!groups[periodo]) {
-        // Try to find catorcena number from catorcenasData
-        const catorcenaInfo = catorcenasData?.data?.find(c => c.fecha_inicio === periodo);
-        groups[periodo] = {
-          caras: [],
-          catorcenaNum: catorcenaInfo?.numero_catorcena,
-          year: catorcenaInfo?.a_o
-        };
+        if (tipoPeriodo === 'mensual' && parsedMonth !== undefined && parsedYear !== undefined) {
+          groups[periodo] = { caras: [], catorcenaNum: parsedMonth, year: parsedYear };
+        } else if (tipoPeriodo === 'mensual') {
+          const parts = periodo.split('-');
+          groups[periodo] = { caras: [], catorcenaNum: parseInt(parts[1]) || undefined, year: parseInt(parts[0]) || undefined };
+        } else {
+          const catorcenaInfo = catorcenasData?.data?.find(c => c.fecha_inicio === periodo);
+          groups[periodo] = { caras: [], catorcenaNum: catorcenaInfo?.numero_catorcena, year: catorcenaInfo?.a_o };
+        }
       }
       groups[periodo].caras.push(cara);
     });
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [caras, catorcenasData]);
+  }, [caras, catorcenasData, tipoPeriodo]);
 
   // Years options (filtered like EditSolicitudModal)
   const yearInicioOptions = useMemo(() => {
@@ -2166,12 +2196,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         return row;
       });
 
-      // Match with inventory
+      // Match with inventory - try multiple possible column names
       const matched = parsedData.map(row => {
-        const codigoUnico = getValueByColumnName(row, 'codigo_unico');
-        const exists = inventarioDisponible.some(inv => inv.codigo_unico === codigoUnico);
+        const codigoUnico = getValueByColumnName(row, 'codigo_unico')
+          || getValueByColumnName(row, 'codigo')
+          || getValueByColumnName(row, 'código')
+          || getValueByColumnName(row, 'código_único')
+          || getValueByColumnName(row, 'codigo_unico');
+        const code = codigoUnico?.trim() || '';
+        const exists = code !== '' && inventarioDisponible.some(inv => inv.codigo_unico === code);
         return {
-          codigo_unico: codigoUnico || 'N/A',
+          codigo_unico: code || 'N/A',
           disponibilidad: exists ? 'Disponible' as const : 'No Disponible' as const,
         };
       });
@@ -2239,7 +2274,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     // Determine columns based on active filters
     const baseColumns = ['codigo_unico', 'tipo_de_cara', 'plaza', 'nivel_socioeconomico', 'ubicacion'];
-    const headers = ['Código', 'Tipo', 'Plaza', 'NSE', 'Ubicación'];
+    const headers = ['codigo_unico', 'Tipo', 'Plaza', 'NSE', 'Ubicación'];
 
     // Add group column if groupByDistance is active
     if (groupByDistance && groupedInventory) {
@@ -2563,11 +2598,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       }
     };
 
+    const isCT = (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT');
     setConfirmModal({
       isOpen: true,
-      title: 'Confirmar Bonificación',
-      message: `¿Estás seguro de bonificar ${selectedInventory.size} espacios?`,
-      confirmText: 'Bonificar',
+      title: isCT ? 'Confirmar Cortesía' : 'Confirmar Bonificación',
+      message: `¿Estás seguro de ${isCT ? 'asignar como cortesía' : 'bonificar'} ${selectedInventory.size} espacios?`,
+      confirmText: isCT ? 'Cortesía' : 'Bonificar',
       onConfirm: runBonificacion,
     });
   };
@@ -2894,6 +2930,45 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Remove a reserva - IMMEDIATE DELETE
   const handleRemoveReserva = (reservaId: string) => {
+    // Handle "completo" grouped items (muebles completos)
+    if (reservaId.startsWith('completo-')) {
+      const grupoId = Number(reservaId.replace('completo-', ''));
+      const groupReservas = reservas.filter(r => r.grupo_completo_id === grupoId);
+      const backendIds = groupReservas.filter(r => r.reservaId).map(r => r.reservaId!);
+
+      if (backendIds.length === 0) {
+        setReservas(prev => prev.filter(r => r.grupo_completo_id !== grupoId));
+        return;
+      }
+
+      setConfirmModal({
+        isOpen: true,
+        title: 'Eliminar Mueble Completo',
+        message: `¿Seguro que quieres eliminar este mueble completo? (${groupReservas.length} reservas)`,
+        confirmText: 'Eliminar',
+        isDestructive: true,
+        onConfirm: async () => {
+          setIsSaving(true);
+          try {
+            await propuestasService.deleteReservas(propuesta.id, backendIds);
+            queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+            queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
+            handleRefetchDisponibles();
+
+            setReservas(prev => prev.filter(r => r.grupo_completo_id !== grupoId));
+            showToast('Mueble completo eliminado correctamente', 'success');
+          } catch (error) {
+            console.error('Error deleting grupo completo:', error);
+            showToast('Error al eliminar mueble completo', 'error');
+          } finally {
+            setIsSaving(false);
+            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          }
+        }
+      });
+      return;
+    }
+
     const reserva = reservas.find(r => r.id === reservaId);
     if (!reserva || !reserva.reservaId) {
       setReservas(prev => prev.filter(r => r.id !== reservaId));
@@ -2907,6 +2982,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
+        setIsSaving(true);
         try {
           await propuestasService.deleteReservas(propuesta.id, [reserva.reservaId!]);
           queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
@@ -2919,6 +2995,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           console.error('Error deleting reserva:', error);
           showToast('Error al eliminar reserva', 'error');
         } finally {
+          setIsSaving(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         }
       }
@@ -2929,30 +3006,43 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const handleEditReserva = (reserva: ReservaItem) => {
     setEditingReserva(reserva);
     setEditingFormato(reserva.formato || '');
+    setEditingPlaza(reserva.plaza || '');
   };
 
-  // Save edited formato
+  // Save edited formato and plaza
   const handleSaveFormato = () => {
     if (!editingReserva) return;
     setReservas(prev => prev.map(r =>
       r.id === editingReserva.id
-        ? { ...r, formato: editingFormato }
+        ? { ...r, formato: editingFormato, plaza: editingPlaza }
         : r
     ));
     setEditingReserva(null);
     setEditingFormato('');
+    setEditingPlaza('');
   };
 
   // Cancel edit
   const handleCancelEdit = () => {
     setEditingReserva(null);
     setEditingFormato('');
+    setEditingPlaza('');
   };
 
   // Bulk delete selected reservas
   const handleBulkDeleteReservas = () => {
+    // Expand "completo-" IDs to their individual reservas
+    const expandedIds = new Set<string>();
+    selectedReservados.forEach(id => {
+      if (id.startsWith('completo-')) {
+        const grupoId = Number(id.replace('completo-', ''));
+        reservas.filter(r => r.grupo_completo_id === grupoId).forEach(r => expandedIds.add(r.id));
+      } else {
+        expandedIds.add(id);
+      }
+    });
     // Get selected reservas
-    const selectedReservasList = reservas.filter(r => selectedReservados.has(r.id));
+    const selectedReservasList = reservas.filter(r => expandedIds.has(r.id));
     if (selectedReservasList.length === 0) return;
 
     // Separate reservas with backend IDs from those without
@@ -2962,7 +3052,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     // If all are local-only (not saved to DB yet), just remove from state
     if (backendIds.length === 0) {
-      setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
+      setReservas(prev => prev.filter(r => !expandedIds.has(r.id)));
       setSelectedReservados(new Set());
       showToast(`${selectedReservasList.length} reservas eliminadas`, 'success');
       return;
@@ -2976,6 +3066,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
+        setIsSaving(true);
         try {
           // Delete from backend if there are any with reservaId
           if (backendIds.length > 0) {
@@ -2986,13 +3077,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           }
 
           // Remove all selected from local state
-          setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
+          setReservas(prev => prev.filter(r => !expandedIds.has(r.id)));
           setSelectedReservados(new Set());
           showToast(`${selectedReservasList.length} reserva(s) eliminada(s) correctamente`, 'success');
         } catch (error) {
           console.error('Error deleting reservas:', error);
           showToast('Error al eliminar reservas', 'error');
         } finally {
+          setIsSaving(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         }
       }
@@ -3146,25 +3238,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 </div>
               </div>
 
-              {/* Bonificacion KPI */}
+              {/* Bonificacion/Cortesia KPI */}
               <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-zinc-400 flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                    Bonificación
+                    <div className={`w-2 h-2 rounded-full ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500' : 'bg-emerald-500'}`} />
+                    {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                   </span>
-                  <span className="text-sm font-bold text-emerald-400">
+                  <span className={`text-sm font-bold ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'}`}>
                     {(selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion} / {selectedCaraForSearch?.bonificacion || 0}
                   </span>
                 </div>
                 <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all"
+                    className={`h-full bg-gradient-to-r ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'from-cyan-500 to-cyan-400' : 'from-emerald-500 to-emerald-400'} rounded-full transition-all`}
                     style={{ width: `${Math.min(100, ((selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion) / (selectedCaraForSearch?.bonificacion || 1) * 100)}%` }}
                   />
                 </div>
                 <div className="mt-1 text-xs text-zinc-500">
-                  <span className="text-emerald-400 font-medium">{remainingToAssign.bonificacion}</span> restantes
+                  <span className={`${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'} font-medium`}>{remainingToAssign.bonificacion}</span> restantes
                 </div>
               </div>
 
@@ -3803,17 +3895,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <button
                         onClick={handleReserveAsBonificacion}
                         disabled={isSaving || selectedInventory.size === 0 || remainingToAssign.bonificacion <= 0}
-                        className="flex-1 px-4 py-2.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-sm font-medium hover:bg-emerald-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className={`flex-1 px-4 py-2.5 ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/30' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30'} border rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
                       >
                         {isSaving ? (
                           <>
-                            <div className="h-4 w-4 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin" />
+                            <div className={`h-4 w-4 border-2 ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'border-cyan-300' : 'border-emerald-300'} border-t-transparent rounded-full animate-spin`} />
                             Guardando...
                           </>
                         ) : (
                           <>
                             <Gift className="h-4 w-4" />
-                            Bonificación
+                            {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                           </>
                         )}
                       </button>
@@ -3888,12 +3980,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           onClick={() => setReservadosTipoFilter(opt)}
                           className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${reservadosTipoFilter === opt
                             ? opt === 'Todos' ? 'bg-zinc-600 text-white shadow'
-                              : opt === 'Bonificacion' ? 'bg-emerald-500 text-white shadow'
+                              : opt === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500 text-white shadow' : 'bg-emerald-500 text-white shadow')
                               : 'bg-blue-500 text-white shadow'
                             : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
                           }`}
                         >
-                          {opt === 'Bonificacion' ? 'Bonif.' : opt}
+                          {opt === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif.') : opt}
                         </button>
                       ))}
                     </div>
@@ -4124,9 +4216,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   </td>
                                   <td className="px-4 py-2">
                                     <span className={`px-2 py-1 rounded-full text-xs ${
-                                      reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+                                      reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
                                     }`}>
-                                      {reserva.tipo}
+                                      {reserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : reserva.tipo}
                                     </span>
                                   </td>
                                   <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
@@ -4174,9 +4266,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </td>
                               <td className="px-4 py-2">
                                 <span className={`px-2 py-1 rounded-full text-xs ${
-                                  reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+                                  reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
                                 }`}>
-                                  {reserva.tipo}
+                                  {reserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : reserva.tipo}
                                 </span>
                               </td>
                               <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
@@ -4404,10 +4496,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                         <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
                                                           ? 'bg-blue-500/20 text-blue-300'
                                                           : reserva.tipo === 'Bonificacion'
-                                                            ? 'bg-emerald-500/20 text-emerald-300'
+                                                            ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300')
                                                             : 'bg-amber-500/20 text-amber-300'
                                                           }`}>
-                                                          {reserva.tipo}
+                                                          {reserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : reserva.tipo}
                                                         </span>
                                                       )}
                                                     </td>
@@ -4468,15 +4560,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <span className={`px-2 py-1 rounded-full text-xs ${editingReserva.tipo === 'Flujo'
                           ? 'bg-blue-500/20 text-blue-300'
                           : editingReserva.tipo === 'Bonificacion'
-                            ? 'bg-emerald-500/20 text-emerald-300'
+                            ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300')
                             : 'bg-amber-500/20 text-amber-300'
                           }`}>
-                          {editingReserva.tipo}
+                          {editingReserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : editingReserva.tipo}
                         </span>
                       </div>
                       <div>
-                        <label className="block text-xs text-zinc-500 mb-1">Plaza</label>
-                        <p className="text-sm text-zinc-300">{editingReserva.plaza || '-'}</p>
+                        <label className="block text-xs text-zinc-500 mb-1.5">Plaza</label>
+                        <input
+                          type="text"
+                          value={editingPlaza}
+                          onChange={(e) => setEditingPlaza(e.target.value)}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          placeholder="Ej: CDMX, GDL, MTY..."
+                        />
                       </div>
                       <div>
                         <label className="block text-xs text-zinc-500 mb-1">Ubicación</label>
@@ -4532,7 +4630,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           <span className="text-blue-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Contraflujo').length}</span> Contraflujo
                         </span>
                         <span className="text-zinc-500">
-                          <span className="text-emerald-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Bonificacion').length}</span> Bonificación
+                          <span className={`${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'} font-medium`}>{currentCaraReservas.filter(r => r.tipo === 'Bonificacion').length}</span> {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                         </span>
                       </div>
                       <span className="text-zinc-400">
@@ -4582,7 +4680,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               scale: 10,
                               fillColor: reserva.codigo_unico?.includes('_Completo')
                                 ? '#a855f7' // Purple for Completo
-                                : reserva.tipo === 'Flujo' ? '#3b82f6' : reserva.tipo === 'Bonificacion' ? '#10b981' : '#f59e0b',
+                                : reserva.tipo === 'Flujo' ? '#3b82f6' : reserva.tipo === 'Bonificacion' ? '#10b981' : '#06b6d4',
                               fillOpacity: 0.9,
                               strokeColor: '#fff',
                               strokeWeight: 2,
@@ -4605,9 +4703,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Dirección del tráfico</div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
-                          <div>
-                            <span className="text-zinc-300">Flujo / Contraflujo</span>
-                          </div>
+                          <span className="text-zinc-300">Flujo</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-cyan-500 ring-1 ring-cyan-400/30" />
+                          <span className="text-zinc-300">Contraflujo</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
@@ -4624,7 +4724,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-emerald-500 ring-1 ring-emerald-400/30" />
                           <div>
-                            <span className="text-zinc-300">Bonificación</span>
+                            <span className="text-zinc-300">{(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}</span>
                           </div>
                         </div>
                       </div>
@@ -4834,7 +4934,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   {/* Notes and Description */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Notas</label>
+                      <label className="text-xs text-zinc-500">Notas Dirección</label>
                       <textarea
                         value={notas}
                         onChange={(e) => canEditResumen && setNotas(e.target.value)}
@@ -4844,7 +4944,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Descripción</label>
+                      <label className="text-xs text-zinc-500">Descripción Trafico</label>
                       <textarea
                         value={descripcion}
                         onChange={(e) => canEditResumen && setDescripcion(e.target.value)}
@@ -4985,6 +5085,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <span className="text-zinc-400">
                       Bonificación: <span className="text-emerald-300 font-medium">{carasKPIs.totalBonificacion}</span>
                     </span>
+                    {carasKPIs.totalCortesia > 0 && (
+                      <span className="text-zinc-400">
+                        Cortesía: <span className="text-cyan-300 font-medium">{carasKPIs.totalCortesia}</span>
+                      </span>
+                    )}
                     <span className="text-zinc-400">
                       Inversión: <span className="text-amber-300 font-medium">{formatCurrency(carasKPIs.totalInversion)}</span>
                     </span>
@@ -5022,10 +5127,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
                             const formato = getFormatoFromArticulo(item.ItemName);
                             const tipo = getTipoFromName(item.ItemName);
+                            const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
+                            const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
+                            const isTarifaCero = isCortesia || isIntercambio;
                             setNewCara({
                               ...newCara,
                               articulo: item.ItemCode,
-                              tarifa_publica: tarifa,
+                              tarifa_publica: isTarifaCero ? 0 : tarifa,
+                              caras: isCortesia ? 0 : newCara.caras,
+                              caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
+                              caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,
                               estados: ciudadEstado?.estado || newCara.estados,
                               // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
                               ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
@@ -5061,12 +5172,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       )}
                     </div>
 
-                    {/* Catorcena - solo una, filtrada por rango de propuesta */}
+                    {/* Periodo - catorcena o mes, filtrada por rango de propuesta */}
                     <div className="mb-4">
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">
-                          Catorcena {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
-                          {propuesta.catorcena_inicio && propuesta.anio_inicio && propuesta.catorcena_fin && propuesta.anio_fin && (
+                          Periodo {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
+                          {tipoPeriodo !== 'mensual' && propuesta.catorcena_inicio && propuesta.anio_inicio && propuesta.catorcena_fin && propuesta.anio_fin && (
                             <span className="text-zinc-600 ml-1">
                               (Rango: {propuesta.catorcena_inicio}/{propuesta.anio_inicio} - {propuesta.catorcena_fin}/{propuesta.anio_fin})
                             </span>
@@ -5078,16 +5189,30 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             if (!canEditResumen || editingCaraHasReservas) return;
                             if (e.target.value) {
                               const [year, cat] = e.target.value.split('-').map(Number);
-                              const period = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
-                              setNewCara({
-                                ...newCara,
-                                catorcena_inicio: cat,
-                                anio_inicio: year,
-                                catorcena_fin: cat,
-                                anio_fin: year,
-                                inicio_periodo: period?.fecha_inicio || '',
-                                fin_periodo: period?.fecha_fin || ''
-                              });
+                              if (tipoPeriodo === 'mensual') {
+                                const fechaIni = new Date(year, cat - 1, 1);
+                                const fechaFin = new Date(year, cat, 0);
+                                setNewCara({
+                                  ...newCara,
+                                  catorcena_inicio: cat,
+                                  anio_inicio: year,
+                                  catorcena_fin: cat,
+                                  anio_fin: year,
+                                  inicio_periodo: fechaIni.toISOString().split('T')[0],
+                                  fin_periodo: fechaFin.toISOString().split('T')[0]
+                                });
+                              } else {
+                                const period = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
+                                setNewCara({
+                                  ...newCara,
+                                  catorcena_inicio: cat,
+                                  anio_inicio: year,
+                                  catorcena_fin: cat,
+                                  anio_fin: year,
+                                  inicio_periodo: period?.fecha_inicio || '',
+                                  fin_periodo: period?.fecha_fin || ''
+                                });
+                              }
                             } else {
                               setNewCara({
                                 ...newCara,
@@ -5103,23 +5228,45 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           disabled={!canEditResumen || editingCaraHasReservas}
                           className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
-                          <option value="">Seleccionar catorcena</option>
-                          {catorcenasData?.data
-                            .filter(c => {
-                              // Filtrar solo catorcenas dentro del rango de la propuesta
-                              if (!propuesta.catorcena_inicio || !propuesta.anio_inicio || !propuesta.catorcena_fin || !propuesta.anio_fin) {
-                                return true; // Si no hay rango, mostrar todas
+                          <option value="">{tipoPeriodo === 'mensual' ? 'Seleccionar mes' : 'Seleccionar catorcena'}</option>
+                          {tipoPeriodo === 'mensual' ? (
+                            (() => {
+                              // Generate monthly options from propuesta date range
+                              const options: { year: number; month: number }[] = [];
+                              if (propuesta.fecha_inicio && propuesta.fecha_fin) {
+                                const start = new Date(propuesta.fecha_inicio);
+                                const end = new Date(propuesta.fecha_fin);
+                                let y = start.getFullYear(), m = start.getMonth() + 1;
+                                const endY = end.getFullYear(), endM = end.getMonth() + 1;
+                                while (y < endY || (y === endY && m <= endM)) {
+                                  options.push({ year: y, month: m });
+                                  m++;
+                                  if (m > 12) { m = 1; y++; }
+                                }
                               }
-                              const catValue = c.a_o * 100 + c.numero_catorcena;
-                              const minValue = propuesta.anio_inicio * 100 + propuesta.catorcena_inicio;
-                              const maxValue = propuesta.anio_fin * 100 + propuesta.catorcena_fin;
-                              return catValue >= minValue && catValue <= maxValue;
-                            })
-                            .map(c => (
-                              <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
-                                Catorcena {c.numero_catorcena} / {c.a_o}
-                              </option>
-                            ))}
+                              return options.map(o => (
+                                <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>
+                                  {MESES_LABEL[o.month - 1]} {o.year}
+                                </option>
+                              ));
+                            })()
+                          ) : (
+                            catorcenasData?.data
+                              .filter(c => {
+                                if (!propuesta.catorcena_inicio || !propuesta.anio_inicio || !propuesta.catorcena_fin || !propuesta.anio_fin) {
+                                  return true;
+                                }
+                                const catValue = c.a_o * 100 + c.numero_catorcena;
+                                const minValue = propuesta.anio_inicio * 100 + propuesta.catorcena_inicio;
+                                const maxValue = propuesta.anio_fin * 100 + propuesta.catorcena_fin;
+                                return catValue >= minValue && catValue <= maxValue;
+                              })
+                              .map(c => (
+                                <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
+                                  Cat {c.numero_catorcena} / {c.a_o}
+                                </option>
+                              ))
+                          )}
                         </select>
                       </div>
                     </div>
@@ -5194,26 +5341,30 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </div>
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras en Renta</label>
+                        <label className="text-xs text-zinc-500">
+                          Caras en Renta
+                          {newCara.articulo?.toUpperCase().startsWith('CT') && (
+                            <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
+                          )}
+                        </label>
                         <input
                           type="number"
                           value={newCara.caras || ''}
                           onChange={(e) => {
                             if (!canEditResumen) return;
                             const val = parseInt(e.target.value) || 0;
-                            // Auto-calculate flujo and contraflujo (half and half)
                             const flujo = Math.ceil(val / 2);
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras Bonificadas</label>
+                        <label className="text-xs text-zinc-500">{newCara.articulo?.toUpperCase().startsWith('CT') ? 'Cortesía' : 'Caras Bonificadas'}</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
@@ -5229,8 +5380,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           type="number"
                           value={newCara.tarifa_publica || ''}
                           onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          disabled={!canEditResumen}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -5303,9 +5454,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   ) : (
                     carasGroupedByCatorcena.map(([periodo, groupData]) => {
                       const isCatorcenaExpanded = expandedCatorcenas.has(periodo);
-                      const catorcenaLabel = groupData.catorcenaNum
-                        ? `Catorcena #${groupData.catorcenaNum}${groupData.year ? ` - ${groupData.year}` : ''}`
-                        : `Periodo: ${new Date(periodo).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}`;
+                      const catorcenaLabel = tipoPeriodo === 'mensual' && groupData.catorcenaNum
+                        ? `${MESES_LABEL[groupData.catorcenaNum - 1]} ${groupData.year || ''}`
+                        : groupData.catorcenaNum
+                        ? `Cat ${groupData.catorcenaNum} / ${groupData.year || ''}`
+                        : (() => {
+                            const parts = periodo.split('-');
+                            if (parts.length >= 2) {
+                              const m = parseInt(parts[1]);
+                              return `${MESES_LABEL[m - 1] || periodo} ${parts[0]}`;
+                            }
+                            return `Periodo: ${periodo}`;
+                          })();
 
                       return (
                         <div key={periodo}>
@@ -5357,7 +5517,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
-                                  <div className="flex-1 grid grid-cols-6 gap-3 text-sm">
+                                  <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
                                     <div>
                                       <span className="text-zinc-500 text-xs">Formato</span>
                                       <p className="text-white font-medium">{cara.formato || '-'}</p>
@@ -5375,6 +5535,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     <div>
                                       <span className="text-zinc-500 text-xs">Artículo</span>
                                       <p className="text-zinc-300 text-xs">{cara.articulo || '-'}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">F. Inicio</span>
+                                      <p className="text-zinc-300 text-xs">{cara.inicio_periodo ? new Date(cara.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">F. Fin</span>
+                                      <p className="text-zinc-300 text-xs">{cara.fin_periodo ? new Date(cara.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Caras</span>
@@ -5899,8 +6067,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           <span className="text-zinc-500 text-[11px]">{reserva.formato}</span>
                                           <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
                                             reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
-                                            reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
-                                          }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                            reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
+                                          }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif') : reserva.tipo}</span>
                                         </label>
                                       ))
                                     ) : (
@@ -5948,8 +6116,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                       <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
                                                       <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
                                                         reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
-                                                        reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
-                                                      }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                                        reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
+                                                      }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif') : reserva.tipo}</span>
                                                     </label>
                                                   ))
                                                 ) : (
@@ -6069,7 +6237,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       scale: isSelected ? 12 : (hasSelection ? 6 : 8),
                                       fillColor: isCompleto ? '#a855f7' :
                                         reserva.tipo === 'Flujo' ? '#3b82f6' :
-                                        reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
+                                        reserva.tipo === 'Contraflujo' ? '#06b6d4' : '#10b981',
                                       fillOpacity: isSelected ? 1 : (hasSelection ? 0.3 : 0.9),
                                       strokeColor: isSelected ? '#fff' : (hasSelection ? 'transparent' : '#fff'),
                                       strokeWeight: isSelected ? 3 : 2,
@@ -6094,7 +6262,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   <span className="text-zinc-300">Flujo</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                                  <div className="w-2.5 h-2.5 rounded-full bg-cyan-500" />
                                   <span className="text-zinc-300">Contraflujo</span>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -6103,7 +6271,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                  <span className="text-zinc-300">Bonificación</span>
+                                  <span className="text-zinc-300">{(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}</span>
                                 </div>
                               </div>
 
