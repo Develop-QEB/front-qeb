@@ -1244,11 +1244,11 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   if (tipoTarea?.toLowerCase().includes('solicitud')) {
     return 'Ver Solicitud';
   }
-  if (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId) {
-    return 'Ver Propuesta';
-  }
   if (tipoTarea?.toLowerCase().includes('campaña')) {
     return 'Ver Campaña';
+  }
+  if (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId) {
+    return 'Ver Propuesta';
   }
   // Si tiene campania_id, ir a campaña
   if (campaniaId) {
