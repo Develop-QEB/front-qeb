@@ -1034,6 +1034,44 @@ export function CampanasPage() {
     });
   };
 
+  // Auto-cargar inventarios de campañas visibles en vista catorcena
+  useEffect(() => {
+    if (activeView !== 'catorcena' || !filteredData.length) return;
+    const idsToLoad = filteredData
+      .filter(c => !campanaInventarios[c.id] && !loadingInventarios.has(c.id))
+      .map(c => c.id);
+    if (idsToLoad.length === 0) return;
+
+    // Cargar en lotes para no saturar
+    const BATCH_SIZE = 5;
+    const batch = idsToLoad.slice(0, BATCH_SIZE);
+    batch.forEach(id => setLoadingInventarios(prev => new Set(prev).add(id)));
+
+    Promise.all(batch.map(async (id) => {
+      try {
+        const [conAPS, sinAPS] = await Promise.all([
+          campanasService.getInventarioConAPS(id),
+          campanasService.getInventarioReservado(id)
+        ]);
+        const sinAPSConFormato: InventarioConAPS[] = sinAPS.map(item => ({ ...item, aps: 0 }));
+        return { id, data: [...conAPS, ...sinAPSConFormato] };
+      } catch {
+        return { id, data: [] as InventarioConAPS[] };
+      }
+    })).then(results => {
+      setCampanaInventarios(prev => {
+        const next = { ...prev };
+        results.forEach(r => { next[r.id] = r.data; });
+        return next;
+      });
+      setLoadingInventarios(prev => {
+        const next = new Set(prev);
+        batch.forEach(id => next.delete(id));
+        return next;
+      });
+    });
+  }, [activeView, filteredData, campanaInventarios, loadingInventarios]);
+
   // Agrupar campañas por catorcena para la vista alternativa (con soporte para subagrupaciones)
   const campanasPorCatorcena = useMemo(() => {
     const groups: Record<string, {
@@ -2219,15 +2257,6 @@ export function CampanasPage() {
                     const isLoadingInv = loadingInventarios.has(campana.id);
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
                     const hasInventarios = allInventarios.length > 0;
-                    // Calcular cuántas catorcenas abarca esta campaña para dividir valores totales
-                    const numCatorcenasCampana = (() => {
-                      const cats = (catorcenasData?.data || [])
-                        .map(c => ({ num: c.numero_catorcena, anio: c.a_o }))
-                        .sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.num - b.num);
-                      const startIdx = cats.findIndex(c => c.num === campana.catorcena_inicio_num && c.anio === campana.catorcena_inicio_anio);
-                      const endIdx = cats.findIndex(c => c.num === (campana.catorcena_fin_num || campana.catorcena_inicio_num) && c.anio === (campana.catorcena_fin_anio || campana.catorcena_inicio_anio));
-                      return startIdx >= 0 && endIdx >= 0 ? Math.max(endIdx - startIdx + 1, 1) : 1;
-                    })();
 
                     // Si ya cargamos inventarios y no hay ninguno en esta catorcena, ocultar la campaña
                     if (hasInventarios && inventarios.length === 0) return null;
@@ -2276,31 +2305,24 @@ export function CampanasPage() {
                           {(() => {
                             // Contar circuitos desde inventarios filtrados por catorcena
                             const circuitosDesdeGrupos = apsAgrupados.reduce((sum, apsGroup) => sum + apsGroup.grupos.length, 0);
-                            // Fallback: dividir total de campaña entre número de catorcenas
-                            const circuitosCampana = Number((campana as any).circuitos ?? (campana as any).circuito ?? 0) || 0;
-                            const circuitosCount = hasInventarios ? circuitosDesdeGrupos : Math.round(circuitosCampana / numCatorcenasCampana);
-                            return (
+                            const circuitosCount = hasInventarios ? circuitosDesdeGrupos : null;
+                            return circuitosCount !== null ? (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`} title="Circuitos (grupos)">
                                 <Layers className="h-3 w-3" /> Circuitos {circuitosCount}
                               </span>
-                            );
+                            ) : null;
                           })()}
-                          {(() => {
-                            const bonifTotal = Number(campana.bonificacion) || 0;
-                            const bonifCatorcena = hasInventarios
-                              ? inventarios.filter(i => Number((i as any).bonificacion_sc) > 0 || (Number((i as any).tarifa_publica_sc) === 0 && Number((i as any).aps) > 0)).length
-                              : Math.round(bonifTotal / numCatorcenasCampana);
+                          {hasInventarios && (() => {
+                            const bonifCatorcena = inventarios.filter(i => Number((i as any).bonificacion_sc) > 0 || (Number((i as any).tarifa_publica_sc) === 0 && Number((i as any).aps) > 0)).length;
                             return bonifCatorcena > 0 ? (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25 flex items-center gap-1`} title="Bonificación">
                                 <Gift className="h-3 w-3" /> {bonifCatorcena}
                               </span>
                             ) : null;
                           })()}
-                          {(() => {
-                            const carasCatorcena = hasInventarios ? inventarios.length : Math.round((Number(campana.total_caras) || 0) / numCatorcenasCampana);
-                            const bonifCatorcenaCalc = hasInventarios
-                              ? inventarios.filter(i => Number((i as any).tarifa_publica_sc) === 0 || Number((i as any).bonificacion_sc) > 0).length
-                              : Math.round((Number(campana.bonificacion) || 0) / numCatorcenasCampana);
+                          {hasInventarios && (() => {
+                            const carasCatorcena = inventarios.length;
+                            const bonifCatorcenaCalc = inventarios.filter(i => Number((i as any).tarifa_publica_sc) === 0 || Number((i as any).bonificacion_sc) > 0).length;
                             const carasNetas = Math.max(carasCatorcena - bonifCatorcenaCalc, 0);
                             return carasNetas > 0 ? (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
@@ -2308,16 +2330,14 @@ export function CampanasPage() {
                               </span>
                             ) : null;
                           })()}
-                          {(() => {
-                            // Calcular inversión desde inventarios filtrados por catorcena
+                          {hasInventarios && (() => {
                             const invCatorcena = inventarios.reduce((sum, inv) => {
                               const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
                               return sum + tarifa;
                             }, 0);
-                            const inversionMostrar = hasInventarios ? invCatorcena : Math.round((Number(campana.inversion) || 0) / numCatorcenasCampana);
                             return (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
-                                <DollarSign className="h-3 w-3" /> {inversionMostrar > 0 ? `$${inversionMostrar.toLocaleString()}` : 'Sin inversión'}
+                                <DollarSign className="h-3 w-3" /> {invCatorcena > 0 ? `$${invCatorcena.toLocaleString()}` : 'Sin inversión'}
                               </span>
                             );
                           })()}
