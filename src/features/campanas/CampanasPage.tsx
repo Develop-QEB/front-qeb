@@ -2203,6 +2203,9 @@ export function CampanasPage() {
                       return startIdx >= 0 && endIdx >= 0 ? Math.max(endIdx - startIdx + 1, 1) : 1;
                     })();
 
+                    // Si ya cargamos inventarios y no hay ninguno en esta catorcena, ocultar la campaña
+                    if (hasInventarios && inventarios.length === 0) return null;
+
                     return (
                       <div key={campana.id} className={`border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
                         <button
@@ -2581,7 +2584,19 @@ export function CampanasPage() {
                           : `Cat ${catorcena.num} / ${catorcena.anio}`}
                       </span>
                       <span className={`px-2.5 py-1 rounded-full text-xs ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200'} border`}>
-                        {campanas.length} campañas
+                        {(() => {
+                          const visibleCount = campanas.filter(c => {
+                            const allInv = campanaInventarios[c.id];
+                            if (!allInv || allInv.length === 0) return true; // no cargados aún, asumir visible
+                            return allInv.some(inv => {
+                              const invCat = (inv as any).numero_catorcena;
+                              const invAnio = (inv as any).anio_catorcena;
+                              if (invCat == null || invAnio == null) return true;
+                              return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
+                            });
+                          }).length;
+                          return `${visibleCount} campañas`;
+                        })()}
                       </span>
                       {secondGroupingLabel && subgroups && (
                         <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30' : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200'} border`}>
