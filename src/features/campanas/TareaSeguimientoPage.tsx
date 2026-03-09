@@ -11678,9 +11678,10 @@ export function TareaSeguimientoPage() {
 
       const tareasRecepcionRelacionadas = impresionToRecepcionesMap.get(tarea.id) || [];
       ids.forEach(id => {
+        const normalizedId = rsvIdToInventoryId.get(id) || id;
         const recepcionesDelId = tareasRecepcionRelacionadas.filter(recepcion => {
           const idsRecepcion = recepcionIdsMap.get(recepcion.id);
-          return idsRecepcion?.has(id);
+          return idsRecepcion?.has(normalizedId) || idsRecepcion?.has(id);
         });
 
         let estadoImpresion: EstadoImpresion = 'en_impresion';
