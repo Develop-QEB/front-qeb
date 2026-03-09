@@ -11595,6 +11595,7 @@ export function TareaSeguimientoPage() {
     const tareasImpresion = tareasAPI.filter(t => t.tipo === 'Impresión');
     const tareasRecepcion = tareasAPI.filter(t => t.tipo === 'Recepción');
 
+
     if (tareasImpresion.length === 0) return [];
 
     // Crear mapas de conversión entre inventory_id y rsv_id
@@ -11609,18 +11610,47 @@ export function TareaSeguimientoPage() {
       }
     });
 
-    // Función para normalizar IDs a un Set de inventory_ids
-    const normalizeToInventoryIds = (listado: string): Set<string> => {
+    // Mapa de compositeId/inventoryId -> rsv_ids para puente impresion↔recepcion
+    const compositeToRsvIds = new Map<string, string[]>();
+    inventarioArteAPI.forEach(item => {
+      const invId = String(item.id);
+      const compositeId = item.grupo ? `${item.id}_${item.grupo}` : invId;
+      const rsvId = item.rsvId || item.rsv_id || item.rsv_ids || '';
+      if (rsvId) {
+        const rsvIds = rsvId.split(',').map((r: string) => r.trim()).filter(Boolean);
+        compositeToRsvIds.set(compositeId, rsvIds);
+        if (!compositeToRsvIds.has(invId)) {
+          compositeToRsvIds.set(invId, rsvIds);
+        }
+      }
+    });
+
+    // Función para normalizar IDs a un Set (mantiene todos los formatos para matching flexible)
+    const normalizeIds = (listado: string): Set<string> => {
       const ids = listado.replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean);
       const normalizedIds = new Set<string>();
       ids.forEach(id => {
-        // Si es un rsv_id, convertir a inventory_id
+        normalizedIds.add(id); // Siempre agregar el ID original
+        // Si es compuesto (id_grupo), también agregar la parte de inventario
+        if (id.includes('_')) {
+          normalizedIds.add(id.split('_')[0]);
+        }
+        // Si es un rsv_id, agregar el inventory_id correspondiente
         const inventoryId = rsvIdToInventoryId.get(id);
         if (inventoryId) {
           normalizedIds.add(inventoryId);
-        } else {
-          // Asumir que ya es un inventory_id
-          normalizedIds.add(id);
+        }
+        // Si es un composite/inventory ID, agregar sus rsv_ids correspondientes
+        const rsvIds = compositeToRsvIds.get(id);
+        if (rsvIds) {
+          rsvIds.forEach(r => normalizedIds.add(r));
+        }
+        // Si es compuesto, también buscar por la parte base
+        if (id.includes('_')) {
+          const baseRsvIds = compositeToRsvIds.get(id.split('_')[0]);
+          if (baseRsvIds) {
+            baseRsvIds.forEach(r => normalizedIds.add(r));
+          }
         }
       });
       return normalizedIds;
@@ -11631,7 +11661,7 @@ export function TareaSeguimientoPage() {
 
     tareasRecepcion.forEach(recepcion => {
       const listadoRecepcion = recepcion.listado_inventario || recepcion.ids_reservas || '';
-      recepcionIdsMap.set(recepcion.id, normalizeToInventoryIds(listadoRecepcion));
+      recepcionIdsMap.set(recepcion.id, normalizeIds(listadoRecepcion));
       let esFaltantes = false;
       if (recepcion.evidencia) {
         try {
@@ -11649,7 +11679,7 @@ export function TareaSeguimientoPage() {
 
       tareasImpresion.forEach(impresion => {
         const listadoImpresion = impresion.listado_inventario || impresion.ids_reservas || '';
-        const impresionIds = normalizeToInventoryIds(listadoImpresion);
+        const impresionIds = normalizeIds(listadoImpresion);
 
         // Comparar sets: deben tener al menos un elemento en común
         const hasCommon = [...impresionIds].some(id => recepcionIds.has(id));
@@ -11660,6 +11690,7 @@ export function TareaSeguimientoPage() {
         }
       });
     });
+
 
     // Crear mapa de ID de reserva -> info de tarea
     const reservaToTareaMap = new Map<string, {
@@ -11678,10 +11709,14 @@ export function TareaSeguimientoPage() {
 
       const tareasRecepcionRelacionadas = impresionToRecepcionesMap.get(tarea.id) || [];
       ids.forEach(id => {
-        const normalizedId = rsvIdToInventoryId.get(id) || id;
+        const baseId = id.includes('_') ? id.split('_')[0] : id;
+        const rsvIdsForItem = compositeToRsvIds.get(id) || compositeToRsvIds.get(baseId) || [];
         const recepcionesDelId = tareasRecepcionRelacionadas.filter(recepcion => {
           const idsRecepcion = recepcionIdsMap.get(recepcion.id);
-          return idsRecepcion?.has(normalizedId) || idsRecepcion?.has(id);
+          if (!idsRecepcion) return false;
+          return idsRecepcion.has(id)
+            || idsRecepcion.has(baseId)
+            || rsvIdsForItem.some(rsvId => idsRecepcion.has(rsvId));
         });
 
         let estadoImpresion: EstadoImpresion = 'en_impresion';
@@ -11699,7 +11734,22 @@ export function TareaSeguimientoPage() {
             recepcion.estatus !== 'Atendido' && recepcion.estatus !== 'Completado'
           );
 
-          if (recepcionCompletadaNormal && !recepcionPendiente) {
+          if (recepcionCompletadaNormal && recepcionPendiente) {
+            // Ambas existen: verificar si este item está en la tarea de faltantes
+            const faltantesListado = recepcionPendiente.listado_inventario || recepcionPendiente.ids_reservas || '';
+            const faltantesIds = normalizeIds(faltantesListado);
+            const isInFaltantes = faltantesIds.has(id) || faltantesIds.has(baseId)
+              || rsvIdsForItem.some(rsvId => faltantesIds.has(rsvId));
+            if (isInFaltantes) {
+              estadoImpresion = 'pendiente_recepcion';
+              tareaRecepcionId = recepcionPendiente.id;
+              estatusMostrado = recepcionPendiente.estatus || 'Pendiente';
+              tituloMostrado = recepcionPendiente.titulo || `Recepción #${recepcionPendiente.id}`;
+            } else {
+              estadoImpresion = 'recibido';
+              tareaRecepcionId = recepcionCompletadaNormal.id;
+            }
+          } else if (recepcionCompletadaNormal && !recepcionPendiente) {
             estadoImpresion = 'recibido';
             tareaRecepcionId = recepcionCompletadaNormal.id;
           } else {
@@ -11725,6 +11775,7 @@ export function TareaSeguimientoPage() {
       });
     });
 
+
     // Filtrar items del inventario que están en tareas de impresión
     const rows: (InventoryRow & {
       tarea_id?: number;
@@ -11736,9 +11787,13 @@ export function TareaSeguimientoPage() {
     })[] = [];
 
     inventarioArteAPI.forEach(item => {
-      // Buscar por ID del inventario (la tarea guarda el ID del inventario, no el rsv_id)
+      // Buscar por múltiples formatos de ID: simple, compuesto (id_grupo), rsv_id
       const itemId = String(item.id);
-      const tareaInfo = reservaToTareaMap.get(itemId);
+      const compositeId = item.grupo ? `${item.id}_${item.grupo}` : itemId;
+      const rsvId = item.rsvId || item.rsv_id || item.rsv_ids || '';
+      const tareaInfo = reservaToTareaMap.get(compositeId)
+        || reservaToTareaMap.get(itemId)
+        || (rsvId ? reservaToTareaMap.get(rsvId) : undefined);
 
       if (tareaInfo) {
         const row = transformInventarioToRow(item, 'aprobado');
@@ -14155,11 +14210,54 @@ export function TareaSeguimientoPage() {
           {activeMainTab === 'impresiones' && (
             <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
               <div className="flex items-center gap-1">
-                {[
-                  { key: 'en_impresion' as const, label: 'En Impresion', count: inventoryImpresionesData.filter(i => i.estado_impresion === 'en_impresion').length },
-                  { key: 'pendiente_recepcion' as const, label: 'Pend. Recepcion', count: inventoryImpresionesData.filter(i => i.estado_impresion === 'pendiente_recepcion').length },
-                  { key: 'recibido' as const, label: 'Recibido', count: inventoryImpresionesData.filter(i => i.estado_impresion === 'recibido').length },
-                ].map(tab => (
+                {(() => {
+                  // Calcular impresiones por estado a nivel de TAREA (sin matching de IDs)
+                  const tareasImp = tareasAPI.filter(t => t.tipo === 'Impresión');
+                  const tareasRec = tareasAPI.filter(t => t.tipo === 'Recepción');
+
+                  // Helper: obtener num_impresiones de una tarea (con fallbacks a evidencia/descripción)
+                  const getNumImpresiones = (t: typeof tareasAPI[0]): number => {
+                    if (t.num_impresiones) return t.num_impresiones;
+                    // Fallback: evidencia
+                    if (t.evidencia) {
+                      try {
+                        const ev = JSON.parse(t.evidencia);
+                        if (ev.totalFaltantes) return ev.totalFaltantes;
+                        if (ev.impresiones && typeof ev.impresiones === 'object') {
+                          return Object.values(ev.impresiones as Record<string, number>).reduce((s, n) => s + n, 0);
+                        }
+                      } catch {}
+                    }
+                    // Fallback: descripción
+                    const match = (t.descripcion || '').match(/[Ii]mpresiones solicitadas:\s*(\d+)/);
+                    if (match) return parseInt(match[1]);
+                    return 0;
+                  };
+
+                  // Impresiones activas = tareas de impresión NO completadas
+                  const activeImpresiones = tareasImp
+                    .filter(t => t.estatus !== 'Atendido' && t.estatus !== 'Completado')
+                    .reduce((sum, t) => sum + getNumImpresiones(t), 0);
+
+                  // Impresiones completadas = tareas de impresión completadas
+                  const completedImpresiones = tareasImp
+                    .filter(t => t.estatus === 'Atendido' || t.estatus === 'Completado')
+                    .reduce((sum, t) => sum + getNumImpresiones(t), 0);
+
+                  // Pendiente recepción = tareas de Recepción pendientes
+                  const pendingRecepcion = tareasRec
+                    .filter(t => t.estatus !== 'Atendido' && t.estatus !== 'Completado')
+                    .reduce((sum, t) => sum + getNumImpresiones(t), 0);
+
+                  // Recibido = impresiones completadas - pendientes de recepción
+                  const recibido = Math.max(0, completedImpresiones - pendingRecepcion);
+
+                  return [
+                    { key: 'en_impresion' as const, label: 'En Impresion', count: activeImpresiones },
+                    { key: 'pendiente_recepcion' as const, label: 'Pend. Recepcion', count: pendingRecepcion },
+                    { key: 'recibido' as const, label: 'Recibido', count: recibido },
+                  ];
+                })().map(tab => (
                   <button
                     key={tab.key}
                     onClick={() => setActiveEstadoImpresionTab(tab.key)}
@@ -14361,6 +14459,55 @@ export function TareaSeguimientoPage() {
 
                   return Object.values(tareasAgrupadas).map(grupo => {
                     const groupSelected = grupo.items.every(item => selectedInventoryIds.has(item.id));
+                    // Obtener impresiones de la tarea
+                    const tareaRecibido = tareasAPI.find(t => t.id === grupo.tarea_id);
+                    let totalImpresionesRecibido = tareaRecibido?.num_impresiones || 0;
+                    let impresionesMapRecibido: Record<string, number> = {};
+                    if (tareaRecibido?.evidencia) {
+                      try {
+                        const ev = JSON.parse(tareaRecibido.evidencia);
+                        if (ev.impresiones && typeof ev.impresiones === 'object') {
+                          impresionesMapRecibido = ev.impresiones;
+                        }
+                        if (ev.tipo === 'recepcion_faltantes' && ev.faltantesPorArte) {
+                          ev.faltantesPorArte.forEach((f: { arte: string; cantidad: number }) => {
+                            impresionesMapRecibido[f.arte] = f.cantidad;
+                          });
+                        }
+                      } catch {}
+                    }
+                    if (!totalImpresionesRecibido && Object.keys(impresionesMapRecibido).length > 0) {
+                      totalImpresionesRecibido = Object.values(impresionesMapRecibido).reduce((s, n) => s + n, 0);
+                    }
+                    // Para recibido: restar faltantes del total si es tarea de impresión
+                    const faltantesTasks = tareasAPI.filter(t => {
+                      if (t.tipo !== 'Recepción') return false;
+                      try { return JSON.parse(t.evidencia || '{}').tipo === 'recepcion_faltantes'; } catch { return false; }
+                    });
+                    const totalFaltantesPending = faltantesTasks
+                      .filter(t => t.estatus !== 'Atendido' && t.estatus !== 'Completado')
+                      .reduce((s, t) => {
+                        // num_impresiones puede ser null en recepciones, fallback a evidencia
+                        if (t.num_impresiones) return s + t.num_impresiones;
+                        try {
+                          const ev = JSON.parse(t.evidencia || '{}');
+                          return s + (ev.totalFaltantes || 0);
+                        } catch { return s; }
+                      }, 0);
+                    console.log('[RECIBIDO DEBUG] tareaId:', grupo.tarea_id, 'totalImpOrig:', totalImpresionesRecibido, 'faltantesTasks:', faltantesTasks.length, 'totalFaltantesPending:', totalFaltantesPending, 'faltantesDetail:', JSON.stringify(faltantesTasks.map(t => ({ id: t.id, est: t.estatus, num: t.num_impresiones, ev: (() => { try { const e = JSON.parse(t.evidencia || '{}'); return { tipo: e.tipo, totalF: e.totalFaltantes }; } catch { return 'err'; } })() }))));
+                    if (totalFaltantesPending > 0 && totalImpresionesRecibido > totalFaltantesPending) {
+                      totalImpresionesRecibido = totalImpresionesRecibido - totalFaltantesPending;
+                    }
+                    // También ajustar el mapa por arte proporcionalmente
+                    if (totalFaltantesPending > 0) {
+                      const originalTotal = Object.values(impresionesMapRecibido).reduce((s, n) => s + n, 0);
+                      if (originalTotal > 0) {
+                        Object.keys(impresionesMapRecibido).forEach(key => {
+                          const proportion = impresionesMapRecibido[key] / originalTotal;
+                          impresionesMapRecibido[key] = Math.round(impresionesMapRecibido[key] - (totalFaltantesPending * proportion));
+                        });
+                      }
+                    }
                     return (
                       <div key={grupo.tarea_id} className="p-4">
                         {/* Header de tarea */}
@@ -14401,7 +14548,7 @@ export function TareaSeguimientoPage() {
                               Recibido
                             </Badge>
                             <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
-                              {grupo.items.length} items
+                              {totalImpresionesRecibido > 0 ? `${totalImpresionesRecibido} impresiones` : `${grupo.items.length} items`}
                             </Badge>
                             {permissions.canOpenTasks && (
                               <button
@@ -14452,6 +14599,7 @@ export function TareaSeguimientoPage() {
 
                             return Object.entries(artesAgrupados).map(([arteKey, arteGrupo]) => {
                               const arteSelected = arteGrupo.items.every(item => selectedInventoryIds.has(item.id));
+                              const impresionesArteR = arteGrupo.archivo ? (impresionesMapRecibido[arteGrupo.archivo] || 0) : 0;
                               return (
                                 <div key={arteKey} className="flex items-center gap-3 p-2 border-b border-border/30 last:border-0">
                                   <button
@@ -14489,7 +14637,7 @@ export function TareaSeguimientoPage() {
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-xs text-white">
-                                      {arteGrupo.items.length} {arteGrupo.items.length === 1 ? 'ubicacion' : 'ubicaciones'}
+                                      {impresionesArteR > 0 ? `${impresionesArteR} impresiones` : `${arteGrupo.items.length} ${arteGrupo.items.length === 1 ? 'ubicacion' : 'ubicaciones'}`}
                                     </p>
                                     <p className="text-[10px] text-zinc-500 truncate">
                                       {arteGrupo.items[0].mueble} - {arteGrupo.items[0].ciudad}
@@ -14525,7 +14673,31 @@ export function TareaSeguimientoPage() {
                     return acc;
                   }, {} as Record<number, { tarea_id: number; tarea_titulo: string; tarea_estatus: string; proveedor: string; items: typeof filteredImpresionesData }>);
 
-                  return Object.values(tareasAgrupadas).map(grupo => (
+                  return Object.values(tareasAgrupadas).map(grupo => {
+                    // Parsear evidencia para obtener impresiones por arte
+                    const tarea = tareasAPI.find(t => t.id === grupo.tarea_id);
+                    let impresionesMap: Record<string, number> = {};
+                    let totalImpresiones = tarea?.num_impresiones || 0;
+                    if (tarea?.evidencia) {
+                      try {
+                        const evidenciaObj = JSON.parse(tarea.evidencia);
+                        if (evidenciaObj.impresiones && typeof evidenciaObj.impresiones === 'object') {
+                          impresionesMap = evidenciaObj.impresiones;
+                        }
+                        // Para tareas de faltantes, usar faltantesPorArte
+                        if (evidenciaObj.tipo === 'recepcion_faltantes' && evidenciaObj.faltantesPorArte) {
+                          evidenciaObj.faltantesPorArte.forEach((f: { arte: string; cantidad: number }) => {
+                            impresionesMap[f.arte] = f.cantidad;
+                          });
+                        }
+                      } catch {}
+                    }
+                    // Si no hay num_impresiones, sumar del mapa
+                    if (!totalImpresiones && Object.keys(impresionesMap).length > 0) {
+                      totalImpresiones = Object.values(impresionesMap).reduce((sum, n) => sum + n, 0);
+                    }
+
+                    return (
                     <div key={grupo.tarea_id} className="p-4">
                       {/* Header de tarea */}
                       <div className="flex items-center justify-between mb-3">
@@ -14557,7 +14729,7 @@ export function TareaSeguimientoPage() {
                             {grupo.tarea_estatus}
                           </Badge>
                           <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
-                            {grupo.items.length} items
+                            {totalImpresiones > 0 ? `${totalImpresiones} impresiones` : `${grupo.items.length} items`}
                           </Badge>
                           {permissions.canOpenTasks && (
                             <button
@@ -14605,7 +14777,10 @@ export function TareaSeguimientoPage() {
                             return acc;
                           }, {} as Record<string, { items: typeof grupo.items; archivo: string | undefined }>);
 
-                          return Object.entries(artesAgrupados).map(([arteKey, arteGrupo]) => (
+                          return Object.entries(artesAgrupados).map(([arteKey, arteGrupo]) => {
+                            // Buscar impresiones para este arte
+                            const impresionesArte = arteGrupo.archivo ? (impresionesMap[arteGrupo.archivo] || 0) : 0;
+                            return (
                             <div key={arteKey} className="flex items-center gap-3 p-2 border-b border-border/30 last:border-0">
                               <div className="w-12 h-10 bg-zinc-800 rounded overflow-hidden flex-shrink-0">
                                 {arteGrupo.archivo ? (
@@ -14622,18 +14797,20 @@ export function TareaSeguimientoPage() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs text-white">
-                                  {arteGrupo.items.length} {arteGrupo.items.length === 1 ? 'ubicacion' : 'ubicaciones'}
+                                  {impresionesArte > 0 ? `${impresionesArte} impresiones` : `${arteGrupo.items.length} ${arteGrupo.items.length === 1 ? 'ubicacion' : 'ubicaciones'}`}
                                 </p>
                                 <p className="text-[10px] text-zinc-500 truncate">
                                   {arteGrupo.items[0].mueble} - {arteGrupo.items[0].ciudad}
                                 </p>
                               </div>
                             </div>
-                          ));
+                            );
+                          });
                         })()}
                       </div>
                     </div>
-                  ));
+                    );
+                  });
                 })()}
               </div>
             ) : activeMainTab === 'atender' && activeGroupingsAtender.length > 0 ? (
