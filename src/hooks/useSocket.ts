@@ -658,11 +658,25 @@ export function useSocketPropuestas() {
       queryClient.invalidateQueries({ queryKey: ['solicitud-full-details'], refetchType: 'active' });
     };
 
+    const handleReservaCreada = (data: { propuestaId: number }) => {
+      console.log('[Socket] Reserva creada (global):', data);
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', data.propuestaId], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'], refetchType: 'active' });
+    };
+
+    const handleReservaEliminada = (data: { propuestaId: number }) => {
+      console.log('[Socket] Reserva eliminada (global):', data);
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', data.propuestaId], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'], refetchType: 'active' });
+    };
+
     socket.on(SOCKET_EVENTS.PROPUESTA_CREADA, handlePropuestaCreada);
     socket.on(SOCKET_EVENTS.PROPUESTA_ACTUALIZADA, handlePropuestaActualizada);
     socket.on(SOCKET_EVENTS.PROPUESTA_STATUS_CHANGED, handlePropuestaStatusChanged);
     socket.on(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobada);
     socket.on(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazada);
+    socket.on(SOCKET_EVENTS.RESERVA_CREADA, handleReservaCreada);
+    socket.on(SOCKET_EVENTS.RESERVA_ELIMINADA, handleReservaEliminada);
 
     return () => {
       socket.off(SOCKET_EVENTS.PROPUESTA_CREADA, handlePropuestaCreada);
@@ -670,6 +684,8 @@ export function useSocketPropuestas() {
       socket.off(SOCKET_EVENTS.PROPUESTA_STATUS_CHANGED, handlePropuestaStatusChanged);
       socket.off(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobada);
       socket.off(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazada);
+      socket.off(SOCKET_EVENTS.RESERVA_CREADA, handleReservaCreada);
+      socket.off(SOCKET_EVENTS.RESERVA_ELIMINADA, handleReservaEliminada);
     };
   }, [queryClient]);
 

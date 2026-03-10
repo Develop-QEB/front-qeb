@@ -561,10 +561,12 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   const reservasIncompletas = useMemo(() => {
     if (!caras || !reservas) return false;
     return caras.some(cara => {
-      const caraReservas = reservas.filter(r => r.solicitud_cara_id === cara.id);
-      const flujoReservado = caraReservas.filter(r => r.tipo_de_cara === 'A' || r.tipo_de_cara === 'Flujo').length;
-      const contraflujoReservado = caraReservas.filter(r => r.tipo_de_cara === 'B' || r.tipo_de_cara === 'Contraflujo').length;
-      const bonificacionReservado = caraReservas.filter(r => r.tipo_de_cara === 'Bonificacion').length;
+      const caraReservas = (reservas as any[]).filter(r => r.solicitud_cara_id === cara.id);
+      // Bonificacion is determined by estatus='Bonificado', not by tipo_de_cara
+      const bonificacionReservado = caraReservas.filter(r => r.estatus === 'Bonificado').length;
+      const nonBonificacion = caraReservas.filter(r => r.estatus !== 'Bonificado');
+      const flujoReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'A' || r.tipo_de_cara === 'Flujo').length;
+      const contraflujoReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'B' || r.tipo_de_cara === 'Contraflujo').length;
       const flujoRequerido = Number(cara.caras_flujo) || 0;
       const contraflujoRequerido = Number(cara.caras_contraflujo) || 0;
       const bonificacionRequerido = Number(cara.bonificacion) || 0;
