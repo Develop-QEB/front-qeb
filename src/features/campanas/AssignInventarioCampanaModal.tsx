@@ -2,8 +2,8 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
-  FileText, MapPin, Layers, Pencil, Map as MapIcon, Package,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload
+  FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from '../propuestas/AdvancedMapComponent';
@@ -13,10 +13,10 @@ import { inventariosService, InventarioDisponible } from '../../services/inventa
 import { campanasService, ReservaModalItem } from '../../services/campanas.service';
 import { formatCurrency } from '../../lib/utils';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
-import { useSocketEquipos, useSocketCampana } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
 import { usePermissions } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
+import { useSocketEquipos, useSocketCampana } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
@@ -168,9 +168,14 @@ const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad
   // Sort cities by length (longest first) to match more specific names before generic ones
   const sortedCities = Object.entries(CIUDAD_ESTADO_MAP).sort((a, b) => b[0].length - a[0].length);
 
+  const CIUDADES_SIN_CIUDAD = ['CDMX', 'CIUDAD DE MEXICO', 'MEXICO', 'DF'];
+
   for (const [ciudad, estado] of sortedCities) {
     const regex = new RegExp(`(^|[^A-Z])${ciudad.replace(/\s+/g, '\\s+')}([^A-Z]|$)`, 'i');
     if (regex.test(name)) {
+      if (CIUDADES_SIN_CIUDAD.includes(ciudad)) {
+        return { estado, ciudad: '' };
+      }
       return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
     }
   }
@@ -189,11 +194,13 @@ interface ReservaItem {
   plaza: string;
   formato: string;
   ubicacion?: string | null;
+  isla?: string | null; // Isla from inventory
   solicitudCaraId?: number; // For linking to cara
   reservaId?: number; // For existing reservas from DB
   grupo_completo_id?: number | null; // For grouping complete groups
   aps?: number | null; // APS asignado (si > 0, no se puede editar)
   articulo?: string; // Artículo SAP de la cara
+  grupo?: string; // Distance group name
 }
 
 // ============ ADVANCED FILTERS SYSTEM (copied from CampanaDetailPage) ============
@@ -303,7 +310,6 @@ interface MultiSelectProps {
 }
 
 function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Seleccionar...' }: MultiSelectProps) {
-  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -330,19 +336,19 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Selec
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex items-center justify-between`}
+        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex items-center justify-between"
       >
-        <span className={selected.length === 0 ? (isDark ? 'text-zinc-500' : 'text-gray-400') : ''}>
+        <span className={selected.length === 0 ? 'text-zinc-500' : ''}>
           {selected.length === 0 ? placeholder : selected.length === 1 ? selected[0] : `${selected.length} seleccionados`}
         </span>
-        <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'} transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className={`absolute z-50 mt-1 w-full ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-200'} border rounded-lg shadow-xl max-h-48 overflow-y-auto`}>
+        <div className="absolute z-50 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
           {options.map(option => (
             <label
               key={option}
-              className={`flex items-center gap-2 px-3 py-2 ${isDark ? 'hover:bg-zinc-700 text-white' : 'hover:bg-gray-100 text-gray-900'} cursor-pointer text-sm`}
+              className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 cursor-pointer text-sm text-white"
             >
               <input
                 type="checkbox"
@@ -354,7 +360,7 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Selec
             </label>
           ))}
           {options.length === 0 && (
-            <div className={`px-3 py-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Sin opciones</div>
+            <div className="px-3 py-2 text-zinc-500 text-sm">Sin opciones</div>
           )}
         </div>
       )}
@@ -368,6 +374,9 @@ type ProcessedInventoryItem = InventarioDisponible & {
   flujoId?: number;
   contraflujoId?: number;
   grupo?: string;
+  // Spot único fields
+  spots_disponibles?: number;
+  isCollapsedSpot?: boolean;
 };
 
 // Empty cara template
@@ -420,7 +429,6 @@ function SearchableSelect({
   renderSelected?: (item: any) => React.ReactNode;
   loading?: boolean;
 }) {
-  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -446,14 +454,14 @@ function SearchableSelect({
         onClick={() => setOpen(!open)}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all ${value
           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : isDark ? 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
+          : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600'
           }`}
       >
         <span className="truncate text-left flex-1">
           {value && renderSelected ? renderSelected(value) : (displayValue || label)}
         </span>
         {value ? (
-          <X className={`h-4 w-4 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} flex-shrink-0`} onClick={(e) => { e.stopPropagation(); onClear(); }} />
+          <X className="h-4 w-4 hover:text-white flex-shrink-0" onClick={(e) => { e.stopPropagation(); onClear(); }} />
         ) : (
           <ChevronDown className="h-4 w-4 flex-shrink-0" />
         )}
@@ -462,16 +470,16 @@ function SearchableSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className={`absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
-            <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
+            <div className="p-2 border-b border-zinc-800">
               <div className="relative">
-                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                 <input
                   type="text"
                   placeholder={`Buscar ${label.toLowerCase()}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className={`w-full pl-9 pr-3 py-2 text-sm ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
                   autoFocus
                   onClick={(e) => e.stopPropagation()}
                 />
@@ -479,9 +487,9 @@ function SearchableSelect({
             </div>
             <div className="max-h-72 overflow-auto">
               {loading ? (
-                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</div>
+                <div className="px-3 py-4 text-center text-zinc-500 text-sm">Cargando...</div>
               ) : filteredOptions.length === 0 ? (
-                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
+                <div className="px-3 py-4 text-center text-zinc-500 text-sm">
                   {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
                 </div>
               ) : (
@@ -490,9 +498,9 @@ function SearchableSelect({
                     key={`${option[valueKey]}-${idx}`}
                     type="button"
                     onClick={() => { onChange(option); handleClose(); }}
-                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} last:border-0 ${value && value[valueKey] === option[valueKey]
+                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b border-zinc-800/50 last:border-0 ${value && value[valueKey] === option[valueKey]
                       ? 'bg-purple-500/20 text-purple-300'
-                      : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'
+                      : 'text-zinc-300 hover:bg-zinc-800'
                       }`}
                   >
                     {renderOption ? renderOption(option) : (
@@ -502,7 +510,7 @@ function SearchableSelect({
                 ))
               )}
             </div>
-            <div className={`px-3 py-1.5 border-t ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'} text-[10px]`}>
+            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
               Mostrando {filteredOptions.length} de {options.length} opciones
             </div>
           </div>
@@ -528,6 +536,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Socket para escuchar cambios en la campaña (autorizaciones, reservas, etc.)
   useSocketCampana(campana?.id || null);
 
+  const effectiveCanEdit = permissions.canAsignarInventario;
+  const canEditResumen = permissions.canEditResumenPropuesta;
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
   const resumenReservasMapRef = useRef<google.maps.Map | null>(null);
@@ -542,7 +552,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [viewState, setViewState] = useState<ViewState>('main');
   const [selectedCaraForSearch, setSelectedCaraForSearch] = useState<CaraItem | null>(null);
 
-  // Editable campana fields
+  // Editable propuesta fields
   const [asignados, setAsignados] = useState<UserOption[]>([]);
   const [nombreCampania, setNombreCampania] = useState('');
   const [notas, setNotas] = useState('');
@@ -581,13 +591,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Reservas state
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
 
+  // Check if the cara being edited has reservas (to block certain fields)
+  const editingCaraHasReservas = useMemo(() => {
+    if (!editingCaraId) return false;
+    const editingCara = caras.find(c => c.localId === editingCaraId);
+    if (!editingCara) return false;
+    // Check if there are any reservas for this cara
+    return reservas.some(r =>
+      r.id.startsWith(editingCaraId) || r.solicitudCaraId === editingCara.id
+    );
+  }, [editingCaraId, caras, reservas]);
+
   // Inventory search state
   const [searchFilters, setSearchFilters] = useState({
     plaza: '',
     tipo: '',
     formato: '',
   });
-  const [selectedInventory, setSelectedInventory] = useState<Set<number>>(new Set());
+  const [selectedInventory, setSelectedInventory] = useState<Set<string>>(new Set());
+
+  // Helper function to get unique key for inventory item (handles digital spaces)
+  const getInventoryKey = useCallback((inv: InventarioDisponible | ProcessedInventoryItem): string => {
+    const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
+    return isDigital && inv.espacio_id ? `${inv.id}_${inv.espacio_id}` : `${inv.id}`;
+  }, []);
   const [selectedReservados, setSelectedReservados] = useState<Set<string>>(new Set());
   const [selectedMapReservas, setSelectedMapReservas] = useState<Set<string>>(new Set()); // For map highlighting
   const [reservadosSearchTerm, setReservadosSearchTerm] = useState('');
@@ -595,11 +622,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [editingFormato, setEditingFormato] = useState('');
   const [editingPlaza, setEditingPlaza] = useState('');
   const [reservadosTipoFilter, setReservadosTipoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo' | 'Bonificacion'>('Todos');
+  const [showOnlyIslaReservados, setShowOnlyIslaReservados] = useState(false);
+  const [showReservasFlatList, setShowReservasFlatList] = useState(false); // Toggle for flat list vs grouped
+  const [groupByDistanceReservados, setGroupByDistanceReservados] = useState(false);
+  const [groupModeReservados, setGroupModeReservados] = useState<'distancia' | 'listado'>('distancia');
+  const [distanciaGruposReservados, setDistanciaGruposReservados] = useState(500);
+  const [tamanoGrupoReservados, setTamanoGrupoReservados] = useState(10);
+  const [expandedGroupsReservados, setExpandedGroupsReservados] = useState<Set<string>>(new Set(['Grupo 1']));
   const [reservadosSortColumn, setReservadosSortColumn] = useState<'codigo' | 'tipo' | 'formato' | 'ciudad'>('ciudad');
   // Reservas summary states - Advanced Filter System
   const [filtersReservas, setFiltersReservas] = useState<FilterCondition[]>([]);
   const [showFiltersReservas, setShowFiltersReservas] = useState(false);
-  const [activeGroupingsReservas, setActiveGroupingsReservas] = useState<GroupByFieldReservas[]>(['catorcena']);
+  const [activeGroupingsReservas, setActiveGroupingsReservas] = useState<GroupByFieldReservas[]>(['catorcena', 'articulo']);
   const [showGroupingConfigReservas, setShowGroupingConfigReservas] = useState(false);
   const [sortFieldReservas, setSortFieldReservas] = useState<string | null>(null);
   const [sortDirectionReservas, setSortDirectionReservas] = useState<'asc' | 'desc'>('asc');
@@ -611,10 +645,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Advanced inventory filters
   const [showOnlyUnicos, setShowOnlyUnicos] = useState(false);
   const [showOnlyCompletos, setShowOnlyCompletos] = useState(false);
+  const [showOnlyUnicosDigitales, setShowOnlyUnicosDigitales] = useState(false);
+  const [showSpotUnico, setShowSpotUnico] = useState(false);
   const [groupByDistance, setGroupByDistance] = useState(false);
+  const [groupMode, setGroupMode] = useState<'distancia' | 'listado'>('distancia');
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
+  const [showOnlyIsla, setShowOnlyIsla] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
@@ -731,11 +769,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch existing reservas for this campana
+  // Fetch existing reservas for this propuesta - refetch always on mount for real-time data
   const { data: existingReservas, isLoading: reservasLoading } = useQuery({
-    queryKey: ['campana-reservas-modal', campana?.id],
+    queryKey: ['campana-reservas-modal', campana!.id],
     queryFn: () => campanasService.getReservasForModal(campana!.id),
-    enabled: isOpen && !!campana?.id,
+    enabled: isOpen && !!campana!.id,
+    refetchOnMount: 'always',
   });
 
   // Load existing reservas into state when data arrives
@@ -753,17 +792,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           inventario_id: r.inventario_id,
           codigo_unico: r.codigo_unico || `INV-${r.inventario_id}`,
           tipo: tipo as 'Flujo' | 'Contraflujo' | 'Bonificacion',
-          catorcena: catorcenaInicio || 1,
-          anio: yearInicio || new Date().getFullYear(),
+          catorcena: matchingCara?.catorcena_inicio || catorcenaInicio || 1,
+          anio: matchingCara?.anio_inicio || yearInicio || new Date().getFullYear(),
           latitud: Number(r.latitud) || 0,
           longitud: Number(r.longitud) || 0,
           plaza: r.plaza || '',
           formato: r.formato || '',
           ubicacion: r.ubicacion,
+          isla: r.isla,
           solicitudCaraId: r.solicitud_cara_id,
           reservaId: r.reserva_id,
           grupo_completo_id: r.grupo_completo_id,
           aps: r.aps,
+          articulo: matchingCara?.articulo || r.articulo || '',
         };
       });
 
@@ -832,9 +873,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       const loadedAsignados: UserOption[] = [];
       // Try to load from T0_U_IDAsesor (single asesor)
       if (campanaDetails.T0_U_IDAsesor && users) {
-        const user = users.find((u: UserOption) => u.id === campanaDetails.T0_U_IDAsesor);
-        if (user) {
-          loadedAsignados.push(user);
+        const foundUser = users.find((u: UserOption) => u.id === campanaDetails.T0_U_IDAsesor);
+        if (foundUser) {
+          loadedAsignados.push(foundUser);
         }
       }
       // Also try id_asignado (could be comma-separated)
@@ -842,9 +883,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         const ids = campanaDetails.id_asignado.split(',').map((id: string) => parseInt(id.trim())).filter((id: number) => !isNaN(id));
         ids.forEach((id: number) => {
           if (!loadedAsignados.find(u => u.id === id)) {
-            const user = users.find((u: UserOption) => u.id === id);
-            if (user) {
-              loadedAsignados.push(user);
+            const foundUser = users.find((u: UserOption) => u.id === id);
+            if (foundUser) {
+              loadedAsignados.push(foundUser);
             }
           }
         });
@@ -869,32 +910,51 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Initialize caras from API
   useEffect(() => {
     if (carasData && isOpen) {
-      console.log('[AssignInventarioCampana] carasData recibida:', carasData.length, 'caras');
-      const carasWithIds: CaraItem[] = carasData.map((cara, idx) => ({
-        localId: `cara-${cara.id || idx}-${Date.now()}`,
-        id: cara.id,
-        ciudad: cara.ciudad || '',
-        estados: cara.estados || '',
-        tipo: cara.tipo || '',
-        flujo: cara.flujo || '',
-        bonificacion: Number(cara.bonificacion) || 0,
-        caras: Number(cara.caras) || 0,
-        nivel_socioeconomico: cara.nivel_socioeconomico || '',
-        formato: cara.formato || '',
-        costo: Number(cara.costo) || 0,
-        tarifa_publica: Number(cara.tarifa_publica) || 0,
-        inicio_periodo: cara.inicio_periodo || '',
-        fin_periodo: cara.fin_periodo || '',
-        caras_flujo: Number(cara.caras_flujo) || 0,
-        caras_contraflujo: Number(cara.caras_contraflujo) || 0,
-        articulo: cara.articulo || '',
-        descuento: Number(cara.descuento) || 0,
-        autorizacion_dg: cara.autorizacion_dg || 'aprobado',
-        autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
-      }));
+      const carasWithIds: CaraItem[] = carasData.map((cara: any, idx: number) => {
+        // Calculate catorcena from inicio_periodo
+        let catorcenaInicioCara: number | undefined;
+        let anioInicioCara: number | undefined;
+        if (cara.inicio_periodo && catorcenasData?.data) {
+          const inicioPeriodoDate = new Date(cara.inicio_periodo);
+          const catInicio = catorcenasData.data.find((c: any) => {
+            const cInicioDate = new Date(c.fecha_inicio);
+            const cFinDate = new Date(c.fecha_fin);
+            return inicioPeriodoDate >= cInicioDate && inicioPeriodoDate <= cFinDate;
+          });
+          if (catInicio) {
+            catorcenaInicioCara = catInicio.numero_catorcena;
+            anioInicioCara = catInicio.a_o;
+          }
+        }
+
+        return {
+          localId: `cara-${cara.id || idx}-${Date.now()}`,
+          id: cara.id,
+          ciudad: cara.ciudad || '',
+          estados: cara.estados || '',
+          tipo: cara.tipo || '',
+          flujo: cara.flujo || '',
+          bonificacion: Number(cara.bonificacion) || 0,
+          caras: Number(cara.caras) || 0,
+          nivel_socioeconomico: cara.nivel_socioeconomico || '',
+          formato: cara.formato || '',
+          costo: Number(cara.costo) || 0,
+          tarifa_publica: Number(cara.tarifa_publica) || 0,
+          inicio_periodo: cara.inicio_periodo || '',
+          fin_periodo: cara.fin_periodo || '',
+          caras_flujo: Number(cara.caras_flujo) || 0,
+          caras_contraflujo: Number(cara.caras_contraflujo) || 0,
+          articulo: cara.articulo || '',
+          descuento: Number(cara.descuento) || 0,
+          catorcena_inicio: catorcenaInicioCara,
+          anio_inicio: anioInicioCara,
+          autorizacion_dg: cara.autorizacion_dg || 'aprobado',
+          autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
+        };
+      });
       setCaras(carasWithIds);
     }
-  }, [carasData, isOpen]);
+  }, [carasData, isOpen, catorcenasData]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -936,7 +996,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const handleUpdateCampana = async () => {
     setIsUpdatingCampana(true);
     try {
-      // Update campaign data
       await campanasService.update(campana!.id, {
         nombre: nombreCampania,
         notas,
@@ -948,6 +1007,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       });
 
       // Update initial values to current values
+      const newAsignadosIds = asignados.map(u => u.id).join(',');
       setInitialValues({
         nombreCampania,
         notas,
@@ -956,7 +1016,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         yearFin,
         catorcenaInicio,
         catorcenaFin,
-        asignadosIds: '',
+        asignadosIds: newAsignadosIds,
       });
 
       queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
@@ -979,7 +1039,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     try {
       // TODO: Implement archivo upload for campaigns if needed
       // const result = await campanasService.uploadArchivo(campana?.id, file);
-      const result = { url: "" };
+      const result = { url: '' };
       setArchivoCampana(result.url);
       queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
       alert('Archivo subido correctamente');
@@ -992,9 +1052,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Calculate KPIs for caras
   const carasKPIs = useMemo(() => {
     const totalRenta = caras.reduce((acc, c) => acc + (c.caras || 0), 0);
-    const totalBonificacion = caras.reduce((acc, c) => acc + (c.bonificacion || 0), 0);
+    const totalBonificacion = caras.filter(c => !(c.articulo || '').toUpperCase().startsWith('CT')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
+    const totalCortesia = caras.filter(c => (c.articulo || '').toUpperCase().startsWith('CT')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
     const totalInversion = caras.reduce((acc, c) => acc + ((c.caras || 0) * (c.tarifa_publica || 0)), 0);
-    return { totalRenta, totalBonificacion, totalInversion };
+    return { totalRenta, totalBonificacion, totalCortesia, totalInversion };
   }, [caras]);
 
   // Merge all reservas by grupo_completo_id (for display)
@@ -1140,8 +1201,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     return data;
   }, [reservasMerged, filtersReservas, sortFieldReservas, sortDirectionReservas]);
+  // ============ END ADVANCED FILTER FUNCTIONS ============
 
-  // Focus map on reservas when data changes
+  // Effect to re-fit map bounds when filtered reservas change (for "Resumen de Reservas" map)
   useEffect(() => {
     if (resumenReservasMapRef.current && filteredReservasData.length > 0 && mapsLoaded && typeof google !== 'undefined') {
       const bounds = new google.maps.LatLngBounds();
@@ -1157,7 +1219,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       }
     }
   }, [filteredReservasData, mapsLoaded]);
-  // ============ END ADVANCED FILTER FUNCTIONS ============
 
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
@@ -1254,7 +1315,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     };
   };
 
-  // Check if all caras are complete (for "Aprobar Campaña" button)
+  // Check if all caras are complete (for "Aprobar propuesta" button)
   const allCarasComplete = useMemo(() => {
     if (caras.length === 0) return false;
     return caras.every(cara => {
@@ -1278,7 +1339,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       let parsedMonth: number | undefined;
       let parsedYear: number | undefined;
       if (tipoPeriodo === 'mensual' && cara.inicio_periodo) {
-        // Parse date string directly to avoid timezone shifts with new Date()
+        // Parse date string directly to avoid timezone shifts
         const parts = cara.inicio_periodo.split('-');
         if (parts.length >= 2) {
           parsedYear = parseInt(parts[0]);
@@ -1290,7 +1351,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         if (tipoPeriodo === 'mensual' && parsedMonth !== undefined && parsedYear !== undefined) {
           groups[periodo] = { caras: [], catorcenaNum: parsedMonth, year: parsedYear };
         } else if (tipoPeriodo === 'mensual') {
-          // Fallback: parse from periodo key directly
           const parts = periodo.split('-');
           groups[periodo] = { caras: [], catorcenaNum: parseInt(parts[1]) || undefined, year: parseInt(parts[0]) || undefined };
         } else {
@@ -1399,9 +1459,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
   };
 
-  // Handle edit cara - permite edición parcial cuando hay reservas (caras y tarifa)
+  // Handle edit cara - permite edición parcial cuando hay reservas
   const handleEditCara = (cara: CaraItem) => {
-    // Ya no bloqueamos completamente - permitimos edición de caras y tarifa
+    // Ya no bloqueamos completamente - permitimos edición de ciudad, formatos y NSE
     setEditingCaraId(cara.localId);
 
     // Find and set the selectedArticulo if we have the articulo code
@@ -1479,7 +1539,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       ciudadToSave = allCitiesForEstado.join(', ');
     }
 
-    // Calculate costo as caras * tarifa_publica
+    // Calcular costo como caras * tarifa_publica (inversión)
     const costoCalculado = (newCara.caras || 0) * (newCara.tarifa_publica || 0);
 
     const caraData = {
@@ -1506,7 +1566,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         // Find the cara being edited to get its database ID
         const caraToEdit = caras.find(c => c.localId === editingCaraId);
         if (caraToEdit?.id) {
-          // Evaluate authorization before updating
+          // Evaluar autorización antes de actualizar
           let autorizacion_dg = 'aprobado';
           let autorizacion_dcm = 'aprobado';
           try {
@@ -1546,7 +1606,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       } else {
         // Create new cara in database
         const createdCara = await campanasService.createCara(campana!.id, caraData);
-        // Add to local state with the database ID and authorization status
+        // Add to local state with the database ID and authorization status from response
         const newCaraItem: CaraItem = {
           ...newCara,
           id: createdCara.id,
@@ -1563,9 +1623,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setShowAddCaraForm(false);
 
       // Invalidate queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ['campana-full', campana?.id] });
-      queryClient.invalidateQueries({ queryKey: ['campana-caras', campana?.id] });
-      queryClient.invalidateQueries({ queryKey: ['campanas'] });
+      queryClient.invalidateQueries({ queryKey: ['campana-full', campana!.id] });
+      queryClient.invalidateQueries({ queryKey: ['campana-caras', campana!.id] });
+      queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
     } catch (error) {
       console.error('Error saving cara:', error);
       alert('Error al guardar la cara');
@@ -1615,6 +1675,54 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       return !reservedBaseCodes.has(baseCode);
     });
   }, [reservas]);
+
+  // Filter for unique digital inventories - hide digital items whose codigo_unico is already reserved
+  const filterUnicosDigitales = useCallback((inventarios: InventarioDisponible[]): InventarioDisponible[] => {
+    // Get codigo_unicos that are already reserved (from digital items)
+    const reservedCodigosDigitales = new Set<string>();
+    reservas.forEach(reserva => {
+      if (reserva.codigo_unico) {
+        reservedCodigosDigitales.add(reserva.codigo_unico);
+      }
+    });
+
+    // Filter out digital items whose codigo_unico is already in reservas
+    return inventarios.filter(inv => {
+      // Only filter digital items
+      const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
+      if (!isDigital) return true; // Keep non-digital items as-is
+
+      // For digital items, exclude if this codigo_unico is already reserved
+      return !reservedCodigosDigitales.has(inv.codigo_unico || '');
+    });
+  }, [reservas]);
+
+  // Filter for spot único - collapse digital inventories to 1 row per inventario with spots indicator
+  const filterSpotUnico = useCallback((inventarios: ProcessedInventoryItem[]): ProcessedInventoryItem[] => {
+    const digitalGroups = new Map<number, ProcessedInventoryItem[]>();
+    const result: ProcessedInventoryItem[] = [];
+
+    for (const inv of inventarios) {
+      const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
+      if (isDigital) {
+        const group = digitalGroups.get(inv.id) || [];
+        group.push(inv);
+        digitalGroups.set(inv.id, group);
+      } else {
+        result.push(inv);
+      }
+    }
+
+    // Per digital group, collapse to 1 row with first available espacio
+    for (const [, group] of digitalGroups) {
+      const representative = { ...group[0] } as ProcessedInventoryItem;
+      representative.spots_disponibles = group.length;
+      representative.isCollapsedSpot = true;
+      result.push(representative);
+    }
+
+    return result;
+  }, []);
 
   // Filter for complete inventories - MERGE flujo/contraflujo pairs into single "completo" rows
   const filterCompletos = useCallback((inventarios: InventarioDisponible[]): (InventarioDisponible & { isCompleto?: boolean; flujoId?: number; contraflujoId?: number })[] => {
@@ -1733,6 +1841,93 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
   }, [tamanoGrupo, distanciaGrupos, haversineDistance]);
 
+  // Group reservados by distance (anti-cannibalization for reserved items)
+  const groupByDistanceFuncReservados = useCallback((items: ReservaItem[]): (ReservaItem & { grupo?: string })[] => {
+    if (items.length === 0) return [];
+
+    const withCoords = items.filter(r =>
+      r.latitud && r.longitud && typeof r.latitud === 'number' && typeof r.longitud === 'number' &&
+      !isNaN(r.latitud) && !isNaN(r.longitud)
+    );
+    const withoutCoords = items.filter(r =>
+      !r.latitud || !r.longitud || typeof r.latitud !== 'number' || typeof r.longitud !== 'number' ||
+      isNaN(r.latitud) || isNaN(r.longitud)
+    );
+
+    if (withCoords.length === 0) {
+      return items.map(r => ({ ...r, grupo: 'Grupo 1' }));
+    }
+
+    const grupos: ReservaItem[][] = [];
+    const remaining = [...withCoords];
+
+    while (remaining.length > 0) {
+      const grupo: ReservaItem[] = [remaining.shift()!];
+
+      while (grupo.length < tamanoGrupoReservados && remaining.length > 0) {
+        let bestIdx = -1;
+        let bestScore = Infinity;
+
+        for (let i = 0; i < remaining.length; i++) {
+          const candidate = remaining[i];
+          let minDist = Infinity;
+
+          for (const member of grupo) {
+            const dist = haversineDistance(
+              candidate.latitud, candidate.longitud,
+              member.latitud, member.longitud
+            );
+            if (dist < minDist) minDist = dist;
+          }
+
+          if (minDist >= distanciaGruposReservados) {
+            const score = Math.abs(minDist - distanciaGruposReservados * 1.2);
+            if (score < bestScore) {
+              bestScore = score;
+              bestIdx = i;
+            }
+          }
+        }
+
+        if (bestIdx >= 0) {
+          grupo.push(remaining.splice(bestIdx, 1)[0]);
+        } else {
+          break;
+        }
+      }
+
+      grupos.push(grupo);
+    }
+
+    if (withoutCoords.length > 0) {
+      grupos.push(withoutCoords);
+    }
+
+    return grupos.flatMap((grupo, idx) => {
+      const isLastGroup = idx === grupos.length - 1 && withoutCoords.length > 0;
+      const groupName = isLastGroup ? 'Sin ubicación' : `Grupo ${idx + 1}`;
+      return grupo.map(r => ({ ...r, grupo: groupName }));
+    });
+  }, [tamanoGrupoReservados, distanciaGruposReservados, haversineDistance]);
+
+  // Group by list order - chunk items sequentially (disponibles)
+  const groupByListFunc = useCallback((inventarios: ProcessedInventoryItem[]): ProcessedInventoryItem[] => {
+    if (inventarios.length === 0) return [];
+    return inventarios.map((inv, idx) => ({
+      ...inv,
+      grupo: `Grupo ${Math.floor(idx / tamanoGrupo) + 1}`,
+    }));
+  }, [tamanoGrupo]);
+
+  // Group by list order - chunk items sequentially (reservados)
+  const groupByListFuncReservados = useCallback((items: ReservaItem[]): (ReservaItem & { grupo?: string })[] => {
+    if (items.length === 0) return [];
+    return items.map((r, idx) => ({
+      ...r,
+      grupo: `Grupo ${Math.floor(idx / tamanoGrupoReservados) + 1}`,
+    }));
+  }, [tamanoGrupoReservados]);
+
   // Handle search inventory - open search view and fetch disponibles
   const handleSearchInventory = async (cara: CaraItem) => {
     setSelectedCaraForSearch(cara);
@@ -1844,19 +2039,34 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       data = data.filter(inv => inv.tipo_de_cara === flujoFilter);
     }
 
-    // Apply unique filter
-    if (showOnlyUnicos) {
-      data = filterUnicos(data);
-    }
-
     // Apply complete filter (merges pairs into single rows)
     if (showOnlyCompletos) {
       data = filterCompletos(data);
     }
 
-    // Apply distance grouping
+    // Apply unique filter for traditional items (hide items whose counterpart is reserved)
+    if (showOnlyUnicos) {
+      data = filterUnicos(data);
+    }
+
+    // Apply unique digital filter (hide digital items with same codigo_unico in reservas)
+    if (showOnlyUnicosDigitales) {
+      data = filterUnicosDigitales(data);
+    }
+
+    // Spot único - collapse digital items to 1 row per inventario
+    if (showSpotUnico) {
+      data = filterSpotUnico(data);
+    }
+
+    // Filter by isla - only show items that have "ISLA" in the isla column
+    if (showOnlyIsla) {
+      data = data.filter(inv => inv.isla?.toUpperCase().includes('ISLA'));
+    }
+
+    // Apply grouping (distance or list)
     if (groupByDistance) {
-      data = groupByDistanceFunc(data);
+      data = groupMode === 'distancia' ? groupByDistanceFunc(data) : groupByListFunc(data);
     }
 
     // Apply sorting
@@ -1876,6 +2086,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         case 'plaza':
           aVal = a.plaza || '';
           bVal = b.plaza || '';
+          break;
+        case 'isla':
+          aVal = a.isla || '';
+          bVal = b.isla || '';
           break;
         case 'nivel_socioeconomico':
           aVal = a.nivel_socioeconomico || '';
@@ -1898,7 +2112,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, groupByDistance, filterUnicos, filterCompletos, groupByDistanceFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, showOnlyIsla, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -1910,11 +2124,28 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     setPoiFilterIds(null);
   }, []);
 
+  // Check if there are digital items in inventory
+  const hasDigitalInventory = useMemo(() => {
+    return inventarioDisponible.some(inv =>
+      inv.tradicional_digital === 'Digital'
+    );
+  }, [inventarioDisponible]);
+
+  // Check if there are traditional items in inventory
+  const hasTradicionalInventory = useMemo(() => {
+    return inventarioDisponible.some(inv =>
+      inv.tradicional_digital === 'Tradicional' || (!inv.total_espacios || inv.total_espacios === 0)
+    );
+  }, [inventarioDisponible]);
+
   // Clear all filters
   const clearAllFilters = useCallback(() => {
     setFlujoFilter('Todos');
     setShowOnlyUnicos(false);
     setShowOnlyCompletos(false);
+    setShowOnlyUnicosDigitales(false);
+    setShowSpotUnico(false);
+    setShowOnlyIsla(false);
     setGroupByDistance(false);
     setPoiFilterIds(null);
     setDisponiblesSearchTerm('');
@@ -1964,12 +2195,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         return row;
       });
 
-      // Match with inventory
+      // Match with inventory - try multiple possible column names
       const matched = parsedData.map(row => {
-        const codigoUnico = getValueByColumnName(row, 'codigo_unico');
-        const exists = inventarioDisponible.some(inv => inv.codigo_unico === codigoUnico);
+        const codigoUnico = getValueByColumnName(row, 'codigo_unico')
+          || getValueByColumnName(row, 'codigo')
+          || getValueByColumnName(row, 'código')
+          || getValueByColumnName(row, 'código_único')
+          || getValueByColumnName(row, 'codigo_unico');
+        const code = codigoUnico?.trim() || '';
+        const exists = code !== '' && inventarioDisponible.some(inv => inv.codigo_unico === code);
         return {
-          codigo_unico: codigoUnico || 'N/A',
+          codigo_unico: code || 'N/A',
           disponibilidad: exists ? 'Disponible' as const : 'No Disponible' as const,
         };
       });
@@ -1989,9 +2225,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const matchingInventory = inventarioDisponible
       .filter(inv => inv.codigo_unico && availableCodes.includes(inv.codigo_unico));
 
-    setSelectedInventory(new Set(matchingInventory.map(inv => inv.id)));
+    setSelectedInventory(new Set(matchingInventory.map(inv => getInventoryKey(inv))));
     setShowCsvSection(false);
-  }, [csvData, inventarioDisponible]);
+  }, [csvData, inventarioDisponible, getInventoryKey]);
 
   const handleClearCsv = useCallback(() => {
     setCsvFile(null);
@@ -2037,7 +2273,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     // Determine columns based on active filters
     const baseColumns = ['codigo_unico', 'tipo_de_cara', 'plaza', 'nivel_socioeconomico', 'ubicacion'];
-    const headers = ['Código', 'Tipo', 'Plaza', 'NSE', 'Ubicación'];
+    const headers = ['codigo_unico', 'Tipo', 'Plaza', 'NSE', 'Ubicación'];
 
     // Add group column if groupByDistance is active
     if (groupByDistance && groupedInventory) {
@@ -2087,7 +2323,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const link = document.createElement('a');
     link.href = url;
     const filterInfo = [
-      showOnlyUnicos ? 'unicos' : '',
+      showOnlyUnicosDigitales ? 'unicos_digitales' : '',
       showOnlyCompletos ? 'completos' : '',
       groupByDistance ? 'agrupados' : '',
       flujoFilter !== 'Todos' ? flujoFilter.toLowerCase() : ''
@@ -2112,26 +2348,26 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Select all in group
   // Toggle all items in a group - if all selected, deselect all; otherwise select all
   const toggleAllInGroup = (items: ProcessedInventoryItem[]) => {
-    const allSelected = items.every(inv => selectedInventory.has(inv.id));
+    const allSelected = items.every(inv => selectedInventory.has(getInventoryKey(inv)));
     setSelectedInventory(prev => {
       const next = new Set(prev);
       if (allSelected) {
         // Deselect all
-        items.forEach(inv => next.delete(inv.id));
+        items.forEach(inv => next.delete(getInventoryKey(inv)));
       } else {
         // Select all
-        items.forEach(inv => next.add(inv.id));
+        items.forEach(inv => next.add(getInventoryKey(inv)));
       }
       return next;
     });
   };
 
-  // Handle inventory selection
-  const toggleInventorySelection = (id: number) => {
+  // Handle inventory selection (uses unique key for digital items)
+  const toggleInventorySelection = (key: string) => {
     setSelectedInventory(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -2141,7 +2377,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     if (!selectedCaraForSearch || selectedInventory.size === 0) return;
 
     // Check for pairs that could be grouped
-    const selectedItems = processedInventory.filter(i => selectedInventory.has(i.id));
+    const selectedItems = processedInventory.filter(i => selectedInventory.has(getInventoryKey(i)));
     const potentialPairs = new Set<string>();
 
     selectedItems.forEach(item => {
@@ -2166,12 +2402,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
 
     const runReservation = async (shouldGroup: boolean) => {
-      const newReservas: { inventario_id: number; tipo: string; latitud: number; longitud: number }[] = [];
+      const newReservas: { inventario_id: number; espacio_id?: number; tipo: string; latitud: number; longitud: number }[] = [];
       let flujoCount = 0;
       let contraflujoCount = 0;
 
-      selectedInventory.forEach(invId => {
-        const inv = processedInventory.find(i => i.id === invId);
+      selectedInventory.forEach(invKey => {
+        const inv = processedInventory.find(i => getInventoryKey(i) === invKey);
         if (!inv) return;
 
         // If it's a "completo" item, reserve both flujo and contraflujo
@@ -2186,16 +2422,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
           // Only reserve both if BOTH have space (to keep them paired)
           if (canReserveFlujo && canReserveContraflujo) {
+            const isDigitalFlujo = flujoOrig!.tradicional_digital === 'Digital' || (flujoOrig!.total_espacios && flujoOrig!.total_espacios > 0);
             newReservas.push({
               inventario_id: inv.flujoId!,
+              espacio_id: isDigitalFlujo && flujoOrig!.espacio_id ? flujoOrig!.espacio_id : undefined,
               tipo: 'Flujo',
               latitud: flujoOrig!.latitud || 0,
               longitud: flujoOrig!.longitud || 0,
             });
             flujoCount++;
 
+            const isDigitalContra = contraflujoOrig!.tradicional_digital === 'Digital' || (contraflujoOrig!.total_espacios && contraflujoOrig!.total_espacios > 0);
             newReservas.push({
               inventario_id: inv.contraflujoId!,
+              espacio_id: isDigitalContra && contraflujoOrig!.espacio_id ? contraflujoOrig!.espacio_id : undefined,
               tipo: 'Contraflujo',
               latitud: contraflujoOrig!.latitud || 0,
               longitud: contraflujoOrig!.longitud || 0,
@@ -2211,8 +2451,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             : contraflujoCount < remainingToAssign.contraflujo;
 
           if (canReserve) {
+            // For digital items, use espacio_id directly; otherwise use inventario_id
+            const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
             newReservas.push({
-              inventario_id: invId,
+              inventario_id: inv.id,
+              espacio_id: isDigital && inv.espacio_id ? inv.espacio_id : undefined,
               tipo,
               latitud: inv.latitud || 0,
               longitud: inv.longitud || 0,
@@ -2231,7 +2474,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       // Call API immediately
       setIsSaving(true);
       try {
-        const clienteId = campanaDetails?.cuic || campana?.cuic;
+        const clienteId = campanaDetails?.cliente_id || campana?.cliente_id;
         const fechaInicio = selectedCaraForSearch.inicio_periodo || campanaDetails?.fecha_inicio || new Date().toISOString();
         const fechaFin = selectedCaraForSearch.fin_periodo || campanaDetails?.fecha_fin || new Date().toISOString();
 
@@ -2246,8 +2489,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           agruparComoCompleto: shouldGroup,
         });
 
-        queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana?.id] });
-        queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana?.id] }); // Refresh map
+        queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+        queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] }); // Refresh map
         // Also refresh disponibles
         handleRefetchDisponibles();
 
@@ -2306,12 +2549,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     }
 
     const runBonificacion = async () => {
-      const newReservas: { inventario_id: number; tipo: string; latitud: number; longitud: number }[] = [];
-      selectedInventory.forEach(invId => {
-        const inv = processedInventory.find(i => i.id === invId);
+      const newReservas: { inventario_id: number; espacio_id?: number; tipo: string; latitud: number; longitud: number }[] = [];
+      selectedInventory.forEach(invKey => {
+        const inv = processedInventory.find(i => getInventoryKey(i) === invKey);
         if (inv) {
+          const isDigital = inv.tradicional_digital === 'Digital' || (inv.total_espacios && inv.total_espacios > 0);
           newReservas.push({
-            inventario_id: invId,
+            inventario_id: inv.id,
+            espacio_id: isDigital && inv.espacio_id ? inv.espacio_id : undefined,
             tipo: 'Bonificacion',
             latitud: inv.latitud || 0,
             longitud: inv.longitud || 0,
@@ -2322,7 +2567,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       // Call API immediately
       setIsSaving(true);
       try {
-        const clienteId = campanaDetails?.cuic || campana?.cuic;
+        const clienteId = campanaDetails?.cliente_id || campana?.cliente_id;
         const fechaInicio = selectedCaraForSearch.inicio_periodo || campanaDetails?.fecha_inicio || new Date().toISOString();
         const fechaFin = selectedCaraForSearch.fin_periodo || campanaDetails?.fecha_fin || new Date().toISOString();
 
@@ -2337,8 +2582,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           agruparComoCompleto: false, // Bonificaciones likely single
         });
 
-        queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana?.id] });
-        queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana?.id] });
+        queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+        queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
         handleRefetchDisponibles();
 
         showToast(`Se guardaron ${result.reservasCreadas} bonificaciones exitosamente`, 'success');
@@ -2352,11 +2597,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       }
     };
 
+    const isCT = (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT');
     setConfirmModal({
       isOpen: true,
-      title: 'Confirmar Bonificación',
-      message: `¿Estás seguro de bonificar ${selectedInventory.size} espacios?`,
-      confirmText: 'Bonificar',
+      title: isCT ? 'Confirmar Cortesía' : 'Confirmar Bonificación',
+      message: `¿Estás seguro de ${isCT ? 'asignar como cortesía' : 'bonificar'} ${selectedInventory.size} espacios?`,
+      confirmText: isCT ? 'Cortesía' : 'Bonificar',
       onConfirm: runBonificacion,
     });
   };
@@ -2426,16 +2672,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             ...r,
             id: `completo-${r.grupo_completo_id}`,
             codigo_unico: `${baseCode}_Completo`,
-            tipo: 'Flujo' as const,
+            tipo: 'Flujo' as const, // Use Flujo for color (will show as purple in legend)
+            // Store original items count for reference
           });
           processedGrupos.add(r.grupo_completo_id);
         } else {
+          // Single item in group, show as-is
           result.push(r);
           processedGrupos.add(r.grupo_completo_id);
         }
       } else if (!r.grupo_completo_id) {
+        // No group, show as-is
         result.push(r);
       }
+      // If grupo_completo_id already processed, skip (it's the pair)
     });
 
     return result;
@@ -2450,6 +2700,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       data = data.filter(r => r.tipo === reservadosTipoFilter);
     }
 
+    // Filter by isla - only show items that have "ISLA" in the isla column
+    if (showOnlyIslaReservados) {
+      data = data.filter(r => r.isla?.toUpperCase().includes('ISLA'));
+    }
+
     // Filter by search term
     if (reservadosSearchTerm.trim()) {
       const term = reservadosSearchTerm.toLowerCase();
@@ -2458,8 +2713,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         r.plaza?.toLowerCase().includes(term) ||
         r.ubicacion?.toLowerCase().includes(term) ||
         r.tipo?.toLowerCase().includes(term) ||
-        r.formato?.toLowerCase().includes(term)
+        r.formato?.toLowerCase().includes(term) ||
+        r.isla?.toLowerCase().includes(term)
       );
+    }
+
+    // Apply grouping (distance or list)
+    if (groupByDistanceReservados) {
+      data = groupModeReservados === 'distancia' ? groupByDistanceFuncReservados(data) : groupByListFuncReservados(data);
     }
 
     // Sort
@@ -2476,7 +2737,25 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
 
     return data;
-  }, [currentCaraReservasMerged, reservadosSearchTerm, reservadosTipoFilter, reservadosSortColumn, reservadosSortDirection]);
+  }, [currentCaraReservasMerged, reservadosSearchTerm, reservadosTipoFilter, showOnlyIslaReservados, groupByDistanceReservados, groupModeReservados, groupByDistanceFuncReservados, groupByListFuncReservados, reservadosSortColumn, reservadosSortDirection]);
+
+  // Group reservados by distance (computed from filteredReservados)
+  const groupedReservadosByDistance = useMemo(() => {
+    if (!groupByDistanceReservados) return null;
+
+    const groups: Record<string, ReservaItem[]> = {};
+    filteredReservados.forEach(r => {
+      const groupName = r.grupo || 'Sin grupo';
+      if (!groups[groupName]) groups[groupName] = [];
+      groups[groupName].push(r);
+    });
+
+    return Object.entries(groups).sort((a, b) => {
+      const numA = parseInt(a[0].replace('Grupo ', '')) || 999;
+      const numB = parseInt(b[0].replace('Grupo ', '')) || 999;
+      return numA - numB;
+    });
+  }, [filteredReservados, groupByDistanceReservados]);
 
   // Group reservados by Catorcena > Artículo > Plaza > Formato (hierarchical)
   const groupedReservadosHierarchy = useMemo(() => {
@@ -2489,9 +2768,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const hierarchy: Level0 = {};
 
     filteredReservados.forEach(r => {
-      const catorcenaKey = tipoPeriodo === 'mensual' && r.catorcena >= 1 && r.catorcena <= 12
-        ? `${MESES_LABEL[r.catorcena - 1]} ${r.anio}`
-        : `Cat ${r.catorcena} / ${r.anio}`;
+      const catorcenaKey = `Cat ${r.catorcena}/${r.anio}`;
       const articuloKey = r.articulo || 'Sin Artículo';
       const plazaKey = r.plaza || 'Sin Plaza';
       const formatoKey = r.formato || 'Sin Formato';
@@ -2505,7 +2782,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
 
     return hierarchy;
-  }, [filteredReservados, tipoPeriodo]);
+  }, [filteredReservados]);
 
   // Helper to get type breakdown for reservados tab
   const getReservadosBreakdown = (items: ReservaItem[]) => {
@@ -2615,6 +2892,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     }
   };
 
+  // Toggle distance group expansion (reservados)
+  const toggleGroupExpansionReservados = (groupName: string) => {
+    setExpandedGroupsReservados(prev => {
+      const next = new Set(prev);
+      if (next.has(groupName)) next.delete(groupName);
+      else next.add(groupName);
+      return next;
+    });
+  };
+
+  // Toggle all items in a distance group (reservados)
+  const toggleAllInGroupReservados = (items: ReservaItem[]) => {
+    const allSelected = items.every(r => selectedReservados.has(r.id));
+    setSelectedReservados(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        items.forEach(r => next.delete(r.id));
+      } else {
+        items.forEach(r => next.add(r.id));
+      }
+      return next;
+    });
+  };
+
   // Toggle single reservado selection
   const handleToggleReservadoSelection = (id: string) => {
     const newSet = new Set(selectedReservados);
@@ -2628,6 +2929,45 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Remove a reserva - IMMEDIATE DELETE
   const handleRemoveReserva = (reservaId: string) => {
+    // Handle "completo" grouped items (muebles completos)
+    if (reservaId.startsWith('completo-')) {
+      const grupoId = Number(reservaId.replace('completo-', ''));
+      const groupReservas = reservas.filter(r => r.grupo_completo_id === grupoId);
+      const backendIds = groupReservas.filter(r => r.reservaId).map(r => r.reservaId!);
+
+      if (backendIds.length === 0) {
+        setReservas(prev => prev.filter(r => r.grupo_completo_id !== grupoId));
+        return;
+      }
+
+      setConfirmModal({
+        isOpen: true,
+        title: 'Eliminar Mueble Completo',
+        message: `¿Seguro que quieres eliminar este mueble completo? (${groupReservas.length} reservas)`,
+        confirmText: 'Eliminar',
+        isDestructive: true,
+        onConfirm: async () => {
+          setIsSaving(true);
+          try {
+            await campanasService.deleteReservas(campana!.id, backendIds);
+            queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+            queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
+            handleRefetchDisponibles();
+
+            setReservas(prev => prev.filter(r => r.grupo_completo_id !== grupoId));
+            showToast('Mueble completo eliminado correctamente', 'success');
+          } catch (error) {
+            console.error('Error deleting grupo completo:', error);
+            showToast('Error al eliminar mueble completo', 'error');
+          } finally {
+            setIsSaving(false);
+            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          }
+        }
+      });
+      return;
+    }
+
     const reserva = reservas.find(r => r.id === reservaId);
     if (!reserva || !reserva.reservaId) {
       setReservas(prev => prev.filter(r => r.id !== reservaId));
@@ -2641,10 +2981,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
+        setIsSaving(true);
         try {
           await campanasService.deleteReservas(campana!.id, [reserva.reservaId!]);
-          queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana?.id] });
-          queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana?.id] });
+          queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+          queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
           handleRefetchDisponibles();
 
           setReservas(prev => prev.filter(r => r.id !== reservaId));
@@ -2653,6 +2994,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           console.error('Error deleting reserva:', error);
           showToast('Error al eliminar reserva', 'error');
         } finally {
+          setIsSaving(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         }
       }
@@ -2686,7 +3028,69 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     setEditingPlaza('');
   };
 
-  if (!isOpen || !campana) return null;
+  // Bulk delete selected reservas
+  const handleBulkDeleteReservas = () => {
+    // Expand "completo-" IDs to their individual reservas
+    const expandedIds = new Set<string>();
+    selectedReservados.forEach(id => {
+      if (id.startsWith('completo-')) {
+        const grupoId = Number(id.replace('completo-', ''));
+        reservas.filter(r => r.grupo_completo_id === grupoId).forEach(r => expandedIds.add(r.id));
+      } else {
+        expandedIds.add(id);
+      }
+    });
+    // Get selected reservas
+    const selectedReservasList = reservas.filter(r => expandedIds.has(r.id));
+    if (selectedReservasList.length === 0) return;
+
+    // Separate reservas with backend IDs from those without
+    const reservasWithBackendId = selectedReservasList.filter(r => r.reservaId);
+    const reservasLocalOnly = selectedReservasList.filter(r => !r.reservaId);
+    const backendIds = reservasWithBackendId.map(r => r.reservaId!);
+
+    // If all are local-only (not saved to DB yet), just remove from state
+    if (backendIds.length === 0) {
+      setReservas(prev => prev.filter(r => !expandedIds.has(r.id)));
+      setSelectedReservados(new Set());
+      showToast(`${selectedReservasList.length} reservas eliminadas`, 'success');
+      return;
+    }
+
+    // Show confirmation for backend deletion
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Reservas',
+      message: `¿Seguro que quieres eliminar ${selectedReservasList.length} reserva(s)?${reservasLocalOnly.length > 0 ? ` (${reservasLocalOnly.length} pendientes + ${backendIds.length} guardadas)` : ''}`,
+      confirmText: 'Eliminar',
+      isDestructive: true,
+      onConfirm: async () => {
+        setIsSaving(true);
+        try {
+          // Delete from backend if there are any with reservaId
+          if (backendIds.length > 0) {
+            await campanasService.deleteReservas(campana!.id, backendIds);
+            queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+            queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
+            handleRefetchDisponibles();
+          }
+
+          // Remove all selected from local state
+          setReservas(prev => prev.filter(r => !expandedIds.has(r.id)));
+          setSelectedReservados(new Set());
+          showToast(`${selectedReservasList.length} reserva(s) eliminada(s) correctamente`, 'success');
+        } catch (error) {
+          console.error('Error deleting reservas:', error);
+          showToast('Error al eliminar reservas', 'error');
+        } finally {
+          setIsSaving(false);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
+  };
+
+  if (!isOpen) return null;
 
   // Confirmation modal content reused in both views
   const confirmModalJSX = confirmModal.isOpen && (
@@ -2833,25 +3237,25 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 </div>
               </div>
 
-              {/* Bonificacion KPI */}
+              {/* Bonificacion/Cortesia KPI */}
               <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-zinc-400 flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                    Bonificación
+                    <div className={`w-2 h-2 rounded-full ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500' : 'bg-emerald-500'}`} />
+                    {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                   </span>
-                  <span className="text-sm font-bold text-emerald-400">
+                  <span className={`text-sm font-bold ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'}`}>
                     {(selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion} / {selectedCaraForSearch?.bonificacion || 0}
                   </span>
                 </div>
                 <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all"
+                    className={`h-full bg-gradient-to-r ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'from-cyan-500 to-cyan-400' : 'from-emerald-500 to-emerald-400'} rounded-full transition-all`}
                     style={{ width: `${Math.min(100, ((selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion) / (selectedCaraForSearch?.bonificacion || 1) * 100)}%` }}
                   />
                 </div>
                 <div className="mt-1 text-xs text-zinc-500">
-                  <span className="text-emerald-400 font-medium">{remainingToAssign.bonificacion}</span> restantes
+                  <span className={`${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'} font-medium`}>{remainingToAssign.bonificacion}</span> restantes
                 </div>
               </div>
 
@@ -2921,21 +3325,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                   <div className="w-px h-6 bg-zinc-700" />
 
-                  {/* Unique filter */}
-                  <button
-                    onClick={() => { setShowOnlyUnicos(!showOnlyUnicos); if (!showOnlyUnicos) setShowOnlyCompletos(false); }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicos
-                      ? 'bg-cyan-500 text-white shadow'
-                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
-                      }`}
-                  >
-                    <Grid className="h-3.5 w-3.5" />
-                    Únicos
-                    {showOnlyUnicos && (
-                      <X className="h-3 w-3 ml-0.5 hover:text-cyan-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicos(false); }} />
-                    )}
-                  </button>
-
                   {/* Complete filter */}
                   <button
                     onClick={() => { setShowOnlyCompletos(!showOnlyCompletos); if (!showOnlyCompletos) setShowOnlyUnicos(false); }}
@@ -2951,7 +3340,81 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     )}
                   </button>
 
-                  {/* Distance grouping */}
+                  {/* Unique filter for traditional items - only show when there are traditional items */}
+                  {hasTradicionalInventory && (
+                    <button
+                      onClick={() => { setShowOnlyUnicos(!showOnlyUnicos); if (!showOnlyUnicos) setShowOnlyCompletos(false); }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicos
+                        ? 'bg-cyan-500 text-white shadow'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        }`}
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      Únicos
+                      {showOnlyUnicos && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-cyan-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicos(false); }} />
+                      )}
+                    </button>
+                  )}
+
+                  {/* Unique digital filter - only show when there are digital items */}
+                  {hasDigitalInventory && (
+                    <button
+                      onClick={() => setShowOnlyUnicosDigitales(!showOnlyUnicosDigitales)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicosDigitales
+                        ? 'bg-orange-500 text-white shadow'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        }`}
+                    >
+                      <Monitor className="h-3.5 w-3.5" />
+                      Únicos Digitales
+                      {showOnlyUnicosDigitales && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-orange-200" onClick={(e) => { e.stopPropagation(); setShowOnlyUnicosDigitales(false); }} />
+                      )}
+                    </button>
+                  )}
+
+                  {/* Spot único filter - only show when there are digital items */}
+                  {hasDigitalInventory && (
+                    <button
+                      onClick={() => setShowSpotUnico(!showSpotUnico)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showSpotUnico
+                        ? 'bg-violet-500 text-white shadow'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        }`}
+                      title="Mostrar inventarios digitales una sola vez con indicador de spots disponibles"
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      Spot único
+                      {showSpotUnico && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-violet-200" onClick={(e) => { e.stopPropagation(); setShowSpotUnico(false); }} />
+                      )}
+                    </button>
+                  )}
+
+                  {/* Isla filter */}
+                  <button
+                    onClick={() => {
+                      setShowOnlyIsla(!showOnlyIsla);
+                      // When activating isla filter, auto-sort by codigo ascending
+                      if (!showOnlyIsla) {
+                        setSortColumn('codigo_unico');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyIsla
+                      ? 'bg-teal-500 text-white shadow'
+                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                      }`}
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                    Isla
+                    {showOnlyIsla && (
+                      <X className="h-3 w-3 ml-0.5 hover:text-teal-200" onClick={(e) => { e.stopPropagation(); setShowOnlyIsla(false); }} />
+                    )}
+                  </button>
+
+                  {/* Grouping */}
                   <button
                     onClick={() => setGroupByDistance(!groupByDistance)}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${groupByDistance
@@ -2967,16 +3430,32 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </button>
                   {groupByDistance && (
                     <>
-                      <select
-                        value={distanciaGrupos}
-                        onChange={(e) => setDistanciaGrupos(parseInt(e.target.value))}
-                        className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
-                      >
-                        <option value={100}>100m</option>
-                        <option value={200}>200m</option>
-                        <option value={500}>500m</option>
-                        <option value={1000}>1km</option>
-                      </select>
+                      <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                        <button
+                          onClick={() => setGroupMode('distancia')}
+                          className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupMode === 'distancia' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                        >
+                          Distancia
+                        </button>
+                        <button
+                          onClick={() => setGroupMode('listado')}
+                          className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupMode === 'listado' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                        >
+                          Listado
+                        </button>
+                      </div>
+                      {groupMode === 'distancia' && (
+                        <select
+                          value={distanciaGrupos}
+                          onChange={(e) => setDistanciaGrupos(parseInt(e.target.value))}
+                          className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        >
+                          <option value={100}>100m</option>
+                          <option value={200}>200m</option>
+                          <option value={500}>500m</option>
+                          <option value={1000}>1km</option>
+                        </select>
+                      )}
                       <input
                         type="number"
                         value={tamanoGrupo}
@@ -2984,6 +3463,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
                         min={2}
                         max={50}
+                        title="Tamaño de grupo"
                       />
                     </>
                   )}
@@ -3059,7 +3539,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     </span>
 
                     {/* Clear all filters */}
-                    {(flujoFilter !== 'Todos' || showOnlyUnicos || showOnlyCompletos || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
+                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicos || showOnlyUnicosDigitales || showSpotUnico || showOnlyIsla || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
                       <button
                         onClick={clearAllFilters}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -3162,7 +3642,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                   if (selectedInventory.size === processedInventory.length) {
                                     setSelectedInventory(new Set());
                                   } else {
-                                    setSelectedInventory(new Set(processedInventory.map(i => i.id)));
+                                    setSelectedInventory(new Set(processedInventory.map(i => getInventoryKey(i))));
                                   }
                                 }}
                                 className="checkbox-purple"
@@ -3180,6 +3660,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 {sortColumn !== 'codigo_unico' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
                               </div>
                             </th>
+                            {hasDigitalInventory && (
+                              <th className="px-3 py-2 text-left text-xs text-zinc-400 font-medium">
+                                Espacio
+                              </th>
+                            )}
                             <th
                               className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
                               onClick={() => handleSort('tipo_de_cara')}
@@ -3202,6 +3687,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                   sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
                                 )}
                                 {sortColumn !== 'plaza' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                              </div>
+                            </th>
+                            <th
+                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              onClick={() => handleSort('isla')}
+                            >
+                              <div className="flex items-center gap-1">
+                                Isla
+                                {sortColumn === 'isla' && (
+                                  sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                                )}
+                                {sortColumn !== 'isla' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
                               </div>
                             </th>
                             <th
@@ -3240,7 +3737,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                   className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
                                   onClick={() => toggleGroupExpansion(groupName)}
                                 >
-                                  <td colSpan={6} className="px-3 py-2">
+                                  <td colSpan={hasDigitalInventory ? 8 : 7} className="px-3 py-2">
                                     <div className="flex items-center gap-3">
                                       {expandedGroups.has(groupName) ? (
                                         <ChevronDown className="h-4 w-4 text-purple-400" />
@@ -3258,7 +3755,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         }}
                                         className="ml-auto text-xs text-purple-400 hover:text-purple-300"
                                       >
-                                        {items.every(inv => selectedInventory.has(inv.id)) ? 'Deseleccionar' : 'Seleccionar todos'}
+                                        {items.every(inv => selectedInventory.has(getInventoryKey(inv))) ? 'Deseleccionar' : 'Seleccionar todos'}
                                       </button>
                                     </div>
                                   </td>
@@ -3266,9 +3763,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 {/* Group Items */}
                                 {expandedGroups.has(groupName) && items.map((inv) => (
                                   <tr
-                                    key={inv.id}
-                                    onClick={() => toggleInventorySelection(inv.id)}
-                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(inv.id)
+                                    key={getInventoryKey(inv)}
+                                    onClick={() => toggleInventorySelection(getInventoryKey(inv))}
+                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(getInventoryKey(inv))
                                       ? 'bg-purple-500/10'
                                       : inv.ya_reservado_para_cara
                                         ? 'bg-green-500/5'
@@ -3278,13 +3775,26 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     <td className="px-3 py-2 pl-8">
                                       <input
                                         type="checkbox"
-                                        checked={selectedInventory.has(inv.id)}
-                                        onChange={() => toggleInventorySelection(inv.id)}
+                                        checked={selectedInventory.has(getInventoryKey(inv))}
+                                        onChange={() => toggleInventorySelection(getInventoryKey(inv))}
                                         onClick={(e) => e.stopPropagation()}
                                         className="checkbox-purple"
                                       />
                                     </td>
                                     <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                    {hasDigitalInventory && (
+                                      <td className="px-3 py-2 text-zinc-400 text-xs">
+                                        {inv.isCollapsedSpot ? (
+                                          <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
+                                            {inv.spots_disponibles}/{inv.total_espacios}
+                                          </span>
+                                        ) : inv.numero_espacio && inv.total_espacios ? (
+                                          <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
+                                            {inv.numero_espacio} de {inv.total_espacios}
+                                          </span>
+                                        ) : '-'}
+                                      </td>
+                                    )}
                                     <td className="px-3 py-2">
                                       <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Completo'
                                         ? 'bg-purple-500/20 text-purple-300'
@@ -3294,6 +3804,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       </span>
                                     </td>
                                     <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
+                                    <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
                                       {inv.ubicacion}
@@ -3306,9 +3817,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             // Normal flat view
                             processedInventory.map((inv) => (
                               <tr
-                                key={inv.id}
-                                onClick={() => toggleInventorySelection(inv.id)}
-                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(inv.id)
+                                key={getInventoryKey(inv)}
+                                onClick={() => toggleInventorySelection(getInventoryKey(inv))}
+                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(getInventoryKey(inv))
                                   ? 'bg-purple-500/10'
                                   : inv.ya_reservado_para_cara
                                     ? 'bg-green-500/5'
@@ -3318,13 +3829,26 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 <td className="px-3 py-2">
                                   <input
                                     type="checkbox"
-                                    checked={selectedInventory.has(inv.id)}
-                                    onChange={() => toggleInventorySelection(inv.id)}
+                                    checked={selectedInventory.has(getInventoryKey(inv))}
+                                    onChange={() => toggleInventorySelection(getInventoryKey(inv))}
                                     onClick={(e) => e.stopPropagation()}
                                     className="checkbox-purple"
                                   />
                                 </td>
                                 <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                {hasDigitalInventory && (
+                                  <td className="px-3 py-2 text-zinc-400 text-xs">
+                                    {inv.isCollapsedSpot ? (
+                                      <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
+                                        {inv.spots_disponibles}/{inv.total_espacios}
+                                      </span>
+                                    ) : inv.numero_espacio && inv.total_espacios ? (
+                                      <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
+                                        {inv.numero_espacio} de {inv.total_espacios}
+                                      </span>
+                                    ) : '-'}
+                                  </td>
+                                )}
                                 <td className="px-3 py-2">
                                   <span className={`px-2 py-0.5 rounded-full text-xs ${inv.tipo_de_cara === 'Completo'
                                     ? 'bg-purple-500/20 text-purple-300'
@@ -3334,6 +3858,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                   </span>
                                 </td>
                                 <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
+                                <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
                                   {inv.ubicacion}
@@ -3369,17 +3894,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       <button
                         onClick={handleReserveAsBonificacion}
                         disabled={isSaving || selectedInventory.size === 0 || remainingToAssign.bonificacion <= 0}
-                        className="flex-1 px-4 py-2.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-sm font-medium hover:bg-emerald-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className={`flex-1 px-4 py-2.5 ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/30' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30'} border rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
                       >
                         {isSaving ? (
                           <>
-                            <div className="h-4 w-4 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin" />
+                            <div className={`h-4 w-4 border-2 ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'border-cyan-300' : 'border-emerald-300'} border-t-transparent rounded-full animate-spin`} />
                             Guardando...
                           </>
                         ) : (
                           <>
                             <Gift className="h-4 w-4" />
-                            Bonificación
+                            {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                           </>
                         )}
                       </button>
@@ -3392,8 +3917,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   {mapsLoaded ? (
                     <AdvancedMapComponent
                       inventarios={processedInventory}
-                      selectedInventory={selectedInventory}
-                      onToggleSelection={toggleInventorySelection}
+                      selectedInventory={new Set(Array.from(selectedInventory).map(key => parseInt(key.split('_')[0])))}
+                      onToggleSelection={(id: number) => {
+                        const inv = processedInventory.find(i => i.id === id);
+                        if (inv) toggleInventorySelection(getInventoryKey(inv));
+                      }}
                       mapCenter={mapCenter}
                       onFilterByPOI={handlePOIFilter}
                       hasPOIFilter={poiFilterIds !== null}
@@ -3425,16 +3953,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         className="w-full pl-9 pr-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                       />
                     </div>
-                    {selectedReservados.size > 0 && (
+                    {effectiveCanEdit && selectedReservados.size > 0 && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-purple-400 px-2 py-1 bg-purple-500/20 rounded-full">
                           {selectedReservados.size} seleccionados
                         </span>
                         <button
-                          onClick={() => {
-                            setReservas(prev => prev.filter(r => !selectedReservados.has(r.id)));
-                            setSelectedReservados(new Set());
-                          }}
+                          onClick={handleBulkDeleteReservas}
                           className="flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30 transition-colors"
                         >
                           <Trash2 className="h-3 w-3" />
@@ -3446,17 +3971,99 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                   {/* Row 2: Filters and Tools */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    {/* Type Filter */}
-                    <select
-                      value={reservadosTipoFilter}
-                      onChange={(e) => setReservadosTipoFilter(e.target.value as any)}
-                      className="px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                    {/* Type Filter - Toggle Buttons */}
+                    <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                      {(['Todos', 'Flujo', 'Contraflujo', 'Bonificacion'] as const).map(opt => (
+                        <button
+                          key={opt}
+                          onClick={() => setReservadosTipoFilter(opt)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${reservadosTipoFilter === opt
+                            ? opt === 'Todos' ? 'bg-zinc-600 text-white shadow'
+                              : opt === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500 text-white shadow' : 'bg-emerald-500 text-white shadow')
+                              : 'bg-blue-500 text-white shadow'
+                            : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
+                          }`}
+                        >
+                          {opt === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif.') : opt}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Isla filter */}
+                    <button
+                      onClick={() => {
+                        setShowOnlyIslaReservados(!showOnlyIslaReservados);
+                        // When activating isla filter, auto-sort by codigo ascending
+                        if (!showOnlyIslaReservados) {
+                          setReservadosSortColumn('codigo');
+                          setReservadosSortDirection('asc');
+                        }
+                      }}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyIslaReservados
+                        ? 'bg-teal-500 text-white shadow'
+                        : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white'
+                        }`}
                     >
-                      <option value="Todos">Todos los tipos</option>
-                      <option value="Flujo">Flujo</option>
-                      <option value="Contraflujo">Contraflujo</option>
-                      <option value="Bonificacion">Bonificación</option>
-                    </select>
+                      <MapPin className="h-3 w-3" />
+                      Isla
+                      {showOnlyIslaReservados && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-teal-200" onClick={(e) => { e.stopPropagation(); setShowOnlyIslaReservados(false); }} />
+                      )}
+                    </button>
+
+                    {/* Grouping */}
+                    <button
+                      onClick={() => setGroupByDistanceReservados(!groupByDistanceReservados)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${groupByDistanceReservados
+                        ? 'bg-green-500 text-white shadow'
+                        : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white'
+                        }`}
+                    >
+                      <Ruler className="h-3.5 w-3.5" />
+                      Agrupar
+                      {groupByDistanceReservados && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-green-200" onClick={(e) => { e.stopPropagation(); setGroupByDistanceReservados(false); }} />
+                      )}
+                    </button>
+                    {groupByDistanceReservados && (
+                      <>
+                        <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                          <button
+                            onClick={() => setGroupModeReservados('distancia')}
+                            className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupModeReservados === 'distancia' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                          >
+                            Distancia
+                          </button>
+                          <button
+                            onClick={() => setGroupModeReservados('listado')}
+                            className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupModeReservados === 'listado' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                          >
+                            Listado
+                          </button>
+                        </div>
+                        {groupModeReservados === 'distancia' && (
+                          <select
+                            value={distanciaGruposReservados}
+                            onChange={(e) => setDistanciaGruposReservados(parseInt(e.target.value))}
+                            className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                          >
+                            <option value={100}>100m</option>
+                            <option value={200}>200m</option>
+                            <option value={500}>500m</option>
+                            <option value={1000}>1km</option>
+                          </select>
+                        )}
+                        <input
+                          type="number"
+                          value={tamanoGrupoReservados}
+                          onChange={(e) => setTamanoGrupoReservados(parseInt(e.target.value) || 10)}
+                          className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                          min={2}
+                          max={50}
+                          title="Tamaño de grupo"
+                        />
+                      </>
+                    )}
 
                     {/* Sort */}
                     <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1">
@@ -3481,23 +4088,39 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </button>
                     </div>
 
-                    {/* Expand/Collapse All */}
+                    {/* Toggle Grouped/Flat View */}
                     <button
-                      onClick={toggleAllCiudadGroups}
-                      className="flex items-center gap-1 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-400 hover:text-white transition-colors"
+                      onClick={() => setShowReservasFlatList(!showReservasFlatList)}
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                        showReservasFlatList
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                          : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white'
+                      }`}
+                      title={showReservasFlatList ? 'Mostrar agrupado' : 'Mostrar lista plana'}
                     >
-                      {expandedCiudadGroups.size === groupedReservados.length ? (
-                        <>
-                          <ChevronUp className="h-3 w-3" />
-                          Colapsar
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="h-3 w-3" />
-                          Expandir
-                        </>
-                      )}
+                      <Layers className="h-3 w-3" />
+                      {showReservasFlatList ? 'Agrupar' : 'Lista Plana'}
                     </button>
+
+                    {/* Expand/Collapse All - Only show when grouped */}
+                    {!showReservasFlatList && (
+                      <button
+                        onClick={toggleAllReservadosHierarchy}
+                        className="flex items-center gap-1 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-400 hover:text-white transition-colors"
+                      >
+                        {expandedReservadosHierarchy.size > 0 ? (
+                          <>
+                            <ChevronUp className="h-3 w-3" />
+                            Colapsar
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="h-3 w-3" />
+                            Expandir
+                          </>
+                        )}
+                      </button>
+                    )}
 
                     {/* Results count */}
                     <span className="text-xs text-zinc-500 ml-auto">
@@ -3528,111 +4151,387 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Código</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Tipo</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Formato</th>
+                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Isla</th>
                           <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Ubicación</th>
-                          <th className="px-4 py-3 text-center text-xs text-zinc-400 font-medium">Acciones</th>
+                          {effectiveCanEdit && <th className="px-4 py-3 text-center text-xs text-zinc-400 font-medium">Acciones</th>}
                         </tr>
                       </thead>
                       <tbody>
-                        {/* Grouped by Ciudad */}
-                        {groupedReservados.map(([ciudad, items]) => (
-                          <React.Fragment key={ciudad}>
-                            {/* Ciudad Group Header */}
-                            <tr
-                              className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
-                              onClick={() => toggleCiudadGroupExpansion(ciudad)}
-                            >
-                              <td colSpan={6} className="px-3 py-2">
-                                <div className="flex items-center gap-3">
-                                  {expandedCiudadGroups.has(ciudad) ? (
-                                    <ChevronDown className="h-4 w-4 text-purple-400" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4 text-purple-400" />
-                                  )}
-                                  <MapPin className="h-4 w-4 text-zinc-500" />
-                                  <span className="text-sm font-medium text-white">{ciudad}</span>
-                                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
-                                    {items.length} reservas
-                                  </span>
-                                </div>
-                              </td>
-                            </tr>
-                            {/* Ciudad Items */}
-                            {expandedCiudadGroups.has(ciudad) && items.map((reserva) => {
-                              const hasAPS = !!(reserva.aps && reserva.aps > 0);
-                              return (
+                        {/* Distance Grouped View */}
+                        {groupByDistanceReservados && groupedReservadosByDistance ? (
+                          groupedReservadosByDistance.map(([groupName, items]) => (
+                            <React.Fragment key={groupName}>
+                              {/* Group Header */}
                               <tr
-                                key={reserva.id}
-                                onClick={() => !hasAPS && handleToggleReservadoSelection(reserva.id)}
-                                className={`border-b border-zinc-800/50 transition-colors ${
-                                  hasAPS
-                                    ? 'bg-cyan-500/5 border-l-2 border-cyan-500'
-                                    : selectedReservados.has(reserva.id)
-                                      ? 'bg-purple-500/10 cursor-pointer'
-                                      : 'hover:bg-zinc-800/30 cursor-pointer'
-                                }`}
+                                className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
+                                onClick={() => toggleGroupExpansionReservados(groupName)}
                               >
-                                <td className="px-3 py-3 pl-8 text-center" onClick={(e) => e.stopPropagation()}>
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedReservados.has(reserva.id)}
-                                    onChange={() => !hasAPS && handleToggleReservadoSelection(reserva.id)}
-                                    disabled={hasAPS}
-                                    className={hasAPS ? 'opacity-50 cursor-not-allowed' : 'checkbox-purple'}
-                                  />
-                                </td>
-                                <td className="px-4 py-3 text-zinc-300 font-mono text-sm">
-                                  <div className="flex items-center gap-2">
-                                    {reserva.codigo_unico}
-                                    {hasAPS && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded text-[10px] font-medium">
-                                        APS
-                                      </span>
+                                <td colSpan={effectiveCanEdit ? 7 : 6} className="px-3 py-2">
+                                  <div className="flex items-center gap-3">
+                                    {expandedGroupsReservados.has(groupName) ? (
+                                      <ChevronDown className="h-4 w-4 text-green-400" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-green-400" />
                                     )}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <span className={`px-2 py-1 rounded-full text-xs ${
-                                    reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
-                                    }`}>
-                                    {reserva.tipo}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-zinc-300">{reserva.formato || '-'}</td>
-                                <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
-                                  {reserva.ubicacion || '-'}
-                                </td>
-                                <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center justify-center gap-1">
+                                    <span className="text-sm font-medium text-white">{groupName}</span>
+                                    <span className="px-2 py-0.5 bg-green-500/20 text-green-300 rounded-full text-xs">
+                                      {items.length} sitios
+                                    </span>
                                     <button
-                                      onClick={() => !hasAPS && handleEditReserva(reserva)}
-                                      disabled={hasAPS}
-                                      className={`p-1.5 rounded-lg transition-colors ${
-                                        hasAPS
-                                          ? 'text-zinc-600 cursor-not-allowed'
-                                          : 'text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10'
-                                      }`}
-                                      title={hasAPS ? 'Bloqueado - tiene APS asignado' : 'Editar formato'}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleAllInGroupReservados(items);
+                                      }}
+                                      className="ml-auto text-xs text-green-400 hover:text-green-300"
                                     >
-                                      <Pencil className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => !hasAPS && handleRemoveReserva(reserva.id)}
-                                      disabled={hasAPS}
-                                      className={`p-1.5 rounded-lg transition-colors ${
-                                        hasAPS
-                                          ? 'text-zinc-600 cursor-not-allowed'
-                                          : 'text-zinc-500 hover:text-red-400 hover:bg-red-500/10'
-                                      }`}
-                                      title={hasAPS ? 'Bloqueado - tiene APS asignado' : 'Quitar reserva'}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
+                                      {items.every(r => selectedReservados.has(r.id)) ? 'Deseleccionar' : 'Seleccionar todos'}
                                     </button>
                                   </div>
                                 </td>
                               </tr>
-                            );})}
-                          </React.Fragment>
-                        ))}
+                              {/* Group Items */}
+                              {expandedGroupsReservados.has(groupName) && items.map((reserva) => (
+                                <tr
+                                  key={reserva.id}
+                                  className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer ${
+                                    selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : ''
+                                  }`}
+                                  onClick={() => handleToggleReservadoSelection(reserva.id)}
+                                >
+                                  <td className="px-3 py-2 pl-8">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedReservados.has(reserva.id)}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleReservadoSelection(reserva.id);
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="checkbox-purple"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <span className="text-sm text-white font-medium">{reserva.codigo_unico}</span>
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <span className={`px-2 py-1 rounded-full text-xs ${
+                                      reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
+                                    }`}>
+                                      {reserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : reserva.tipo}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
+                                  <td className="px-4 py-2 text-sm text-zinc-400">{reserva.isla || '-'}</td>
+                                  <td className="px-4 py-2 text-sm text-zinc-400">{reserva.plaza}</td>
+                                  {effectiveCanEdit && (
+                                    <td className="px-4 py-2 text-center">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleRemoveReserva(reserva.id); }}
+                                        className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                                        title="Eliminar"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          ))
+                        ) : showReservasFlatList ? (
+                          /* Flat List View */
+                          filteredReservados.map((reserva) => (
+                            <tr
+                              key={reserva.id}
+                              className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer ${
+                                selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : ''
+                              } ${selectedMapReservas.has(reserva.id) ? 'ring-1 ring-purple-500' : ''}`}
+                              onClick={() => handleToggleReservadoSelection(reserva.id)}
+                            >
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedReservados.has(reserva.id)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleReservadoSelection(reserva.id);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="checkbox-purple"
+                                />
+                              </td>
+                              <td className="px-4 py-2">
+                                <span className="text-sm text-white font-medium">{reserva.codigo_unico}</span>
+                              </td>
+                              <td className="px-4 py-2">
+                                <span className={`px-2 py-1 rounded-full text-xs ${
+                                  reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
+                                }`}>
+                                  {reserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : reserva.tipo}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
+                              <td className="px-4 py-2 text-sm text-zinc-400">{reserva.isla || '-'}</td>
+                              <td className="px-4 py-2 text-sm text-zinc-400">{reserva.plaza}</td>
+                              {effectiveCanEdit && (
+                                <td className="px-4 py-2 text-center">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleRemoveReserva(reserva.id); }}
+                                    className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))
+                        ) : (
+                          /* Hierarchical: Catorcena > Artículo > Plaza > Formato */
+                          catorcenaKeys.map((catKey) => {
+                            const catItems = flattenHierarchy(groupedReservadosHierarchy[catKey]);
+                            const catBreakdown = getReservadosBreakdown(catItems);
+                            const catExpanded = expandedReservadosHierarchy.has(catKey);
+
+                            return (
+                              <React.Fragment key={catKey}>
+                                {/* Level 0: Catorcena Header */}
+                                <tr
+                                  className="bg-zinc-800/90 cursor-pointer hover:bg-zinc-800"
+                                  onClick={() => toggleReservadosHierarchy(catKey)}
+                                >
+                                  <td colSpan={7} className="px-3 py-2">
+                                    <div className="flex items-center gap-3">
+                                      {catExpanded ? (
+                                        <ChevronDown className="h-4 w-4 text-purple-400" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4 text-purple-400" />
+                                      )}
+                                      <Calendar className="h-4 w-4 text-purple-400" />
+                                      <span className="text-sm font-semibold text-white">{catKey}</span>
+                                      <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
+                                        {catBreakdown.total} caras
+                                      </span>
+                                      <div className="flex gap-1 ml-2">
+                                        {catBreakdown.flujo > 0 && (
+                                          <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                            F:{catBreakdown.flujo}
+                                          </span>
+                                        )}
+                                        {catBreakdown.contraflujo > 0 && (
+                                          <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                            C:{catBreakdown.contraflujo}
+                                          </span>
+                                        )}
+                                        {catBreakdown.bonificacion > 0 && (
+                                          <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                            B:{catBreakdown.bonificacion}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+
+                                {/* Level 1: Artículos */}
+                                {catExpanded && Object.entries(groupedReservadosHierarchy[catKey]).map(([artKey, plazas]) => {
+                                  const artKeyFull = `${catKey}|${artKey}`;
+                                  const artItems = flattenHierarchy(plazas);
+                                const artBreakdown = getReservadosBreakdown(artItems);
+                                const artExpanded = expandedReservadosHierarchy.has(artKeyFull);
+
+                                return (
+                                  <React.Fragment key={artKeyFull}>
+                                    <tr
+                                      className="bg-zinc-800/60 cursor-pointer hover:bg-zinc-800/80"
+                                      onClick={() => toggleReservadosHierarchy(artKeyFull)}
+                                    >
+                                      <td colSpan={7} className="px-3 py-2 pl-8">
+                                        <div className="flex items-center gap-3">
+                                          {artExpanded ? (
+                                            <ChevronDown className="h-4 w-4 text-indigo-400" />
+                                          ) : (
+                                            <ChevronRight className="h-4 w-4 text-indigo-400" />
+                                          )}
+                                          <Package className="h-4 w-4 text-indigo-400" />
+                                          <span className="text-sm font-medium text-zinc-200">{artKey}</span>
+                                          <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-full text-xs">
+                                            {artBreakdown.total}
+                                          </span>
+                                          <div className="flex gap-1 ml-1">
+                                            {artBreakdown.flujo > 0 && (
+                                              <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                                F:{artBreakdown.flujo}
+                                              </span>
+                                            )}
+                                            {artBreakdown.contraflujo > 0 && (
+                                              <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                                C:{artBreakdown.contraflujo}
+                                              </span>
+                                            )}
+                                            {artBreakdown.bonificacion > 0 && (
+                                              <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                                B:{artBreakdown.bonificacion}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+
+                                    {/* Level 2: Plazas */}
+                                    {artExpanded && Object.entries(plazas).map(([plzKey, formatos]) => {
+                                      const plzKeyFull = `${artKeyFull}|${plzKey}`;
+                                      const plzItems = flattenHierarchy(formatos);
+                                      const plzBreakdown = getReservadosBreakdown(plzItems);
+                                      const plzExpanded = expandedReservadosHierarchy.has(plzKeyFull);
+
+                                      return (
+                                        <React.Fragment key={plzKeyFull}>
+                                          <tr
+                                            className="bg-zinc-800/40 cursor-pointer hover:bg-zinc-800/60"
+                                            onClick={() => toggleReservadosHierarchy(plzKeyFull)}
+                                          >
+                                            <td colSpan={7} className="px-3 py-2 pl-14">
+                                              <div className="flex items-center gap-3">
+                                                {plzExpanded ? (
+                                                  <ChevronDown className="h-4 w-4 text-cyan-400" />
+                                                ) : (
+                                                  <ChevronRight className="h-4 w-4 text-cyan-400" />
+                                                )}
+                                                <MapPin className="h-4 w-4 text-cyan-400" />
+                                                <span className="text-sm text-zinc-300">{plzKey}</span>
+                                                <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded-full text-xs">
+                                                  {plzBreakdown.total}
+                                                </span>
+                                                <div className="flex gap-1 ml-1">
+                                                  {plzBreakdown.flujo > 0 && (
+                                                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                                      F:{plzBreakdown.flujo}
+                                                    </span>
+                                                  )}
+                                                  {plzBreakdown.contraflujo > 0 && (
+                                                    <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                                      C:{plzBreakdown.contraflujo}
+                                                    </span>
+                                                  )}
+                                                  {plzBreakdown.bonificacion > 0 && (
+                                                    <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                                      B:{plzBreakdown.bonificacion}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </td>
+                                          </tr>
+
+                                          {/* Level 3: Formatos */}
+                                          {plzExpanded && Object.entries(formatos).map(([fmtKey, items]) => {
+                                            const fmtKeyFull = `${plzKeyFull}|${fmtKey}`;
+                                            const fmtBreakdown = getReservadosBreakdown(items);
+                                            const fmtExpanded = expandedReservadosHierarchy.has(fmtKeyFull);
+
+                                            return (
+                                              <React.Fragment key={fmtKeyFull}>
+                                                <tr
+                                                  className="bg-zinc-800/20 cursor-pointer hover:bg-zinc-800/40"
+                                                  onClick={() => toggleReservadosHierarchy(fmtKeyFull)}
+                                                >
+                                                  <td colSpan={7} className="px-3 py-2 pl-20">
+                                                    <div className="flex items-center gap-3">
+                                                      {fmtExpanded ? (
+                                                        <ChevronDown className="h-4 w-4 text-zinc-500" />
+                                                      ) : (
+                                                        <ChevronRight className="h-4 w-4 text-zinc-500" />
+                                                      )}
+                                                      <LayoutGrid className="h-4 w-4 text-zinc-500" />
+                                                      <span className="text-sm text-zinc-400">{fmtKey}</span>
+                                                      <span className="px-2 py-0.5 bg-zinc-700 text-zinc-300 rounded-full text-xs">
+                                                        {fmtBreakdown.total}
+                                                      </span>
+                                                      <div className="flex gap-1 ml-1">
+                                                        {fmtBreakdown.flujo > 0 && (
+                                                          <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                                                            F:{fmtBreakdown.flujo}
+                                                          </span>
+                                                        )}
+                                                        {fmtBreakdown.contraflujo > 0 && (
+                                                          <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px]">
+                                                            C:{fmtBreakdown.contraflujo}
+                                                          </span>
+                                                        )}
+                                                        {fmtBreakdown.bonificacion > 0 && (
+                                                          <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]">
+                                                            B:{fmtBreakdown.bonificacion}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  </td>
+                                                </tr>
+
+                                                {/* Individual items */}
+                                                {fmtExpanded && items.map((reserva) => (
+                                                  <tr
+                                                    key={reserva.id}
+                                                    onClick={() => handleToggleReservadoSelection(reserva.id)}
+                                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'}`}
+                                                  >
+                                                    <td className="px-3 py-3 pl-24 text-center" onClick={(e) => e.stopPropagation()}>
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={selectedReservados.has(reserva.id)}
+                                                        onChange={() => handleToggleReservadoSelection(reserva.id)}
+                                                        className="checkbox-purple"
+                                                      />
+                                                    </td>
+                                                    <td className="px-4 py-3 text-zinc-300 font-mono text-sm">{reserva.codigo_unico}</td>
+                                                    <td className="px-4 py-3">
+                                                      {reserva.codigo_unico?.includes('_Completo') ? (
+                                                        <span className="px-2 py-1 rounded-full text-xs bg-purple-500/20 text-purple-300">
+                                                          Completo
+                                                        </span>
+                                                      ) : (
+                                                        <span className={`px-2 py-1 rounded-full text-xs ${reserva.tipo === 'Flujo'
+                                                          ? 'bg-blue-500/20 text-blue-300'
+                                                          : reserva.tipo === 'Bonificacion'
+                                                            ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300')
+                                                            : 'bg-amber-500/20 text-amber-300'
+                                                          }`}>
+                                                          {reserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : reserva.tipo}
+                                                        </span>
+                                                      )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-zinc-300">{reserva.formato || '-'}</td>
+                                                    <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
+                                                      {reserva.ubicacion || '-'}
+                                                    </td>
+                                                    {effectiveCanEdit && (
+                                                      <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                                        <button
+                                                          onClick={() => handleRemoveReserva(reserva.id)}
+                                                          className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                          title="Quitar reserva"
+                                                        >
+                                                          <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                      </td>
+                                                    )}
+                                                  </tr>
+                                                ))}
+                                              </React.Fragment>
+                                            );
+                                          })}
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        })
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -3657,10 +4556,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </div>
                       <div>
                         <label className="block text-xs text-zinc-500 mb-1">Tipo</label>
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          editingReserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+                        <span className={`px-2 py-1 rounded-full text-xs ${editingReserva.tipo === 'Flujo'
+                          ? 'bg-blue-500/20 text-blue-300'
+                          : editingReserva.tipo === 'Bonificacion'
+                            ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300')
+                            : 'bg-amber-500/20 text-amber-300'
                           }`}>
-                          {editingReserva.tipo}
+                          {editingReserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : editingReserva.tipo}
                         </span>
                       </div>
                       <div>
@@ -3727,11 +4629,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           <span className="text-blue-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Contraflujo').length}</span> Contraflujo
                         </span>
                         <span className="text-zinc-500">
-                          <span className="text-emerald-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Bonificacion').length}</span> Bonificación
+                          <span className={`${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'} font-medium`}>{currentCaraReservas.filter(r => r.tipo === 'Bonificacion').length}</span> {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                         </span>
                       </div>
                       <span className="text-zinc-400">
-                        Total: <span className="text-white font-medium">{currentCaraReservas.length}</span> reservados
+                        Total: <span className="text-white font-medium">{currentCaraReservasMerged.length}</span> reservados
                       </span>
                     </div>
                   </div>
@@ -3767,7 +4669,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         }
                       }}
                     >
-                      {currentCaraReservas.map(reserva => (
+                      {currentCaraReservasMerged.map(reserva => (
                         reserva.latitud && reserva.longitud && (
                           <Marker
                             key={reserva.id}
@@ -3775,12 +4677,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             icon={{
                               path: google.maps.SymbolPath.CIRCLE,
                               scale: 10,
-                              fillColor: reserva.codigo_unico?.includes('_Completo') ? '#a855f7' : reserva.tipo === 'Flujo' ? '#3b82f6' : reserva.tipo === 'Bonificacion' ? '#10b981' : '#f59e0b',
+                              fillColor: reserva.codigo_unico?.includes('_Completo')
+                                ? '#a855f7' // Purple for Completo
+                                : reserva.tipo === 'Flujo' ? '#3b82f6' : reserva.tipo === 'Bonificacion' ? '#10b981' : '#06b6d4',
                               fillOpacity: 0.9,
                               strokeColor: '#fff',
                               strokeWeight: 2,
                             }}
-                            title={`${reserva.codigo_unico} - ${reserva.tipo}`}
+                            title={`${reserva.codigo_unico} - ${reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo}`}
                           />
                         )
                       ))}
@@ -3798,9 +4702,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Dirección del tráfico</div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
-                          <div>
-                            <span className="text-zinc-300">Flujo / Contraflujo</span>
-                          </div>
+                          <span className="text-zinc-300">Flujo</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-cyan-500 ring-1 ring-cyan-400/30" />
+                          <span className="text-zinc-300">Contraflujo</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
@@ -3817,7 +4723,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-emerald-500 ring-1 ring-emerald-400/30" />
                           <div>
-                            <span className="text-zinc-300">Bonificación</span>
+                            <span className="text-zinc-300">{(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}</span>
                           </div>
                         </div>
                       </div>
@@ -3846,7 +4752,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
           <div>
             <h2 className="text-lg font-semibold text-white">Asignar Inventario</h2>
-            <p className="text-sm text-zinc-400">Campaña #{campana?.id}</p>
+            <p className="text-sm text-zinc-400">Propuesta #{campana!.id}</p>
           </div>
           <div className="flex items-center gap-3">
             
@@ -3869,7 +4775,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50">
                   <h3 className="text-sm font-medium text-white flex items-center gap-2">
                     <FileText className="h-4 w-4 text-purple-400" />
-                    Resumen de Propuesta
+                    Resumen de Campaña
                   </h3>
                 </div>
                 <div className="p-5 space-y-4">
@@ -3884,19 +4790,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <div className="space-y-1">
                       <label className="text-xs text-zinc-500">Razón Social</label>
                       <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30 truncate">
-                        {campanaDetails?.T0_U_RazonSocial || '-'}
+                        {(campanaDetails as any)?.razon_social || '-'}
                       </div>
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs text-zinc-500">Marca</label>
                       <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
-                        {campanaDetails?.T2_U_Marca || '-'}
+                        {(campanaDetails as any)?.marca_nombre || '-'}
                       </div>
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs text-zinc-500">Asesor</label>
                       <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
-                        {campanaDetails?.T0_U_Asesor || '-'}
+                        {(campanaDetails as any)?.asesor || '-'}
                       </div>
                     </div>
                   </div>
@@ -3908,30 +4814,33 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       <input
                         type="text"
                         value={nombreCampania}
-                        onChange={(e) => setNombreCampania(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        onChange={(e) => canEditResumen && setNombreCampania(e.target.value)}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Nombre de la campaña"
                       />
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs text-zinc-500">Asignados</label>
                       {/* Add user button */}
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          const userId = parseInt(e.target.value);
-                          const selectedUser = users?.find((u: UserOption) => u.id === userId);
-                          if (selectedUser && !asignados.find(a => a.id === userId)) {
-                            setAsignados(prev => [...prev, selectedUser]);
-                          }
-                        }}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      >
-                        <option value="">+ Agregar asignado...</option>
-                        {users?.filter((u: UserOption) => !asignados.find(a => a.id === u.id)).map((u: UserOption) => (
-                          <option key={u.id} value={u.id}>{u.nombre} - {u.area}</option>
-                        ))}
-                      </select>
+                      {canEditResumen ? (
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const userId = parseInt(e.target.value);
+                            const selectedUser = users?.find((u: UserOption) => u.id === userId);
+                            if (selectedUser && !asignados.find(a => a.id === userId)) {
+                              setAsignados(prev => [...prev, selectedUser]);
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        >
+                          <option value="">+ Agregar asignado...</option>
+                          {users?.filter((u: UserOption) => !asignados.find(a => a.id === u.id)).map((u: UserOption) => (
+                            <option key={u.id} value={u.id}>{u.nombre} - {u.area}</option>
+                          ))}
+                        </select>
+                      ) : null}
                       {/* Selected users tags */}
                       {asignados.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
@@ -3941,118 +4850,106 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-xs"
                             >
                               {user.nombre}
-                              <button
-                                onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
-                                className="hover:text-white"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
+                              {canEditResumen && (
+                                <button
+                                  onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
+                                  className="hover:text-white"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
                             </span>
                           ))}
+                        </div>
+                      )}
+                      {!canEditResumen && asignados.length === 0 && (
+                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-400 border border-zinc-700/30">
+                          Sin asignados
                         </div>
                       )}
                     </div>
                   </div>
 
                   {/* Period - Same style as EditSolicitudModal */}
-                  {tipoPeriodo === 'mensual' ? (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Fecha Inicio</label>
-                        <input
-                          type="date"
-                          value={campana.fecha_inicio || ''}
-                          readOnly
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none cursor-default opacity-80"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Fecha Fin</label>
-                        <input
-                          type="date"
-                          value={campana.fecha_fin || ''}
-                          readOnly
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none cursor-default opacity-80"
-                        />
-                      </div>
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Año Inicio</label>
+                      <select
+                        value={yearInicio || ''}
+                        onChange={(e) => canEditResumen && (setYearInicio(e.target.value ? parseInt(e.target.value) : undefined), setCatorcenaInicio(undefined))}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        <option value="">Seleccionar</option>
+                        {yearInicioOptions.map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-4 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Año Inicio</label>
-                        <select
-                          value={yearInicio || ''}
-                          onChange={(e) => { setYearInicio(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaInicio(undefined); }}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                        >
-                          <option value="">Seleccionar</option>
-                          {yearInicioOptions.map(y => (
-                            <option key={y} value={y}>{y}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Cat. Inicio</label>
-                        <select
-                          value={catorcenaInicio || ''}
-                          onChange={(e) => setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
-                          disabled={!yearInicio}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                        >
-                          <option value="">Seleccionar</option>
-                          {catorcenasInicioOptions.map(c => (
-                            <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Año Fin</label>
-                        <select
-                          value={yearFin || ''}
-                          onChange={(e) => { setYearFin(e.target.value ? parseInt(e.target.value) : undefined); setCatorcenaFin(undefined); }}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                        >
-                          <option value="">Seleccionar</option>
-                          {yearFinOptions.map(y => (
-                            <option key={y} value={y}>{y}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Cat. Fin</label>
-                        <select
-                          value={catorcenaFin || ''}
-                          onChange={(e) => setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
-                          disabled={!yearFin}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50"
-                        >
-                          <option value="">Seleccionar</option>
-                          {catorcenasFinOptions.map(c => (
-                            <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
-                          ))}
-                        </select>
-                      </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Cat. Inicio</label>
+                      <select
+                        value={catorcenaInicio || ''}
+                        onChange={(e) => canEditResumen && setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
+                        disabled={!canEditResumen || !yearInicio}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50 ${!canEditResumen ? 'cursor-not-allowed' : ''}`}
+                      >
+                        <option value="">Seleccionar</option>
+                        {catorcenasInicioOptions.map(c => (
+                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                        ))}
+                      </select>
                     </div>
-                  )}
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Año Fin</label>
+                      <select
+                        value={yearFin || ''}
+                        onChange={(e) => canEditResumen && (setYearFin(e.target.value ? parseInt(e.target.value) : undefined), setCatorcenaFin(undefined))}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        <option value="">Seleccionar</option>
+                        {yearFinOptions.map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Cat. Fin</label>
+                      <select
+                        value={catorcenaFin || ''}
+                        onChange={(e) => canEditResumen && setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
+                        disabled={!canEditResumen || !yearFin}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50 ${!canEditResumen ? 'cursor-not-allowed' : ''}`}
+                      >
+                        <option value="">Seleccionar</option>
+                        {catorcenasFinOptions.map(c => (
+                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
 
                   {/* Notes and Description */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Notas</label>
+                      <label className="text-xs text-zinc-500">Notas Dirección</label>
                       <textarea
                         value={notas}
-                        onChange={(e) => setNotas(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20"
+                        onChange={(e) => canEditResumen && setNotas(e.target.value)}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Notas adicionales..."
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Descripción</label>
+                      <label className="text-xs text-zinc-500">Descripción Trafico</label>
                       <textarea
                         value={descripcion}
-                        onChange={(e) => setDescripcion(e.target.value)}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20"
-                        placeholder="Descripción de la campana..."
+                        onChange={(e) => canEditResumen && setDescripcion(e.target.value)}
+                        disabled={!canEditResumen}
+                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        placeholder="Descripción de la campaña..."
                       />
                     </div>
                   </div>
@@ -4108,24 +5005,28 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           >
                             <Download className="h-4 w-4" />
                           </a>
-                          <button
-                            type="button"
-                            onClick={() => archivoInputRef.current?.click()}
-                            className="px-3 py-2 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
-                          >
-                            Cambiar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setArchivoCampana(null); setTipoArchivoCampana(null); }}
-                            className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {canEditResumen && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => archivoInputRef.current?.click()}
+                                className="px-3 py-2 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
+                              >
+                                Cambiar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setArchivoCampana(null); setTipoArchivoCampana(null); }}
+                                className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
-                    ) : (
+                    ) : canEditResumen ? (
                       <button
                         type="button"
                         onClick={() => archivoInputRef.current?.click()}
@@ -4134,33 +5035,38 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <Upload className="h-5 w-5" />
                         <span className="text-sm">Seleccionar archivo</span>
                       </button>
+                    ) : (
+                      <div className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-zinc-700/50 rounded-xl text-zinc-500">
+                        <span className="text-sm">Sin archivo adjunto</span>
+                      </div>
                     )}
                   </div>
 
                   {/* Update button */}
-                  <div className="flex justify-end pt-2 border-t border-zinc-700/30">
-
-                    {/* Update button - shows when there are changes */}
-                    {hasChanges && (
-                      <button
-                        onClick={handleUpdateCampana}
-                        disabled={isUpdatingCampana}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isUpdatingCampana ? (
-                          <>
-                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Guardando...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="h-4 w-4" />
-                            Actualizar Propuesta
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
+                  {canEditResumen && (
+                    <div className="flex justify-end pt-2 border-t border-zinc-700/30">
+                      {/* Update button - shows when there are changes */}
+                      {hasChanges && (
+                        <button
+                          onClick={handleUpdateCampana}
+                          disabled={isUpdatingCampana}
+                          className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isUpdatingCampana ? (
+                            <>
+                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              Guardando...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4" />
+                              Actualizar Campaña
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -4178,16 +5084,23 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <span className="text-zinc-400">
                       Bonificación: <span className="text-emerald-300 font-medium">{carasKPIs.totalBonificacion}</span>
                     </span>
+                    {carasKPIs.totalCortesia > 0 && (
+                      <span className="text-zinc-400">
+                        Cortesía: <span className="text-cyan-300 font-medium">{carasKPIs.totalCortesia}</span>
+                      </span>
+                    )}
                     <span className="text-zinc-400">
                       Inversión: <span className="text-amber-300 font-medium">{formatCurrency(carasKPIs.totalInversion)}</span>
                     </span>
-                    <button
-                      onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Agregar Cara
-                    </button>
+                    {effectiveCanEdit && canEditResumen && (
+                      <button
+                        onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Agregar Cara
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -4200,65 +5113,79 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className="text-xs text-zinc-500 mb-1 block">Artículo SAP</label>
-                      <SearchableSelect
-                        label="Seleccionar artículo"
-                        options={articulosData || []}
-                        value={selectedArticulo}
-                        onChange={(item: SAPArticulo) => {
-                          setSelectedArticulo(item);
-                          // Auto-complete all fields from article
-                          const tarifa = getTarifaFromItemCode(item.ItemCode);
-                          const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
-                          const formato = getFormatoFromArticulo(item.ItemName);
-                          const tipo = getTipoFromName(item.ItemName);
-                          setNewCara({
-                            ...newCara,
-                            articulo: item.ItemCode,
-                            tarifa_publica: tarifa,
-                            estados: ciudadEstado?.estado || newCara.estados,
-                            ciudad: ciudadEstado?.ciudad || newCara.ciudad,
-                            formato: formato || newCara.formato,
-                            tipo: tipo || newCara.tipo,
-                          });
-                        }}
-                        onClear={() => {
-                          setSelectedArticulo(null);
-                          setNewCara({ ...newCara, articulo: '', tarifa_publica: 0, estados: '', ciudad: '', formato: '', tipo: '' });
-                        }}
-                        displayKey="ItemName"
-                        valueKey="ItemCode"
-                        searchKeys={['ItemCode', 'ItemName']}
-                        loading={articulosLoading}
-                        renderOption={(item: SAPArticulo) => (
-                          <div>
-                            <div className="font-medium text-white">{item.ItemCode}</div>
-                            <div className="text-xs text-zinc-500">{item.ItemName}</div>
-                          </div>
-                        )}
-                        renderSelected={(item: SAPArticulo) => (
-                          <div className="text-left">
-                            <div className="font-medium text-sm">{item.ItemCode}</div>
-                            <div className="text-[10px] text-zinc-500 truncate">{item.ItemName}</div>
-                          </div>
-                        )}
-                      />
+                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
+                      {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                        <SearchableSelect
+                          label="Seleccionar artículo"
+                          options={articulosData || []}
+                          value={selectedArticulo}
+                          onChange={(item: SAPArticulo) => {
+                            setSelectedArticulo(item);
+                            // Auto-complete all fields from article
+                            const tarifa = getTarifaFromItemCode(item.ItemCode);
+                            const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
+                            const formato = getFormatoFromArticulo(item.ItemName);
+                            const tipo = getTipoFromName(item.ItemName);
+                            const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
+                            const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
+                            const isTarifaCero = isCortesia || isIntercambio;
+                            setNewCara({
+                              ...newCara,
+                              articulo: item.ItemCode,
+                              tarifa_publica: isTarifaCero ? 0 : tarifa,
+                              caras: isCortesia ? 0 : newCara.caras,
+                              caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
+                              caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,
+                              estados: ciudadEstado?.estado || newCara.estados,
+                              // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
+                              ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
+                              formato: formato || newCara.formato,
+                              tipo: tipo || newCara.tipo,
+                            });
+                          }}
+                          onClear={() => {
+                            setSelectedArticulo(null);
+                            setNewCara({ ...newCara, articulo: '', tarifa_publica: 0, estados: '', ciudad: '', formato: '', tipo: '' });
+                          }}
+                          displayKey="ItemName"
+                          valueKey="ItemCode"
+                          searchKeys={['ItemCode', 'ItemName']}
+                          loading={articulosLoading}
+                          renderOption={(item: SAPArticulo) => (
+                            <div>
+                              <div className="font-medium text-white">{item.ItemCode}</div>
+                              <div className="text-xs text-zinc-500">{item.ItemName}</div>
+                            </div>
+                          )}
+                          renderSelected={(item: SAPArticulo) => (
+                            <div className="text-left">
+                              <div className="font-medium text-sm">{item.ItemCode}</div>
+                              <div className="text-[10px] text-zinc-500 truncate">{item.ItemName}</div>
+                            </div>
+                          )}
+                        />
+                      ) : (
+                        <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300">
+                          {selectedArticulo ? `${selectedArticulo.ItemCode} - ${selectedArticulo.ItemName}` : newCara.articulo || 'Sin artículo'}
+                        </div>
+                      )}
                     </div>
 
-                    {/* Periodo - catorcena o mes, filtrada por rango de campana */}
+                    {/* Periodo - catorcena o mes, filtrada por rango de campaña */}
                     <div className="mb-4">
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">
-                          Periodo
-                          {tipoPeriodo !== 'mensual' && campana.catorcena_inicio_num && campana.catorcena_inicio_anio && campana.catorcena_fin_num && campana.catorcena_fin_anio && (
+                          Periodo {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
+                          {tipoPeriodo !== 'mensual' && campana!.catorcena_inicio_num && campana!.catorcena_inicio_anio && campana!.catorcena_fin_num && campana!.catorcena_fin_anio && (
                             <span className="text-zinc-600 ml-1">
-                              (Rango: {campana.catorcena_inicio_num}/{campana.catorcena_inicio_anio} - {campana.catorcena_fin_num}/{campana.catorcena_fin_anio})
+                              (Rango: {campana!.catorcena_inicio_num}/{campana!.catorcena_inicio_anio} - {campana!.catorcena_fin_num}/{campana!.catorcena_fin_anio})
                             </span>
                           )}
                         </label>
                         <select
                           value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
                           onChange={(e) => {
+                            if (!canEditResumen || editingCaraHasReservas) return;
                             if (e.target.value) {
                               const [year, cat] = e.target.value.split('-').map(Number);
                               if (tipoPeriodo === 'mensual') {
@@ -4297,15 +5224,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               });
                             }
                           }}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          disabled={!canEditResumen || editingCaraHasReservas}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">{tipoPeriodo === 'mensual' ? 'Seleccionar mes' : 'Seleccionar catorcena'}</option>
                           {tipoPeriodo === 'mensual' ? (
                             (() => {
+                              // Generate monthly options from propuesta date range
                               const options: { year: number; month: number }[] = [];
-                              if (campana.fecha_inicio && campana.fecha_fin) {
-                                const start = new Date(campana.fecha_inicio);
-                                const end = new Date(campana.fecha_fin);
+                              if (campana!.fecha_inicio && campana!.fecha_fin) {
+                                const start = new Date(campana!.fecha_inicio);
+                                const end = new Date(campana!.fecha_fin);
                                 let y = start.getFullYear(), m = start.getMonth() + 1;
                                 const endY = end.getFullYear(), endM = end.getMonth() + 1;
                                 while (y < endY || (y === endY && m <= endM)) {
@@ -4323,65 +5252,85 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           ) : (
                             catorcenasData?.data
                               .filter(c => {
-                                if (!campana.catorcena_inicio_num || !campana.catorcena_inicio_anio || !campana.catorcena_fin_num || !campana.catorcena_fin_anio) {
+                                if (!campana!.catorcena_inicio_num || !campana!.catorcena_inicio_anio || !campana!.catorcena_fin_num || !campana!.catorcena_fin_anio) {
                                   return true;
                                 }
                                 const catValue = c.a_o * 100 + c.numero_catorcena;
-                                const minValue = campana.catorcena_inicio_anio * 100 + campana.catorcena_inicio_num;
-                                const maxValue = campana.catorcena_fin_anio * 100 + campana.catorcena_fin_num;
+                                const minValue = campana!.catorcena_inicio_anio * 100 + campana!.catorcena_inicio_num;
+                                const maxValue = campana!.catorcena_fin_anio * 100 + campana!.catorcena_fin_num;
                                 return catValue >= minValue && catValue <= maxValue;
                               })
                               .map(c => (
                                 <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
                                   Cat {c.numero_catorcena} / {c.a_o}
                                 </option>
-                            )))}
+                              ))
+                          )}
                         </select>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Estados {newCara.estados && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
-                        <MultiSelectDropdown
-                          options={solicitudFilters?.estados || []}
-                          selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
-                          onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
-                          placeholder="Seleccionar estados..."
-                        />
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Estados {newCara.estados && !editingCaraId && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                          <MultiSelectDropdown
+                            options={solicitudFilters?.estados || []}
+                            selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
+                            onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
+                            placeholder="Seleccionar estados..."
+                          />
+                        ) : (
+                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                            {newCara.estados || '-'}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Ciudades {newCara.ciudad && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
-                        <MultiSelectDropdown
-                          options={
-                            solicitudFilters?.ciudades
-                              .filter(c => {
-                                if (!newCara.estados) return true;
-                                const selectedEstados = newCara.estados.split(',').map(s => s.trim());
-                                return selectedEstados.includes(c.estado);
-                              })
-                              .map(c => c.ciudad) || []
-                          }
-                          selected={newCara.ciudad ? newCara.ciudad.split(',').map(s => s.trim()).filter(Boolean) : []}
-                          onChange={(selected) => setNewCara({ ...newCara, ciudad: selected.join(', ') })}
-                          placeholder="Seleccionar ciudades..."
-                        />
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {newCara.ciudad && !editingCaraId && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                          <MultiSelectDropdown
+                            options={
+                              solicitudFilters?.ciudades
+                                .filter(c => {
+                                  if (!newCara.estados) return true;
+                                  const selectedEstados = newCara.estados.split(',').map(s => s.trim());
+                                  return selectedEstados.includes(c.estado);
+                                })
+                                .map(c => c.ciudad) || []
+                            }
+                            selected={newCara.ciudad ? newCara.ciudad.split(',').map(s => s.trim()).filter(Boolean) : []}
+                            onChange={(selected) => setNewCara({ ...newCara, ciudad: selected.join(', ') })}
+                            placeholder="Seleccionar ciudades..."
+                          />
+                        ) : (
+                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                            {newCara.ciudad || '-'}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Formatos {newCara.formato && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
-                        <MultiSelectDropdown
-                          options={solicitudFilters?.formatos || []}
-                          selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
-                          onChange={(selected) => setNewCara({ ...newCara, formato: selected.join(', ') })}
-                          placeholder="Seleccionar formatos..."
-                        />
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Formatos {newCara.formato && !editingCaraId && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                          <MultiSelectDropdown
+                            options={solicitudFilters?.formatos || []}
+                            selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
+                            onChange={(selected) => setNewCara({ ...newCara, formato: selected.join(', ') })}
+                            placeholder="Seleccionar formatos..."
+                          />
+                        ) : (
+                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                            {newCara.formato || '-'}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Tipo</label>
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Tipo</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => setNewCara({ ...newCara, tipo: e.target.value })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          onChange={(e) => canEditResumen && !editingCaraHasReservas && !editingCaraId && setNewCara({ ...newCara, tipo: e.target.value })}
+                          disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
@@ -4391,29 +5340,36 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     </div>
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras en Renta</label>
+                        <label className="text-xs text-zinc-500">
+                          Caras en Renta
+                          {newCara.articulo?.toUpperCase().startsWith('CT') && (
+                            <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
+                          )}
+                        </label>
                         <input
                           type="number"
                           value={newCara.caras || ''}
                           onChange={(e) => {
+                            if (!canEditResumen) return;
                             const val = parseInt(e.target.value) || 0;
-                            // Auto-calculate flujo and contraflujo (half and half)
                             const flujo = Math.ceil(val / 2);
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Caras Bonificadas</label>
+                        <label className="text-xs text-zinc-500">{newCara.articulo?.toUpperCase().startsWith('CT') ? 'Cortesía' : 'Caras Bonificadas'}</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
-                          onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                          disabled={!canEditResumen}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -4422,8 +5378,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <input
                           type="number"
                           value={newCara.tarifa_publica || ''}
-                          onChange={(e) => setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -4437,7 +5394,32 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         />
                       </div>
                     </div>
-                    <div className="flex justify-end gap-2">
+
+                    {/* Preview calculation - Resumen y cálculos */}
+                    {(newCara.caras || 0) > 0 && (newCara.tarifa_publica || 0) > 0 && (
+                      <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/30 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-400">Inversión (Tarifa Cliente):</span>
+                          <span className="text-zinc-300">
+                            {newCara.caras} caras × {formatCurrency(newCara.tarifa_publica)} = <span className="text-emerald-400 font-medium">{formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))}</span>
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-400">Caras Totales:</span>
+                          <span className="text-zinc-300">
+                            {newCara.caras || 0} caras + {newCara.bonificacion || 0} bonif. = <span className="text-blue-400 font-medium">{(newCara.caras || 0) + (newCara.bonificacion || 0)} caras totales</span>
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-400">Tarifa Efectiva:</span>
+                          <span className="text-zinc-300">
+                            {formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))} ÷ {(newCara.caras || 0) + (newCara.bonificacion || 0)} = <span className="text-purple-400 font-medium">{formatCurrency(((newCara.caras || 0) + (newCara.bonificacion || 0)) > 0 ? ((newCara.caras || 0) * (newCara.tarifa_publica || 0)) / ((newCara.caras || 0) + (newCara.bonificacion || 0)) : 0)}</span>
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 mt-4">
                       <button
                         onClick={handleCancelCaraForm}
                         className="px-4 py-2 bg-zinc-700 text-zinc-300 rounded-lg text-sm hover:bg-zinc-600 transition-colors"
@@ -4459,12 +5441,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <div className="p-8 text-center text-zinc-500">
                       <Layers className="h-10 w-10 mx-auto mb-3 opacity-30" />
                       <p>No hay formatos/caras en esta campaña</p>
-                      <button
-                        onClick={() => setShowAddCaraForm(true)}
-                        className="mt-3 text-purple-400 hover:text-purple-300 text-sm"
-                      >
-                        Agregar primera cara
-                      </button>
+                      {effectiveCanEdit && canEditResumen && (
+                        <button
+                          onClick={() => setShowAddCaraForm(true)}
+                          className="mt-3 text-purple-400 hover:text-purple-300 text-sm"
+                        >
+                          Agregar primera cara
+                        </button>
+                      )}
                     </div>
                   ) : (
                     carasGroupedByCatorcena.map(([periodo, groupData]) => {
@@ -4474,7 +5458,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         : groupData.catorcenaNum
                         ? `Cat ${groupData.catorcenaNum} / ${groupData.year || ''}`
                         : (() => {
-                            // Parse date string directly to avoid timezone issues
                             const parts = periodo.split('-');
                             if (parts.length >= 2) {
                               const m = parseInt(parts[1]);
@@ -4507,22 +5490,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               r.id.startsWith(cara.localId) || r.solicitudCaraId === cara.id
                             );
                             const hasReservas = caraReservas.length > 0;
-                            const hasAPS = caraHasAPS(cara.localId, cara.id);
-                            const apsCount = getCaraAPSCount(cara.localId, cara.id);
-                            const apsNumbers = getCaraAPSNumbers(cara.localId, cara.id);
                             const status = getCaraCompletionStatus(cara);
                             const totalCaras = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
                             const carasFaltantes = status.totalRequerido - status.totalReservado;
 
-                            // Verificar estado de autorización
-                            const needsAuthDG = cara.autorizacion_dg === 'pendiente';
-                            const needsAuthDCM = cara.autorizacion_dcm === 'pendiente';
-                            const isRejected = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
-                            const needsAuthorization = needsAuthDG || needsAuthDCM;
-                            const isFullyApproved = cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado';
-
                             // Determine status color and indicator
-                            // Green = complete (exact match), Amber = incomplete (under or over)
+                            // Green = complete (reservado >= requerido), Amber = incomplete (reservado < requerido)
                             const statusColor = status.isComplete ? 'emerald' : 'amber';
 
                             // Display text for diff:
@@ -4543,7 +5516,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
-                                  <div className="flex-1 grid grid-cols-7 gap-3 text-sm">
+                                  <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
                                     <div>
                                       <span className="text-zinc-500 text-xs">Formato</span>
                                       <p className="text-white font-medium">{cara.formato || '-'}</p>
@@ -4556,11 +5529,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Ciudad</span>
-                                      <p className="text-zinc-300 text-xs truncate max-w-[100px]" title={cara.ciudad || '-'}>{cara.ciudad || '-'}</p>
+                                      <p className="text-zinc-300 text-xs truncate" title={cara.ciudad || cara.estados}>{cara.ciudad || cara.estados || '-'}</p>
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Artículo</span>
-                                      <p className="text-zinc-300 text-xs truncate max-w-[120px]" title={cara.articulo || '-'}>{cara.articulo || '-'}</p>
+                                      <p className="text-zinc-300 text-xs">{cara.articulo || '-'}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">F. Inicio</span>
+                                      <p className="text-zinc-300 text-xs">{cara.inicio_periodo ? new Date(cara.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 text-xs">F. Fin</span>
+                                      <p className="text-zinc-300 text-xs">{cara.fin_periodo ? new Date(cara.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Caras</span>
@@ -4574,77 +5555,75 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       </div>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">APS</span>
-                                      {hasAPS ? (
-                                        <div className="flex flex-wrap gap-1">
-                                          {apsNumbers.map(aps => (
-                                            <span key={aps} className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-medium">
-                                              {aps}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <p className="text-zinc-500 text-xs">-</p>
-                                      )}
-                                    </div>
-                                    <div>
                                       <span className="text-zinc-500 text-xs">Autorización</span>
                                       <div className="flex flex-col gap-0.5">
-                                        {isFullyApproved && (
+                                        {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Aprobado</span>
                                         )}
-                                        {isRejected && (
+                                        {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rechazado</span>
                                         )}
-                                        {needsAuthDG && !isRejected && (
+                                        {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dcm !== 'rechazado' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
                                         )}
-                                        {needsAuthDCM && !isRejected && (
+                                        {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. DCM</span>
                                         )}
                                       </div>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    {permissions.canBuscarInventarioEnModal && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); if (!needsAuthorization && !hasAPS) handleSearchInventory(cara); }}
-                                        disabled={needsAuthorization || hasAPS}
-                                        className={`p-2 rounded-lg border transition-colors ${
-                                          needsAuthorization || hasAPS
-                                            ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
-                                            : status.isComplete
-                                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
-                                              : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
+                                    {/* Botón Buscar Inventario - deshabilitado si hay autorizaciones pendientes */}
+                                    {effectiveCanEdit && permissions.canBuscarInventarioEnModal && (() => {
+                                      const tienePendientes = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
+                                      const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
+                                      const bloqueado = tienePendientes || tieneRechazado;
+
+                                      return (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); if (!bloqueado) handleSearchInventory(cara); }}
+                                          disabled={bloqueado}
+                                          className={`p-2 rounded-lg border transition-colors ${
+                                            bloqueado
+                                              ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                              : status.isComplete
+                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                                                : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
                                           }`}
-                                        title={hasAPS ? 'Bloqueado - tiene APS asignado' : needsAuthorization ? 'Esta cara requiere autorización' : status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'}
-                                      >
-                                        <Search className="h-4 w-4" />
-                                      </button>
+                                          title={
+                                            tieneRechazado ? 'Cara rechazada - no se puede asignar inventario' :
+                                            tienePendientes ? 'Esta cara necesita autorización antes de asignar inventario' :
+                                            status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'
+                                          }
+                                        >
+                                          <Search className="h-4 w-4" />
+                                        </button>
+                                      );
+                                    })()}
+                                    {effectiveCanEdit && (
+                                      <>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
+                                          className="p-2 rounded-lg border transition-colors bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
+                                          title="Editar"
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </button>
+                                        {canEditResumen && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
+                                            disabled={hasReservas}
+                                            className={`p-2 rounded-lg border transition-colors ${hasReservas
+                                              ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                              : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+                                              }`}
+                                            title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </button>
+                                        )}
+                                      </>
                                     )}
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); if (!hasAPS) handleEditCara(cara); }}
-                                      disabled={hasAPS}
-                                      className={`p-2 rounded-lg border transition-colors ${
-                                        hasAPS
-                                          ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
-                                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
-                                      }`}
-                                      title={hasAPS ? 'Bloqueado - tiene APS asignado' : 'Editar'}
-                                    >
-                                      <Pencil className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
-                                      disabled={hasReservas || hasAPS}
-                                      className={`p-2 rounded-lg border transition-colors ${hasReservas || hasAPS
-                                        ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
-                                        : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
-                                        }`}
-                                      title={hasAPS ? 'Bloqueado - tiene APS asignado' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
                                   </div>
                                 </div>
 
@@ -4666,11 +5645,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 // Helper to get group key based on field
                 const getFieldValue = (r: ReservaItem, field: GroupByFieldReservas): string => {
                   switch (field) {
-                    case 'catorcena': return tipoPeriodo === 'mensual' && r.catorcena >= 1 && r.catorcena <= 12 ? `${MESES_LABEL[r.catorcena - 1]} ${r.anio}` : `Cat ${r.catorcena} / ${r.anio}`;
+                    case 'catorcena': return `Cat ${r.catorcena}/${r.anio}`;
                     case 'tipo': return r.tipo;
                     case 'plaza': return r.plaza || 'Sin Plaza';
                     case 'formato': return r.formato || 'Sin Formato';
                     case 'grupo': return r.grupo_completo_id ? `Grupo ${r.grupo_completo_id}` : 'Sin Grupo';
+                    case 'articulo': return r.articulo || 'Sin Artículo';
                     default: return 'Otros';
                   }
                 };
@@ -4743,6 +5723,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     else next.add(id);
                     return next;
                   });
+                  // Pan map to the selected reserva's location
+                  const reserva = filteredReservas.find(r => r.id === id);
+                  if (reserva?.latitud && reserva?.longitud && resumenReservasMapRef.current) {
+                    resumenReservasMapRef.current.panTo({ lat: reserva.latitud, lng: reserva.longitud });
+                    resumenReservasMapRef.current.setZoom(15);
+                  }
                 };
                 const toggleReservasGroup = (groupKey: string) => {
                   setExpandedReservasGroups(prev => {
@@ -4762,6 +5748,41 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   return [];
                 };
 
+                // Get type breakdown for a group of items
+                const getTypeBreakdown = (items: ReservaItem[]) => {
+                  const flujo = items.filter(r => r.tipo === 'Flujo').length;
+                  const contraflujo = items.filter(r => r.tipo === 'Contraflujo').length;
+                  const bonificacion = items.filter(r => r.tipo === 'Bonificacion').length;
+                  return { flujo, contraflujo, bonificacion, total: items.length };
+                };
+
+                // Render type breakdown badges
+                const TypeBreakdownBadges = ({ items }: { items: ReservaItem[] }) => {
+                  const breakdown = getTypeBreakdown(items);
+                  return (
+                    <div className="flex items-center gap-1">
+                      {breakdown.flujo > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                          F:{breakdown.flujo}
+                        </span>
+                      )}
+                      {breakdown.contraflujo > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          C:{breakdown.contraflujo}
+                        </span>
+                      )}
+                      {breakdown.bonificacion > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          B:{breakdown.bonificacion}
+                        </span>
+                      )}
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-zinc-700/50 text-zinc-300">
+                        {breakdown.total}
+                      </span>
+                    </div>
+                  );
+                };
+
                 return (
                   <div className="bg-zinc-800/30 rounded-2xl border border-zinc-700/50 overflow-hidden">
                     <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50 flex items-center justify-between">
@@ -4769,7 +5790,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <MapIcon className="h-4 w-4 text-purple-400" />
                         Resumen de Reservas
                         <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
-                          {filteredReservas.length} de {reservas.length}
+                          {filteredReservas.length} de {reservasMerged.length}
                         </span>
                       </h3>
                       <div className="flex items-center gap-2">
@@ -4856,7 +5877,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               </div>
                               {filtersReservas.length > 0 && (
                                 <div className="mt-2 pt-2 border-t border-purple-900/30">
-                                  <span className="text-[10px] text-zinc-500">{filteredReservas.length} de {reservas.length} registros</span>
+                                  <span className="text-[10px] text-zinc-500">{filteredReservas.length} de {reservasMerged.length} registros</span>
                                 </div>
                               )}
                             </div>
@@ -5026,7 +6047,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[0])?.label}:
                                   </span>
                                   <span className="text-sm font-medium text-white flex-1 text-left truncate">{groupKey}</span>
-                                  <span className="px-2 py-0.5 rounded-full text-xs bg-zinc-700/50 text-zinc-300">{totalItems}</span>
+                                  <TypeBreakdownBadges items={level1Items} />
                                 </button>
                                 {isExpanded && (
                                   <div className="bg-zinc-900/40 border-l-2 border-purple-500/30 ml-3">
@@ -5044,8 +6065,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           <span className="text-zinc-500 text-[11px] truncate max-w-[80px]">{reserva.plaza}</span>
                                           <span className="text-zinc-500 text-[11px]">{reserva.formato}</span>
                                           <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
-                                            reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
-                                          }`}>{reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                            reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
+                                            reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
+                                          }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif') : reserva.tipo}</span>
                                         </label>
                                       ))
                                     ) : (
@@ -5077,7 +6099,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                 {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[1])?.label}:
                                               </span>
                                               <span className="text-[11px] text-white flex-1 text-left truncate">{subKey}</span>
-                                              <span className="text-[10px] text-zinc-500">{countItems(subData)}</span>
+                                              <TypeBreakdownBadges items={subItems} />
                                             </button>
                                             {isSubExpanded && (
                                               <div className="ml-2 border-l border-cyan-500/20">
@@ -5092,8 +6114,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                       <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
                                                       <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
                                                       <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
-                                                        reserva.tipo === 'Bonificacion' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
-                                                      }`}>{reserva.tipo === 'Bonificacion' ? 'Bonif' : reserva.tipo}</span>
+                                                        reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
+                                                        reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
+                                                      }`}>{reserva.codigo_unico?.includes('_Completo') ? 'Completo' : reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif') : reserva.tipo}</span>
                                                     </label>
                                                   ))
                                                 ) : (
@@ -5112,7 +6135,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                             {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[2])?.label}:
                                                           </span>
                                                           <span className="text-[11px] text-white flex-1 text-left truncate">{thirdKey}</span>
-                                                          <span className="text-[10px] text-zinc-500">{thirdItems.length}</span>
+                                                          <TypeBreakdownBadges items={thirdItems} />
                                                         </button>
                                                         {isThirdExpanded && thirdItems.map(reserva => (
                                                           <label
@@ -5172,7 +6195,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           <>
                             <GoogleMap
                               mapContainerStyle={{ width: '100%', height: '100%' }}
-                              center={{ lat: 20.6597, lng: -103.3496 }}
+                              center={filteredReservas.find(r => r.latitud && r.longitud) ? { lat: filteredReservas.find(r => r.latitud && r.longitud)!.latitud, lng: filteredReservas.find(r => r.latitud && r.longitud)!.longitud } : { lat: 20.6597, lng: -103.3496 }}
                               zoom={11}
                               options={{
                                 styles: DARK_MAP_STYLES,
@@ -5181,21 +6204,23 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               }}
                               onLoad={(map) => {
                                 resumenReservasMapRef.current = map;
-                                // Fit bounds to reservas
-                                if (filteredReservasData.length > 0) {
+                                // Center map on reservas bounds
+                                if (filteredReservas.length > 0) {
                                   const bounds = new google.maps.LatLngBounds();
-                                  filteredReservasData.forEach(r => {
+                                  let hasValidCoords = false;
+                                  filteredReservas.forEach(r => {
                                     if (r.latitud && r.longitud) {
                                       bounds.extend({ lat: r.latitud, lng: r.longitud });
+                                      hasValidCoords = true;
                                     }
                                   });
-                                  if (!bounds.isEmpty()) {
+                                  if (hasValidCoords && !bounds.isEmpty()) {
                                     map.fitBounds(bounds, 50);
                                   }
                                 }
                               }}
                             >
-                              {filteredReservasData.map(reserva => {
+                              {filteredReservas.map(reserva => {
                                 if (!reserva.latitud || !reserva.longitud) return null;
                                 const isSelected = selectedMapReservas.has(reserva.id);
                                 const hasSelection = selectedMapReservas.size > 0;
@@ -5209,8 +6234,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     icon={{
                                       path: google.maps.SymbolPath.CIRCLE,
                                       scale: isSelected ? 12 : (hasSelection ? 6 : 8),
-                                      fillColor: isCompleto ? '#a855f7' : reserva.tipo === 'Flujo' ? '#3b82f6' :
-                                        reserva.tipo === 'Contraflujo' ? '#f59e0b' : '#10b981',
+                                      fillColor: isCompleto ? '#a855f7' :
+                                        reserva.tipo === 'Flujo' ? '#3b82f6' :
+                                        reserva.tipo === 'Contraflujo' ? '#06b6d4' : '#10b981',
                                       fillOpacity: isSelected ? 1 : (hasSelection ? 0.3 : 0.9),
                                       strokeColor: isSelected ? '#fff' : (hasSelection ? 'transparent' : '#fff'),
                                       strokeWeight: isSelected ? 3 : 2,
@@ -5222,27 +6248,38 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             </GoogleMap>
 
                             {/* Map Legend */}
-                            <div className="absolute bottom-2 right-2 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-2 text-xs">
-                              <div className="text-zinc-300 font-semibold mb-1.5 flex items-center gap-1">
+                            <div className="absolute bottom-3 right-3 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-2.5 text-xs max-w-[180px]">
+                              <div className="text-zinc-300 font-semibold mb-1.5 flex items-center gap-1.5">
                                 <MapPin className="h-3 w-3 text-purple-400" />
                                 Leyenda
                               </div>
+
+                              {/* Dirección del tráfico */}
                               <div className="space-y-1">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-2">
                                   <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                                  <span className="text-zinc-400">Flujo</span>
+                                  <span className="text-zinc-300">Flujo</span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                                  <span className="text-zinc-400">Contraflujo</span>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-cyan-500" />
+                                  <span className="text-zinc-300">Contraflujo</span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-2">
                                   <div className="w-2.5 h-2.5 rounded-full bg-purple-500" />
-                                  <span className="text-zinc-400">Completo</span>
+                                  <span className="text-zinc-300">Completo</span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-2">
                                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                  <span className="text-zinc-400">Bonificación</span>
+                                  <span className="text-zinc-300">{(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}</span>
+                                </div>
+                              </div>
+
+                              {/* Estado de selección */}
+                              <div className="border-t border-zinc-700/70 pt-1.5 mt-1.5 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-white ring-2 ring-white/50" />
+                                  <span className="text-zinc-300">Seleccionado</span>
+                                  <span className="text-zinc-500 text-[10px]">({selectedMapReservas.size})</span>
                                 </div>
                               </div>
                             </div>
@@ -5294,13 +6331,38 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               >
                 Cerrar
               </button>
-              <button
-                onClick={onClose}
-                className="px-6 py-2 rounded-lg text-sm font-medium transition-all bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25"
-              >
-                <Eye className="h-4 w-4 inline-block mr-2" />
-                Detalles de la campaña
-              </button>
+              {effectiveCanEdit && (
+                <button
+                  disabled={!allCarasComplete || hasPendingAuthorization || isSaving}
+                  onClick={async () => {
+                    setIsSaving(true);
+                    try {
+                      await campanasService.updateStatus(campana!.id, 'Pase a ventas');
+                      queryClient.invalidateQueries({ queryKey: ['campanas'] });
+                      queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
+                      showToast('Campaña aprobada y enviada a ventas', 'success');
+                      onClose();
+                    } catch (error) {
+                      console.error('Error al aprobar campaña:', error);
+                      showToast(`Error al aprobar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
+                    allCarasComplete && !hasPendingAuthorization && !isSaving
+                      ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
+                      : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                  }`}
+                >
+                  {isSaving ? (
+                    <div className="h-4 w-4 inline-block mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4 inline-block mr-2" />
+                  )}
+                  {isSaving ? 'Aprobando...' : 'Aprobar Campaña'}
+                </button>
+              )}
             </div>
           </div>
         )}

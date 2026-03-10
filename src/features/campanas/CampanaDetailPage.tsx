@@ -736,6 +736,7 @@ export function CampanaDetailPage() {
   const [postSAPResult, setPostSAPResult] = useState<{ success: boolean; message: string; data?: unknown } | null>(null);
   const [alreadyPosted, setAlreadyPosted] = useState(false);
   const [previewDeliveryNote, setPreviewDeliveryNote] = useState<any>(null);
+  const [postedAPSGroups, setPostedAPSGroups] = useState<Set<number>>(new Set());
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -746,12 +747,11 @@ export function CampanaDetailPage() {
     queryFn: () => campanasService.getById(campanaId),
   });
 
-  // Inicializar alreadyPosted desde la DB
+  // Inicializar alreadyPosted y postedAPSGroups desde la DB
   useEffect(() => {
-    if (campana?.posted_to_sap) {
-      setAlreadyPosted(true);
-    }
-  }, [campana?.posted_to_sap]);
+    if (campana?.posted_to_sap) setAlreadyPosted(true);
+    if (campana?.posted_aps) setPostedAPSGroups(new Set(campana.posted_aps));
+  }, [campana?.posted_to_sap, campana?.posted_aps]);
 
   const { data: inventarioReservado = [], isLoading: isLoadingInventario, error: errorInventario, refetch: refetchInventario } = useQuery({
     queryKey: ['campana-inventario', campanaId],
@@ -1036,8 +1036,13 @@ export function CampanaDetailPage() {
     setPostSAPResult(null);
 
     try {
+      // Usar solo items seleccionados, o todos si no hay selección
+      const itemsToPost = selectedItemsAPS.size > 0
+        ? inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids)))
+        : inventarioConAPS;
+
       // Construir el payload
-      const deliveryNote = buildDeliveryNote(campana, inventarioConAPS, campana.sap_database);
+      const deliveryNote = buildDeliveryNote(campana, itemsToPost, campana.sap_database);
       console.log('========== DELIVERY NOTE JSON ==========');
       console.log('SAP Database:', campana.sap_database);
       console.log(JSON.stringify(deliveryNote, null, 2));
@@ -1052,9 +1057,12 @@ export function CampanaDetailPage() {
           message: 'Delivery Note creado exitosamente en SAP',
           data: result.data,
         });
-        setAlreadyPosted(true);
-        // Guardar en DB que ya se posteó
-        try { await campanasService.markPostedToSAP(campana.id); } catch (e) { console.error('Error marcando posted_to_sap:', e); }
+        // Guardar en DB los APS posteados y actualizar estado
+        const apsPosteados = Array.from(new Set(itemsToPost.map(i => i.aps)));
+        try {
+          const updatedAPS = await campanasService.markPostedAPS(campana.id, apsPosteados);
+          setPostedAPSGroups(new Set(updatedAPS));
+        } catch (e) { console.error('Error marcando posted_aps:', e); }
       } else {
         setPostSAPResult({
           success: false,
@@ -1070,7 +1078,7 @@ export function CampanaDetailPage() {
     } finally {
       setPostingToSAP(false);
     }
-  }, [campana, inventarioConAPS]);
+  }, [campana, inventarioConAPS, selectedItemsAPS]);
 
   // Agrupar datos del inventario
   const groupedInventario = useMemo(() => {
@@ -1622,7 +1630,11 @@ export function CampanaDetailPage() {
               {/*<InfoItem label="NSE" value={campana.nivel_socioeconomico ? [...new Set(campana.nivel_socioeconomico.split(",").map(s => s.trim()))].join(", ") : null} type="category" isDark={isDark} />*/}
               <InfoItem label="Bonificacion" value={campana.bonificacion} type="default" isDark={isDark} />
               <InfoItem label="Descuento" value={campana.descuento ? `${campana.descuento}%` : null} type="percent" isDark={isDark} />
-              <InfoItem label="Inversion" value={typeof campana.inversion === "string" ? parseFloat(campana.inversion) : campana.inversion} type="amount" isDark={isDark} />
+              <InfoItem label="Inversion" value={(() => {
+                const getTarifa = (i: InventarioReservado) => Number(i.tarifa_publica_sc) || Number(i.tarifa_publica) || 0;
+                const total = [...inventarioReservado, ...inventarioConAPS].reduce((s, i) => s + getTarifa(i) * (Number(i.caras_totales) || 0), 0);
+                return total || (typeof campana.inversion === "string" ? parseFloat(campana.inversion) : campana.inversion);
+              })()} type="amount" isDark={isDark} />
               {/*<InfoItem label="Precio" value={typeof campana.precio === "string" ? parseFloat(campana.precio) : campana.precio} type="amount" /> */}
             </div>
           </div>
@@ -2388,23 +2400,31 @@ export function CampanaDetailPage() {
                   <Minus className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${selectedItemsAPS.size === 0 ? 'text-red-400/40' : 'text-red-400'}`} />
                 </button>
               )}
-              {permissions.canEditDetalleCampana && inventarioConAPS.length > 0 && (
-                <button
-                  onClick={() => {
-                    if (campana) {
-                      const dn = buildDeliveryNote(campana, inventarioConAPS, campana.sap_database);
-                      setPreviewDeliveryNote(dn);
-                    }
-                    setShowPostSAPModal(true);
-                  }}
-                  disabled={alreadyPosted}
-                  className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${alreadyPosted ? 'bg-zinc-800/50 border-zinc-700 cursor-not-allowed opacity-50' : 'bg-cyan-900/30 border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40'}`}
-                  title={alreadyPosted ? 'Ya se envió a SAP' : 'Enviar a SAP'}
-                >
-                  <Upload className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${alreadyPosted ? 'text-zinc-500' : 'text-cyan-400'}`} />
-                  <span className={`text-[10px] sm:text-xs font-medium ${alreadyPosted ? 'text-zinc-500' : 'text-cyan-300'}`}>{alreadyPosted ? 'ENVIADO' : 'POST'}</span>
-                </button>
-              )}
+              {permissions.canEditDetalleCampana && inventarioConAPS.length > 0 && (() => {
+                const selectedHavePostedAPS = selectedItemsAPS.size > 0 &&
+                  inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => postedAPSGroups.has(i.aps));
+                const isPostDisabled = alreadyPosted || selectedHavePostedAPS;
+                return (
+                  <button
+                    onClick={() => {
+                      if (campana) {
+                        const itemsToPreview = selectedItemsAPS.size > 0
+                          ? inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids)))
+                          : inventarioConAPS;
+                        const dn = buildDeliveryNote(campana, itemsToPreview, campana.sap_database);
+                        setPreviewDeliveryNote(dn);
+                      }
+                      setShowPostSAPModal(true);
+                    }}
+                    disabled={isPostDisabled}
+                    className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${isPostDisabled ? 'bg-zinc-800/50 border-zinc-700 cursor-not-allowed opacity-50' : 'bg-cyan-900/30 border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40'}`}
+                    title={alreadyPosted ? 'Ya se envió a SAP' : selectedHavePostedAPS ? 'Este APS ya fue enviado a SAP' : 'Enviar a SAP'}
+                  >
+                    <Upload className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isPostDisabled ? 'text-zinc-500' : 'text-cyan-400'}`} />
+                    <span className={`text-[10px] sm:text-xs font-medium ${isPostDisabled ? 'text-zinc-500' : 'text-cyan-300'}`}>{alreadyPosted ? 'ENVIADO' : 'POST'}</span>
+                  </button>
+                );
+              })()}
             </div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
@@ -2879,6 +2899,9 @@ export function CampanaDetailPage() {
                               {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[0])?.label}:
                             </span>
                             <span className="text-xs text-white">{groupKey}</span>
+                            {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && (postedAPSGroups.has(allGroupItemsAPS[0].aps) || alreadyPosted) && (
+                              <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
+                            )}
                             <GroupSummaryInline items={allGroupItemsAPS} groupField={activeGroupingsAPS[0]} />
                             <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                               {totalItems} items
@@ -2972,6 +2995,9 @@ export function CampanaDetailPage() {
                                             {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[1])?.label}:
                                           </span>
                                           <span className="text-[10px] text-white">{subGroupKey}</span>
+                                          {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && postedAPSGroups.has(allSubItemsAPS[0].aps) && (
+                                            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
+                                          )}
                                           <GroupSummaryInline items={allSubItemsAPS} groupField={activeGroupingsAPS[1]} />
                                           <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                             {subTotalItems}
@@ -3060,6 +3086,9 @@ export function CampanaDetailPage() {
                                                           {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[2])?.label}:
                                                         </span>
                                                         <span className="text-[10px] text-white">{thirdGroupKey}</span>
+                                                        {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && postedAPSGroups.has(thirdItems[0].aps) && (
+                                                          <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
+                                                        )}
                                                         <GroupSummaryInline items={thirdItems} groupField={activeGroupingsAPS[2]} />
                                                         <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                                           {thirdItems.length}

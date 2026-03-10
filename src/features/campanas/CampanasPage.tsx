@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -1034,6 +1034,42 @@ export function CampanasPage() {
     });
   };
 
+  // Auto-cargar inventarios de campañas visibles en vista catorcena
+  const loadingRef = useRef(new Set<number>());
+  useEffect(() => {
+    if (activeView !== 'catorcena' || !filteredData.length) return;
+    const idsToLoad = filteredData
+      .filter(c => !campanaInventarios[c.id] && !loadingRef.current.has(c.id))
+      .map(c => c.id);
+    if (idsToLoad.length === 0) return;
+
+    const BATCH_SIZE = 10;
+    const batch = idsToLoad.slice(0, BATCH_SIZE);
+    batch.forEach(id => loadingRef.current.add(id));
+    setLoadingInventarios(new Set(loadingRef.current));
+
+    Promise.all(batch.map(async (id) => {
+      try {
+        const [conAPS, sinAPS] = await Promise.all([
+          campanasService.getInventarioConAPS(id),
+          campanasService.getInventarioReservado(id)
+        ]);
+        const sinAPSConFormato: InventarioConAPS[] = sinAPS.map(item => ({ ...item, aps: 0 }));
+        return { id, data: [...conAPS, ...sinAPSConFormato] };
+      } catch {
+        return { id, data: [] as InventarioConAPS[] };
+      }
+    })).then(results => {
+      setCampanaInventarios(prev => {
+        const next = { ...prev };
+        results.forEach(r => { next[r.id] = r.data; });
+        return next;
+      });
+      batch.forEach(id => loadingRef.current.delete(id));
+      setLoadingInventarios(new Set(loadingRef.current));
+    });
+  }, [activeView, filteredData, campanaInventarios]);
+
   // Agrupar campañas por catorcena para la vista alternativa (con soporte para subagrupaciones)
   const campanasPorCatorcena = useMemo(() => {
     const groups: Record<string, {
@@ -1041,6 +1077,11 @@ export function CampanasPage() {
       campanas: Campana[];
       subgroups?: { name: string; campanas: Campana[] }[];
     }> = {};
+
+    // Build sorted catorcena list for range expansion
+    const catorcenasList = (catorcenasData?.data || [])
+      .map(c => ({ num: c.numero_catorcena, anio: c.a_o }))
+      .sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.num - b.num);
 
     filteredData.forEach(item => {
       const isMensual = (item as any).tipo_periodo === 'mensual';
@@ -1058,17 +1099,58 @@ export function CampanasPage() {
         }
         groups[key].campanas.push(item);
       } else if (item.catorcena_inicio_num && item.catorcena_inicio_anio) {
-        // Esta vista es "por periodo de inicio": cada campaña debe aparecer solo una vez.
-        const num = item.catorcena_inicio_num;
-        const anio = item.catorcena_inicio_anio;
-        const key = `${anio}-${String(num).padStart(2, '0')}`;
-        if (!groups[key]) {
-          groups[key] = {
-            catorcena: { num, anio },
-            campanas: []
-          };
+        // Usar catorcenas reales con contenido si el backend las proporciona
+        const catContenido = (item as any).catorcenas_con_contenido as string | null;
+        if (catContenido) {
+          // Formato: "num:anio,num:anio,..."
+          const catorcenasReales = catContenido.split(',').map(entry => {
+            const [num, anio] = entry.split(':').map(Number);
+            return { num, anio };
+          }).filter(c => !isNaN(c.num) && !isNaN(c.anio));
+
+          if (catorcenasReales.length > 0) {
+            catorcenasReales.forEach(({ num, anio }) => {
+              const key = `${anio}-${String(num).padStart(2, '0')}`;
+              if (!groups[key]) {
+                groups[key] = { catorcena: { num, anio }, campanas: [] };
+              }
+              groups[key].campanas.push(item);
+            });
+          } else {
+            // Fallback: solo catorcena de inicio
+            const key = `${item.catorcena_inicio_anio}-${String(item.catorcena_inicio_num).padStart(2, '0')}`;
+            if (!groups[key]) {
+              groups[key] = { catorcena: { num: item.catorcena_inicio_num, anio: item.catorcena_inicio_anio }, campanas: [] };
+            }
+            groups[key].campanas.push(item);
+          }
+        } else {
+          // Sin dato de catorcenas reales: expandir por rango de fechas (fallback)
+          const startNum = item.catorcena_inicio_num;
+          const startAnio = item.catorcena_inicio_anio;
+          const endNum = item.catorcena_fin_num || startNum;
+          const endAnio = item.catorcena_fin_anio || startAnio;
+
+          const startIdx = catorcenasList.findIndex(c => c.num === startNum && c.anio === startAnio);
+          const endIdx = catorcenasList.findIndex(c => c.num === endNum && c.anio === endAnio);
+
+          if (startIdx >= 0 && endIdx >= 0) {
+            for (let i = startIdx; i <= endIdx; i++) {
+              const { num, anio } = catorcenasList[i];
+              const key = `${anio}-${String(num).padStart(2, '0')}`;
+              if (!groups[key]) {
+                groups[key] = { catorcena: { num, anio }, campanas: [] };
+              }
+              groups[key].campanas.push(item);
+            }
+          } else {
+            const key = `${startAnio}-${String(startNum).padStart(2, '0')}`;
+            if (!groups[key]) {
+              groups[key] = { catorcena: { num: startNum, anio: startAnio }, campanas: [] };
+            }
+            groups[key].campanas.push(item);
+          }
         }
-        groups[key].campanas.push(item);
       }
     });
 
@@ -1096,7 +1178,7 @@ export function CampanasPage() {
         }
         return { key, ...value };
       });
-  }, [filteredData, activeGroupings]);
+  }, [filteredData, activeGroupings, catorcenasData]);
 
   // Estadísticas para gráfica de Status — from global stats
   const statusChartData = useMemo(() => {
@@ -2162,9 +2244,20 @@ export function CampanasPage() {
                     const PERIOD_COLORS_LOCAL = getPeriodColors(isDark);
                     const periodColor = PERIOD_COLORS_LOCAL[periodStatus] || getDefaultStatusColor(isDark);
                     const isExpanded = expandedCampanas.has(campana.id);
-                    const inventarios = campanaInventarios[campana.id] || [];
+                    const allInventarios = campanaInventarios[campana.id] || [];
+                    // Filtrar inventarios por la catorcena del grupo actual
+                    const inventarios = allInventarios.filter(inv => {
+                      const invCat = (inv as any).numero_catorcena;
+                      const invAnio = (inv as any).anio_catorcena;
+                      if (invCat == null || invAnio == null) return true;
+                      return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
+                    });
                     const isLoadingInv = loadingInventarios.has(campana.id);
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
+                    const hasInventarios = allInventarios.length > 0;
+
+                    // Si ya cargamos inventarios y no hay ninguno en esta catorcena, ocultar la campaña
+                    if (hasInventarios && inventarios.length === 0) return null;
 
                     return (
                       <div key={campana.id} className={`border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
@@ -2207,31 +2300,50 @@ export function CampanasPage() {
                             </span>
                           )}
                           {/* Resumen de campaña: circuitos (grupos), bonificación, inversión */}
+                          {!hasInventarios && isLoadingInv && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/15 text-zinc-400' : 'bg-gray-100 text-gray-400'} border border-zinc-500/25 flex items-center gap-1`}>
+                              <Loader2 className="h-3 w-3 animate-spin" /> Cargando...
+                            </span>
+                          )}
                           {(() => {
-                            // Priorizar el campo de campana para mantener valor estable aun con grupo cerrado.
-                            const circuitosCampana = Number((campana as any).circuitos ?? (campana as any).circuito ?? 0) || 0;
-                            // Fallback: contar grupos reales renderizados (APS + Sin APS).
+                            // Contar circuitos desde inventarios filtrados por catorcena
                             const circuitosDesdeGrupos = apsAgrupados.reduce((sum, apsGroup) => sum + apsGroup.grupos.length, 0);
-                            const circuitosCount = circuitosCampana > 0 ? circuitosCampana : circuitosDesdeGrupos;
-                            return (
+                            const circuitosCount = hasInventarios ? circuitosDesdeGrupos : null;
+                            return circuitosCount !== null ? (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`} title="Circuitos (grupos)">
                                 <Layers className="h-3 w-3" /> Circuitos {circuitosCount}
                               </span>
+                            ) : null;
+                          })()}
+                          {hasInventarios && (() => {
+                            const bonifCatorcena = inventarios.filter(i => Number((i as any).bonificacion_sc) > 0 || (Number((i as any).tarifa_publica_sc) === 0 && Number((i as any).aps) > 0)).length;
+                            return bonifCatorcena > 0 ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25 flex items-center gap-1`} title="Bonificación">
+                                <Gift className="h-3 w-3" /> {bonifCatorcena}
+                              </span>
+                            ) : null;
+                          })()}
+                          {hasInventarios && (() => {
+                            const carasCatorcena = inventarios.length;
+                            const bonifCatorcenaCalc = inventarios.filter(i => Number((i as any).tarifa_publica_sc) === 0 || Number((i as any).bonificacion_sc) > 0).length;
+                            const carasNetas = Math.max(carasCatorcena - bonifCatorcenaCalc, 0);
+                            return carasNetas > 0 ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
+                                <MapPin className="h-3 w-3" /> {carasNetas}
+                              </span>
+                            ) : null;
+                          })()}
+                          {hasInventarios && (() => {
+                            const invCatorcena = inventarios.reduce((sum, inv) => {
+                              const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
+                              return sum + tarifa;
+                            }, 0);
+                            return (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
+                                <DollarSign className="h-3 w-3" /> {invCatorcena > 0 ? `$${invCatorcena.toLocaleString()}` : 'Sin inversión'}
+                              </span>
                             );
                           })()}
-                          {Number(campana.bonificacion) > 0 && (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25 flex items-center gap-1`} title="Bonificación">
-                              <Gift className="h-3 w-3" /> {campana.bonificacion}
-                            </span>
-                          )}
-                          {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0) > 0 && (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
-                              <MapPin className="h-3 w-3" /> {Math.max((Number(campana.total_caras) || 0) - (Number(campana.bonificacion) || 0), 0)}
-                            </span>
-                          )}
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
-                            <DollarSign className="h-3 w-3" /> {campana.inversion != null && Number(campana.inversion) > 0 ? `$${Number(campana.inversion).toLocaleString()}` : 'Sin inversión'}
-                          </span>
                           <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => handleOpenCampana(campana.id)}
@@ -2521,7 +2633,19 @@ export function CampanasPage() {
                           : `Cat ${catorcena.num} / ${catorcena.anio}`}
                       </span>
                       <span className={`px-2.5 py-1 rounded-full text-xs ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200'} border`}>
-                        {campanas.length} campañas
+                        {(() => {
+                          const visibleCount = campanas.filter(c => {
+                            const allInv = campanaInventarios[c.id];
+                            if (!allInv || allInv.length === 0) return true; // no cargados aún, asumir visible
+                            return allInv.some(inv => {
+                              const invCat = (inv as any).numero_catorcena;
+                              const invAnio = (inv as any).anio_catorcena;
+                              if (invCat == null || invAnio == null) return true;
+                              return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
+                            });
+                          }).length;
+                          return `${visibleCount} campañas`;
+                        })()}
                       </span>
                       {secondGroupingLabel && subgroups && (
                         <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30' : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200'} border`}>
@@ -2538,7 +2662,20 @@ export function CampanasPage() {
                       )}
                       {/* Inversión total de la catorcena */}
                       {(() => {
-                        const totalInversion = campanas.reduce((s, c) => s + (Number(c.inversion) || 0), 0);
+                        // Sumar inversión solo de inventarios que pertenecen a esta catorcena
+                        const totalInversion = campanas.reduce((s, c) => {
+                          const allInv = campanaInventarios[c.id] || [];
+                          const invFiltrados = allInv.filter(inv => {
+                            const invCat = (inv as any).numero_catorcena;
+                            const invAnio = (inv as any).anio_catorcena;
+                            if (invCat == null || invAnio == null) return true;
+                            return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
+                          });
+                          return s + invFiltrados.reduce((sum, inv) => {
+                            const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
+                            return sum + tarifa;
+                          }, 0);
+                        }, 0);
                         return totalInversion > 0 ? (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión total">
                             <DollarSign className="h-3 w-3" /> {'$'}{totalInversion.toLocaleString()}

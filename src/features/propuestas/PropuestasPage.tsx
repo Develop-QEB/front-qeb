@@ -565,9 +565,9 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
       const flujoReservado = caraReservas.filter(r => r.tipo_de_cara === 'A' || r.tipo_de_cara === 'Flujo').length;
       const contraflujoReservado = caraReservas.filter(r => r.tipo_de_cara === 'B' || r.tipo_de_cara === 'Contraflujo').length;
       const bonificacionReservado = caraReservas.filter(r => r.tipo_de_cara === 'Bonificacion').length;
-      const flujoRequerido = cara.caras_flujo || 0;
-      const contraflujoRequerido = cara.caras_contraflujo || 0;
-      const bonificacionRequerido = cara.bonificacion || 0;
+      const flujoRequerido = Number(cara.caras_flujo) || 0;
+      const contraflujoRequerido = Number(cara.caras_contraflujo) || 0;
+      const bonificacionRequerido = Number(cara.bonificacion) || 0;
       return flujoReservado !== flujoRequerido || contraflujoReservado !== contraflujoRequerido || bonificacionReservado !== bonificacionRequerido;
     });
   }, [caras, reservas]);
@@ -1106,7 +1106,7 @@ export function PropuestasPage() {
   });
 
   // When grouping or advanced filters are active, fetch ALL data
-  const needsAllData = !!groupBy || advancedFilters.length > 0;
+  const needsAllData = !!groupBy || advancedFilters.length > 0 || !!debouncedSearch;
   const effectiveLimit = needsAllData ? 9999 : limit;
 
   const { data, isLoading } = useQuery({
@@ -1149,11 +1149,27 @@ export function PropuestasPage() {
     return valuesMap;
   }, [data?.data]);
 
-  // Apply advanced filters to data
+  // Apply advanced filters and local search to data
   const filteredData = useMemo(() => {
     if (!data?.data) return [];
-    return applyAdvancedFilters(data.data, advancedFilters);
-  }, [data?.data, advancedFilters]);
+    let items = applyAdvancedFilters(data.data, advancedFilters);
+
+    // Client-side search filter (like CampanasPage)
+    if (debouncedSearch && items.length > 0) {
+      const searchLower = debouncedSearch.toLowerCase();
+      items = items.filter(p =>
+        String(p.id).includes(searchLower) ||
+        p.articulo?.toLowerCase().includes(searchLower) ||
+        p.descripcion?.toLowerCase().includes(searchLower) ||
+        p.asignado?.toLowerCase().includes(searchLower) ||
+        p.cliente_nombre?.toLowerCase().includes(searchLower) ||
+        p.nombre_comercial?.toLowerCase().includes(searchLower) ||
+        p.marca_nombre?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return items;
+  }, [data?.data, advancedFilters, debouncedSearch]);
 
   // Advanced filter functions
   const addAdvancedFilter = () => {
@@ -1254,7 +1270,7 @@ export function PropuestasPage() {
 
   // Handle export CSV - exports only visible/filtered data
   const handleExportCSV = () => {
-    const dataToExport = advancedFilters.length > 0 ? filteredData : (data?.data || []);
+    const dataToExport = hasLocalFilters ? filteredData : (data?.data || []);
 
     if (dataToExport.length === 0) return;
 
@@ -1438,8 +1454,10 @@ export function PropuestasPage() {
     );
   };
 
-  const totalPages = data?.pagination?.totalPages || 1;
-  const total = data?.pagination?.total ?? 0;
+  // Calcular paginación basada en si hay filtros locales activos
+  const hasLocalFilters = !!(debouncedSearch || advancedFilters.length > 0);
+  const totalPages = hasLocalFilters ? 1 : (data?.pagination?.totalPages || 1);
+  const total = hasLocalFilters ? filteredData.length : (data?.pagination?.total ?? 0);
 
   return (
     <div className="min-h-screen">
@@ -1896,7 +1914,7 @@ export function PropuestasPage() {
                   ))
                 ) : (
                   // Flat view - use filtered data if advanced filters applied
-                  (advancedFilters.length > 0 ? filteredData : data.data).map((item, idx) => renderPropuestaRow(item, idx))
+                  (hasLocalFilters ? filteredData : data.data).map((item, idx) => renderPropuestaRow(item, idx))
                 )}
               </tbody>
             </table>

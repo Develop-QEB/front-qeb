@@ -195,7 +195,7 @@ async function fetchPublicPropuesta(id: number): Promise<PublicPropuestaData> {
 }
 
 export function ClientePropuestaPage() {
-  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const isDark = false;
   const { id } = useParams<{ id: string }>();
   const propuestaId = id ? parseInt(id, 10) : 0;
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -214,6 +214,7 @@ export function ClientePropuestaPage() {
   // Advanced filter states
   const [filters, setFilters] = useState<FilterCondition[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -410,6 +411,58 @@ export function ClientePropuestaPage() {
     a.href = url;
     a.download = `propuesta_${propuestaId}.kml`;
     a.click();
+  };
+
+  const handleDownloadKMLSelected = () => {
+    if (!inventario || selectedItems.size === 0) return;
+    const itemsToExport = inventario.filter(i => selectedItems.has(i.id));
+    const placemarks = itemsToExport
+      .filter(i => i.latitud && i.longitud)
+      .map(i => `
+        <Placemark>
+          <name>${i.codigo_unico}</name>
+          <description><![CDATA[Plaza: ${i.plaza || 'N/A'}<br/>Tipo: ${i.tipo_de_cara || 'N/A'}<br/>Formato: ${i.tipo_de_mueble || 'N/A'}<br/>Caras: ${i.caras_totales}<br/>Tarifa: ${formatCurrency(i.tarifa_publica || 0)}]]></description>
+          <Point><coordinates>${i.longitud},${i.latitud},0</coordinates></Point>
+        </Placemark>`).join('');
+    const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document><name>Propuesta ${propuestaId} - ${selectedItems.size} seleccionados</name>${placemarks}</Document>\n</kml>`;
+    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `propuesta_${propuestaId}_seleccionados.kml`;
+    a.click();
+  };
+
+  const toggleItemSelection = (id: number) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleGroupSelection = (items: InventarioReservado[]) => {
+    const groupIds = items.map(i => i.id);
+    const allSelected = groupIds.every(id => selectedItems.has(id));
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        groupIds.forEach(id => next.delete(id));
+      } else {
+        groupIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (!inventario) return;
+    if (selectedItems.size === inventario.length) {
+      setSelectedItems(new Set());
+    } else {
+      setSelectedItems(new Set(inventario.map(i => i.id)));
+    }
   };
 
   const handleGeneratePDF = async () => {
@@ -768,10 +821,25 @@ export function ClientePropuestaPage() {
                 <button onClick={handleDownloadCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7AB800] hover:bg-[#5FA800] text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
                   <FileSpreadsheet className="h-3.5 w-3.5" /> CSV
                 </button>
+                <button onClick={handleDownloadKML} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0054A6] hover:bg-[#003B71] text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
+                  <MapIcon className="h-3.5 w-3.5" /> KML
+                </button>
+                {selectedItems.size > 0 && (
+                  <button onClick={handleDownloadKMLSelected} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium shadow-sm transition-colors" title={`Descargar KML de ${selectedItems.size} seleccionados`}>
+                    <MapIcon className="h-3.5 w-3.5" /> KML ({selectedItems.size})
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={inventario ? selectedItems.size === inventario.length && inventario.length > 0 : false}
+                  onChange={toggleSelectAll}
+                  className="checkbox-purple"
+                  title="Seleccionar todo"
+                />
                 <Filter className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                 <input
                   type="text"
@@ -873,6 +941,21 @@ export function ClientePropuestaPage() {
                     className="w-full px-5 py-3 flex items-center justify-between hover:bg-blue-50/50 transition-colors bg-[#0054A6]/5"
                   >
                     <div className="flex items-center gap-3">
+                      {(() => {
+                        const catItems = catGroup.articulos.flatMap(a => a.items);
+                        const allCatSelected = catItems.length > 0 && catItems.every(i => selectedItems.has(i.id));
+                        const someCatSelected = catItems.some(i => selectedItems.has(i.id));
+                        return (
+                          <input
+                            type="checkbox"
+                            checked={allCatSelected}
+                            ref={(el) => { if (el) el.indeterminate = someCatSelected && !allCatSelected; }}
+                            onChange={(e) => { e.stopPropagation(); toggleGroupSelection(catItems); }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="checkbox-purple"
+                          />
+                        );
+                      })()}
                       {expandedResumen.has(catGroup.catorcena) ? (
                         <ChevronDown className="h-4 w-4 text-[#0054A6]" />
                       ) : (
@@ -909,6 +992,20 @@ export function ClientePropuestaPage() {
                               className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-green-50/50 transition-colors"
                             >
                               <div className="flex items-center gap-3">
+                                {(() => {
+                                  const allArtSelected = artGroup.items.length > 0 && artGroup.items.every(i => selectedItems.has(i.id));
+                                  const someArtSelected = artGroup.items.some(i => selectedItems.has(i.id));
+                                  return (
+                                    <input
+                                      type="checkbox"
+                                      checked={allArtSelected}
+                                      ref={(el) => { if (el) el.indeterminate = someArtSelected && !allArtSelected; }}
+                                      onChange={(e) => { e.stopPropagation(); toggleGroupSelection(artGroup.items); }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="checkbox-purple"
+                                    />
+                                  );
+                                })()}
                                 {expandedResumen.has(artKey) ? (
                                   <ChevronDown className="h-3.5 w-3.5 text-[#7AB800]" />
                                 ) : (
@@ -950,6 +1047,7 @@ export function ClientePropuestaPage() {
                                   <table className="w-full text-sm">
                                     <thead>
                                       <tr className="bg-[#0054A6]/5">
+                                        <th className="px-3 py-2 w-8"></th>
                                         <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Plaza</th>
                                         <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Formato</th>
                                         <th className="px-3 py-2 text-center text-xs font-semibold text-[#0054A6]">Caras</th>
@@ -964,6 +1062,9 @@ export function ClientePropuestaPage() {
                                         const inv = (Number(item.tarifa_publica) || 0) * (Number(item.caras_totales) || 0);
                                         return (
                                           <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
+                                            <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                                              <input type="checkbox" checked={selectedItems.has(item.id)} onChange={() => toggleItemSelection(item.id)} className="checkbox-purple" />
+                                            </td>
                                             <td className="px-3 py-2 text-gray-700 text-xs">{item.plaza || '-'}</td>
                                             <td className="px-3 py-2 text-gray-600 text-xs">{item.tipo_de_mueble || '-'}</td>
                                             <td className="px-3 py-2 text-center font-semibold text-gray-800 text-xs">{item.caras_totales}</td>
