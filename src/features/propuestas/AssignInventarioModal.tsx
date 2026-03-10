@@ -3455,6 +3455,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           <option value={200}>200m</option>
                           <option value={500}>500m</option>
                           <option value={1000}>1km</option>
+                          <option value={1500}>1.5km</option>
+                          <option value={2000}>2km</option>
+                          <option value={3000}>3km</option>
                         </select>
                       )}
                       <input
