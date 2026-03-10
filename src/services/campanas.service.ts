@@ -85,6 +85,29 @@ export interface DigitalFileSummary {
   countVideos: number;
 }
 
+export interface ArteTradicional {
+  id: number;
+  idReserva: number;
+  archivo: string;
+  nota: string;
+  spot: number;
+  createdAt: string | null;
+}
+
+export interface TradicionalFileSummary {
+  idReserva: number;
+  totalArchivos: number;
+  firstNota: string;
+}
+
+export interface FichasTecnicasNode {
+  name: string;
+  type: 'folder' | 'file';
+  path?: string;
+  ext?: string;
+  children?: FichasTecnicasNode[];
+}
+
 export interface InventarioReservado {
   rsv_ids: string;
   id: number;
@@ -750,6 +773,37 @@ export const campanasService = {
     return response.data.data;
   },
 
+  async assignArteTradicional(
+    id: number,
+    reservaIds: number[],
+    archivos: { archivo: string; nota: string; spot: number }[]
+  ): Promise<{ message: string; affected: number }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/assign-arte-tradicional`, {
+      reservaIds,
+      archivos,
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al asignar arte tradicional');
+    }
+    return response.data.data;
+  },
+
+  async getArtesTradicionales(campanaId: number, reservaId: number | string): Promise<ArteTradicional[]> {
+    const response = await api.get<ApiResponse<ArteTradicional[]>>(`/campanas/${campanaId}/artes-tradicionales/${reservaId}`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener artes tradicionales');
+    }
+    return response.data.data;
+  },
+
+  async getTradicionalFileSummaries(campanaId: number): Promise<TradicionalFileSummary[]> {
+    const response = await api.get<ApiResponse<TradicionalFileSummary[]>>(`/campanas/${campanaId}/tradicional-file-summaries`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener resumen de artes tradicionales');
+    }
+    return response.data.data;
+  },
+
   async checkReservasTareas(id: number, reservaIds: number[]): Promise<{
     hasTareas: boolean;
     tareas: Array<{ id: number; titulo: string | null; tipo: string | null; estatus: string | null; responsable: string | null }>;
@@ -792,6 +846,26 @@ export const campanasService = {
       throw new Error(response.data.error || 'Error al subir archivo de testigo');
     }
     return response.data.data;
+  },
+
+  async getFichasTecnicasTree(): Promise<FichasTecnicasNode[]> {
+    const response = await api.get<ApiResponse<FichasTecnicasNode[]>>('/fichas-tecnicas/tree');
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener fichas técnicas');
+    }
+    return response.data.data;
+  },
+
+  async openFichaTecnica(filePath: string): Promise<void> {
+    const response = await api.get(`/fichas-tecnicas/file`, {
+      params: { path: filePath },
+      responseType: 'blob',
+    });
+    const blob = response.data as Blob;
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    // Clean up after a delay to allow the new tab to load
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
   },
 
   async updateArteStatus(

@@ -49,9 +49,11 @@ import {
   FileSpreadsheet,
   ToggleLeft,
   ToggleRight,
+  Folder,
+  FolderOpen,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioConArte, TareaCampana, ArteExistente, DigitalFileSummary } from '../../services/campanas.service';
+import { campanasService, InventarioConArte, TareaCampana, ArteExistente, DigitalFileSummary, TradicionalFileSummary, FichasTecnicasNode } from '../../services/campanas.service';
 import { proveedoresService } from '../../services/proveedores.service';
 import { Proveedor, Catorcena } from '../../types';
 import { solicitudesService } from '../../services/solicitudes.service';
@@ -816,6 +818,14 @@ interface ImagenDigitalView {
   estado: string;
 }
 
+// Tipo para artes tradicionales del backend
+interface ArteTradicionalView {
+  id: number;
+  archivo: string;
+  nota: string;
+  spot: number;
+}
+
 // Digital Gallery Modal Component
 function DigitalGalleryModal({
   isOpen,
@@ -979,6 +989,155 @@ function DigitalGalleryModal({
   );
 }
 
+// Traditional Gallery Modal Component
+function TradicionalGalleryModal({
+  isOpen,
+  onClose,
+  imagenes,
+  isLoading,
+  title,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  imagenes: ArteTradicionalView[];
+  isLoading: boolean;
+  title?: string;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const handlePrev = () => {
+    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : imagenes.length - 1));
+  };
+
+  const handleNext = () => {
+    setCurrentIndex((prev) => (prev < imagenes.length - 1 ? prev + 1 : 0));
+  };
+
+  useEffect(() => {
+    if (isOpen) setCurrentIndex(0);
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const currentImage = imagenes[currentIndex];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="relative bg-card border border-border rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Printer className="h-5 w-5 text-orange-400" />
+            {title || 'Galería Tradicional'}
+            <Badge className="bg-orange-600/30 text-orange-300 border-orange-500/30 text-[10px]">
+              {imagenes.length} arte{imagenes.length !== 1 ? 's' : ''}
+            </Badge>
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-orange-900/30 rounded-lg transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden p-4 flex flex-col">
+          {isLoading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-orange-400" />
+            </div>
+          ) : imagenes.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center text-zinc-500">
+              <div className="text-center">
+                <Image className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                <p>No hay artes tradicionales</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Main viewer */}
+              <div className="flex-1 relative bg-black rounded-lg flex items-center justify-center min-h-[300px]">
+                <img
+                  key={currentImage?.id}
+                  src={getImageUrl(currentImage?.archivo) || ''}
+                  alt={`Arte ${currentIndex + 1}`}
+                  className="max-w-full max-h-[400px] object-contain"
+                />
+
+                {/* Navigation arrows */}
+                {imagenes.length > 1 && (
+                  <>
+                    <button
+                      onClick={handlePrev}
+                      className="absolute left-2 p-2 bg-black/50 hover:bg-black/70 rounded-full transition-colors"
+                    >
+                      <ChevronLeft className="h-6 w-6" />
+                    </button>
+                    <button
+                      onClick={handleNext}
+                      className="absolute right-2 p-2 bg-black/50 hover:bg-black/70 rounded-full transition-colors"
+                    >
+                      <ChevronRight className="h-6 w-6" />
+                    </button>
+                  </>
+                )}
+
+                {/* Position indicator */}
+                <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded text-xs">
+                  {currentIndex + 1} de {imagenes.length}
+                </div>
+              </div>
+
+              {/* Nota de la imagen actual */}
+              {currentImage?.nota && (
+                <div className="mt-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                  <p className="text-xs font-medium text-orange-300 mb-1">Nota:</p>
+                  <p className="text-sm text-zinc-300 whitespace-pre-wrap">{currentImage.nota}</p>
+                </div>
+              )}
+
+              {/* Thumbnails */}
+              {imagenes.length > 1 && (
+                <div className="mt-3 flex gap-2 overflow-x-auto py-2 px-1">
+                  {imagenes.map((img, index) => (
+                    <button
+                      key={img.id || index}
+                      onClick={() => setCurrentIndex(index)}
+                      className={`relative flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-all ${
+                        index === currentIndex
+                          ? 'border-orange-400 ring-2 ring-orange-400/30'
+                          : 'border-transparent hover:border-orange-400/50'
+                      }`}
+                    >
+                      <img
+                        src={getImageUrl(img.archivo) || ''}
+                        alt={`Thumbnail ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-center py-0.5">
+                        {img.spot}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 p-4 border-t border-border flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Upload Art Modal Component
 function UploadArtModal({
   isOpen,
@@ -986,6 +1145,7 @@ function UploadArtModal({
   selectedInventory,
   onSubmit,
   onSubmitDigital,
+  onSubmitTradicional,
   artesExistentes,
   isLoadingArtes,
   isSubmitting,
@@ -999,6 +1159,7 @@ function UploadArtModal({
   selectedInventory: InventoryRow[];
   onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => void;
   onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[] }) => void;
+  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[] }) => void;
   artesExistentes: ArteExistente[];
   isLoadingArtes: boolean;
   isSubmitting: boolean;
@@ -1015,9 +1176,48 @@ function UploadArtModal({
   const [duplicateWarning, setDuplicateWarning] = useState<{ nombre: string; usos: number; url: string } | null>(null);
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
 
+  // Tab del modal: Artes o Fichas Técnicas
+  const [modalTab, setModalTab] = useState<'artes' | 'fichas'>('artes');
+
   // Estado para archivos digitales (múltiples)
   const [digitalFiles, setDigitalFiles] = useState<DigitalFile[]>([]);
   const [draggedFile, setDraggedFile] = useState<string | null>(null);
+
+  // Estado para wizard de artes tradicionales (2 pasos)
+  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
+  const [selectedGalleryImages, setSelectedGalleryImages] = useState<Map<string, { url: string; source: 'existing' | 'upload' | 'url'; preview?: string }>>(new Map());
+  const [imageNotes, setImageNotes] = useState<Map<string, string>>(new Map());
+
+  // Estado para fichas técnicas (browser de carpetas)
+  const [expandedFichaFolders, setExpandedFichaFolders] = useState<Set<string>>(new Set());
+  const [fichasTree, setFichasTree] = useState<FichasTecnicasNode[]>([]);
+  const [fichasLoading, setFichasLoading] = useState(false);
+  const [fichasError, setFichasError] = useState<string | null>(null);
+  const [fichasLoaded, setFichasLoaded] = useState(false);
+
+  // Cargar árbol de fichas técnicas cuando se abre la tab
+  useEffect(() => {
+    if (modalTab !== 'fichas' || fichasLoaded) return;
+    let cancelled = false;
+    setFichasLoading(true);
+    setFichasError(null);
+    campanasService.getFichasTecnicasTree()
+      .then(tree => {
+        if (!cancelled) {
+          setFichasTree(tree);
+          setFichasLoaded(true);
+        }
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setFichasError(err instanceof Error ? err.message : 'Error al cargar fichas técnicas');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setFichasLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [modalTab, fichasLoaded]);
 
   // Detectar si todos los items seleccionados son digitales
   const isDigitalInventory = useMemo(() => {
@@ -1229,7 +1429,21 @@ function UploadArtModal({
       return;
     }
 
-    // Flujo tradicional
+    // Flujo tradicional con wizard
+    if (!isDigitalInventory && onSubmitTradicional && wizardStep === 2) {
+      const archivos = Array.from(selectedGalleryImages.entries()).map(([key, img], idx) => ({
+        archivo: img.url,
+        nota: imageNotes.get(key)?.trim() || '',
+        spot: idx + 1,
+      }));
+      onSubmitTradicional({
+        archivos,
+        inventoryIds: selectedInventory.map((i) => i.id),
+      });
+      return;
+    }
+
+    // Fallback: flujo tradicional legacy (no debería llegar aquí con el wizard)
     let value: string | File = '';
     if (selectedOption === 'existing') {
       value = existingArtUrl;
@@ -1259,6 +1473,11 @@ function UploadArtModal({
     setDuplicateWarning(null);
     setDigitalFiles([]);
     setDraggedFile(null);
+    setWizardStep(1);
+    setSelectedGalleryImages(new Map());
+    setImageNotes(new Map());
+    setModalTab('artes');
+    setExpandedFichaFolders(new Set());
     onClose();
   };
 
@@ -1281,13 +1500,116 @@ function UploadArtModal({
       return digitalFiles.length === 0;
     }
 
-    // Para inventario tradicional
+    // Para inventario tradicional con wizard
+    if (!isDigitalInventory && onSubmitTradicional) {
+      if (wizardStep === 2) {
+        // En paso 2: todas las notas deben estar llenas
+        if (selectedGalleryImages.size === 0) return true;
+        for (const [key] of selectedGalleryImages) {
+          const nota = imageNotes.get(key);
+          if (!nota || nota.trim() === '') return true;
+        }
+        return false;
+      }
+      // En paso 1: no usar este botón (se usa "Siguiente")
+      return true;
+    }
+
+    // Fallback tradicional
     if (isCheckingDuplicate) return true;
-    if (duplicateWarning) return true; // No permitir subir si hay duplicado
+    if (duplicateWarning) return true;
     if (selectedOption === 'existing' && !existingArtUrl) return true;
     if (selectedOption === 'file' && !file) return true;
     if (selectedOption === 'link' && !link.trim()) return true;
     return false;
+  };
+
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+
+  // Helpers para el wizard tradicional
+  // No permitir avanzar si hay archivos subiendo o imágenes sin URL
+  const hasUploadingImages = Array.from(selectedGalleryImages.values()).some(img => img.source === 'upload' && !img.url);
+  const canGoToStep2 = selectedGalleryImages.size > 0 && !isUploadingFile && !hasUploadingImages;
+
+  const toggleGalleryImage = (id: string, url: string) => {
+    setSelectedGalleryImages(prev => {
+      const next = new Map(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        setImageNotes(prevNotes => {
+          const nn = new Map(prevNotes);
+          nn.delete(id);
+          return nn;
+        });
+      } else {
+        next.set(id, { url, source: 'existing' });
+      }
+      return next;
+    });
+  };
+
+  const addUploadedFile = async (selectedFile: File) => {
+    const id = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // Create preview first
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const preview = event.target?.result as string;
+      // Show preview immediately with loading state
+      setSelectedGalleryImages(prev => {
+        const next = new Map(prev);
+        next.set(id, { url: '', source: 'upload', preview });
+        return next;
+      });
+
+      // Upload to Spaces immediately
+      try {
+        setIsUploadingFile(true);
+        const uploadResult = await campanasService.uploadArteFile(selectedFile);
+        setSelectedGalleryImages(prev => {
+          const next = new Map(prev);
+          const existing = next.get(id);
+          if (existing) {
+            next.set(id, { ...existing, url: uploadResult.url });
+          }
+          return next;
+        });
+      } catch (err) {
+        console.error('Error uploading file:', err);
+        // Remove the failed upload
+        setSelectedGalleryImages(prev => {
+          const next = new Map(prev);
+          next.delete(id);
+          return next;
+        });
+      } finally {
+        setIsUploadingFile(false);
+      }
+    };
+    reader.readAsDataURL(selectedFile);
+  };
+
+  const addUrlImage = (url: string) => {
+    if (!url.trim()) return;
+    const id = `url-${Date.now()}`;
+    setSelectedGalleryImages(prev => {
+      const next = new Map(prev);
+      next.set(id, { url, source: 'url' });
+      return next;
+    });
+  };
+
+  const removeGalleryImage = (id: string) => {
+    setSelectedGalleryImages(prev => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+    setImageNotes(prev => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   if (!isOpen) return null;
@@ -1295,7 +1617,7 @@ function UploadArtModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-card border border-border rounded-xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col">
+      <div className="relative bg-card border border-border rounded-xl w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -1321,72 +1643,251 @@ function UploadArtModal({
           </div>
         )}
 
+        {/* Tabs: Artes / Fichas Técnicas */}
+        <div className="flex items-center gap-1 px-4 pt-3 pb-0 flex-shrink-0">
+          <button
+            onClick={() => setModalTab('artes')}
+            className={`px-4 py-1.5 text-xs font-medium rounded-t-lg border border-b-0 transition-colors ${
+              modalTab === 'artes'
+                ? 'bg-card text-purple-300 border-border'
+                : 'bg-zinc-800/50 text-zinc-500 border-transparent hover:text-zinc-300'
+            }`}
+          >
+            <Upload className="h-3 w-3 inline mr-1.5" />
+            Artes
+          </button>
+          <button
+            onClick={() => setModalTab('fichas')}
+            className={`px-4 py-1.5 text-xs font-medium rounded-t-lg border border-b-0 transition-colors ${
+              modalTab === 'fichas'
+                ? 'bg-card text-emerald-300 border-border'
+                : 'bg-zinc-800/50 text-zinc-500 border-transparent hover:text-zinc-300'
+            }`}
+          >
+            <FileSpreadsheet className="h-3 w-3 inline mr-1.5" />
+            Fichas Técnicas
+          </button>
+        </div>
+
         {/* Content - Two columns */}
-        <div className="flex-1 overflow-hidden p-4">
+        <div className="flex-1 overflow-hidden p-4 pt-2">
+          {modalTab === 'fichas' ? (
+            /* ===== TAB: FICHAS TÉCNICAS (Explorador de carpetas) ===== */
+            <div className="h-full flex flex-col">
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg mb-3">
+                <div className="flex items-start gap-2">
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-emerald-300 font-medium">Fichas Técnicas</p>
+                    <p className="text-[10px] text-emerald-400/70 mt-1">
+                      Navega por las carpetas para consultar fichas técnicas disponibles. Haz clic en un archivo para visualizarlo.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {fichasError && (
+                <div className="mb-3 p-2 bg-red-500/20 border border-red-500/30 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+                  <span className="text-xs text-red-300">{fichasError}</span>
+                  <button onClick={() => { setFichasError(null); setFichasLoaded(false); }} className="ml-auto text-xs text-red-300 hover:text-red-200 underline">Reintentar</button>
+                </div>
+              )}
+
+              {fichasLoading ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+                  <span className="ml-2 text-xs text-zinc-400">Cargando fichas técnicas...</span>
+                </div>
+              ) : fichasTree.length === 0 && fichasLoaded ? (
+                <div className="flex-1 flex items-center justify-center text-zinc-500">
+                  <div className="text-center">
+                    <FileSpreadsheet className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                    <p className="text-xs">No se encontraron fichas técnicas</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 min-h-0 overflow-auto">
+                  {(() => {
+                    const renderNode = (node: FichasTecnicasNode, depth: number = 0): React.ReactNode => {
+                      const paddingLeft = depth * 16;
+                      if (node.type === 'folder') {
+                        const isExpanded = expandedFichaFolders.has(node.path || node.name);
+                        const folderKey = node.path || node.name;
+                        return (
+                          <div key={folderKey}>
+                            <button
+                              onClick={() => {
+                                setExpandedFichaFolders(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(folderKey)) next.delete(folderKey);
+                                  else next.add(folderKey);
+                                  return next;
+                                });
+                              }}
+                              className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800/60 rounded transition-colors text-left"
+                              style={{ paddingLeft: `${paddingLeft + 8}px` }}
+                            >
+                              {isExpanded
+                                ? <FolderOpen className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                                : <Folder className="h-4 w-4 text-amber-400/70 flex-shrink-0" />
+                              }
+                              <span className="text-xs text-zinc-200 truncate">{node.name}</span>
+                              {node.children && (
+                                <span className="text-[10px] text-zinc-500 ml-auto flex-shrink-0">
+                                  {node.children.length} {node.children.length === 1 ? 'elemento' : 'elementos'}
+                                </span>
+                              )}
+                            </button>
+                            {isExpanded && node.children && (
+                              <div>
+                                {node.children.map(child => renderNode(child, depth + 1))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                      // File node
+                      const ext = (node.ext || '').toLowerCase();
+                      const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext);
+                      const isPdf = ext === 'pdf';
+                      return (
+                        <button
+                          key={node.path || node.name}
+                          onClick={() => {
+                            if (node.path) {
+                              campanasService.openFichaTecnica(node.path).catch(err => {
+                                console.error('Error opening ficha:', err);
+                              });
+                            }
+                          }}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-emerald-900/20 rounded transition-colors text-left group"
+                          style={{ paddingLeft: `${paddingLeft + 8}px` }}
+                        >
+                          {isPdf ? (
+                            <FileText className="h-4 w-4 text-red-400/70 flex-shrink-0" />
+                          ) : isImage ? (
+                            <Image className="h-4 w-4 text-blue-400/70 flex-shrink-0" />
+                          ) : (
+                            <FileText className="h-4 w-4 text-zinc-400/70 flex-shrink-0" />
+                          )}
+                          <span className="text-xs text-zinc-300 truncate group-hover:text-emerald-300 transition-colors">{node.name}</span>
+                          <ExternalLink className="h-3 w-3 text-zinc-600 group-hover:text-emerald-400 ml-auto flex-shrink-0 transition-colors" />
+                        </button>
+                      );
+                    };
+                    return fichasTree.map(node => renderNode(node, 0));
+                  })()}
+                </div>
+              )}
+            </div>
+          ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
             {/* Left Column - Upload Options & Preview */}
             <div className="flex flex-col space-y-4">
               {isDigitalInventory ? (
-                /* ===== INTERFAZ DIGITAL - MÚLTIPLES ARCHIVOS ===== */
+                /* ===== INTERFAZ DIGITAL - Estilo galería similar a tradicional ===== */
                 <>
-                  {/* Header info */}
-                  <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <Film className="h-4 w-4 text-cyan-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-xs text-cyan-300 font-medium">
-                          Inventario Digital - Rotación de contenido
-                        </p>
-                        <p className="text-[10px] text-cyan-400/70 mt-1">
-                          Puedes subir múltiples imágenes y/o videos que se mostrarán en rotación.
-                          Arrastra para reordenar la secuencia.
+                  {/* Galería de artes digitales existentes */}
+                  <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                      Biblioteca de contenido digital ({artesExistentes.length})
+                    </label>
+                    <div className="flex-1 min-h-[120px] max-h-[200px] border border-border rounded-lg bg-zinc-900/50 overflow-auto p-2">
+                      {isLoadingArtes ? (
+                        <div className="h-full flex items-center justify-center">
+                          <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+                        </div>
+                      ) : artesExistentes.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-center text-zinc-500">
+                          <div>
+                            <Film className="h-8 w-8 mx-auto mb-1 opacity-30" />
+                            <p className="text-[10px]">No se han subido archivos digitales a esta campaña</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-6 gap-1.5">
+                          {artesExistentes.map((art) => {
+                            const isVideo = /\.(mp4|mov|webm|avi)$/i.test(art.url || '');
+                            return (
+                              <div
+                                key={art.id}
+                                className="relative aspect-square rounded-lg overflow-hidden border-2 border-transparent group"
+                                title={art.nombre}
+                              >
+                                {isVideo ? (
+                                  <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+                                    <Play className="h-5 w-5 text-cyan-400" />
+                                  </div>
+                                ) : (
+                                  <img
+                                    src={getImageUrl(art.url) || ''}
+                                    alt={art.nombre}
+                                    className="w-full h-full object-cover"
+                                  />
+                                )}
+                                <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
+                                  <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Agregar nuevos archivos */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-medium text-zinc-400">
+                      Agregar archivos para rotación
+                    </label>
+                    <div className="flex gap-2">
+                      <label className="flex-1 cursor-pointer">
+                        <input
+                          type="file"
+                          onChange={handleDigitalFilesChange}
+                          accept="image/*,video/*"
+                          multiple
+                          disabled={isSubmitting}
+                          className="hidden"
+                        />
+                        <div className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-cyan-600/20 border border-cyan-500/30 rounded-lg hover:bg-cyan-600/30 transition-colors">
+                          <Upload className="h-3.5 w-3.5 text-cyan-400" />
+                          <span className="text-cyan-300">Subir archivos</span>
+                        </div>
+                      </label>
+                      <div className="flex items-center">
+                        <p className="text-[10px] text-zinc-500">
+                          JPG, PNG, GIF, MP4, MOV, WEBM
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  {/* File Input */}
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                      Agregar archivos
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="file"
-                        onChange={handleDigitalFilesChange}
-                        accept="image/*,video/*"
-                        multiple
-                        disabled={isSubmitting}
-                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-cyan-600 file:text-white hover:file:bg-cyan-700 disabled:opacity-50"
-                      />
-                    </div>
-                    <p className="mt-2 text-[10px] text-zinc-500">
-                      Formatos: JPG, PNG, GIF, WEBP, MP4, MOV, WEBM (max 50MB por archivo)
-                    </p>
-                  </div>
-
-                  {/* Lista de archivos con drag & drop */}
+                  {/* Lista de archivos seleccionados con drag & drop */}
                   <div className="flex-1 min-h-0 overflow-hidden">
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-medium text-zinc-400">
-                        Archivos para rotación
+                        Archivos seleccionados
                       </label>
                       <Badge className="bg-cyan-600/30 text-cyan-300 border-cyan-500/30 text-[10px]">
                         {digitalFiles.length} archivo{digitalFiles.length !== 1 ? 's' : ''}
                       </Badge>
                     </div>
-                    <div className="h-64 border border-border rounded-lg bg-zinc-900/50 overflow-auto">
+                    <div className="flex-1 min-h-[100px] max-h-[180px] border border-border rounded-lg bg-zinc-900/50 overflow-auto">
                       {digitalFiles.length === 0 ? (
-                        <div className="h-full flex items-center justify-center text-center text-zinc-500">
+                        <div className="h-full min-h-[100px] flex items-center justify-center text-center text-zinc-500">
                           <div>
-                            <Upload className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                            <p className="text-xs">
-                              Selecciona archivos para agregarlos a la rotación
+                            <Upload className="h-8 w-8 mx-auto mb-1 opacity-30" />
+                            <p className="text-[10px]">
+                              Sube archivos para agregarlos a la rotación
                             </p>
+                            <p className="text-[9px] text-zinc-600 mt-0.5">Arrastra para reordenar</p>
                           </div>
                         </div>
                       ) : (
-                        <div className="p-2 space-y-2">
+                        <div className="p-2 space-y-1.5">
                           {digitalFiles.map((digitalFile, index) => (
                             <div
                               key={digitalFile.id}
@@ -1394,27 +1895,22 @@ function UploadArtModal({
                               onDragStart={() => handleDragStart(digitalFile.id)}
                               onDragOver={(e) => handleDragOver(e, digitalFile.id)}
                               onDragEnd={handleDragEnd}
-                              className={`flex items-center gap-2 p-2 rounded-lg border transition-all cursor-move ${
+                              className={`flex items-center gap-2 p-1.5 rounded-lg border transition-all cursor-move ${
                                 draggedFile === digitalFile.id
                                   ? 'border-cyan-500 bg-cyan-500/20 opacity-50'
                                   : 'border-border bg-background hover:border-cyan-500/50'
                               }`}
                             >
-                              {/* Drag Handle */}
                               <div className="flex-shrink-0 text-zinc-500 hover:text-cyan-400 cursor-grab">
-                                <GripVertical className="h-4 w-4" />
+                                <GripVertical className="h-3.5 w-3.5" />
                               </div>
-
-                              {/* Spot Number */}
-                              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-cyan-600/30 flex items-center justify-center">
-                                <span className="text-[10px] font-bold text-cyan-300">{digitalFile.spot}</span>
+                              <div className="flex-shrink-0 w-5 h-5 rounded-full bg-cyan-600/30 flex items-center justify-center">
+                                <span className="text-[9px] font-bold text-cyan-300">{digitalFile.spot}</span>
                               </div>
-
-                              {/* Preview */}
-                              <div className="flex-shrink-0 w-12 h-12 rounded overflow-hidden bg-zinc-800">
+                              <div className="flex-shrink-0 w-10 h-10 rounded overflow-hidden bg-zinc-800">
                                 {digitalFile.type === 'video' ? (
                                   <div className="w-full h-full flex items-center justify-center bg-zinc-700">
-                                    <Play className="h-5 w-5 text-cyan-400" />
+                                    <Play className="h-4 w-4 text-cyan-400" />
                                   </div>
                                 ) : (
                                   <img
@@ -1424,31 +1920,26 @@ function UploadArtModal({
                                   />
                                 )}
                               </div>
-
-                              {/* File Info */}
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs text-white truncate" title={digitalFile.file.name}>
+                                <p className="text-[10px] text-white truncate" title={digitalFile.file.name}>
                                   {digitalFile.file.name}
                                 </p>
-                                <p className="text-[10px] text-zinc-500 flex items-center gap-1.5">
+                                <p className="text-[9px] text-zinc-500 flex items-center gap-1">
                                   {digitalFile.type === 'video' ? (
-                                    <Film className="h-3 w-3 text-cyan-400" />
+                                    <Film className="h-2.5 w-2.5 text-cyan-400" />
                                   ) : (
-                                    <Image className="h-3 w-3 text-purple-400" />
+                                    <Image className="h-2.5 w-2.5 text-cyan-400" />
                                   )}
-                                  {digitalFile.type === 'video' ? 'Video' : 'Imagen'} •{' '}
-                                  {(digitalFile.file.size / 1024 / 1024).toFixed(2)} MB
+                                  {digitalFile.type === 'video' ? 'Video' : 'Imagen'} • {(digitalFile.file.size / 1024 / 1024).toFixed(2)} MB
                                 </p>
                               </div>
-
-                              {/* Delete Button */}
                               <button
                                 type="button"
                                 onClick={() => handleRemoveDigitalFile(digitalFile.id)}
                                 className="flex-shrink-0 p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                                 title="Eliminar archivo"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           ))}
@@ -1458,169 +1949,195 @@ function UploadArtModal({
                   </div>
                 </>
               ) : (
-                /* ===== INTERFAZ TRADICIONAL - UN ARCHIVO ===== */
+                /* ===== INTERFAZ TRADICIONAL - WIZARD 2 PASOS ===== */
                 <>
-                  {/* Option Selector */}
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                      Tipo de subida
-                    </label>
-                    <select
-                      value={selectedOption}
-                      onChange={(e) => setSelectedOption(e.target.value as UploadOption)}
-                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-                      disabled={isSubmitting}
-                    >
-                      <option value="file">Subir archivo</option>
-                      <option value="existing">Escoger existente</option>
-                      <option value="link">Subir link</option>
-                    </select>
-                  </div>
-
-                  {/* Dynamic Input based on option */}
-                  <div className="space-y-3">
-                    {selectedOption === 'file' && (
-                      <div>
-                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                          Seleccionar archivo
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="file"
-                            onChange={handleFileChange}
-                            accept="image/*,.pdf"
-                            disabled={isSubmitting}
-                            className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-purple-600 file:text-white hover:file:bg-purple-700 disabled:opacity-50"
-                          />
-                        </div>
-                        {file && (
-                          <p className="mt-2 text-xs text-purple-300 flex items-center gap-1.5">
-                            <FileText className="h-3.5 w-3.5" />
-                            {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                          </p>
-                        )}
-                        {isCheckingDuplicate && (
-                          <div className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            Verificando si el archivo ya existe...
-                          </div>
-                        )}
-                        {duplicateWarning && (
-                          <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                            <div className="flex items-start gap-2">
-                              <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                              <div className="flex-1">
-                                <p className="text-xs text-amber-300 font-medium">
-                                  Ya existe un archivo con el nombre "{duplicateWarning.nombre}"
-                                </p>
-                                <p className="text-[10px] text-amber-400/70 mt-1">
-                                  Usado {duplicateWarning.usos} {duplicateWarning.usos === 1 ? 'vez' : 'veces'} en esta campaña
-                                </p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={handleUseExisting}
-                                    className="px-2 py-1 text-[10px] bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-                                  >
-                                    Usar el existente
-                                  </button>
-                                  <span className="text-[10px] text-amber-400/50 self-center">
-                                    o cambia el nombre del archivo
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        <p className="mt-2 text-[10px] text-zinc-500">
-                          Formatos permitidos: JPG, PNG, GIF, WEBP, PDF (max 10MB)
-                        </p>
-                      </div>
-                    )}
-
-                    {selectedOption === 'existing' && (
-                      <div>
-                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                          Seleccionar arte existente
-                        </label>
-                        {isLoadingArtes ? (
-                          <div className="flex items-center gap-2 py-2 text-zinc-400">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span className="text-sm">Cargando artes...</span>
-                          </div>
-                        ) : artesExistentes.length === 0 ? (
-                          <div className="p-3 bg-zinc-800/50 rounded-lg text-center">
-                            <p className="text-xs text-zinc-500">No hay artes existentes en esta campaña</p>
-                          </div>
-                        ) : (
-                          <select
-                            value={existingArtUrl}
-                            onChange={(e) => setExistingArtUrl(e.target.value)}
-                            className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-                            disabled={isSubmitting}
-                          >
-                            <option value="">-- Selecciona un arte --</option>
-                            {artesExistentes.map((art) => (
-                              <option key={art.id} value={art.url}>
-                                {art.nombre} ({art.usos} uso{art.usos !== 1 ? 's' : ''})
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    )}
-
-                    {selectedOption === 'link' && (
-                      <div>
-                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                          URL del arte
-                        </label>
-                        <input
-                          type="url"
-                          value={link}
-                          onChange={(e) => setLink(e.target.value)}
-                          placeholder="https://ejemplo.com/arte.jpg"
-                          disabled={isSubmitting}
-                          className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Preview Section */}
-                  <div className="flex-1 min-h-0">
-                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                      Previsualizacion
-                    </label>
-                    <div className="h-48 border border-border rounded-lg bg-zinc-900/50 flex items-center justify-center overflow-hidden">
-                      {previewUrl ? (
-                        <img
-                          src={previewUrl}
-                          alt="Preview"
-                          className="max-w-full max-h-full object-contain"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                          }}
-                        />
-                      ) : (
-                        <div className="text-center text-zinc-500">
-                          <Image className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                          <p className="text-xs">
-                            {selectedOption === 'file' && 'Selecciona un archivo para ver la previsualizacion'}
-                            {selectedOption === 'existing' && 'Selecciona un arte existente'}
-                            {selectedOption === 'link' && 'Ingresa una URL para ver la previsualizacion'}
-                          </p>
-                        </div>
-                      )}
-                      {previewUrl && (
-                        <div className="hidden text-center text-zinc-500">
-                          <AlertCircle className="h-8 w-8 mx-auto mb-2 text-amber-400" />
-                          <p className="text-xs">No se pudo cargar la imagen</p>
-                        </div>
-                      )}
+                  {/* Step indicator */}
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={`flex items-center gap-1.5 ${wizardStep === 1 ? 'text-purple-300' : 'text-zinc-500'}`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        wizardStep === 1 ? 'bg-purple-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                      }`}>1</div>
+                      <span className="text-xs font-medium">Seleccionar</span>
+                    </div>
+                    <div className="flex-1 h-px bg-border" />
+                    <div className={`flex items-center gap-1.5 ${wizardStep === 2 ? 'text-purple-300' : 'text-zinc-500'}`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        wizardStep === 2 ? 'bg-purple-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                      }`}>2</div>
+                      <span className="text-xs font-medium">Notas</span>
                     </div>
                   </div>
+
+                  {wizardStep === 1 ? (
+                    /* ===== PASO 1: Seleccionar imágenes ===== */
+                    <>
+                      {/* Galería de artes existentes */}
+                      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          Biblioteca de artes ({artesExistentes.length})
+                        </label>
+                        <div className="flex-1 min-h-[120px] max-h-[260px] border border-border rounded-lg bg-zinc-900/50 overflow-auto p-2">
+                          {isLoadingArtes ? (
+                            <div className="h-full flex items-center justify-center">
+                              <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
+                            </div>
+                          ) : artesExistentes.length === 0 ? (
+                            <div className="h-full flex items-center justify-center text-center text-zinc-500">
+                              <div>
+                                <Image className="h-8 w-8 mx-auto mb-1 opacity-30" />
+                                <p className="text-[10px]">No se han subido imágenes a esta campaña</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-6 gap-1.5">
+                              {artesExistentes.map((art) => {
+                                const isSelected = selectedGalleryImages.has(art.id);
+                                return (
+                                  <button
+                                    key={art.id}
+                                    onClick={() => toggleGalleryImage(art.id, art.url)}
+                                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all group ${
+                                      isSelected
+                                        ? 'border-purple-400 ring-2 ring-purple-400/30'
+                                        : 'border-transparent hover:border-purple-400/50'
+                                    }`}
+                                    title={art.nombre}
+                                  >
+                                    <img
+                                      src={getImageUrl(art.url) || ''}
+                                      alt={art.nombre}
+                                      className="w-full h-full object-cover"
+                                    />
+                                    {isSelected && (
+                                      <div className="absolute inset-0 bg-purple-600/30 flex items-center justify-center">
+                                        <Check className="h-4 w-4 text-white" />
+                                      </div>
+                                    )}
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
+                                      <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Opciones: Subir archivo o URL */}
+                      <div className="space-y-2">
+                        <label className="block text-xs font-medium text-zinc-400">
+                          O agrega nuevas
+                        </label>
+                        <div className="flex gap-2">
+                          <label className="flex-1 cursor-pointer">
+                            <input
+                              type="file"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) addUploadedFile(f);
+                                e.target.value = '';
+                              }}
+                              accept="image/*,.pdf"
+                              multiple
+                              className="hidden"
+                              disabled={isSubmitting}
+                            />
+                            <div className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-purple-600/20 border border-purple-500/30 rounded-lg hover:bg-purple-600/30 transition-colors">
+                              <Upload className="h-3.5 w-3.5 text-purple-400" />
+                              <span className="text-purple-300">Subir archivo</span>
+                            </div>
+                          </label>
+                          <div className="flex-1 flex gap-1">
+                            <input
+                              type="url"
+                              value={link}
+                              onChange={(e) => setLink(e.target.value)}
+                              placeholder="URL de imagen..."
+                              className="flex-1 px-2 py-1.5 text-[10px] bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => { addUrlImage(link); setLink(''); }}
+                              disabled={!link.trim()}
+                              className="px-2 py-1.5 text-[10px] bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Preview de seleccionadas */}
+                      {selectedGalleryImages.size > 0 && (
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                            Seleccionadas ({selectedGalleryImages.size})
+                          </label>
+                          <div className="flex gap-2 overflow-x-auto py-1">
+                            {Array.from(selectedGalleryImages.entries()).map(([id, img]) => (
+                              <div key={id} className="relative flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-purple-400/50">
+                                <img
+                                  src={img.preview || getImageUrl(img.url) || ''}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                                <button
+                                  onClick={() => removeGalleryImage(id)}
+                                  className="absolute top-0 right-0 p-0.5 bg-red-600/80 rounded-bl-lg"
+                                >
+                                  <X className="h-2.5 w-2.5 text-white" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* ===== PASO 2: Notas por imagen ===== */
+                    <>
+                      <div className="p-2 bg-purple-500/10 border border-purple-500/30 rounded-lg mb-2">
+                        <p className="text-[10px] text-purple-300">
+                          Agrega una nota obligatoria para cada imagen seleccionada.
+                        </p>
+                      </div>
+                      <div className="flex-1 min-h-0 overflow-auto space-y-3">
+                        {Array.from(selectedGalleryImages.entries()).map(([id, img], idx) => (
+                          <div key={id} className="flex gap-3 p-3 bg-zinc-900/50 border border-border rounded-lg">
+                            {/* Image preview */}
+                            <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-zinc-800">
+                              <img
+                                src={img.preview || getImageUrl(img.url) || ''}
+                                alt={`Arte ${idx + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            {/* Note input */}
+                            <div className="flex-1 min-w-0">
+                              <label className="block text-[10px] font-medium text-zinc-400 mb-1">
+                                Nota para imagen {idx + 1} <span className="text-red-400">*</span>
+                              </label>
+                              <textarea
+                                value={imageNotes.get(id) || ''}
+                                onChange={(e) => setImageNotes(prev => {
+                                  const next = new Map(prev);
+                                  next.set(id, e.target.value);
+                                  return next;
+                                })}
+                                placeholder="Escribe una nota para esta imagen..."
+                                rows={3}
+                                className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+                              />
+                              {(!imageNotes.get(id) || imageNotes.get(id)?.trim() === '') && (
+                                <p className="mt-0.5 text-[9px] text-red-400">Nota obligatoria</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -1742,25 +2259,58 @@ function UploadArtModal({
               </div>
             </div>
           </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 p-4 border-t border-border flex-shrink-0">
-          <button
-            onClick={handleClose}
-            disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitDisabled()}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isSubmitting ? 'Guardando...' : 'Asignar Arte'}
-          </button>
+        <div className="flex items-center justify-between p-4 border-t border-border flex-shrink-0">
+          <div>
+            {modalTab === 'artes' && !isDigitalInventory && wizardStep === 2 && (
+              <button
+                onClick={() => setWizardStep(1)}
+                disabled={isSubmitting}
+                className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors disabled:opacity-50"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Atrás
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleClose}
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            {modalTab === 'fichas' ? (
+              <button
+                onClick={handleClose}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
+              >
+                Cerrar
+              </button>
+            ) : !isDigitalInventory && wizardStep === 1 ? (
+              <button
+                onClick={() => setWizardStep(2)}
+                disabled={!canGoToStep2}
+                className="flex items-center gap-1 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Siguiente
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitDisabled()}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isSubmitting ? 'Guardando...' : 'Finalizar'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -2166,6 +2716,10 @@ function TestigoTaskView({
   getCatorcenaFromFechaFin,
   canResolveProduccionTasks = true,
   tipoPeriodo = 'catorcena',
+  tradicionalSummaryMap,
+  digitalSummaryMap,
+  openTradicionalGallery,
+  openDigitalGalleryModal,
 }: {
   task: TaskRow;
   taskInventory: InventoryRow[];
@@ -2175,6 +2729,10 @@ function TestigoTaskView({
   getCatorcenaFromFechaFin: string | null;
   canResolveProduccionTasks?: boolean;
   tipoPeriodo?: string;
+  tradicionalSummaryMap: Map<number, TradicionalFileSummary>;
+  digitalSummaryMap: Map<number, DigitalFileSummary>;
+  openTradicionalGallery: (reservaIds: number | number[], codigoUnico: string) => void;
+  openDigitalGalleryModal: (reservaId: number, codigoUnico: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [testigoFile, setTestigoFile] = useState<File | null>(null);
@@ -2277,6 +2835,44 @@ function TestigoTaskView({
 
   // Obtener archivo existente desde la tarea
   const existingFile = task.archivo_testigo;
+
+  // Helpers para multi-imagen
+  const getDigitalSummaryForItem = useCallback((item: InventoryRow) => {
+    if (item.tradicional_digital !== 'Digital' || !item.rsv_id) return null;
+    const rsvIds = item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+    let total = 0, imagenes = 0, videos = 0;
+    rsvIds.forEach(rsvId => {
+      const summary = digitalSummaryMap.get(rsvId);
+      if (summary) { total = Math.max(total, summary.totalArchivos); imagenes = Math.max(imagenes, summary.countImagenes); videos = Math.max(videos, summary.countVideos); }
+    });
+    if (total === 0) return null;
+    return { total, imagenes, videos };
+  }, [digitalSummaryMap]);
+
+  const getDigitalSummaryText = useCallback((summary: { total: number; imagenes: number; videos: number } | null) => {
+    if (!summary) return '';
+    const parts: string[] = [];
+    if (summary.imagenes > 0) parts.push(`${summary.imagenes} img`);
+    if (summary.videos > 0) parts.push(`${summary.videos} vid`);
+    return parts.join(' + ') || `${summary.total} archivos`;
+  }, []);
+
+  const getTradicionalSummaryForItem = useCallback((item: InventoryRow) => {
+    if (item.tradicional_digital === 'Digital' || !item.rsv_id) return null;
+    const rsvIds = item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+    let totalArchivos = 0;
+    let firstNota = '';
+    rsvIds.forEach(rsvId => {
+      const summary = tradicionalSummaryMap.get(rsvId);
+      if (summary) {
+        // Use max instead of sum: all reservas in a group share the same artes_tradicionales
+        totalArchivos = Math.max(totalArchivos, summary.totalArchivos);
+        if (!firstNota && summary.firstNota) firstNota = summary.firstNota;
+      }
+    });
+    if (totalArchivos === 0) return null;
+    return { total: totalArchivos, firstNota };
+  }, [tradicionalSummaryMap]);
 
   // Manejar selección de archivo
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2443,17 +3039,56 @@ function TestigoTaskView({
                         <th className="p-2 font-medium text-purple-300">Ciudad</th>
                         <th className="p-2 font-medium text-purple-300">Mueble</th>
                         <th className="p-2 font-medium text-purple-300">Medidas</th>
+                        <th className="p-2 font-medium text-purple-300">Notas</th>
                         <th className="p-2 font-medium text-purple-300">Periodo</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(items as InventoryRow[]).map((item) => (
+                      {(items as InventoryRow[]).map((item) => {
+                        const digitalSummary = getDigitalSummaryForItem(item);
+                        const tradSummary = getTradicionalSummaryForItem(item);
+                        const isDigital = item.tradicional_digital === 'Digital';
+                        return (
                         <tr key={item.id} className="border-t border-border/30 hover:bg-purple-900/10">
                           <td className="p-2">
-                            {item.archivo_arte ? (
-                              <div className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                            {isDigital && digitalSummary ? (
+                              <button
+                                onClick={() => {
+                                  const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                  if (rsvIds.length > 0) openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                }}
+                                className="w-12 h-9 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                title={`Ver ${getDigitalSummaryText(digitalSummary)}`}
+                              >
+                                <Film className="h-3 w-3 text-cyan-400" />
+                                <span className="text-cyan-400 font-bold text-[10px]">{digitalSummary.total}</span>
+                              </button>
+                            ) : tradSummary && tradSummary.total > 1 ? (
+                              <button
+                                onClick={() => {
+                                  const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                  if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
+                                }}
+                                className="w-12 h-9 rounded bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                title={`Ver ${tradSummary.total} artes`}
+                              >
+                                <Printer className="h-3 w-3 text-orange-400" />
+                                <span className="text-orange-400 font-bold text-[10px]">{tradSummary.total}</span>
+                              </button>
+                            ) : item.archivo_arte ? (
+                              <button
+                                onClick={() => {
+                                  const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                  if (tradSummary && rsvIds.length > 0) {
+                                    openTradicionalGallery(rsvIds, item.codigo_unico);
+                                  } else {
+                                    window.open(getImageUrl(item.archivo_arte) || '', '_blank');
+                                  }
+                                }}
+                                className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
+                              >
                                 <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
-                              </div>
+                              </button>
                             ) : (
                               <div className="w-14 h-10 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
                                 <Image className="h-4 w-4 text-zinc-600" />
@@ -2464,9 +3099,14 @@ function TestigoTaskView({
                           <td className="p-2 text-zinc-300">{item.ciudad}</td>
                           <td className="p-2 text-zinc-300">{item.mueble}</td>
                           <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
+                          <td className="p-2 text-zinc-400 max-w-[120px]">
+                            {tradSummary?.firstNota ? (
+                              <span className="text-[10px] text-orange-300 truncate block" title={tradSummary.firstNota}>{tradSummary.firstNota}</span>
+                            ) : <span className="text-zinc-600">-</span>}
+                          </td>
                           <td className="p-2 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                         </tr>
-                      ))}
+                      );})}
                     </tbody>
                   </table>
                 </div>
@@ -2483,17 +3123,56 @@ function TestigoTaskView({
                   <th className="p-3 font-medium text-purple-300">Plaza</th>
                   <th className="p-3 font-medium text-purple-300">Mueble</th>
                   <th className="p-3 font-medium text-purple-300">Medidas</th>
+                  <th className="p-3 font-medium text-purple-300">Notas</th>
                   <th className="p-3 font-medium text-purple-300">Periodo</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredData.map((item) => (
+                {filteredData.map((item) => {
+                  const digitalSummary = getDigitalSummaryForItem(item);
+                  const tradSummary = getTradicionalSummaryForItem(item);
+                  const isDigital = item.tradicional_digital === 'Digital';
+                  return (
                   <tr key={item.id} className="border-t border-border/50 hover:bg-purple-900/10">
                     <td className="p-3">
-                      {item.archivo_arte ? (
-                        <div className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                      {isDigital && digitalSummary ? (
+                        <button
+                          onClick={() => {
+                            const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                            if (rsvIds.length > 0) openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                          }}
+                          className="w-16 h-12 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                          title={`Ver ${getDigitalSummaryText(digitalSummary)}`}
+                        >
+                          <Film className="h-4 w-4 text-cyan-400" />
+                          <span className="text-cyan-400 font-bold text-xs">{digitalSummary.total}</span>
+                        </button>
+                      ) : tradSummary && tradSummary.total > 1 ? (
+                        <button
+                          onClick={() => {
+                            const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                            if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
+                          }}
+                          className="w-16 h-12 rounded bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                          title={`Ver ${tradSummary.total} artes`}
+                        >
+                          <Printer className="h-4 w-4 text-orange-400" />
+                          <span className="text-orange-400 font-bold text-xs">{tradSummary.total}</span>
+                        </button>
+                      ) : item.archivo_arte ? (
+                        <button
+                          onClick={() => {
+                            const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                            if (tradSummary && rsvIds.length > 0) {
+                              openTradicionalGallery(rsvIds, item.codigo_unico);
+                            } else {
+                              window.open(getImageUrl(item.archivo_arte) || '', '_blank');
+                            }
+                          }}
+                          className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
+                        >
                           <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
-                        </div>
+                        </button>
                       ) : (
                         <div className="w-16 h-12 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
                           <Image className="h-4 w-4 text-zinc-600" />
@@ -2505,9 +3184,14 @@ function TestigoTaskView({
                     <td className="p-3 text-zinc-400">{item.plaza}</td>
                     <td className="p-3 text-zinc-300">{item.mueble}</td>
                     <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
+                    <td className="p-3 text-zinc-400 max-w-[120px]">
+                      {tradSummary?.firstNota ? (
+                        <span className="text-[10px] text-orange-300 truncate block" title={tradSummary.firstNota}>{tradSummary.firstNota}</span>
+                      ) : <span className="text-zinc-600">-</span>}
+                    </td>
                     <td className="p-3 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                   </tr>
-                ))}
+                );})}
               </tbody>
             </table>
           )}
@@ -2645,6 +3329,7 @@ function TaskDetailModal({
   onCorrect,
   onUpdateArte,
   onUpdateArteDigital,
+  onUpdateArteTradicional,
   onTaskComplete,
   onSendToReview,
   onCreateRecepcion,
@@ -2656,6 +3341,8 @@ function TaskDetailModal({
   canResolveRevisionArtesTasks = true,
   canResolveCorreccionTasks = true,
   digitalSummaryMap,
+  tradicionalSummaryMap,
+  openTradicionalGallery,
   tipoPeriodo = 'catorcena',
 }: {
   isOpen: boolean;
@@ -2669,6 +3356,7 @@ function TaskDetailModal({
   onCorrect: (reservaIds: number[], instrucciones: string) => void;
   onUpdateArte: (reservaIds: number[], archivo: string) => void;
   onUpdateArteDigital: (reservaIds: number[], files: { file: File; spot: number }[], deleteArchivos?: string[]) => Promise<void>;
+  onUpdateArteTradicional: (reservaIds: number[], archivos: { archivo: string; nota: string; spot: number }[]) => Promise<void>;
   onTaskComplete: (taskId: string, observaciones?: string, archivoTestigo?: string) => Promise<void>;
   onSendToReview: (reservaIds: number[], responsableOriginal: string) => Promise<void>;
   onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string, asignadoId?: string, guiaPdfUrl?: string) => Promise<void>;
@@ -2685,6 +3373,8 @@ function TaskDetailModal({
   canResolveRevisionArtesTasks?: boolean;
   canResolveCorreccionTasks?: boolean;
   digitalSummaryMap: Map<number, DigitalFileSummary>;
+  tradicionalSummaryMap: Map<number, TradicionalFileSummary>;
+  openTradicionalGallery: (reservaIds: number | number[], codigoUnico: string) => void;
   tipoPeriodo?: string;
 }) {
   // Socket para actualizar usuarios en tiempo real
@@ -2805,14 +3495,33 @@ function TaskDetailModal({
     rsvIds.forEach(rsvId => {
       const summary = digitalSummaryMap.get(rsvId);
       if (summary) {
-        totalArchivos += summary.totalArchivos;
-        totalImagenes += summary.countImagenes;
-        totalVideos += summary.countVideos;
+        // Use max instead of sum: all reservas in a group share the same digital files
+        totalArchivos = Math.max(totalArchivos, summary.totalArchivos);
+        totalImagenes = Math.max(totalImagenes, summary.countImagenes);
+        totalVideos = Math.max(totalVideos, summary.countVideos);
       }
     });
     if (totalArchivos === 0) return null;
     return { total: totalArchivos, imagenes: totalImagenes, videos: totalVideos };
   }, [digitalSummaryMap]);
+
+  // Helper para obtener resumen tradicional de un item
+  const getTradicionalSummaryForItem = useCallback((item: InventoryRow) => {
+    if (item.tradicional_digital === 'Digital' || !item.rsv_id) return null;
+    const rsvIds = item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+    let totalArchivos = 0;
+    let firstNota = '';
+    rsvIds.forEach(rsvId => {
+      const summary = tradicionalSummaryMap.get(rsvId);
+      if (summary) {
+        // Use max instead of sum: all reservas in a group share the same artes_tradicionales
+        totalArchivos = Math.max(totalArchivos, summary.totalArchivos);
+        if (!firstNota && summary.firstNota) firstNota = summary.firstNota;
+      }
+    });
+    if (totalArchivos === 0) return null;
+    return { total: totalArchivos, firstNota };
+  }, [tradicionalSummaryMap]);
 
   // Helper para generar texto de resumen digital
   const getDigitalSummaryText = useCallback((summary: { total: number; imagenes: number; videos: number } | null) => {
@@ -3013,6 +3722,12 @@ function TaskDetailModal({
   const [existingDigitalFilesEditar, setExistingDigitalFilesEditar] = useState<ImagenDigitalView[]>([]);
   const [isLoadingExistingFiles, setIsLoadingExistingFiles] = useState(false);
   const [filesToDelete, setFilesToDelete] = useState<number[]>([]); // IDs de archivos a eliminar
+
+  // Estados para wizard de artes tradicionales en Editar tab
+  const [editWizardStep, setEditWizardStep] = useState<1 | 2>(1);
+  const [editSelectedImages, setEditSelectedImages] = useState<Map<string, { url: string; source: 'existing' | 'upload' | 'url'; preview?: string }>>(new Map());
+  const [editImageNotes, setEditImageNotes] = useState<Map<string, string>>(new Map());
+  const [isEditUploadingFile, setIsEditUploadingFile] = useState(false);
 
   // Estados para filtros y agrupaciones - Paso 1 (Resumen)
   const [filtersResumen, setFiltersResumen] = useState<FilterCondition[]>([]);
@@ -3971,6 +4686,75 @@ function TaskDetailModal({
       }
     } catch (error) {
       console.error('Error al actualizar imagen:', error);
+    }
+  };
+
+  // Helpers para wizard tradicional en Editar
+  const editHasUploadingImages = Array.from(editSelectedImages.values()).some(img => img.source === 'upload' && !img.url);
+  const editCanGoToStep2 = editSelectedImages.size > 0 && !isEditUploadingFile && !editHasUploadingImages;
+  const editAllNotesReady = editSelectedImages.size > 0 && Array.from(editSelectedImages.keys()).every(id => editImageNotes.get(id)?.trim());
+
+  const toggleEditGalleryImage = (id: string, url: string) => {
+    setEditSelectedImages(prev => {
+      const next = new Map(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        setEditImageNotes(pn => { const nn = new Map(pn); nn.delete(id); return nn; });
+      } else {
+        next.set(id, { url, source: 'existing' });
+      }
+      return next;
+    });
+  };
+
+  const addEditUploadedFile = async (selectedFileInput: File) => {
+    const id = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const preview = event.target?.result as string;
+      setEditSelectedImages(prev => {
+        const next = new Map(prev);
+        next.set(id, { url: '', source: 'upload', preview });
+        return next;
+      });
+      setIsEditUploadingFile(true);
+      try {
+        const uploadResult = await campanasService.uploadArteFile(selectedFileInput);
+        setEditSelectedImages(prev => {
+          const next = new Map(prev);
+          const entry = next.get(id);
+          if (entry) next.set(id, { ...entry, url: uploadResult.url });
+          return next;
+        });
+      } catch (err) {
+        console.error('Error uploading file:', err);
+        setEditSelectedImages(prev => { const next = new Map(prev); next.delete(id); return next; });
+      } finally {
+        setIsEditUploadingFile(false);
+      }
+    };
+    reader.readAsDataURL(selectedFileInput);
+  };
+
+  const handleUpdateTradicional = async () => {
+    const reservaIds = selectedArteItems.flatMap(item =>
+      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+    );
+    if (reservaIds.length === 0) return;
+    const archivos = Array.from(editSelectedImages.entries()).map(([id, img], idx) => ({
+      archivo: img.url,
+      nota: editImageNotes.get(id) || '',
+      spot: idx + 1,
+    })).filter(a => a.archivo);
+    if (archivos.length === 0) return;
+    try {
+      await onUpdateArteTradicional(reservaIds, archivos);
+      setSelectedArteIds(new Set());
+      setEditSelectedImages(new Map());
+      setEditImageNotes(new Map());
+      setEditWizardStep(1);
+    } catch (error) {
+      console.error('Error al actualizar artes tradicionales:', error);
     }
   };
 
@@ -5876,14 +6660,15 @@ function TaskDetailModal({
                   if (Object.keys(indicaciones).length === 0 && archivosEv.length === 0) return null;
 
                   // Build display items: prefer archivos with key (new format), fallback to indicaciones keys
-                  let displayItems: { key: string; label: string; tipoArchivo: string }[];
+                  let displayItems: { key: string; label: string; tipoArchivo: string; archivoUrl?: string }[];
                   const hasValidArchivos = archivosEv.length > 0 && archivosEv[0]?.key;
                   if (hasValidArchivos) {
-                    // New format: archivos have key + nombre
+                    // New format: archivos have key + nombre + optional archivoUrl
                     displayItems = archivosEv.map((a: any, idx: number) => ({
                       key: a.key,
                       label: a.nombre || `Arte ${idx + 1}`,
                       tipoArchivo: a.tipo || 'tradicional',
+                      archivoUrl: a.archivoUrl,
                     }));
                   } else {
                     // Fallback: use indicaciones keys directly
@@ -5904,10 +6689,15 @@ function TaskDetailModal({
                       <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
                         {displayItems.map((item: any, idx: number) => {
                           const indicacion = indicaciones[item.key] || '';
-                          // Get image preview from taskInventory (deduplicated archivo_arte)
-                          const uniqueArtes = [...new Set(taskInventory.map(i => i.archivo_arte).filter(Boolean))];
-                          const arteUrl = uniqueArtes[idx] || null;
-                          const fileUrl = arteUrl ? (arteUrl.startsWith('data:') ? arteUrl : getImageUrl(arteUrl)) : null;
+                          // Get image preview: prefer archivoUrl from evidencia, fallback to taskInventory index match
+                          let fileUrl: string | null = null;
+                          if (item.archivoUrl) {
+                            fileUrl = item.archivoUrl.startsWith('data:') ? item.archivoUrl : getImageUrl(item.archivoUrl);
+                          } else {
+                            const uniqueArtes = [...new Set(taskInventory.map(i => i.archivo_arte).filter(Boolean))];
+                            const arteUrl = uniqueArtes[idx] || null;
+                            fileUrl = arteUrl ? (arteUrl.startsWith('data:') ? arteUrl : getImageUrl(arteUrl)) : null;
+                          }
                           const displayLabel = item.label || `Arte ${idx + 1}`;
                           return (
                             <div key={idx} className="flex gap-3 p-2 border rounded-lg bg-purple-900/10 border-purple-500/20">
@@ -6000,17 +6790,56 @@ function TaskDetailModal({
                                 <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                 <th className="p-2 font-medium text-purple-300">Mueble</th>
                                 <th className="p-2 font-medium text-purple-300">Medidas</th>
+                                <th className="p-2 font-medium text-purple-300">Notas</th>
                                 <th className="p-2 font-medium text-purple-300">Periodo</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {items.map((item) => (
+                              {items.map((item) => {
+                                const digitalSummary = getDigitalSummaryForItem(item);
+                                const tradSummary = getTradicionalSummaryForItem(item);
+                                const isDigital = item.tradicional_digital === 'Digital';
+                                return (
                                 <tr key={item.id} className="border-t border-border/30 hover:bg-purple-900/10">
                                   <td className="p-2">
-                                    {item.archivo_arte ? (
-                                      <div className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                                    {isDigital && digitalSummary ? (
+                                      <button
+                                        onClick={() => {
+                                          const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                          if (rsvIds.length > 0) openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                        }}
+                                        className="w-12 h-9 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                        title={`Ver ${getDigitalSummaryText(digitalSummary)}`}
+                                      >
+                                        <Film className="h-3 w-3 text-cyan-400" />
+                                        <span className="text-cyan-400 font-bold text-[10px]">{digitalSummary.total}</span>
+                                      </button>
+                                    ) : tradSummary && tradSummary.total > 1 ? (
+                                      <button
+                                        onClick={() => {
+                                          const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                          if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
+                                        }}
+                                        className="w-12 h-9 rounded bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                        title={`Ver ${tradSummary.total} artes`}
+                                      >
+                                        <Printer className="h-3 w-3 text-orange-400" />
+                                        <span className="text-orange-400 font-bold text-[10px]">{tradSummary.total}</span>
+                                      </button>
+                                    ) : item.archivo_arte ? (
+                                      <button
+                                        onClick={() => {
+                                          const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                          if (tradSummary && rsvIds.length > 0) {
+                                            openTradicionalGallery(rsvIds, item.codigo_unico);
+                                          } else {
+                                            window.open(getImageUrl(item.archivo_arte) || '', '_blank');
+                                          }
+                                        }}
+                                        className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
+                                      >
                                         <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
-                                      </div>
+                                      </button>
                                     ) : (
                                       <div className="w-14 h-10 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
                                         <Image className="h-4 w-4 text-zinc-600" />
@@ -6021,9 +6850,14 @@ function TaskDetailModal({
                                   <td className="p-2 text-zinc-300">{item.ciudad}</td>
                                   <td className="p-2 text-zinc-300">{item.mueble}</td>
                                   <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
+                                  <td className="p-2 text-zinc-400 max-w-[120px]">
+                                    {tradSummary?.firstNota ? (
+                                      <span className="text-[10px] text-orange-300 truncate block" title={tradSummary.firstNota}>{tradSummary.firstNota}</span>
+                                    ) : <span className="text-zinc-600">-</span>}
+                                  </td>
                                   <td className="p-2 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                                 </tr>
-                              ))}
+                              );})}
                             </tbody>
                           </table>
                         </div>
@@ -6040,17 +6874,56 @@ function TaskDetailModal({
                           <th className="p-3 font-medium text-purple-300">Plaza</th>
                           <th className="p-3 font-medium text-purple-300">Mueble</th>
                           <th className="p-3 font-medium text-purple-300">Medidas</th>
+                          <th className="p-3 font-medium text-purple-300">Notas</th>
                           <th className="p-3 font-medium text-purple-300">Periodo</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredDataResumen.map((item) => (
+                        {filteredDataResumen.map((item) => {
+                          const digitalSummary = getDigitalSummaryForItem(item);
+                          const tradSummary = getTradicionalSummaryForItem(item);
+                          const isDigital = item.tradicional_digital === 'Digital';
+                          return (
                           <tr key={item.id} className="border-t border-border/50 hover:bg-purple-900/10">
                             <td className="p-3">
-                              {item.archivo_arte ? (
-                                <div className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                              {isDigital && digitalSummary ? (
+                                <button
+                                  onClick={() => {
+                                    const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                    if (rsvIds.length > 0) openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                  }}
+                                  className="w-16 h-12 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                  title={`Ver ${getDigitalSummaryText(digitalSummary)}`}
+                                >
+                                  <Film className="h-4 w-4 text-cyan-400" />
+                                  <span className="text-cyan-400 font-bold text-xs">{digitalSummary.total}</span>
+                                </button>
+                              ) : tradSummary && tradSummary.total > 1 ? (
+                                <button
+                                  onClick={() => {
+                                    const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                    if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
+                                  }}
+                                  className="w-16 h-12 rounded bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                  title={`Ver ${tradSummary.total} artes`}
+                                >
+                                  <Printer className="h-4 w-4 text-orange-400" />
+                                  <span className="text-orange-400 font-bold text-xs">{tradSummary.total}</span>
+                                </button>
+                              ) : item.archivo_arte ? (
+                                <button
+                                  onClick={() => {
+                                    const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                    if (tradSummary && rsvIds.length > 0) {
+                                      openTradicionalGallery(rsvIds, item.codigo_unico);
+                                    } else {
+                                      window.open(getImageUrl(item.archivo_arte) || '', '_blank');
+                                    }
+                                  }}
+                                  className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
+                                >
                                   <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
-                                </div>
+                                </button>
                               ) : (
                                 <div className="w-16 h-12 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
                                   <Image className="h-4 w-4 text-zinc-600" />
@@ -6062,9 +6935,14 @@ function TaskDetailModal({
                             <td className="p-3 text-zinc-400">{item.plaza}</td>
                             <td className="p-3 text-zinc-300">{item.mueble}</td>
                             <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
+                            <td className="p-3 text-zinc-400 max-w-[120px]">
+                              {tradSummary?.firstNota ? (
+                                <span className="text-[10px] text-orange-300 truncate block" title={tradSummary.firstNota}>{tradSummary.firstNota}</span>
+                              ) : <span className="text-zinc-600">-</span>}
+                            </td>
                             <td className="p-3 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                           </tr>
-                        ))}
+                        );})}
                       </tbody>
                     </table>
                   )}
@@ -7500,6 +8378,10 @@ function TaskDetailModal({
               getCatorcenaFromFechaFin={getCatorcenaFromFechaFin}
               canResolveProduccionTasks={canResolveProduccionTasks}
               tipoPeriodo={tipoPeriodo}
+              tradicionalSummaryMap={tradicionalSummaryMap}
+              digitalSummaryMap={digitalSummaryMap}
+              openTradicionalGallery={openTradicionalGallery}
+              openDigitalGalleryModal={openDigitalGalleryModal}
             />
           )}
 
@@ -7682,17 +8564,56 @@ function TaskDetailModal({
                                 <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                 <th className="p-2 font-medium text-purple-300">Mueble</th>
                                 <th className="p-2 font-medium text-purple-300">Medidas</th>
+                                <th className="p-2 font-medium text-purple-300">Notas</th>
                                 <th className="p-2 font-medium text-purple-300">Periodo</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {items.map((item) => (
+                              {items.map((item) => {
+                                const digitalSummary = getDigitalSummaryForItem(item);
+                                const tradSummary = getTradicionalSummaryForItem(item);
+                                const isDigital = item.tradicional_digital === 'Digital';
+                                return (
                                 <tr key={item.id} className="border-t border-border/30 hover:bg-purple-900/10">
                                   <td className="p-2">
-                                    {item.archivo_arte ? (
-                                      <div className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                                    {isDigital && digitalSummary ? (
+                                      <button
+                                        onClick={() => {
+                                          const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                          if (rsvIds.length > 0) openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                        }}
+                                        className="w-12 h-9 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30 transition-colors"
+                                        title={`Ver ${getDigitalSummaryText(digitalSummary)}`}
+                                      >
+                                        <Film className="h-3 w-3 text-cyan-400" />
+                                        <span className="text-cyan-400 font-bold text-[10px]">{digitalSummary.total}</span>
+                                      </button>
+                                    ) : tradSummary && tradSummary.total > 1 ? (
+                                      <button
+                                        onClick={() => {
+                                          const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                          if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
+                                        }}
+                                        className="w-12 h-9 rounded bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                        title={`Ver ${tradSummary.total} artes`}
+                                      >
+                                        <Printer className="h-3 w-3 text-orange-400" />
+                                        <span className="text-orange-400 font-bold text-[10px]">{tradSummary.total}</span>
+                                      </button>
+                                    ) : item.archivo_arte ? (
+                                      <button
+                                        onClick={() => {
+                                          const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                          if (tradSummary && rsvIds.length > 0) {
+                                            openTradicionalGallery(rsvIds, item.codigo_unico);
+                                          } else {
+                                            window.open(getImageUrl(item.archivo_arte) || '', '_blank');
+                                          }
+                                        }}
+                                        className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
+                                      >
                                         <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
-                                      </div>
+                                      </button>
                                     ) : (
                                       <div className="w-14 h-10 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
                                         <Image className="h-4 w-4 text-zinc-600" />
@@ -7703,9 +8624,14 @@ function TaskDetailModal({
                                   <td className="p-2 text-zinc-300">{item.ciudad}</td>
                                   <td className="p-2 text-zinc-300">{item.mueble}</td>
                                   <td className="p-2 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
+                                  <td className="p-2 text-zinc-400 max-w-[120px]">
+                                    {tradSummary?.firstNota ? (
+                                      <span className="text-[10px] text-orange-300 truncate block" title={tradSummary.firstNota}>{tradSummary.firstNota}</span>
+                                    ) : <span className="text-zinc-600">-</span>}
+                                  </td>
                                   <td className="p-2 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                                 </tr>
-                              ))}
+                              );})}
                             </tbody>
                           </table>
                         </div>
@@ -7722,6 +8648,7 @@ function TaskDetailModal({
                           <th className="p-3 font-medium text-purple-300">Plaza</th>
                           <th className="p-3 font-medium text-purple-300">Mueble</th>
                           <th className="p-3 font-medium text-purple-300">Medidas</th>
+                          <th className="p-3 font-medium text-purple-300">Notas</th>
                           <th className="p-3 font-medium text-purple-300">Periodo</th>
                           <th className="p-3 font-medium text-purple-300">Estado</th>
                         </tr>
@@ -7729,6 +8656,7 @@ function TaskDetailModal({
                       <tbody>
                         {filteredDataResumen.map((item) => {
                           const digitalSummary = getDigitalSummaryForItem(item);
+                          const tradSummary = getTradicionalSummaryForItem(item);
                           const isDigital = item.tradicional_digital === 'Digital';
                           return (
                           <tr key={item.id} className="border-t border-border/50 hover:bg-purple-900/10">
@@ -7747,10 +8675,32 @@ function TaskDetailModal({
                                   <Film className="h-4 w-4 text-cyan-400" />
                                   <span className="text-cyan-400 font-bold text-xs">{digitalSummary.total}</span>
                                 </button>
+                              ) : tradSummary && tradSummary.total > 1 ? (
+                                <button
+                                  onClick={() => {
+                                    const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                    if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
+                                  }}
+                                  className="w-16 h-12 rounded bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                  title={`Ver ${tradSummary.total} artes`}
+                                >
+                                  <Printer className="h-4 w-4 text-orange-400" />
+                                  <span className="text-orange-400 font-bold text-xs">{tradSummary.total}</span>
+                                </button>
                               ) : item.archivo_arte ? (
-                                <div className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
+                                <button
+                                  onClick={() => {
+                                    const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                    if (tradSummary && rsvIds.length > 0) {
+                                      openTradicionalGallery(rsvIds, item.codigo_unico);
+                                    } else {
+                                      window.open(getImageUrl(item.archivo_arte) || '', '_blank');
+                                    }
+                                  }}
+                                  className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
+                                >
                                   <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
-                                </div>
+                                </button>
                               ) : (
                                 <div className="w-16 h-12 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
                                   <Image className="h-4 w-4 text-zinc-600" />
@@ -7762,6 +8712,11 @@ function TaskDetailModal({
                             <td className="p-3 text-zinc-400">{item.plaza}</td>
                             <td className="p-3 text-zinc-300">{item.mueble}</td>
                             <td className="p-3 text-zinc-400">{item.ancho || '-'} x {item.alto || '-'}</td>
+                            <td className="p-3 text-zinc-400 max-w-[120px]">
+                              {tradSummary?.firstNota ? (
+                                <span className="text-[10px] text-orange-300 truncate block" title={tradSummary.firstNota}>{tradSummary.firstNota}</span>
+                              ) : <span className="text-zinc-600">-</span>}
+                            </td>
                             <td className="p-3 text-zinc-400">{getPeriodoShort(item, tipoPeriodo)}</td>
                             <td className="p-3">
                               <span className={`px-2 py-0.5 rounded text-[10px] ${
@@ -7869,6 +8824,7 @@ function TaskDetailModal({
                             <tbody>
                               {items.map((item) => {
                                 const digitalSummary = getDigitalSummaryForItem(item);
+                                const tradSummary = getTradicionalSummaryForItem(item);
                                 const isDigital = item.tradicional_digital === 'Digital';
                                 return (
                                 <tr key={item.id} className={`border-t border-border/30 transition-colors ${selectedArteIds.has(item.id) ? 'bg-purple-900/30' : 'hover:bg-purple-900/10'}`}>
@@ -7894,6 +8850,18 @@ function TaskDetailModal({
                                       >
                                         <Film className="h-3 w-3 text-cyan-400" />
                                         <span className="text-cyan-400 font-bold text-[10px]">{digitalSummary.total}</span>
+                                      </button>
+                                    ) : tradSummary && tradSummary.total > 1 ? (
+                                      <button
+                                        onClick={() => {
+                                          const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                          if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
+                                        }}
+                                        className="w-12 h-9 rounded bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                        title={`Ver ${tradSummary.total} artes`}
+                                      >
+                                        <Printer className="h-3 w-3 text-orange-400" />
+                                        <span className="text-orange-400 font-bold text-[10px]">{tradSummary.total}</span>
                                       </button>
                                     ) : item.archivo_arte ? (
                                       <div className="w-12 h-9 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
@@ -7944,6 +8912,7 @@ function TaskDetailModal({
                       <tbody>
                         {filteredDataEditar.map((item) => {
                           const digitalSummary = getDigitalSummaryForItem(item);
+                          const tradSummary = getTradicionalSummaryForItem(item);
                           const isDigital = item.tradicional_digital === 'Digital';
                           return (
                           <tr
@@ -7974,6 +8943,18 @@ function TaskDetailModal({
                                 >
                                   <Film className="h-4 w-4 text-cyan-400" />
                                   <span className="text-cyan-400 font-bold text-[10px]">{digitalSummary.total}</span>
+                                </button>
+                              ) : tradSummary && tradSummary.total > 1 ? (
+                                <button
+                                  onClick={() => {
+                                    const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                    if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
+                                  }}
+                                  className="w-14 h-10 rounded bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                  title={`Ver ${tradSummary.total} artes`}
+                                >
+                                  <Printer className="h-4 w-4 text-orange-400" />
+                                  <span className="text-orange-400 font-bold text-[10px]">{tradSummary.total}</span>
                                 </button>
                               ) : item.archivo_arte ? (
                                 <div className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
@@ -8270,122 +9251,220 @@ function TaskDetailModal({
                     </div>
                   </>
                 ) : (
-                  /* ===== INTERFAZ TRADICIONAL - UN ARCHIVO ===== */
+                  /* ===== INTERFAZ TRADICIONAL - WIZARD 2 PASOS ===== */
                   <>
-                    {/* Botones de accion */}
-                    <div className="flex justify-center">
-                      <button
-                        onClick={handleUpdateImage}
-                        disabled={selectedArteIds.size === 0 || isUpdating}
-                        className={`flex items-center justify-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
-                          selectedArteIds.size > 0 && !isUpdating
-                            ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                            : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                        }`}
-                      >
-                        {isUpdating ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
-                            <span className="truncate">Actualizando...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="h-4 w-4 flex-shrink-0" />
-                            <span className="truncate">Actualizar Arte</span>
-                          </>
-                        )}
-                      </button>
+                    {/* Step indicator */}
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className={`flex items-center gap-1.5 ${editWizardStep === 1 ? 'text-orange-300' : 'text-zinc-500'}`}>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          editWizardStep === 1 ? 'bg-orange-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                        }`}>1</div>
+                        <span className="text-xs font-medium">Seleccionar</span>
+                      </div>
+                      <div className="flex-1 h-px bg-border" />
+                      <div className={`flex items-center gap-1.5 ${editWizardStep === 2 ? 'text-orange-300' : 'text-zinc-500'}`}>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          editWizardStep === 2 ? 'bg-orange-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                        }`}>2</div>
+                        <span className="text-xs font-medium">Notas</span>
+                      </div>
                     </div>
 
-                    {/* Selector de opcion */}
-                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                      <label className="block text-sm font-medium text-zinc-300 mb-2">
-                        Escoja una opcion
-                      </label>
-                      <select
-                        value={uploadOption}
-                        onChange={(e) => setUploadOption(e.target.value as UploadOption)}
-                        className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-1 focus:ring-purple-500"
-                      >
-                        <option value="file">Subir archivo</option>
-                        <option value="existing">Escoger existente</option>
-                        <option value="link">Subir link</option>
-                      </select>
-                    </div>
-
-                    {/* Contenido segun opcion */}
-                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                      {uploadOption === 'file' && (
-                        <div>
-                          <label className="block text-sm font-medium text-zinc-300 mb-2">
-                            Subir archivo
+                    {editWizardStep === 1 ? (
+                      /* ===== PASO 1: Seleccionar imágenes ===== */
+                      <>
+                        <div className="bg-zinc-900/50 rounded-lg p-3 border border-border">
+                          <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                            Biblioteca de artes ({artesExistentes.length})
                           </label>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleFileChange}
-                            className="w-full text-sm text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700"
-                          />
-                          {filePreview && (
-                            <div className="mt-3">
-                              <img src={filePreview} alt="Preview" className="max-h-40 rounded-lg" />
-                            </div>
-                          )}
+                          <div className="min-h-[100px] max-h-[200px] border border-border rounded-lg bg-zinc-900/50 overflow-auto p-2">
+                            {isLoadingArtes ? (
+                              <div className="h-full flex items-center justify-center">
+                                <Loader2 className="h-5 w-5 animate-spin text-orange-400" />
+                              </div>
+                            ) : artesExistentes.length === 0 ? (
+                              <div className="h-full flex items-center justify-center text-center text-zinc-500">
+                                <div>
+                                  <Image className="h-6 w-6 mx-auto mb-1 opacity-30" />
+                                  <p className="text-[10px]">Sin imágenes en esta campaña</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {artesExistentes.map((art) => {
+                                  const isSelected = editSelectedImages.has(art.id);
+                                  return (
+                                    <button
+                                      key={art.id}
+                                      onClick={() => toggleEditGalleryImage(art.id, art.url)}
+                                      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                                        isSelected
+                                          ? 'border-orange-400 ring-2 ring-orange-400/30'
+                                          : 'border-transparent hover:border-orange-400/50'
+                                      }`}
+                                      title={art.nombre}
+                                    >
+                                      <img src={getImageUrl(art.url) || ''} alt={art.nombre} className="w-full h-full object-cover" />
+                                      {isSelected && (
+                                        <div className="absolute inset-0 bg-orange-600/30 flex items-center justify-center">
+                                          <Check className="h-4 w-4 text-white" />
+                                        </div>
+                                      )}
+                                      <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
+                                        <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      )}
 
-                      {uploadOption === 'existing' && (
-                        <div>
-                          <label className="block text-sm font-medium text-zinc-300 mb-2">
-                            Seleccionar archivo existente
-                          </label>
-                          {isLoadingArtes ? (
-                            <div className="flex items-center gap-2 text-zinc-400">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Cargando artes...
-                            </div>
-                          ) : (
-                            <select
-                              value={existingArtUrl}
-                              onChange={(e) => setExistingArtUrl(e.target.value)}
-                              className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-1 focus:ring-purple-500"
-                            >
-                              <option value="">Seleccionar...</option>
-                              {artesExistentes.map((arte) => (
-                                <option key={arte.id} value={arte.url}>
-                                  {arte.nombre} ({arte.usos} usos)
-                                </option>
+                        {/* Opciones: Subir archivo o URL */}
+                        <div className="space-y-2">
+                          <label className="block text-xs font-medium text-zinc-400">O agrega nuevas</label>
+                          <div className="flex gap-2">
+                            <label className="flex-1 cursor-pointer">
+                              <input
+                                type="file"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) addEditUploadedFile(f);
+                                  e.target.value = '';
+                                }}
+                                accept="image/*,.pdf"
+                                className="hidden"
+                                disabled={isUpdating}
+                              />
+                              <div className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-orange-600/20 border border-orange-500/30 rounded-lg hover:bg-orange-600/30 transition-colors">
+                                <Upload className="h-3.5 w-3.5 text-orange-400" />
+                                <span className="text-orange-300">Subir archivo</span>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Selected images preview */}
+                        {editSelectedImages.size > 0 && (
+                          <div className="bg-zinc-900/50 rounded-lg p-3 border border-orange-500/30">
+                            <label className="block text-xs font-medium text-orange-300 mb-1.5">
+                              Seleccionadas ({editSelectedImages.size})
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              {Array.from(editSelectedImages.entries()).map(([id, img]) => (
+                                <div key={id} className="relative w-12 h-12 rounded overflow-hidden border border-orange-500/50">
+                                  {img.url ? (
+                                    <img src={getImageUrl(img.url) || img.preview || ''} alt="" className="w-full h-full object-cover" />
+                                  ) : img.preview ? (
+                                    <>
+                                      <img src={img.preview} alt="" className="w-full h-full object-cover opacity-50" />
+                                      <div className="absolute inset-0 flex items-center justify-center">
+                                        <Loader2 className="h-3 w-3 animate-spin text-orange-400" />
+                                      </div>
+                                    </>
+                                  ) : null}
+                                  <button
+                                    onClick={() => toggleEditGalleryImage(id, '')}
+                                    className="absolute -top-1 -right-1 bg-red-600 rounded-full p-0.5"
+                                  >
+                                    <X className="h-2 w-2 text-white" />
+                                  </button>
+                                </div>
                               ))}
-                            </select>
-                          )}
-                          {existingArtUrl && (
-                            <div className="mt-3">
-                              <img src={getImageUrl(existingArtUrl) || existingArtUrl} alt="Preview" className="max-h-40 rounded-lg" />
                             </div>
-                          )}
-                        </div>
-                      )}
+                          </div>
+                        )}
 
-                      {uploadOption === 'link' && (
-                        <div>
-                          <label className="block text-sm font-medium text-zinc-300 mb-2">
-                            URL de la imagen
-                          </label>
-                          <input
-                            type="url"
-                            value={linkUrl}
-                            onChange={(e) => setLinkUrl(e.target.value)}
-                            placeholder="https://..."
-                            className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-1 focus:ring-purple-500"
-                          />
-                          {linkUrl && (
-                            <div className="mt-3">
-                              <img src={linkUrl} alt="Preview" className="max-h-40 rounded-lg" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />
-                            </div>
-                          )}
+                        {/* Siguiente */}
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => setEditWizardStep(2)}
+                            disabled={!editCanGoToStep2}
+                            className={`px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
+                              editCanGoToStep2
+                                ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                                : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                            }`}
+                          >
+                            Siguiente →
+                          </button>
                         </div>
-                      )}
-                    </div>
+                      </>
+                    ) : (
+                      /* ===== PASO 2: Notas por imagen ===== */
+                      <>
+                        <div className="space-y-3 max-h-[350px] overflow-auto">
+                          {Array.from(editSelectedImages.entries()).map(([id, img], idx) => (
+                            <div key={id} className="bg-zinc-900/50 rounded-lg p-3 border border-border">
+                              <div className="flex gap-3">
+                                <div className="flex-shrink-0 w-16 h-16 rounded overflow-hidden bg-zinc-800">
+                                  <img src={getImageUrl(img.url) || img.preview || ''} alt="" className="w-full h-full object-cover" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs text-zinc-400 mb-1">Imagen {idx + 1}</p>
+                                  <textarea
+                                    value={editImageNotes.get(id) || ''}
+                                    onChange={(e) => setEditImageNotes(prev => new Map(prev).set(id, e.target.value))}
+                                    placeholder="Nota obligatoria para esta imagen..."
+                                    className={`w-full px-2 py-1.5 text-xs bg-zinc-800 border rounded-lg resize-none focus:ring-1 focus:ring-orange-500 ${
+                                      !editImageNotes.get(id)?.trim() ? 'border-orange-500/50' : 'border-zinc-700'
+                                    }`}
+                                    rows={2}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Aviso si falta seleccionar en la tabla */}
+                        {selectedArteIds.size === 0 && (
+                          <div className="flex items-center gap-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                            <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                            <p className="text-xs text-amber-300">Selecciona al menos un item en la tabla de la izquierda para aplicar los cambios.</p>
+                          </div>
+                        )}
+                        {/* Aviso si faltan notas */}
+                        {selectedArteIds.size > 0 && !editAllNotesReady && editSelectedImages.size > 0 && (
+                          <div className="flex items-center gap-2 p-2.5 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                            <AlertCircle className="h-4 w-4 text-orange-400 flex-shrink-0" />
+                            <p className="text-xs text-orange-300">Completa la nota de cada imagen para continuar.</p>
+                          </div>
+                        )}
+
+                        {/* Footer */}
+                        <div className="flex justify-between">
+                          <button
+                            onClick={() => setEditWizardStep(1)}
+                            className="px-4 py-2 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
+                          >
+                            ← Atrás
+                          </button>
+                          <button
+                            onClick={handleUpdateTradicional}
+                            disabled={!editAllNotesReady || isUpdating || selectedArteIds.size === 0}
+                            className={`px-4 py-2 text-xs font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                              editAllNotesReady && !isUpdating && selectedArteIds.size > 0
+                                ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                                : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                            }`}
+                          >
+                            {isUpdating ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Actualizando...
+                              </>
+                            ) : (
+                              <>
+                                <Check className="h-3.5 w-3.5" />
+                                Actualizar Arte
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -8421,6 +9500,7 @@ function TaskDetailModal({
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                         {taskInventory.map((item) => {
                           const digitalSummary = getDigitalSummaryForItem(item);
+                          const tradSummary = getTradicionalSummaryForItem(item);
                           const isDigital = item.tradicional_digital === 'Digital';
                           return (
                           <div key={item.id} className="bg-zinc-800/50 rounded-lg p-2 border border-border">
@@ -8439,6 +9519,19 @@ function TaskDetailModal({
                                   <Film className="h-8 w-8 text-cyan-400 mb-1" />
                                   <span className="text-cyan-400 font-bold text-lg">{digitalSummary.total}</span>
                                   <span className="text-cyan-300 text-[10px]">{getDigitalSummaryText(digitalSummary)}</span>
+                                </button>
+                              ) : tradSummary && tradSummary.total > 1 ? (
+                                <button
+                                  onClick={() => {
+                                    const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                    if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
+                                  }}
+                                  className="w-full h-full bg-orange-500/20 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                  title={`Ver ${tradSummary.total} artes tradicionales`}
+                                >
+                                  <Printer className="h-8 w-8 text-orange-400 mb-1" />
+                                  <span className="text-orange-400 font-bold text-lg">{tradSummary.total}</span>
+                                  <span className="text-orange-300 text-[10px]">{tradSummary.total} artes</span>
                                 </button>
                               ) : item.archivo_arte ? (
                                 <img src={getImageUrl(item.archivo_arte) || ''} alt={item.codigo_unico} className="w-full h-full object-cover" />
@@ -8622,6 +9715,7 @@ function TaskDetailModal({
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               {items.map((item) => {
                                 const digitalSummary = getDigitalSummaryForItem(item);
+                                const tradSummary = getTradicionalSummaryForItem(item);
                                 const isDigital = item.tradicional_digital === 'Digital';
                                 return (
                                 <div key={item.id} className="bg-zinc-800/50 rounded-lg p-3 border border-border">
@@ -8629,7 +9723,6 @@ function TaskDetailModal({
                                     {/* Preview */}
                                     <div className="flex-shrink-0">
                                       {isDigital && digitalSummary ? (
-                                        // Para digitales: mostrar botón con contador que abre galería
                                         <button
                                           onClick={() => {
                                             const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
@@ -8643,14 +9736,36 @@ function TaskDetailModal({
                                           <Film className="h-5 w-5 text-cyan-400 mb-1" />
                                           <span className="text-cyan-400 font-bold text-sm">{digitalSummary.total}</span>
                                         </button>
+                                      ) : tradSummary && tradSummary.total > 1 ? (
+                                        <button
+                                          onClick={() => {
+                                            const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                            if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
+                                          }}
+                                          className="w-20 h-16 rounded bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                          title={`Ver ${tradSummary.total} artes tradicionales`}
+                                        >
+                                          <Printer className="h-5 w-5 text-orange-400 mb-1" />
+                                          <span className="text-orange-400 font-bold text-sm">{tradSummary.total}</span>
+                                        </button>
                                       ) : item.archivo_arte ? (
-                                        <div className="w-20 h-16 rounded overflow-hidden bg-zinc-700 border border-zinc-600">
+                                        <button
+                                          onClick={() => {
+                                            const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                            if (tradSummary && rsvIds.length > 0) {
+                                              openTradicionalGallery(rsvIds, item.codigo_unico);
+                                            } else {
+                                              window.open(getImageUrl(item.archivo_arte) || '', '_blank');
+                                            }
+                                          }}
+                                          className="w-20 h-16 rounded overflow-hidden bg-zinc-700 border border-zinc-600 hover:border-orange-400/50 transition-colors"
+                                        >
                                           <img
                                             src={getImageUrl(item.archivo_arte) || ''}
                                             alt="Arte"
                                             className="w-full h-full object-cover"
                                           />
-                                        </div>
+                                        </button>
                                       ) : (
                                         <div className="w-20 h-16 rounded bg-zinc-700 border border-zinc-600 flex items-center justify-center">
                                           <Image className="h-5 w-5 text-zinc-500" />
@@ -8663,7 +9778,7 @@ function TaskDetailModal({
                                       <p className="text-sm font-medium text-white truncate">{item.codigo_unico}</p>
                                       <p className="text-xs text-zinc-400 truncate">{item.mueble}</p>
                                       <p className="text-xs text-zinc-500 truncate">
-                                        {isDigital && digitalSummary ? getDigitalSummaryText(digitalSummary) : item.ubicacion}
+                                        {isDigital && digitalSummary ? getDigitalSummaryText(digitalSummary) : tradSummary ? `${tradSummary.total} artes` : item.ubicacion}
                                       </p>
                                       <div className="mt-1 flex items-center gap-2">
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
@@ -8695,6 +9810,7 @@ function TaskDetailModal({
                             (() => {
                               const representativeItem = items[0];
                               const digitalSummary = representativeItem ? getDigitalSummaryForItem(representativeItem) : null;
+                              const tradSummary = representativeItem ? getTradicionalSummaryForItem(representativeItem) : null;
                               const isDigital = representativeItem?.tradicional_digital === 'Digital';
                               return (
                             <div className="bg-zinc-800/50 rounded-lg p-4 border border-border">
@@ -8702,7 +9818,6 @@ function TaskDetailModal({
                                 {/* Preview de la imagen representativa */}
                                 <div className="flex-shrink-0 relative">
                                   {isDigital && digitalSummary ? (
-                                    // Para digitales: mostrar botón con contador que abre galería
                                     <button
                                       onClick={() => {
                                         const rsvIds = representativeItem.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
@@ -8717,14 +9832,37 @@ function TaskDetailModal({
                                       <span className="text-cyan-400 font-bold text-lg">{digitalSummary.total}</span>
                                       <span className="text-cyan-300 text-[10px]">{getDigitalSummaryText(digitalSummary)}</span>
                                     </button>
+                                  ) : tradSummary && tradSummary.total > 1 ? (
+                                    <button
+                                      onClick={() => {
+                                        const rsvIds = representativeItem.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                        if (rsvIds.length > 0) openTradicionalGallery(rsvIds, representativeItem.codigo_unico);
+                                      }}
+                                      className="w-32 h-24 rounded-lg bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                      title={`Ver ${tradSummary.total} artes tradicionales`}
+                                    >
+                                      <Printer className="h-8 w-8 text-orange-400 mb-1" />
+                                      <span className="text-orange-400 font-bold text-lg">{tradSummary.total}</span>
+                                      <span className="text-orange-300 text-[10px]">{tradSummary.total} artes</span>
+                                    </button>
                                   ) : representativeItem?.archivo_arte ? (
-                                    <div className="w-32 h-24 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600">
+                                    <button
+                                      onClick={() => {
+                                        const rsvIds = representativeItem.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                        if (tradSummary && rsvIds.length > 0) {
+                                          openTradicionalGallery(rsvIds, representativeItem.codigo_unico);
+                                        } else {
+                                          window.open(getImageUrl(representativeItem.archivo_arte) || '', '_blank');
+                                        }
+                                      }}
+                                      className="w-32 h-24 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600 hover:border-orange-400/50 transition-colors"
+                                    >
                                       <img
                                         src={getImageUrl(representativeItem.archivo_arte) || ''}
                                         alt="Arte"
                                         className="w-full h-full object-cover"
                                       />
-                                    </div>
+                                    </button>
                                   ) : (
                                     <div className="w-32 h-24 rounded-lg bg-zinc-700 border border-zinc-600 flex items-center justify-center">
                                       <Image className="h-8 w-8 text-zinc-500" />
@@ -9079,11 +10217,41 @@ function CreateTaskModal({
           const archivos: typeof archivosInstalacion = [];
           const archivosVistos = new Set<string>();
 
-          // 1. Archivos tradicionales (de archivo_arte, deduplicados)
+          // 1. Archivos tradicionales (de artes_tradicionales API + fallback a archivo_arte)
+          const reservaIds = selectedInventory.flatMap(item =>
+            item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+          );
+
+          // Try loading from artes_tradicionales table first
+          const reservasConArtesTradicionales = new Set<number>();
+          if (reservaIds.length > 0) {
+            try {
+              const idsParam = reservaIds.join(',');
+              const artesTradicionales = await campanasService.getArtesTradicionales(campanaId, idsParam);
+              artesTradicionales.forEach(arte => {
+                reservasConArtesTradicionales.add(arte.idReserva);
+                if (!archivosVistos.has(arte.archivo)) {
+                  archivosVistos.add(arte.archivo);
+                  const nombreLegible = arte.nota || (arte.archivo.split('/').pop() || `Arte Tradicional`);
+                  archivos.push({
+                    nombre: arte.archivo,
+                    tipo: 'tradicional',
+                    archivoData: arte.archivo.startsWith('data:') ? arte.archivo : getImageUrl(arte.archivo) || undefined,
+                    nombreLegible,
+                  });
+                }
+              });
+            } catch (e) {
+              // Fallback silently to archivo_arte
+            }
+          }
+
+          // Fallback: for items whose reservas don't have artes_tradicionales, use archivo_arte
           selectedInventory.forEach(item => {
-            if (item.archivo_arte && !archivosVistos.has(item.archivo_arte)) {
+            const itemRsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+            const hasTradicionales = itemRsvIds.some(id => reservasConArtesTradicionales.has(id));
+            if (!hasTradicionales && item.archivo_arte && !archivosVistos.has(item.archivo_arte)) {
               archivosVistos.add(item.archivo_arte);
-              // Generar nombre legible: si es base64/URL larga, usar nombre del item
               const isDataUrl = item.archivo_arte.startsWith('data:');
               const nombreLegible = isDataUrl
                 ? `Arte - ${item.codigo_unico || (item as any).clave || 'Archivo'}`
@@ -9098,9 +10266,6 @@ function CreateTaskModal({
           });
 
           // 2. Archivos digitales (via API)
-          const reservaIds = selectedInventory.flatMap(item =>
-            item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
-          );
           if (reservaIds.length > 0) {
             const idsParam = reservaIds.join(',');
             const imagenes = await campanasService.getImagenesDigitales(campanaId, idsParam);
@@ -9273,6 +10438,7 @@ function CreateTaskModal({
             key: shortKey,
             nombre: a.nombreLegible || (a.nombre.startsWith('data:') ? `Arte ${i + 1}` : (a.nombre.split('/').pop() || `Arte ${i + 1}`)),
             tipo: a.tipo,
+            archivoUrl: a.nombre.startsWith('data:') ? undefined : a.nombre,
           };
         });
         (payload as any).evidencia = JSON.stringify({
@@ -9303,6 +10469,7 @@ function CreateTaskModal({
           key: shortKey,
           nombre: a.nombreLegible || (a.nombre.startsWith('data:') ? `Arte ${i + 1}` : (a.nombre.split('/').pop() || `Arte ${i + 1}`)),
           tipo: a.tipo,
+          archivoUrl: a.nombre.startsWith('data:') ? undefined : a.nombre,
         };
       });
       (payload as any).evidencia = JSON.stringify({
@@ -10931,6 +12098,12 @@ export function TareaSeguimientoPage() {
   const [isLoadingDigitalGallery, setIsLoadingDigitalGallery] = useState(false);
   const [digitalGalleryTitle, setDigitalGalleryTitle] = useState('');
 
+  // Tradicional Gallery Modal state
+  const [isTradicionalGalleryOpen, setIsTradicionalGalleryOpen] = useState(false);
+  const [tradicionalGalleryImages, setTradicionalGalleryImages] = useState<ArteTradicionalView[]>([]);
+  const [isLoadingTradicionalGallery, setIsLoadingTradicionalGallery] = useState(false);
+  const [tradicionalGalleryTitle, setTradicionalGalleryTitle] = useState('');
+
   // Testigo File Modal state
   const [isTestigoFileModalOpen, setIsTestigoFileModalOpen] = useState(false);
   const [selectedTestigoFile, setSelectedTestigoFile] = useState<string | null>(null);
@@ -10942,7 +12115,7 @@ export function TareaSeguimientoPage() {
 
   // Modal advertencia de tareas existentes al crear tarea
   const [isTaskWarningModalOpen, setIsTaskWarningModalOpen] = useState(false);
-  const [existingTasksForCreate, setExistingTasksForCreate] = useState<Array<{ id: number; titulo: string | null; tipo: string | null; estatus: string | null; responsable: string | null }>>([]);
+  const [existingTasksForCreate, setExistingTasksForCreate] = useState<Array<{ id: number; titulo: string | null; tipo: string | null; estatus: string | null; responsable: string | null; ids_reservas?: string }>>([]);
   const [isCheckingExistingTasks, setIsCheckingExistingTasks] = useState(false);
   const [isImpresionConflictModalOpen, setIsImpresionConflictModalOpen] = useState(false);
   const [impresionFlowConflicts, setImpresionFlowConflicts] = useState<ImpresionFlowConflict[]>([]);
@@ -11044,6 +12217,21 @@ export function TareaSeguimientoPage() {
     });
     return map;
   }, [digitalFileSummaries]);
+
+  // Resumen de archivos tradicionales por reserva
+  const { data: tradicionalFileSummaries = [] } = useQuery({
+    queryKey: ['tradicional-file-summaries', campanaId],
+    queryFn: () => campanasService.getTradicionalFileSummaries(campanaId),
+    enabled: campanaId > 0,
+  });
+
+  const tradicionalSummaryMap = useMemo(() => {
+    const map = new Map<number, TradicionalFileSummary>();
+    tradicionalFileSummaries.forEach(summary => {
+      map.set(summary.idReserva, summary);
+    });
+    return map;
+  }, [tradicionalFileSummaries]);
 
   // No precargar los 3 tabs al inicio: se consulta solo el tab activo para evitar
   // cargas pesadas y recargas lentas en campañas con mucho inventario.
@@ -13147,6 +14335,68 @@ export function TareaSeguimientoPage() {
     }
   }, [campanaId]);
 
+  // Handler para subir artes tradicionales (múltiples con notas)
+  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[] }) => {
+    const reservaIds = selectedInventoryItems.flatMap(item =>
+      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+    );
+
+    if (reservaIds.length === 0) {
+      setUploadArtError('No se encontraron reservas para actualizar');
+      return;
+    }
+
+    try {
+      setUploadArtError(null);
+
+      // Los archivos ya fueron subidos a Spaces en paso 1, solo filtrar los que tienen URL
+      const validArchivos = data.archivos.filter(a => a.archivo && a.archivo.trim() !== '');
+
+      if (validArchivos.length === 0) {
+        setUploadArtError('No se pudieron procesar los archivos. Algunos pueden seguir subiendo.');
+        return;
+      }
+
+      await campanasService.assignArteTradicional(campanaId, reservaIds, validArchivos);
+
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['tradicional-file-summaries', campanaId] });
+
+      setIsUploadArtModalOpen(false);
+      setSelectedInventoryIds(new Set());
+      setUploadArtError(null);
+    } catch (error) {
+      console.error('Error al subir artes tradicionales:', error);
+      setUploadArtError(error instanceof Error ? error.message : 'Error al subir artes tradicionales');
+    }
+  }, [selectedInventoryItems, campanaId, queryClient]);
+
+  // Handler para abrir la galería de artes tradicionales
+  const openTradicionalGallery = useCallback(async (reservaIds: number | number[], codigoUnico: string) => {
+    setIsLoadingTradicionalGallery(true);
+    setTradicionalGalleryTitle(`Galería Tradicional - ${codigoUnico}`);
+    setIsTradicionalGalleryOpen(true);
+
+    try {
+      const idsParam = Array.isArray(reservaIds) ? reservaIds.join(',') : reservaIds;
+      const artes = await campanasService.getArtesTradicionales(campanaId, idsParam);
+      setTradicionalGalleryImages(artes.map(a => ({
+        id: a.id,
+        archivo: a.archivo,
+        nota: a.nota,
+        spot: a.spot,
+      })));
+    } catch (error) {
+      console.error('Error al cargar artes tradicionales:', error);
+      setTradicionalGalleryImages([]);
+    } finally {
+      setIsLoadingTradicionalGallery(false);
+    }
+  }, [campanaId]);
+
   // ---- Render helpers ----
   // Render row for Versionario tab (shows inventory pending art upload)
   const renderVersionarioRow = (item: InventoryRow, showCheckbox = true) => (
@@ -13205,13 +14455,33 @@ export function TareaSeguimientoPage() {
       rsvIds.forEach(rsvId => {
         const summary = digitalSummaryMap.get(rsvId);
         if (summary) {
-          totalArchivos += summary.totalArchivos;
-          totalImagenes += summary.countImagenes;
-          totalVideos += summary.countVideos;
+          // Use max instead of sum: all reservas in a group share the same digital files
+          totalArchivos = Math.max(totalArchivos, summary.totalArchivos);
+          totalImagenes = Math.max(totalImagenes, summary.countImagenes);
+          totalVideos = Math.max(totalVideos, summary.countVideos);
         }
       });
       if (totalArchivos > 0) {
         digitalSummary = { total: totalArchivos, imagenes: totalImagenes, videos: totalVideos };
+      }
+    }
+
+    // Para items tradicionales, obtener resumen
+    let tradSummary: { total: number; firstNota: string } | null = null;
+    if (!isDigital && item.rsv_id) {
+      const rsvIds = item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      let totalArchivos = 0;
+      let firstNota = '';
+      rsvIds.forEach(rsvId => {
+        const summary = tradicionalSummaryMap.get(rsvId);
+        if (summary) {
+          // Use max instead of sum: all reservas in a group share the same artes_tradicionales
+          totalArchivos = Math.max(totalArchivos, summary.totalArchivos);
+          if (!firstNota && summary.firstNota) firstNota = summary.firstNota;
+        }
+      });
+      if (totalArchivos > 0) {
+        tradSummary = { total: totalArchivos, firstNota };
       }
     }
 
@@ -13255,7 +14525,6 @@ export function TareaSeguimientoPage() {
       <td className="p-2 text-xs text-zinc-300">{item.arte_aprobado || 'Sin revisar'}</td>
       <td className="p-2">
         {isDigital && digitalSummary ? (
-          // Para digitales: mostrar contador de archivos con icono clickeable para abrir galería
           <button
             onClick={() => {
               const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
@@ -13263,17 +14532,41 @@ export function TareaSeguimientoPage() {
                 openDigitalGallery(rsvIds, item.codigo_unico);
               }
             }}
-            className="flex items-center justify-center w-10 h-10 bg-blue-500/20 rounded hover:bg-blue-500/30 transition-colors"
+            className="flex items-center justify-center w-10 h-10 bg-cyan-500/20 border border-cyan-500/50 rounded hover:bg-cyan-500/30 transition-colors"
             title="Ver galería digital"
           >
-            <span className="text-blue-400 font-bold text-lg">{digitalSummary.total}</span>
+            <div className="flex flex-col items-center">
+              <Film className="h-3 w-3 text-cyan-400" />
+              <span className="text-cyan-400 font-bold text-[10px]">{digitalSummary.total}</span>
+            </div>
+          </button>
+        ) : tradSummary && tradSummary.total > 1 ? (
+          <button
+            onClick={() => {
+              const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+              if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
+            }}
+            className="flex items-center justify-center w-10 h-10 bg-orange-500/20 border border-orange-500/50 rounded hover:bg-orange-500/30 transition-colors"
+            title={`Ver ${tradSummary.total} artes tradicionales`}
+          >
+            <div className="flex flex-col items-center">
+              <Printer className="h-3 w-3 text-orange-400" />
+              <span className="text-orange-400 font-bold text-[10px]">{tradSummary.total}</span>
+            </div>
           </button>
         ) : item.archivo_arte ? (
           <img
             src={getImageUrl(item.archivo_arte) || ''}
             alt="Arte"
             className="w-10 h-10 object-cover rounded cursor-pointer hover:opacity-80"
-            onClick={() => window.open(getImageUrl(item.archivo_arte) || '', '_blank')}
+            onClick={() => {
+              const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+              if (tradSummary && rsvIds.length > 0) {
+                openTradicionalGallery(rsvIds, item.codigo_unico);
+              } else {
+                window.open(getImageUrl(item.archivo_arte) || '', '_blank');
+              }
+            }}
           />
         ) : (
           <span className="text-zinc-500 text-xs">Sin archivo</span>
@@ -13292,6 +14585,9 @@ export function TareaSeguimientoPage() {
             {item.archivo_arte.split('/').pop()}
           </a>
         ) : '-'}
+      </td>
+      <td className="p-2 text-xs text-orange-300 max-w-[120px] truncate" title={tradSummary?.firstNota || ''}>
+        {tradSummary?.firstNota || <span className="text-zinc-600">-</span>}
       </td>
       {!hideInstalado && (
         <td className="p-2 text-center">
@@ -13371,9 +14667,10 @@ export function TareaSeguimientoPage() {
       rsvIds.forEach(rsvId => {
         const summary = digitalSummaryMap.get(rsvId);
         if (summary) {
-          totalArchivos += summary.totalArchivos;
-          totalImagenes += summary.countImagenes;
-          totalVideos += summary.countVideos;
+          // Use max instead of sum: all reservas in a group share the same digital files
+          totalArchivos = Math.max(totalArchivos, summary.totalArchivos);
+          totalImagenes = Math.max(totalImagenes, summary.countImagenes);
+          totalVideos = Math.max(totalVideos, summary.countVideos);
         }
       });
       if (totalArchivos > 0) {
@@ -15019,6 +16316,7 @@ export function TareaSeguimientoPage() {
                                                     <th className="p-2 font-medium text-purple-300">Plaza</th>
                                                     <th className="p-2 font-medium text-purple-300">Ciudad</th>
                                                     <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
+                                                    <th className="p-2 font-medium text-purple-300">Notas</th>
                                                     <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
                                                   </tr>
                                                 </thead>
@@ -15068,7 +16366,10 @@ export function TareaSeguimientoPage() {
                           )}
                           <span className="text-sm font-bold text-white">{level1Key}</span>
                           {/* Checkbox para seleccionar todo el nivel 1 */}
-                          <button
+                          <span
+                            role="checkbox"
+                            aria-checked={getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0}
+                            tabIndex={0}
                             onClick={(e) => {
                               e.stopPropagation();
                               const allItems = getAllLevel1Items();
@@ -15082,7 +16383,7 @@ export function TareaSeguimientoPage() {
                                 return next;
                               });
                             }}
-                            className={`ml-2 w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                            className={`ml-2 w-4 h-4 rounded border flex items-center justify-center transition-colors cursor-pointer ${
                               getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0
                                 ? 'bg-purple-600 border-purple-600'
                                 : 'border-purple-500/50 hover:border-purple-400'
@@ -15091,7 +16392,7 @@ export function TareaSeguimientoPage() {
                             {getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0 && (
                               <Check className="h-3 w-3 text-white" />
                             )}
-                          </button>
+                          </span>
                         </div>
                         <div className="flex items-center gap-1">
                           <FlujoBadges items={getAllLevel1Items()} tab={activeMainTab} />
@@ -15122,7 +16423,10 @@ export function TareaSeguimientoPage() {
                                     )}
                                     <span className="text-xs font-semibold text-purple-300">{level2Key}</span>
                                     {/* Checkbox para seleccionar todo el nivel 2 */}
-                                    <button
+                                    <span
+                                      role="checkbox"
+                                      aria-checked={getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0}
+                                      tabIndex={0}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         const allItems = getAllLevel2Items();
@@ -15136,7 +16440,7 @@ export function TareaSeguimientoPage() {
                                           return next;
                                         });
                                       }}
-                                      className={`ml-2 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                      className={`ml-2 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors cursor-pointer ${
                                         getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0
                                           ? 'bg-purple-600 border-purple-600'
                                           : 'border-purple-500/50 hover:border-purple-400'
@@ -15145,7 +16449,7 @@ export function TareaSeguimientoPage() {
                                       {getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0 && (
                                         <Check className="h-2.5 w-2.5 text-white" />
                                       )}
-                                    </button>
+                                    </span>
                                   </div>
                                   <div className="flex items-center gap-1">
                                     <FlujoBadges items={getAllLevel2Items()} tab={activeMainTab} />
@@ -15174,7 +16478,10 @@ export function TareaSeguimientoPage() {
                                               )}
                                               <span className="text-[11px] font-medium text-zinc-400">{level3Key}</span>
                                               {/* Checkbox para seleccionar todo el nivel 3 */}
-                                              <button
+                                              <span
+                                                role="checkbox"
+                                                aria-checked={items.every(item => selectedInventoryIds.has(item.id))}
+                                                tabIndex={0}
                                                 onClick={(e) => {
                                                   e.stopPropagation();
                                                   const allSelected = items.every(item => selectedInventoryIds.has(item.id));
@@ -15187,7 +16494,7 @@ export function TareaSeguimientoPage() {
                                                     return next;
                                                   });
                                                 }}
-                                                className={`ml-2 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                className={`ml-2 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors cursor-pointer ${
                                                   items.every(item => selectedInventoryIds.has(item.id))
                                                     ? 'bg-purple-600 border-purple-600'
                                                     : 'border-purple-500/50 hover:border-purple-400'
@@ -15196,7 +16503,7 @@ export function TareaSeguimientoPage() {
                                                 {items.every(item => selectedInventoryIds.has(item.id)) && (
                                                   <Check className="h-2.5 w-2.5 text-white" />
                                                 )}
-                                              </button>
+                                              </span>
                                             </div>
                                             <div className="flex items-center gap-1">
                                               <FlowStepIcons items={items} impresionMap={impresionStatusMap} programacionMap={programacionStatusMap} instalacionMap={instalacionStatusMap} />
@@ -15283,6 +16590,7 @@ export function TareaSeguimientoPage() {
                       <th className="p-2 font-medium text-purple-300">Plaza</th>
                       <th className="p-2 font-medium text-purple-300">Ciudad</th>
                       <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
+                      <th className="p-2 font-medium text-purple-300">Notas</th>
                       <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
                     </tr>
                   </thead>
@@ -16457,6 +17765,46 @@ export function TareaSeguimientoPage() {
               </button>
               <button
                 onClick={() => {
+                  // Collect all reserva IDs from conflicting tasks
+                  const conflictingReservaIds = new Set<number>();
+                  existingTasksForCreate.forEach(tarea => {
+                    if (tarea.ids_reservas) {
+                      tarea.ids_reservas.replace(/\*/g, ',').split(',')
+                        .map(id => parseInt(id.trim()))
+                        .filter(id => !isNaN(id))
+                        .forEach(id => conflictingReservaIds.add(id));
+                    }
+                  });
+
+                  // Remove inventory items whose reservas overlap with conflicting tasks
+                  const remainingIds = new Set<string>();
+                  selectedInventoryItems.forEach(item => {
+                    const itemRsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                    const hasConflict = itemRsvIds.some(rsvId => conflictingReservaIds.has(rsvId));
+                    if (!hasConflict) {
+                      remainingIds.add(item.id);
+                    }
+                  });
+
+                  if (remainingIds.size === 0) {
+                    // All items are conflicting, nothing left to create
+                    setIsTaskWarningModalOpen(false);
+                    setExistingTasksForCreate([]);
+                    return;
+                  }
+
+                  // Update selection to only non-conflicting items
+                  setSelectedInventoryIds(remainingIds);
+                  setIsTaskWarningModalOpen(false);
+                  setExistingTasksForCreate([]);
+                  setIsCreateModalOpen(true);
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
+              >
+                Descartar conflictivos
+              </button>
+              <button
+                onClick={() => {
                   setIsTaskWarningModalOpen(false);
                   setExistingTasksForCreate([]);
                   setIsCreateModalOpen(true);
@@ -16480,6 +17828,7 @@ export function TareaSeguimientoPage() {
         selectedInventory={selectedInventoryItems}
         onSubmit={handleUploadArt}
         onSubmitDigital={handleUploadDigitalArt}
+        onSubmitTradicional={handleUploadTradicionalArt}
         artesExistentes={artesExistentes}
         isLoadingArtes={isLoadingArtes}
         isSubmitting={assignArteMutation.isPending}
@@ -16498,6 +17847,18 @@ export function TareaSeguimientoPage() {
         imagenes={digitalGalleryImages}
         isLoading={isLoadingDigitalGallery}
         title={digitalGalleryTitle}
+      />
+
+      {/* Tradicional Gallery Modal */}
+      <TradicionalGalleryModal
+        isOpen={isTradicionalGalleryOpen}
+        onClose={() => {
+          setIsTradicionalGalleryOpen(false);
+          setTradicionalGalleryImages([]);
+        }}
+        imagenes={tradicionalGalleryImages}
+        isLoading={isLoadingTradicionalGallery}
+        title={tradicionalGalleryTitle}
       />
 
       {/* Task Detail Modal */}
@@ -16586,6 +17947,14 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
           queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
           queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
           queryClient.invalidateQueries({ queryKey: ['digital-file-summaries', campanaId] });
+        }}
+        onUpdateArteTradicional={async (reservaIds, archivos) => {
+          await campanasService.assignArteTradicional(campanaId, reservaIds, archivos);
+          queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+          queryClient.invalidateQueries({ queryKey: ['tradicional-file-summaries', campanaId] });
         }}
         onTaskComplete={async (taskId, observaciones, archivoTestigo) => {
           await updateTareaMutation.mutateAsync({
@@ -16734,6 +18103,8 @@ Por favor registra la cantidad de impresiones recibidas.`,
         canResolveRevisionArtesTasks={permissions.canResolveRevisionArtesTasks}
         canResolveCorreccionTasks={permissions.canResolveCorreccionTasks}
         digitalSummaryMap={digitalSummaryMap}
+        tradicionalSummaryMap={tradicionalSummaryMap}
+        openTradicionalGallery={openTradicionalGallery}
         tipoPeriodo={tipoPeriodo}
       />
 
