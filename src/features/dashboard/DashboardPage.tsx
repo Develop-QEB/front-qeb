@@ -1487,6 +1487,9 @@ export function DashboardPage() {
   const [filters, setFilters] = useState<DashboardFilters>({});
   const [activeEstatus, setActiveEstatus] = useState<EstatusType>('total');
   const [showFilters, setShowFilters] = useState(false);
+  const [dateMode, setDateMode] = useState<'catorcenal' | 'periodo'>('catorcenal');
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [selectedCatNum, setSelectedCatNum] = useState<number | null>(null);
   const [showPins, setShowPins] = useState(false);
   const [selectedPlaza, setSelectedPlaza] = useState<string | null>(null);
   const [inventoryPage, setInventoryPage] = useState(1);
@@ -1530,7 +1533,7 @@ export function DashboardPage() {
     return filterOptions.catorcenas.find(c => c.id === filters.catorcena_id) || null;
   }, [filters.catorcena_id, filterOptions]);
 
-  const handleClearFilters = () => { setFilters({}); setActiveEstatus('total'); setInventoryPage(1); };
+  const handleClearFilters = () => { setFilters({}); setActiveEstatus('total'); setInventoryPage(1); setSelectedYear(null); setSelectedCatNum(null); setDateMode('catorcenal'); };
   const hasActiveFilters = filters.estado || filters.ciudad || filters.formato || filters.nse || filters.catorcena_id || filters.fecha_inicio || filters.fecha_fin;
 
   const handleEstatusChange = (estatus: EstatusType) => { setActiveEstatus(estatus); setInventoryPage(1); };
@@ -1583,46 +1586,130 @@ export function DashboardPage() {
 
           {showFilters && (
             <GlassCard>
-              <div className="p-4 grid gap-4 md:grid-cols-6">
+              <div className="p-4 grid gap-4 md:grid-cols-4">
                 <FilterSelect label="Estado" value={filters.estado || ''} onChange={(v) => { setFilters(p => ({ ...p, estado: v || undefined })); setInventoryPage(1); }} options={filterOptions?.estados || []} />
                 <FilterSelect label="Ciudad" value={filters.ciudad || ''} onChange={(v) => { setFilters(p => ({ ...p, ciudad: v || undefined })); setInventoryPage(1); }} options={filterOptions?.ciudades || []} placeholder="Todas" />
                 <FilterSelect label="Formato" value={filters.formato || ''} onChange={(v) => { setFilters(p => ({ ...p, formato: v || undefined })); setInventoryPage(1); }} options={filterOptions?.formatos || []} />
                 <FilterSelect label="NSE" value={filters.nse || ''} onChange={(v) => { setFilters(p => ({ ...p, nse: v || undefined })); setInventoryPage(1); }} options={filterOptions?.nses || []} />
-                <div className="md:col-span-2 grid grid-cols-2 gap-4">
-                  <div>
-                    <label className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase tracking-wider mb-1 block font-medium`}>Inicio</label>
-                    <input
-                      type="date"
-                      value={filters.fecha_inicio || ''}
-                      onChange={(e) => {
-                        setFilters(p => ({
-                          ...p,
-                          fecha_inicio: e.target.value || undefined,
-                          // clear catorcena if switching to manual dates
-                          catorcena_id: undefined,
-                        }));
-                        setInventoryPage(1);
+              </div>
+              <div className={`px-4 pb-4 pt-0`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <label className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase tracking-wider font-medium`}>Tipo de fecha</label>
+                  <div className={`inline-flex rounded-lg border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} overflow-hidden`}>
+                    <button
+                      onClick={() => {
+                        setDateMode('catorcenal');
+                        setFilters(p => ({ ...p, fecha_inicio: undefined, fecha_fin: undefined }));
                       }}
-                      className={`h-9 w-full rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white' : 'border-purple-200 bg-gray-50 text-gray-800'} px-3 text-sm focus:ring-2 focus:ring-purple-500/30`}
-                    />
-                  </div>
-                  <div>
-                    <label className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase tracking-wider mb-1 block font-medium`}>Fin</label>
-                    <input
-                      type="date"
-                      value={filters.fecha_fin || ''}
-                      onChange={(e) => {
-                        setFilters(p => ({
-                          ...p,
-                          fecha_fin: e.target.value || undefined,
-                          catorcena_id: undefined,
-                        }));
-                        setInventoryPage(1);
+                      className={`px-3 py-1 text-xs font-medium transition-all ${dateMode === 'catorcenal'
+                        ? `${isDark ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'}`
+                        : `${isDark ? 'bg-zinc-800/50 text-zinc-400 hover:text-white' : 'bg-gray-50 text-gray-500 hover:text-gray-800'}`
+                      }`}
+                    >
+                      Catorcenal
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDateMode('periodo');
+                        setSelectedYear(null);
+                        setSelectedCatNum(null);
+                        setFilters(p => ({ ...p, catorcena_id: undefined }));
                       }}
-                      className={`h-9 w-full rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white' : 'border-purple-200 bg-gray-50 text-gray-800'} px-3 text-sm focus:ring-2 focus:ring-purple-500/30`}
-                    />
+                      className={`px-3 py-1 text-xs font-medium transition-all ${dateMode === 'periodo'
+                        ? `${isDark ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'}`
+                        : `${isDark ? 'bg-zinc-800/50 text-zinc-400 hover:text-white' : 'bg-gray-50 text-gray-500 hover:text-gray-800'}`
+                      }`}
+                    >
+                      Periodo
+                    </button>
                   </div>
                 </div>
+                {dateMode === 'catorcenal' ? (
+                  <div className="grid grid-cols-2 gap-4 max-w-md">
+                    <div>
+                      <label className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase tracking-wider mb-1 block font-medium`}>Año</label>
+                      <select
+                        value={selectedYear?.toString() || ''}
+                        onChange={(e) => {
+                          const yr = e.target.value ? parseInt(e.target.value) : null;
+                          setSelectedYear(yr);
+                          setSelectedCatNum(null);
+                          setFilters(p => ({ ...p, catorcena_id: undefined }));
+                          setInventoryPage(1);
+                        }}
+                        className={`h-9 w-full rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white' : 'border-purple-200 bg-gray-50 text-gray-800'} px-3 text-sm focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 transition-all`}
+                      >
+                        <option value="" className={isDark ? 'bg-zinc-800' : 'bg-white'}>Seleccionar</option>
+                        {[...new Set((filterOptions?.catorcenas || []).map(c => c.ano))].sort((a, b) => b - a).map(yr => (
+                          <option key={yr} value={yr.toString()} className={isDark ? 'bg-zinc-800' : 'bg-white'}>{yr}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase tracking-wider mb-1 block font-medium`}>Catorcena</label>
+                      <select
+                        value={selectedCatNum?.toString() || ''}
+                        disabled={!selectedYear}
+                        onChange={(e) => {
+                          const num = e.target.value ? parseInt(e.target.value) : null;
+                          setSelectedCatNum(num);
+                          if (num && selectedYear) {
+                            const cat = (filterOptions?.catorcenas || []).find(c => c.ano === selectedYear && c.numero === num);
+                            if (cat) {
+                              setFilters(p => ({ ...p, catorcena_id: cat.id, fecha_inicio: undefined, fecha_fin: undefined }));
+                            }
+                          } else {
+                            setFilters(p => ({ ...p, catorcena_id: undefined }));
+                          }
+                          setInventoryPage(1);
+                        }}
+                        className={`h-9 w-full rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white' : 'border-purple-200 bg-gray-50 text-gray-800'} px-3 text-sm focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 transition-all ${!selectedYear ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <option value="" className={isDark ? 'bg-zinc-800' : 'bg-white'}>Seleccionar</option>
+                        {(filterOptions?.catorcenas || []).filter(c => c.ano === selectedYear).sort((a, b) => a.numero - b.numero).map(c => (
+                          <option key={c.id} value={c.numero.toString()} className={isDark ? 'bg-zinc-800' : 'bg-white'}>
+                            Cat. {c.numero}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4 max-w-md">
+                    <div>
+                      <label className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase tracking-wider mb-1 block font-medium`}>Inicio</label>
+                      <input
+                        type="date"
+                        value={filters.fecha_inicio || ''}
+                        onChange={(e) => {
+                          setFilters(p => ({
+                            ...p,
+                            fecha_inicio: e.target.value || undefined,
+                            catorcena_id: undefined,
+                          }));
+                          setInventoryPage(1);
+                        }}
+                        className={`h-9 w-full rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white' : 'border-purple-200 bg-gray-50 text-gray-800'} px-3 text-sm focus:ring-2 focus:ring-purple-500/30`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase tracking-wider mb-1 block font-medium`}>Fin</label>
+                      <input
+                        type="date"
+                        value={filters.fecha_fin || ''}
+                        onChange={(e) => {
+                          setFilters(p => ({
+                            ...p,
+                            fecha_fin: e.target.value || undefined,
+                            catorcena_id: undefined,
+                          }));
+                          setInventoryPage(1);
+                        }}
+                        className={`h-9 w-full rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white' : 'border-purple-200 bg-gray-50 text-gray-800'} px-3 text-sm focus:ring-2 focus:ring-purple-500/30`}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </GlassCard>
           )}
