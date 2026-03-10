@@ -5188,9 +5188,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">
                           Periodo {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
-                          {tipoPeriodo !== 'mensual' && propuesta.catorcena_inicio && propuesta.anio_inicio && propuesta.catorcena_fin && propuesta.anio_fin && (
+                          {tipoPeriodo !== 'mensual' && catorcenaInicio && yearInicio && catorcenaFin && yearFin && (
                             <span className="text-zinc-600 ml-1">
-                              (Rango: {propuesta.catorcena_inicio}/{propuesta.anio_inicio} - {propuesta.catorcena_fin}/{propuesta.anio_fin})
+                              (Rango: {catorcenaInicio}/{yearInicio} - {catorcenaFin}/{yearFin})
                             </span>
                           )}
                         </label>
@@ -5264,12 +5264,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           ) : (
                             catorcenasData?.data
                               .filter(c => {
-                                if (!propuesta.catorcena_inicio || !propuesta.anio_inicio || !propuesta.catorcena_fin || !propuesta.anio_fin) {
+                                if (!catorcenaInicio || !yearInicio || !catorcenaFin || !yearFin) {
                                   return true;
                                 }
                                 const catValue = c.a_o * 100 + c.numero_catorcena;
-                                const minValue = propuesta.anio_inicio * 100 + propuesta.catorcena_inicio;
-                                const maxValue = propuesta.anio_fin * 100 + propuesta.catorcena_fin;
+                                const minValue = yearInicio * 100 + catorcenaInicio;
+                                const maxValue = yearFin * 100 + catorcenaFin;
                                 return catValue >= minValue && catValue <= maxValue;
                               })
                               .map(c => (
