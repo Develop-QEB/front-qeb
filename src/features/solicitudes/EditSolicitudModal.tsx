@@ -951,10 +951,12 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                             const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
                             const formato = getFormatoFromArticulo(item.ItemName);
                             const tipo = getTipoFromName(item.ItemName);
+                            const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
                             setNewCaraForm({
                               ...newCaraForm,
                               articulo: item,
                               tarifaPublica: tarifa.tarifa_publica,
+                              bonificacion: isImpresion ? 0 : newCaraForm.bonificacion,
                               estado: ciudadEstado?.estado || newCaraForm.estado,
                               ciudades: ciudadEstado ? [ciudadEstado.ciudad] : newCaraForm.ciudades,
                               formato: formato || newCaraForm.formato,
@@ -1020,7 +1022,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
 
                       {/* Renta */}
                       <div>
-                        <label className="text-xs text-zinc-500">Renta</label>
+                        <label className="text-xs text-zinc-500">{newCaraForm.articulo?.ItemCode?.toUpperCase().startsWith('IM') ? 'Impresiones' : 'Renta'}</label>
                         <input type="number" min={1} value={newCaraForm.renta}
                           onChange={(e) => setNewCaraForm({ ...newCaraForm, renta: parseInt(e.target.value) || 1 })}
                           className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none" />
@@ -1031,7 +1033,8 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                         <label className="text-xs text-zinc-500">Bonificación</label>
                         <input type="number" min={0} value={newCaraForm.bonificacion}
                           onChange={(e) => setNewCaraForm({ ...newCaraForm, bonificacion: parseInt(e.target.value) || 0 })}
-                          className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none" />
+                          disabled={newCaraForm.articulo?.ItemCode?.toUpperCase().startsWith('IM')}
+                          className={`w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none ${newCaraForm.articulo?.ItemCode?.toUpperCase().startsWith('IM') ? 'opacity-40 cursor-not-allowed' : ''}`} />
                       </div>
 
                       {/* Tarifa Pública (auto) */}

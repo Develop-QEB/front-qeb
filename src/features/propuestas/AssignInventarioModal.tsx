@@ -1073,11 +1073,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Calculate KPIs for caras
   const carasKPIs = useMemo(() => {
-    const totalRenta = caras.reduce((acc, c) => acc + (c.caras || 0), 0);
-    const totalBonificacion = caras.filter(c => !(c.articulo || '').toUpperCase().startsWith('CT')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
+    const totalRenta = caras.filter(c => !(c.articulo || '').toUpperCase().startsWith('IM')).reduce((acc, c) => acc + (c.caras || 0), 0);
+    const totalImpresiones = caras.filter(c => (c.articulo || '').toUpperCase().startsWith('IM')).reduce((acc, c) => acc + (c.caras || 0), 0);
+    const totalBonificacion = caras.filter(c => !(c.articulo || '').toUpperCase().startsWith('CT') && !(c.articulo || '').toUpperCase().startsWith('IM')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
     const totalCortesia = caras.filter(c => (c.articulo || '').toUpperCase().startsWith('CT')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
     const totalInversion = caras.reduce((acc, c) => acc + ((c.caras || 0) * (c.tarifa_publica || 0)), 0);
-    return { totalRenta, totalBonificacion, totalCortesia, totalInversion };
+    return { totalRenta, totalImpresiones, totalBonificacion, totalCortesia, totalInversion };
   }, [caras]);
 
   // Merge all reservas by grupo_completo_id (for display)
@@ -3198,8 +3199,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-zinc-400 flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    Flujo
+                    <div className={`w-2 h-2 rounded-full ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('IM') ? 'bg-amber-500' : 'bg-blue-500'}`} />
+                    {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('IM') ? 'Impresiones' : 'Flujo'}
                   </span>
                   <span className="text-sm font-bold text-blue-400">
                     {(selectedCaraForSearch?.caras_flujo || 0) - remainingToAssign.flujo} / {selectedCaraForSearch?.caras_flujo || 0}
@@ -3895,7 +3896,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           </>
                         )}
                       </button>
-                      <button
+                      {!(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('IM') && <button
                         onClick={handleReserveAsBonificacion}
                         disabled={isSaving || selectedInventory.size === 0 || remainingToAssign.bonificacion <= 0}
                         className={`flex-1 px-4 py-2.5 ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/30' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30'} border rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
@@ -3911,7 +3912,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                           </>
                         )}
-                      </button>
+                      </button>}
                     </div>
                   </div>
                 </div>
@@ -3988,7 +3989,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
                           }`}
                         >
-                          {opt === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif.') : opt}
+                          {opt === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif.') : opt === 'Flujo' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('IM') ? 'Impresiones' : opt}
                         </button>
                       ))}
                     </div>
@@ -5085,6 +5086,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <span className="text-zinc-400">
                       Renta: <span className="text-purple-300 font-medium">{carasKPIs.totalRenta}</span>
                     </span>
+                    {carasKPIs.totalImpresiones > 0 && (
+                      <span className="text-zinc-400">
+                        Impresiones: <span className="text-amber-300 font-medium">{carasKPIs.totalImpresiones}</span>
+                      </span>
+                    )}
                     <span className="text-zinc-400">
                       Bonificación: <span className="text-emerald-300 font-medium">{carasKPIs.totalBonificacion}</span>
                     </span>
@@ -5132,6 +5138,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const tipo = getTipoFromName(item.ItemName);
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
+                            const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
                             const isTarifaCero = isCortesia || isIntercambio;
                             setNewCara({
                               ...newCara,
@@ -5140,6 +5147,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               caras: isCortesia ? 0 : newCara.caras,
                               caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
                               caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,
+                              bonificacion: isImpresion ? 0 : newCara.bonificacion,
                               estados: ciudadEstado?.estado || newCara.estados,
                               // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
                               ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
@@ -5345,7 +5353,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label className="text-xs text-zinc-500">
-                          Caras en Renta
+                          {newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : 'Caras en Renta'}
                           {newCara.articulo?.toUpperCase().startsWith('CT') && (
                             <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
                           )}
@@ -5372,8 +5380,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           type="number"
                           value={newCara.bonificacion || ''}
                           onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                          disabled={!canEditResumen}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM')}
+                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM')) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
