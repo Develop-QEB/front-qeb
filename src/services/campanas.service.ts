@@ -857,15 +857,13 @@ export const campanasService = {
   },
 
   async openFichaTecnica(filePath: string): Promise<void> {
-    const response = await api.get(`/fichas-tecnicas/file`, {
+    const response = await api.get<ApiResponse<{ url: string }>>(`/fichas-tecnicas/file`, {
       params: { path: filePath },
-      responseType: 'blob',
     });
-    const blob = response.data as Blob;
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    // Clean up after a delay to allow the new tab to load
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    if (!response.data.success || !response.data.data?.url) {
+      throw new Error('Error al obtener URL del archivo');
+    }
+    window.open(response.data.data.url, '_blank');
   },
 
   async updateArteStatus(
