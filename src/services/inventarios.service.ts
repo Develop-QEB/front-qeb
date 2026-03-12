@@ -50,6 +50,16 @@ export const inventariosService = {
     return response.data;
   },
 
+  async downloadCSV(params: Pick<InventariosParams, 'search' | 'tipo' | 'estatus' | 'plaza'> = {}): Promise<void> {
+    const response = await api.get('/inventarios/download/csv', { params, responseType: 'blob' });
+    const url = URL.createObjectURL(response.data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'inventario.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
   async getForMap(params: { tipo?: string; estatus?: string; plaza?: string } = {}): Promise<InventarioMapItem[]> {
     const response = await api.get<ApiResponse<InventarioMapItem[]>>('/inventarios/map', { params });
     if (!response.data.success || !response.data.data) {

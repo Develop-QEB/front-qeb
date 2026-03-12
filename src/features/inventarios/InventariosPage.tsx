@@ -600,6 +600,15 @@ export function InventariosPage() {
                 </button>
               </div>
 
+              {/* Download CSV button */}
+              <button
+                onClick={() => inventariosService.downloadCSV({ search: search || undefined, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined })}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700' : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'}`}
+              >
+                <Download className="h-4 w-4" />
+                Descargar CSV
+              </button>
+
               {/* Bulk upload button */}
               <button
                 onClick={() => setIsBulkOpen(true)}
