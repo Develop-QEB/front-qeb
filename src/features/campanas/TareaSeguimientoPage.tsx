@@ -13284,6 +13284,7 @@ export function TareaSeguimientoPage() {
     tareaTitulo: string;
     tareaEstatus: string;
     tareaFechaFin: string;
+    archivoTestigo: string | null;
     items: (typeof inventoryTestigosData)[number][];
   };
 
@@ -13320,6 +13321,7 @@ export function TareaSeguimientoPage() {
         tareaTitulo: tarea.titulo || 'Sin título',
         tareaEstatus: tarea.estatus || 'Pendiente',
         tareaFechaFin: tarea.fecha_fin?.split('T')[0] || '',
+        archivoTestigo: tarea.archivo_testigo || null,
         items,
       };
     });
@@ -16964,6 +16966,20 @@ export function TareaSeguimientoPage() {
                             )}
                           </div>
                           <div className="flex items-center gap-2">
+                            {group.archivoTestigo && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedTestigoFile(group.archivoTestigo);
+                                  setIsTestigoFileModalOpen(true);
+                                }}
+                                className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 rounded-full border border-purple-500/30 transition-colors"
+                                title="Ver fotos comprobatorias"
+                              >
+                                <Eye className="h-3 w-3" />
+                                Ver fotos
+                              </button>
+                            )}
                             <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full border ${estatusColors[group.tareaEstatus] || 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'}`}>
                               {group.tareaEstatus}
                             </span>
