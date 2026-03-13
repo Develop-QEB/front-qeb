@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, Check, Users, Building2,
-  Package, Calendar, FileText, MapPin, RefreshCw, Save, Loader2, Edit3
+  Package, Calendar, FileText, MapPin, RefreshCw, Save, Loader2, Edit3, AlertTriangle
 } from 'lucide-react';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { formatCurrency } from '../../lib/utils';
@@ -436,6 +436,14 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
     });
   }, [catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
 
+  // Detect new caras whose period is outside the current availablePeriods range
+  const invalidNewCaras = useMemo(() => {
+    if (newCaras.length === 0) return [];
+    if (!yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
+    const validKeys = new Set(availablePeriods.map(p => `${p.a_o}-${p.numero_catorcena}`));
+    return newCaras.filter(c => !validKeys.has(`${c.catorcenaYear}-${c.catorcenaNum}`));
+  }, [newCaras, availablePeriods, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+
   const fechaInicio = useMemo(() => {
     if (!catorcenasData?.data || !yearInicio || !catorcenaInicio) return '';
     const cat = catorcenasData.data.find(c => c.a_o === yearInicio && c.numero_catorcena === catorcenaInicio);
@@ -634,6 +642,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
 
   const handleSave = () => {
     if (!selectedCuic) return;
+    if (invalidNewCaras.length > 0) return;
 
     const allCaras = [
       ...existingCaras.map(c => ({
@@ -1189,11 +1198,18 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
         </div>
 
         {/* Footer */}
+        {invalidNewCaras.length > 0 && (
+          <div className="flex items-center gap-2 mx-6 mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span><strong>{invalidNewCaras.length} circuito{invalidNewCaras.length > 1 ? 's' : ''} nuevo{invalidNewCaras.length > 1 ? 's' : ''}</strong> tienen catorcenas fuera del rango de campaña. Elimínalos o ajusta el rango.</span>
+          </div>
+        )}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-zinc-800 bg-zinc-900/50">
           <button onClick={onClose} className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 border border-zinc-700">
             Cancelar
           </button>
-          <button onClick={handleSave} disabled={updateMutation.isPending || !selectedCuic}
+          <button onClick={handleSave} disabled={updateMutation.isPending || !selectedCuic || invalidNewCaras.length > 0}
+            title={invalidNewCaras.length > 0 ? 'Hay circuitos nuevos con catorcenas fuera del rango' : undefined}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-700 disabled:opacity-50">
             {updateMutation.isPending ? (
               <><Loader2 className="h-4 w-4 animate-spin" />Guardando...</>

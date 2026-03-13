@@ -1215,6 +1215,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     });
   }, [tipoPeriodo, catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin]);
 
+  // Detect caras whose period is outside the current availablePeriods range
+  const invalidCaras = useMemo(() => {
+    if (caras.length === 0) return [];
+    // Skip if period range is not configured yet (user hasn't set dates)
+    const rangeConfigured = tipoPeriodo === 'mensual'
+      ? (yearInicio && yearFin && mesInicio !== undefined && mesFin !== undefined)
+      : (yearInicio && yearFin && catorcenaInicio && catorcenaFin);
+    if (!rangeConfigured) return [];
+    // Build valid key set (may be empty if range is inconsistent, meaning all caras are invalid)
+    const validKeys = new Set(availablePeriods.map(p => `${p.a_o}-${p.numero_catorcena}`));
+    return caras.filter(c => !validKeys.has(`${c.catorcenaYear}-${c.catorcenaNum}`));
+  }, [caras, availablePeriods, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin]);
+
   // Calculate fecha_inicio and fecha_fin from catorcenas or months
   const fechaInicio = useMemo(() => {
     if (tipoPeriodo === 'mensual') {
@@ -1554,6 +1567,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Handle submit
   const handleSubmit = async () => {
     if (!selectedCuic || caras.length === 0 || !fechaInicio || !fechaFin || selectedAsignados.length === 0) {
+      return;
+    }
+    if (invalidCaras.length > 0) {
+      showToast('Hay circuitos con catorcenas fuera del rango de campaña. Corrígelos antes de guardar.', 'error');
       return;
     }
 
@@ -2042,6 +2059,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           {/* Step 2: Campaña */}
           {step === 2 && (
             <div className="space-y-6">
+              {/* Warning: caras with invalid periods */}
+              {invalidCaras.length > 0 && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>
+                    <strong>{invalidCaras.length} circuito{invalidCaras.length > 1 ? 's' : ''}</strong> asignado{invalidCaras.length > 1 ? 's' : ''} ya no pertenece{invalidCaras.length > 1 ? 'n' : ''} al rango de catorcenas actual. Ve a "Asignar Caras" y elimínalos o ajusta el rango.
+                  </span>
+                </div>
+              )}
               {/* Campaign name */}
               <div className="space-y-2">
                 <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Nombre de Campaña</label>
@@ -2807,6 +2833,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           {/* Step 4: Resumen */}
           {step === 4 && (
             <div className="space-y-6">
+              {/* Warning: invalid caras */}
+              {invalidCaras.length > 0 && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>
+                    <strong>{invalidCaras.length} circuito{invalidCaras.length > 1 ? 's' : ''}</strong> tienen catorcenas fuera del rango de campaña. Regresa a "Campaña" o "Asignar Caras" para corregirlo.
+                  </span>
+                </div>
+              )}
               {/* Summary cards */}
               <div className="grid grid-cols-2 gap-4">
                 <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
@@ -3030,7 +3065,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0}
+              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0 || invalidCaras.length > 0}
               className={`px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} transition-colors flex items-center gap-2`}
               title={selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
             >
