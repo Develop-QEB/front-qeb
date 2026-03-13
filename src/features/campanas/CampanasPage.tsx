@@ -1154,6 +1154,24 @@ export function CampanasPage() {
       }
     });
 
+    // Filtrar grupos para que solo queden catorcenas dentro del rango del filtro de periodo activo
+    if (yearInicio && yearFin && catorcenaInicio && catorcenaFin) {
+      const filterStartKey = `${yearInicio}-${String(catorcenaInicio).padStart(2, '0')}`;
+      const filterEndKey = `${yearFin}-${String(catorcenaFin).padStart(2, '0')}`;
+      Object.keys(groups).forEach(key => {
+        if (key < filterStartKey || key > filterEndKey) {
+          delete groups[key];
+        }
+      });
+    } else if (yearInicio && yearFin) {
+      Object.keys(groups).forEach(key => {
+        const groupAnio = parseInt(key.split('-')[0]);
+        if (groupAnio < yearInicio || groupAnio > yearFin) {
+          delete groups[key];
+        }
+      });
+    }
+
     // Obtener segunda agrupación si existe y la primera es catorcena_inicio
     const secondGrouping = activeGroupings[0] === 'catorcena_inicio' && activeGroupings.length > 1
       ? activeGroupings[1]
@@ -1178,7 +1196,7 @@ export function CampanasPage() {
         }
         return { key, ...value };
       });
-  }, [filteredData, activeGroupings, catorcenasData]);
+  }, [filteredData, activeGroupings, catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
 
   // Estadísticas para gráfica de Status — from global stats
   const statusChartData = useMemo(() => {
