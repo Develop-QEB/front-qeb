@@ -12050,6 +12050,13 @@ export function TareaSeguimientoPage() {
   const [activeEstadoProgramacionTab, setActiveEstadoProgramacionTab] = useState<'en_programacion' | 'programado'>('en_programacion');
 
   // --- Impresiones ---
+  const [filtersImpresiones, setFiltersImpresiones] = useState<FilterCondition[]>([]);
+  const [showFiltersImpresiones, setShowFiltersImpresiones] = useState(false);
+  const [activeGroupingsImpresiones, setActiveGroupingsImpresiones] = useState<GroupByField[]>(['catorcena', 'aps', 'grupo']);
+  const [showGroupingImpresiones, setShowGroupingImpresiones] = useState(false);
+  const [sortFieldImpresiones, setSortFieldImpresiones] = useState<string | null>(null);
+  const [sortDirectionImpresiones, setSortDirectionImpresiones] = useState<'asc' | 'desc'>('asc');
+  const [showSortImpresiones, setShowSortImpresiones] = useState(false);
   const [activeEstadoImpresionTab, setActiveEstadoImpresionTab] = useState<'en_impresion' | 'pendiente_recepcion' | 'recibido'>('en_impresion');
 
   // --- Validar Instalación (testigo) ---
@@ -12068,8 +12075,9 @@ export function TareaSeguimientoPage() {
     if (activeMainTab === 'versionario') return activeGroupingsVersionario.length > 0;
     if (activeMainTab === 'atender') return activeGroupingsAtender.length > 0;
     if (activeMainTab === 'programacion') return activeGroupingsProgramacion.length > 0;
+    if (activeMainTab === 'impresiones') return activeGroupingsImpresiones.length > 0;
     return activeGroupingsTestigo.length > 0;
-  }, [activeMainTab, activeGroupingsVersionario, activeGroupingsAtender, activeGroupingsProgramacion, activeGroupingsTestigo]);
+  }, [activeMainTab, activeGroupingsVersionario, activeGroupingsAtender, activeGroupingsProgramacion, activeGroupingsImpresiones, activeGroupingsTestigo]);
 
   // Tasks state
   const [tasksSearch, setTasksSearch] = useState('');
@@ -12466,6 +12474,41 @@ export function TareaSeguimientoPage() {
 
   const clearGroupingsProgramacion = useCallback(() => {
     setActiveGroupingsProgramacion([]);
+  }, []);
+
+  // --- Funciones para Impresiones ---
+  const addFilterImpresiones = useCallback(() => {
+    const newFilter: FilterCondition = {
+      id: `filter-${Date.now()}`,
+      field: FILTER_FIELDS_INVENTARIO[0].field,
+      operator: '=',
+      value: '',
+    };
+    setFiltersImpresiones(prev => [...prev, newFilter]);
+  }, []);
+
+  const updateFilterImpresiones = useCallback((id: string, updates: Partial<FilterCondition>) => {
+    setFiltersImpresiones(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+  }, []);
+
+  const removeFilterImpresiones = useCallback((id: string) => {
+    setFiltersImpresiones(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const clearFiltersImpresiones = useCallback(() => {
+    setFiltersImpresiones([]);
+  }, []);
+
+  const toggleGroupingImpresiones = useCallback((field: GroupByField) => {
+    setActiveGroupingsImpresiones(prev => {
+      if (prev.includes(field)) return prev.filter(f => f !== field);
+      if (prev.length < 3) return [...prev, field];
+      return [...prev.slice(1), field];
+    });
+  }, []);
+
+  const clearGroupingsImpresiones = useCallback(() => {
+    setActiveGroupingsImpresiones([]);
   }, []);
 
   // --- Funciones para Validar Instalación (testigo) ---
@@ -13349,8 +13392,26 @@ export function TareaSeguimientoPage() {
         ? item.tradicional_digital === 'Tradicional'
         : item.tradicional_digital === 'Digital'
     );
+    // Aplicar filtros avanzados
+    data = applyFilters(data, filtersImpresiones);
+    // Aplicar ordenamiento
+    if (sortFieldImpresiones) {
+      data = [...data].sort((a, b) => {
+        const aVal = a[sortFieldImpresiones as keyof InventoryRow];
+        const bVal = b[sortFieldImpresiones as keyof InventoryRow];
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        let comparison = 0;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          comparison = aVal - bVal;
+        } else {
+          comparison = String(aVal).localeCompare(String(bVal));
+        }
+        return sortDirectionImpresiones === 'asc' ? comparison : -comparison;
+      });
+    }
     return data;
-  }, [inventoryImpresionesData, activeFormat, activeEstadoImpresionTab]);
+  }, [inventoryImpresionesData, activeFormat, activeEstadoImpresionTab, filtersImpresiones, sortFieldImpresiones, sortDirectionImpresiones]);
 
   // Determinar si la campaña tiene items tradicionales y/o digitales
   // Combinar inventario sin arte + con arte para tener la visión completa
@@ -13412,6 +13473,15 @@ export function TareaSeguimientoPage() {
     });
     return values;
   }, [inventoryProgramacionData]);
+
+  const getUniqueValuesImpresiones = useMemo(() => {
+    const values: Record<string, string[]> = {};
+    FILTER_FIELDS_INVENTARIO.forEach(field => {
+      const unique = [...new Set(inventoryImpresionesData.map(item => String(item[field.field as keyof InventoryRow] || '')))].filter(v => v).sort();
+      values[field.field] = unique;
+    });
+    return values;
+  }, [inventoryImpresionesData]);
 
   const getUniqueValuesTestigo = useMemo(() => {
     const values: Record<string, string[]> = {};
@@ -15592,6 +15662,36 @@ export function TareaSeguimientoPage() {
                   {tareasAPI.filter(t => t.tipo === 'Impresión' && t.estatus !== 'Atendido').length} tarea(s) activa(s)
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* Filter Toolbar (Impresiones tab) */}
+          {activeMainTab === 'impresiones' && (
+            <div className="px-4 py-2 border-b border-border flex items-center justify-between">
+              <span className="text-xs text-zinc-400">{filteredImpresionesData.length} de {inventoryImpresionesData.length} items</span>
+              <FilterToolbar
+                filters={filtersImpresiones}
+                showFilters={showFiltersImpresiones}
+                setShowFilters={setShowFiltersImpresiones}
+                addFilter={addFilterImpresiones}
+                updateFilter={updateFilterImpresiones}
+                removeFilter={removeFilterImpresiones}
+                clearFilters={clearFiltersImpresiones}
+                uniqueValues={getUniqueValuesImpresiones}
+                activeGroupings={activeGroupingsImpresiones}
+                showGrouping={showGroupingImpresiones}
+                setShowGrouping={setShowGroupingImpresiones}
+                toggleGrouping={toggleGroupingImpresiones}
+                clearGroupings={clearGroupingsImpresiones}
+                sortField={sortFieldImpresiones}
+                sortDirection={sortDirectionImpresiones}
+                showSort={showSortImpresiones}
+                setShowSort={setShowSortImpresiones}
+                setSortField={setSortFieldImpresiones}
+                setSortDirection={setSortDirectionImpresiones}
+                filteredCount={filteredImpresionesData.length}
+                totalCount={inventoryImpresionesData.length}
+              />
             </div>
           )}
 
