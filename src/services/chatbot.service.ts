@@ -17,12 +17,14 @@ export const chatbotService = {
     pantalla?: string,
     modal?: string | null,
     permisos?: string,
+    contextoUI?: string | null,
   ): Promise<string> {
     const response = await api.post<ChatResponse>('/chatbot', {
       messages,
       pantalla,
       modal: modal || null,
       permisos: permisos || null,
+      contextoUI: contextoUI || null,
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al enviar mensaje');
