@@ -90,16 +90,25 @@ Flujo: Solicitud aprobada → crear Propuesta → asignar inventario en mapa →
 
   'Propuestas:Asignar Inventario Propuesta': `El usuario tiene abierto el modal/pantalla de asignación de inventario para una propuesta.
 Elementos visibles:
-- Mapa interactivo (Leaflet/Mapbox): muestra todos los espacios publicitarios disponibles como puntos en el mapa.
+- Mapa interactivo: muestra todos los espacios publicitarios disponibles como puntos en el mapa.
   - Puntos verdes: espacios disponibles.
   - Puntos grises: espacios no disponibles o reservados.
   - Al hacer clic en un punto: muestra detalles del espacio (código, ubicación, formato, precio).
-- Panel lateral con lista de espacios filtrada.
-- Filtros: Plaza/Ciudad, Formato, Tipo, Estado, Precio.
+- Panel lateral con tabla de espacios disponibles y filtros.
+- Filtros disponibles: Plaza/Ciudad, Formato, Tipo (Tradicional/Digital), Flujo/Contraflujo, Solo únicos, Solo completos, Solo isla.
 - Barra de búsqueda: busca por código o dirección.
+- Botón "Agrupar" (ícono de regla, color verde cuando activo): agrupa los espacios de la tabla por cercanía geográfica para facilitar la selección de espacios en una misma zona. Cuando se activa aparecen dos controles adicionales:
+  - Selector de modo "Distancia" / "Listado":
+    - Modo "Distancia": el sistema agrupa los espacios usando el algoritmo de distancia haversine (distancia real entre coordenadas GPS). Los espacios que estén dentro del radio configurado se asignan al mismo grupo.
+    - Modo "Listado": agrupa los espacios secuencialmente según el orden de la lista, sin considerar ubicación geográfica.
+  - Selector de distancia (solo en modo Distancia): 100m, 200m, 500m (default), 1km, 1.5km, 2km, 3km. Define el radio mínimo de separación entre grupos.
+  - Campo numérico de tamaño de grupo: define cuántos espacios máximo hay por grupo (default 10, mínimo 2, máximo 50).
+  - Cuando está activo, aparece una columna "Grupo" en la tabla que indica a qué grupo pertenece cada espacio (Grupo 1, Grupo 2, etc.).
+- Botón "Filtro POI": filtra espacios cercanos a un Punto de Interés marcado en el mapa.
+- Botón "Cargar CSV": carga una lista de códigos de espacios desde un archivo CSV.
 - Botón "Asignar seleccionados": agrega los espacios marcados a la propuesta.
 - Botón "Quitar seleccionados": elimina espacios ya asignados.
-- Lista de espacios asignados en la parte inferior.
+- Sección inferior "Reservados": lista de espacios ya asignados a esta propuesta, con los mismos controles de agrupación.
 Tip: los espacios en gris con precio cruzado están reservados por otra propuesta.`,
 
   // ─────────────────────────── CAMPAÑAS ───────────────────────────
@@ -111,10 +120,26 @@ Elementos visibles:
 - Acciones por fila: Ver detalle (abre CampanaDetailPage), Editar, Cambiar estado, Gestión de artes (si tiene permiso).
 Flujo: Propuesta aprobada por cliente → se crea Campaña → se asignan APS → se gestiona el arte (diseño) → se programa e imprime → se instala y valida.`,
 
-  'Campanas:Editar Campaña': `El usuario tiene abierto el modal de edición de campaña.
-Campos editables: Nombre de campaña, descripción, notas, estado, período.
-Botón "Guardar": aplica los cambios.
-Botón "Cancelar": descarta y cierra.`,
+  'Campanas:Editar Campaña': `El usuario tiene abierto el modal de asignación/edición de inventario de una campaña. Este modal tiene dos paneles principales:
+
+Panel izquierdo - Mapa interactivo: muestra los espacios del inventario disponible y reservado con puntos en el mapa.
+
+Panel derecho - Tabla de inventario disponible con:
+- Barra de búsqueda por código o dirección.
+- Filtros: Flujo/Contraflujo, Solo únicos, Solo completos, Solo digitales, Solo isla.
+- Botón "Agrupar" (ícono de regla, verde cuando activo): agrupa los espacios de la tabla por cercanía geográfica. Útil para seleccionar espacios de una misma zona sin tener que buscarlos uno a uno. Al activarlo aparecen:
+  - Selector de modo "Distancia" / "Listado":
+    - Modo "Distancia": agrupa usando coordenadas GPS reales (algoritmo haversine). Los espacios más cercanos entre sí quedan en el mismo grupo.
+    - Modo "Listado": agrupa secuencialmente por posición en la lista, sin tomar en cuenta ubicación geográfica.
+  - Selector de distancia: 100m, 200m, 500m (default), 1km, 1.5km, 2km, 3km. Es el radio mínimo de separación entre grupos.
+  - Campo de tamaño de grupo: cuántos espacios máximo por grupo (default 10, rango 2-50).
+  - Columna "Grupo" en la tabla: muestra a qué grupo pertenece cada espacio (Grupo 1, Grupo 2...).
+- Botón "Filtro POI": filtra espacios cercanos a un punto del mapa.
+- Botón "Cargar CSV": importa lista de espacios desde archivo CSV.
+- Botón "Reservar seleccionados": reserva los espacios seleccionados para la campaña.
+
+Sección inferior - "Reservados": lista de espacios ya asignados a la campaña, con los mismos controles de agrupación por distancia.
+Botón "Quitar reservas": libera espacios ya reservados.`,
 
   'Campanas:Nueva Incidencia': `El usuario tiene abierto el modal para reportar una incidencia en una campaña.
 Campos:
