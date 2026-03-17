@@ -567,6 +567,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
   const [archivoPropuesta, setArchivoPropuesta] = useState<string | null>(null);
   const [tipoArchivoPropuesta, setTipoArchivoPropuesta] = useState<string | null>(null);
+  const periodInitializedRef = useRef(false);
 
   // Initial values for change detection
   const [initialValues, setInitialValues] = useState({
@@ -877,41 +878,44 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setArchivoPropuesta(solicitudDetails.solicitud?.archivo || null);
       setTipoArchivoPropuesta(solicitudDetails.solicitud?.tipo_archivo || null);
 
-      // Set period from cotizacion dates
+      // Set period from cotizacion dates — only on first load, not after updates
       const cot = solicitudDetails.cotizacion;
       let yInicio: number | undefined;
       let cInicio: number | undefined;
       let yFin: number | undefined;
       let cFin: number | undefined;
 
-      // Load catorcenas from cotizacion dates using proper date comparison
-      if (cot?.fecha_inicio && catorcenasData?.data) {
-        const fechaInicioDate = new Date(cot.fecha_inicio);
-        const inicioCat = catorcenasData.data.find(c => {
-          const cInicioDate = new Date(c.fecha_inicio);
-          const cFinDate = new Date(c.fecha_fin);
-          return fechaInicioDate >= cInicioDate && fechaInicioDate <= cFinDate;
-        });
-        if (inicioCat) {
-          yInicio = inicioCat.a_o;
-          setYearInicio(yInicio);
-          cInicio = inicioCat.numero_catorcena;
-          setCatorcenaInicio(cInicio);
+      if (!periodInitializedRef.current) {
+        // Load catorcenas from cotizacion dates using proper date comparison
+        if (cot?.fecha_inicio && catorcenasData?.data) {
+          const fechaInicioDate = new Date(cot.fecha_inicio);
+          const inicioCat = catorcenasData.data.find(c => {
+            const cInicioDate = new Date(c.fecha_inicio);
+            const cFinDate = new Date(c.fecha_fin);
+            return fechaInicioDate >= cInicioDate && fechaInicioDate <= cFinDate;
+          });
+          if (inicioCat) {
+            yInicio = inicioCat.a_o;
+            setYearInicio(yInicio);
+            cInicio = inicioCat.numero_catorcena;
+            setCatorcenaInicio(cInicio);
+          }
         }
-      }
-      if (cot?.fecha_fin && catorcenasData?.data) {
-        const fechaFinDate = new Date(cot.fecha_fin);
-        const finCat = catorcenasData.data.find(c => {
-          const cInicioDate = new Date(c.fecha_inicio);
-          const cFinDate = new Date(c.fecha_fin);
-          return fechaFinDate >= cInicioDate && fechaFinDate <= cFinDate;
-        });
-        if (finCat) {
-          yFin = finCat.a_o;
-          setYearFin(yFin);
-          cFin = finCat.numero_catorcena;
-          setCatorcenaFin(cFin);
+        if (cot?.fecha_fin && catorcenasData?.data) {
+          const fechaFinDate = new Date(cot.fecha_fin);
+          const finCat = catorcenasData.data.find(c => {
+            const cInicioDate = new Date(c.fecha_inicio);
+            const cFinDate = new Date(c.fecha_fin);
+            return fechaFinDate >= cInicioDate && fechaFinDate <= cFinDate;
+          });
+          if (finCat) {
+            yFin = finCat.a_o;
+            setYearFin(yFin);
+            cFin = finCat.numero_catorcena;
+            setCatorcenaFin(cFin);
+          }
         }
+        periodInitializedRef.current = true;
       }
 
       // Store initial values for change detection
@@ -919,10 +923,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         nombreCampania: campaniaNombre,
         notas: notasVal,
         descripcion: descripcionVal,
-        yearInicio: yInicio,
-        yearFin: yFin,
-        catorcenaInicio: cInicio,
-        catorcenaFin: cFin,
+        yearInicio: yInicio || yearInicio,
+        yearFin: yFin || yearFin,
+        catorcenaInicio: cInicio || catorcenaInicio,
+        catorcenaFin: cFin || catorcenaFin,
         asignadosIds: propuesta.id_asignado || '',
       });
 
@@ -985,6 +989,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setEditingCaraId(null);
       setNewCara(EMPTY_CARA);
       setSelectedArticulo(null);
+      periodInitializedRef.current = false;
     }
   }, [isOpen]);
 
