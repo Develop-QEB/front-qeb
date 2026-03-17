@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery } from '@tanstack/react-query';
 import {
   X, Download, Filter, ChevronDown, ChevronRight, Calendar, Loader2, FileSpreadsheet,
@@ -359,6 +360,7 @@ function formatDate(dateStr: string | null): string {
 }
 
 export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: OrdenesMontajeModalProps) {
+  useModalTracker('Órdenes de Montaje', isOpen);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [activeTab, setActiveTab] = useState<TabType>('cat');
   const contentRef = useRef<HTMLDivElement>(null);

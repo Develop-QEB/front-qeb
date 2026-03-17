@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Users, Building2, Tag, Database, Cloud, Plus, Trash2,
@@ -115,6 +116,7 @@ interface ViewClienteModalProps {
 }
 
 function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
+  useModalTracker('Ver Cliente', isOpen);
   const isDark = useThemeStore((s) => s.theme === 'dark');
 
   // Bloquear scroll del body cuando el modal está abierto
@@ -547,6 +549,7 @@ export function ClientesPage() {
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  useModalTracker('Registrar Cliente', showCreateModal);
 
   // Estados para filtros avanzados
   const [filters, setFilters] = useState<FilterCondition[]>([]);

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, Check, Users, Building2,
@@ -280,6 +281,7 @@ function MultiSelectTags({
 
 // ====== MAIN COMPONENT ======
 export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
+  useModalTracker('Editar Solicitud', isOpen);
   const queryClient = useQueryClient();
 
   // Form state

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
@@ -533,6 +534,7 @@ const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
+  useModalTracker('Editar Campaña', isOpen);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
