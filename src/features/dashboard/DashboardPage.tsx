@@ -29,7 +29,9 @@ import {
   Plus,
   Check,
   Trash2,
+  Download,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
 import { Skeleton } from '../../components/ui/skeleton';
 import { useThemeStore } from '../../store/themeStore';
@@ -915,6 +917,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
   selectedIds: Set<number>; onSelectionChange: (ids: Set<number>) => void;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(true);
 
   // Filter/Group/Sort state
@@ -993,6 +996,30 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
     }
     return result;
   }, [data, invFilters, invSortField, invSortDirection]);
+
+  const downloadCSV = useCallback(() => {
+    const selected = filteredData.filter(item => selectedIds.has(item.id));
+    if (selected.length === 0) return;
+    const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'];
+    const rows = selected.map(item => [
+      item.codigo_unico || item.id,
+      item.plaza || '',
+      item.municipio || '',
+      item.mueble || item.tipo_de_mueble || '',
+      item.tradicional_digital || 'Tradicional',
+      item.estatus || 'Disponible',
+      item.cliente_nombre || '',
+      item.APS || '',
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `inventario_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [filteredData, selectedIds]);
 
   // Grouped data (up to 2 levels)
   interface InvGroupedLevel1 { name: string; items: any[]; subgroups?: { name: string; items: any[] }[] }
@@ -1077,7 +1104,10 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
         <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate max-w-[150px]`}>{item.cliente_nombre || '-'}</td>
         <td className="px-4 py-3">
           {item.APS ? (
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} border`}>{item.APS}</span>
+            <span
+              onClick={(e) => { e.stopPropagation(); if (item.campana_id) navigate(`/campanas/detail/${item.campana_id}`); }}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} ${item.campana_id ? 'cursor-pointer hover:opacity-75' : ''}`}
+            >{item.APS}</span>
           ) : (
             <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>-</span>
           )}
@@ -1107,6 +1137,14 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
               <span className={`px-3 py-1 rounded-full ${isDark ? 'bg-pink-500/20 text-pink-300 border-pink-500/30' : 'bg-pink-50 text-pink-600 border-pink-200'} text-xs font-medium border`}>
                 {selectedIds.size} seleccionados
               </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); downloadCSV(); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'} transition-colors`}
+                title="Descargar CSV"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Descargar CSV
+              </button>
               <button
                 onClick={(e) => { e.stopPropagation(); handleClearSelection(); }}
                 className={`p-1.5 rounded-lg ${isDark ? 'bg-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-700' : 'bg-gray-100 text-gray-400 hover:text-gray-700 hover:bg-gray-200'} transition-colors`}

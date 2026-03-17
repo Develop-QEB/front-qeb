@@ -194,6 +194,8 @@ export interface InventoryDetailItem {
   longitud: number | null;
   estatus: string;
   cliente_nombre: string | null;
+  APS?: number | null;
+  campana_id?: number | null;
 }
 
 export interface PlazaMapData {

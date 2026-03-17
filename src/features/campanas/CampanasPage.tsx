@@ -6,7 +6,7 @@ import {
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
   ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2,
-  Image, FileText, DollarSign, Hash, Gift
+  Image, FileText, DollarSign, Hash, Gift, AlertTriangle
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -24,6 +24,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampanas } from '../../hooks/useSocket';
+import { IncidenciaModal } from './IncidenciaModal';
 
 // Colors for dynamic tags
 const getTagColors = (isDark: boolean) => [
@@ -670,6 +671,8 @@ export function CampanasPage() {
   const [ordenesMontajeModalOpen, setOrdenesMontajeModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [statusCampana, setStatusCampana] = useState<Campana | null>(null);
+  const [incidenciaModalOpen, setIncidenciaModalOpen] = useState(false);
+  const [incidenciaCampana, setIncidenciaCampana] = useState<Campana | null>(null);
   const limit = 20;
 
   // Estado para la vista activa (tabs)
@@ -1581,6 +1584,15 @@ export function CampanasPage() {
                 title={isEditDisabled(item) ? 'No editable (tiene APS o status no permite edición)' : 'Editar campaña'}
               >
                 <Edit2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {permissions.canSeeGestionArtes && (periodStatus === 'En curso' || item.status?.toLowerCase() === 'aprobada') && (
+              <button
+                onClick={() => { setIncidenciaCampana(item); setIncidenciaModalOpen(true); }}
+                className="p-2 rounded-lg border bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 border-orange-500/20 hover:border-orange-500/40 transition-all"
+                title="Reportar incidencia"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
@@ -2807,6 +2819,16 @@ export function CampanasPage() {
           }}
           campana={statusCampana}
           statusReadOnly={!permissions.canEditCampanaStatus}
+        />
+      )}
+
+      {/* Incidencia Modal */}
+      {incidenciaCampana && (
+        <IncidenciaModal
+          isOpen={incidenciaModalOpen}
+          onClose={() => { setIncidenciaModalOpen(false); setIncidenciaCampana(null); }}
+          campanaId={incidenciaCampana.id}
+          campanaNombre={incidenciaCampana.nombre}
         />
       )}
     </div>

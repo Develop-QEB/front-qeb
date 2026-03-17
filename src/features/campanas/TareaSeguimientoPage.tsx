@@ -51,6 +51,7 @@ import {
   ToggleRight,
   Folder,
   FolderOpen,
+  AlertTriangle,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioConArte, TareaCampana, ArteExistente, DigitalFileSummary, TradicionalFileSummary, FichasTecnicasNode } from '../../services/campanas.service';
@@ -2326,6 +2327,7 @@ const TIPOS_TAREA = [
   { value: 'Programación', label: 'Programación', description: 'Programación de artes digitales con indicaciones' },
   { value: 'Orden de Programación', label: 'Orden de Programación', description: 'Orden de programación para tráfico' },
   { value: 'Orden de Instalación', label: 'Orden de Instalación', description: 'Orden de instalación para tráfico' },
+  { value: 'Re-impresión', label: 'Re-impresión', description: 'Re-impresión por incidencia (grafiti, siniestro, vandalismo, etc.)' },
 ];
 
 // ============================================================================
@@ -10077,6 +10079,16 @@ function CreateTaskModal({
     }
   }, [isOpen, tipo, usuariosConArea]);
 
+  // Auto-asignar todos los analistas para Re-impresión
+  useEffect(() => {
+    if (isOpen && tipo === 'Re-impresión' && todosUsuarios) {
+      const analistas = todosUsuarios.filter(u =>
+        u.puesto?.toLowerCase().includes('analista')
+      );
+      setSelectedAnalistasReImpresion(analistas.map(u => ({ id: u.id, nombre: u.nombre })));
+    }
+  }, [isOpen, tipo, todosUsuarios]);
+
   // Pre-llenar asignados con TODOS los usuarios de Compras para Impresión
   useEffect(() => {
     if (isOpen && tipo === 'Impresión' && todosUsuarios) {
@@ -10128,6 +10140,11 @@ function CreateTaskModal({
   const [selectedAsignadosProgramacion, setSelectedAsignadosProgramacion] = useState<{ id: number; nombre: string }[]>([]);
   const [asignadoSearchProgramacion, setAsignadoSearchProgramacion] = useState('');
   const [showAsignadoDropdownProgramacion, setShowAsignadoDropdownProgramacion] = useState(false);
+  const [tipoIncidencia, setTipoIncidencia] = useState('');
+  // Para Re-impresión - múltiples analistas (puesto Analista)
+  const [selectedAnalistasReImpresion, setSelectedAnalistasReImpresion] = useState<{ id: number; nombre: string }[]>([]);
+  const [analistaSearchReImpresion, setAnalistaSearchReImpresion] = useState('');
+  const [showAnalistaDropdownReImpresion, setShowAnalistaDropdownReImpresion] = useState(false);
   const [fechaCreacion, setFechaCreacion] = useState(() => {
     const now = new Date();
     return now.toISOString().slice(0, 16);
@@ -10393,6 +10410,18 @@ function CreateTaskModal({
     );
   }, [todosUsuarios, asignadoSearchProgramacion, selectedAsignadosProgramacion]);
 
+  // Filtrar analistas para Re-impresión (excluir ya seleccionados)
+  const filteredAnalistasReImpresion = useMemo(() => {
+    if (!todosUsuarios) return [];
+    const selectedIds = new Set(selectedAnalistasReImpresion.map(u => u.id));
+    const analistas = todosUsuarios.filter(u =>
+      u.puesto?.toLowerCase().includes('analista') && !selectedIds.has(u.id)
+    );
+    if (!analistaSearchReImpresion.trim()) return analistas;
+    const search = analistaSearchReImpresion.toLowerCase();
+    return analistas.filter(u => u.nombre.toLowerCase().includes(search));
+  }, [todosUsuarios, analistaSearchReImpresion, selectedAnalistasReImpresion]);
+
   const handleSubmit = () => {
     const payload: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<number, number> } = {
       titulo,
@@ -10514,6 +10543,16 @@ function CreateTaskModal({
         // Guardar nombres separados por coma
         payload.asignado = selectedAsignadosTestigo.map(u => u.nombre).join(', ');
       }
+    } else if (tipo === 'Re-impresión') {
+      payload.titulo = `Re-impresión — ${tipoIncidencia}`;
+      payload.descripcion = `[Incidencia: ${tipoIncidencia}]\n${descripcion}`;
+      (payload as any).fecha_fin = fechaEntrega;
+      (payload as any).fecha_creacion = new Date().toISOString();
+      (payload as any).listado_inventario = selectedIds.join(',');
+      if (selectedAnalistasReImpresion.length > 0) {
+        (payload as any).id_asignado = selectedAnalistasReImpresion.map(u => u.id).join(', ');
+        payload.asignado = selectedAnalistasReImpresion.map(u => u.nombre).join(', ');
+      }
     } else if (tipo === 'Programación') {
       // Campos adicionales para Programación
       (payload as any).fecha_fin = fechaEntrega;
@@ -10585,6 +10624,10 @@ function CreateTaskModal({
       d.setDate(d.getDate() + 7);
       return d.toISOString().slice(0, 10);
     });
+    setTipoIncidencia('');
+    setSelectedAnalistasReImpresion([]);
+    setAnalistaSearchReImpresion('');
+    setShowAnalistaDropdownReImpresion(false);
     setAsignadoId(null);
     setAsignadoNombre('');
     setAsignadoSearch('');
@@ -11640,6 +11683,92 @@ function CreateTaskModal({
                 </div>
               </>
             )}
+
+            {tipo === 'Re-impresión' && (
+              <>
+                {/* Tipo de incidencia */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Tipo de incidencia *</label>
+                  <select
+                    value={tipoIncidencia}
+                    onChange={e => setTipoIncidencia(e.target.value)}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:opacity-50"
+                  >
+                    <option value="">Seleccionar...</option>
+                    {['Grafiti', 'Siniestro', 'Vandalismo', 'Daño por clima', 'Robo de material', 'Otro'].map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* ¿Qué pasó? */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">¿Qué pasó? *</label>
+                  <textarea
+                    value={descripcion}
+                    onChange={(e) => setDescripcion(e.target.value)}
+                    rows={3}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 resize-none disabled:opacity-50"
+                    placeholder="Describe la incidencia detalladamente..."
+                  />
+                </div>
+
+                {/* Fecha de entrega */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega *</label>
+                  <input
+                    type="date"
+                    value={fechaEntrega}
+                    onChange={(e) => setFechaEntrega(e.target.value)}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:opacity-50"
+                  />
+                </div>
+
+                {/* Asignar analistas */}
+                <div className="relative">
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Analistas asignados *</label>
+                  {selectedAnalistasReImpresion.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {selectedAnalistasReImpresion.map((u) => (
+                        <span key={u.id} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-orange-500/20 text-orange-300 border border-orange-500/30 rounded-full">
+                          {u.nombre}
+                          <button type="button" onClick={() => setSelectedAnalistasReImpresion(prev => prev.filter(x => x.id !== u.id))} className="hover:text-orange-100">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={analistaSearchReImpresion}
+                      onChange={(e) => { setAnalistaSearchReImpresion(e.target.value); setShowAnalistaDropdownReImpresion(true); }}
+                      onFocus={() => setShowAnalistaDropdownReImpresion(true)}
+                      onBlur={() => setTimeout(() => setShowAnalistaDropdownReImpresion(false), 200)}
+                      placeholder="Agregar analista..."
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:opacity-50"
+                    />
+                    {showAnalistaDropdownReImpresion && filteredAnalistasReImpresion.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {filteredAnalistasReImpresion.map((u) => (
+                          <button key={u.id} type="button"
+                            onClick={() => { setSelectedAnalistasReImpresion(prev => [...prev, { id: u.id, nombre: u.nombre }]); setAnalistaSearchReImpresion(''); setShowAnalistaDropdownReImpresion(false); }}
+                            className="w-full px-3 py-2 text-sm text-left hover:bg-orange-900/30 transition-colors"
+                          >
+                            {u.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -11653,11 +11782,11 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !fechaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : tipo === 'Orden de Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0) : !titulo.trim()) || isSubmitting}
+            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !fechaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Re-impresión' ? (!tipoIncidencia || !descripcion.trim() || selectedAnalistasReImpresion.length === 0 || !fechaEntrega) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : tipo === 'Orden de Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0) : !titulo.trim()) || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {(isSubmitting || ((tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isSubmitting ? 'Generando...' : (tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales ? 'Cargando archivos...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : tipo === 'Testigo' ? 'Crear Testigo' : tipo === 'Orden de Programación' ? 'Crear Orden de Programación' : 'Crear tarea'}
+            {isSubmitting ? 'Generando...' : (tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales ? 'Cargando archivos...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : tipo === 'Testigo' ? 'Crear Testigo' : tipo === 'Re-impresión' ? 'Crear Re-impresión' : tipo === 'Orden de Programación' ? 'Crear Orden de Programación' : 'Crear tarea'}
           </button>
         </div>
       </div>
@@ -12135,6 +12264,8 @@ export function TareaSeguimientoPage() {
   // URL search params (para auto-abrir modal de tarea desde "Mis Tareas")
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTaskId = searchParams.get('taskId');
+  const urlIncidencia = searchParams.get('incidencia');
+  const urlTipoIncidencia = searchParams.get('tipoIncidencia');
 
   // ---- Query Client for mutations ----
   const queryClient = useQueryClient();
@@ -14050,9 +14181,9 @@ export function TareaSeguimientoPage() {
 
   // Calcular el tipo de tarea inicial y los tipos disponibles basado en el estado de los inventarios
   const calculateTaskTiposConfig = useCallback(() => {
-    // Si estamos en la tab de testigo, solo mostrar tipo Testigo
+    // Si estamos en la tab de testigo, mostrar tipo Testigo y Re-impresión
     if (activeMainTab === 'testigo') {
-      return { initialTipo: 'Testigo', availableTipos: ['Testigo'] };
+      return { initialTipo: 'Testigo', availableTipos: ['Testigo', 'Re-impresión'] };
     }
 
     // Si estamos en la tab de programación con subtab "programado", solo mostrar tipo Testigo
@@ -14266,15 +14397,25 @@ export function TareaSeguimientoPage() {
       });
       // Éxito - cerrar modal y actualizar
       setIsCreateModalOpen(false);
-      setSelectedInventoryIds(new Set());
       setCreateTaskError(null);
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', campanaId] });
+
+      // Si es Re-impresión, mover inventarios de vuelta a tab de impresiones
+      if (task.tipo === 'Re-impresión') {
+        const reservaIdsNum = reservaIds.map(Number).filter(n => !isNaN(n));
+        if (reservaIdsNum.length > 0) {
+          await updateInstaladoMutation.mutateAsync({ reservaIds: reservaIdsNum, instalado: false });
+        }
+        setActiveMainTab('impresiones');
+      } else {
+        setSelectedInventoryIds(new Set());
+      }
     } catch (error) {
       console.error('Error al crear tarea:', error);
       setCreateTaskError(error instanceof Error ? error.message : 'Error al crear tarea');
     }
-  }, [selectedInventoryItems, createTareaMutation, campanaId, queryClient, getSelectedImpresionFlowConflicts]);
+  }, [selectedInventoryItems, createTareaMutation, updateInstaladoMutation, campanaId, queryClient, getSelectedImpresionFlowConflicts, setActiveMainTab]);
 
   const handleUploadArt = useCallback(async (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => {
     // Get reserva IDs from selected inventory items
@@ -14953,6 +15094,27 @@ export function TareaSeguimientoPage() {
             <Badge variant="outline" className="text-[10px]">#{campana.id}</Badge>
           </div>
         </div>
+
+        {/* Incidencia Banner */}
+        {urlIncidencia === '1' && (
+          <div className="flex items-center gap-3 px-4 py-3 bg-orange-500/15 border border-orange-500/30 rounded-xl">
+            <AlertTriangle className="h-5 w-5 text-orange-400 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-orange-300">
+                Modo Incidencia{urlTipoIncidencia ? ` — ${urlTipoIncidencia}` : ''}
+              </p>
+              <p className="text-xs text-orange-400/80 mt-0.5">
+                Selecciona los espacios afectados y crea nuevas tareas de impresión para iniciar el flujo.
+              </p>
+            </div>
+            <button
+              onClick={() => { searchParams.delete('incidencia'); searchParams.delete('tipoIncidencia'); setSearchParams(searchParams, { replace: true }); }}
+              className="text-orange-400/60 hover:text-orange-300 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* Workflow Step Indicator */}
         <div className="bg-gradient-to-r from-purple-900/30 to-purple-900/10 rounded-xl border border-purple-500/20 p-4">
@@ -15770,8 +15932,8 @@ export function TareaSeguimientoPage() {
                   </div>
                 )}
               </div>
-              {permissions.canEditGestionArtes && permissions.canCreateTareasGestionArtes && (
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                {permissions.canEditGestionArtes && permissions.canCreateTareasGestionArtes && (
                   <button
                     onClick={handleCreateTaskClick}
                     disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
@@ -15788,8 +15950,8 @@ export function TareaSeguimientoPage() {
                     )}
                     {isCheckingExistingTasks ? 'Verificando...' : 'Crear Tarea'}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
 
@@ -18286,6 +18448,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
           </div>
         );
       })()}
+
     </div>
   );
 }
