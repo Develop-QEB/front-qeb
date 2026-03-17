@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, ChevronDown, ChevronRight, User, Monitor, Layers, Clock, MessageSquare, Search } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { useThemeStore } from '../../store/themeStore';
+import { useSocketChatbotAdmin } from '../../hooks/useSocket';
 import api from '../../lib/api';
 
 interface ChatMessage {
@@ -46,8 +47,18 @@ function duration(start: string, end: string) {
 
 export function ChatbotHistorialPage() {
   const isDark = useThemeStore((s) => s.theme === 'dark');
+  const queryClient = useQueryClient();
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
+  const [newLogs, setNewLogs] = useState(0);
+
+  const handleNuevoLog = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['chatbot-logs'] });
+    setNewLogs(prev => prev + 1);
+    setTimeout(() => setNewLogs(0), 3000);
+  }, [queryClient]);
+
+  useSocketChatbotAdmin(handleNuevoLog);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['chatbot-logs'],
@@ -99,15 +110,21 @@ export function ChatbotHistorialPage() {
         )}
 
         {/* Search */}
-        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border mb-4 ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
-          <Search className={`h-4 w-4 flex-shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
-          <input
-            type="text"
-            placeholder="Buscar por usuario, rol o contenido..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className={`flex-1 bg-transparent text-sm outline-none ${isDark ? 'text-white placeholder:text-zinc-600' : 'text-gray-900 placeholder:text-gray-400'}`}
-          />
+        <div className="flex items-center gap-2 mb-4">
+          <div className={`flex flex-1 items-center gap-2 px-3 py-2 rounded-xl border ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+            <Search className={`h-4 w-4 flex-shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+            <input
+              type="text"
+              placeholder="Buscar por usuario, rol o contenido..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className={`flex-1 bg-transparent text-sm outline-none ${isDark ? 'text-white placeholder:text-zinc-600' : 'text-gray-900 placeholder:text-gray-400'}`}
+            />
+          </div>
+          <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${newLogs > 0 ? 'bg-green-500/20 border-green-500/40 text-green-400' : isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-500' : 'bg-white border-gray-200 text-gray-400'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${newLogs > 0 ? 'bg-green-400 animate-pulse' : isDark ? 'bg-zinc-600' : 'bg-gray-300'}`} />
+            En vivo
+          </div>
         </div>
 
         {/* Sessions list */}
