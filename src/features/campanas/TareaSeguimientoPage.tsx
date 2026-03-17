@@ -12266,6 +12266,8 @@ export function TareaSeguimientoPage() {
   const urlTaskId = searchParams.get('taskId');
   const urlIncidencia = searchParams.get('incidencia');
   const urlTipoIncidencia = searchParams.get('tipoIncidencia');
+  const urlTab = searchParams.get('tab') as MainTab | null;
+  const urlSubtab = searchParams.get('subtab');
 
   // ---- Query Client for mutations ----
   const queryClient = useQueryClient();
@@ -12413,6 +12415,16 @@ export function TareaSeguimientoPage() {
   // ---- Error State ----
   const [uploadArtError, setUploadArtError] = useState<string | null>(null);
   const [createTaskError, setCreateTaskError] = useState<string | null>(null);
+  const [createTaskSuccess, setCreateTaskSuccess] = useState<string | null>(null);
+  const reimpresionStorageKey = `reimpresion-rsv-${campanaId}`;
+  const [reimpresionRsvIds, setReimpresionRsvIds] = useState<Set<number>>(() => {
+    try {
+      const stored = sessionStorage.getItem(reimpresionStorageKey);
+      if (stored) return new Set<number>(JSON.parse(stored));
+    } catch {}
+    return new Set<number>();
+  });
+  const [soloReimpresion, setSoloReimpresion] = useState(false);
 
   // ---- Mutations ----
   const assignArteMutation = useMutation({
@@ -12473,6 +12485,7 @@ export function TareaSeguimientoPage() {
       impresiones?: Record<string, number>;
       evidencia?: string;
       num_impresiones?: number;
+      fecha_fin?: string;
     }) => campanasService.createTarea(campanaId, data),
     // El manejo de éxito/error ahora está en handleCreateTask con mutateAsync
   });
@@ -13361,6 +13374,14 @@ export function TareaSeguimientoPage() {
       data = data.filter(item => item.estado_arte === activeEstadoArteTab);
     }
 
+    // Filtrar solo re-impresión si está activo
+    if (soloReimpresion && reimpresionRsvIds.size > 0) {
+      data = data.filter(item => {
+        const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+        return rsvIds.some(id => reimpresionRsvIds.has(id));
+      });
+    }
+
     if (sortFieldAtender) {
       data = [...data].sort((a, b) => {
         const aVal = a[sortFieldAtender as keyof InventoryRow];
@@ -13377,7 +13398,7 @@ export function TareaSeguimientoPage() {
       });
     }
     return data;
-  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoArteTab, inventorySearch]);
+  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoArteTab, inventorySearch, soloReimpresion, reimpresionRsvIds]);
 
   // Datos filtrados y ordenados para Programación (programacion)
   const filteredProgramacionData = useMemo(() => {
@@ -13560,6 +13581,16 @@ export function TareaSeguimientoPage() {
   const shouldShowImpresionesTab = campaignHasTradicional;
   // Tab de Programación: solo visible si hay inventarios digitales
   const shouldShowProgramacionTab = campaignHasDigital;
+
+  // Aplicar tab inicial desde URL (ej. ?tab=testigo&subtab=instaladas desde flujo de incidencia)
+  useEffect(() => {
+    if (urlTab) setActiveMainTab(urlTab);
+    if (urlSubtab === 'instaladas' || urlSubtab === 'por_instalar' || urlSubtab === 'testigo') {
+      setActiveEstadoInstalacionTab(urlSubtab);
+    }
+  // Solo al montar
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-switch si el tab activo fue ocultado por tipo de inventario
   useEffect(() => {
@@ -14383,6 +14414,7 @@ export function TareaSeguimientoPage() {
         ids_reservas: reservaIds.join(','),
         proveedores_id: task.proveedores_id,
         nombre_proveedores: task.nombre_proveedores,
+        fecha_fin: (task as any).fecha_fin,
         // Campos para Revisión de artes e Impresión
         asignado: (task as any).asignado,
         id_asignado: (task as any).id_asignado,
@@ -14407,7 +14439,12 @@ export function TareaSeguimientoPage() {
         if (reservaIdsNum.length > 0) {
           await updateInstaladoMutation.mutateAsync({ reservaIds: reservaIdsNum, instalado: false });
         }
-        setActiveMainTab('impresiones');
+        const newSet = new Set(reservaIdsNum);
+        setReimpresionRsvIds(newSet);
+        try { sessionStorage.setItem(reimpresionStorageKey, JSON.stringify(reservaIdsNum)); } catch {}
+        setCreateTaskSuccess('Tarea de re-impresión creada. Los espacios afectados están listos para una nueva tarea de impresión.');
+        setTimeout(() => setCreateTaskSuccess(null), 6000);
+        setActiveMainTab('atender');
       } else {
         setSelectedInventoryIds(new Set());
       }
@@ -14734,7 +14771,17 @@ export function TareaSeguimientoPage() {
           </button>
         </td>
       )}
-      <td className="p-2 text-xs font-medium text-white">{item.id}</td>
+      <td className="p-2 text-xs font-medium text-white">
+        <div className="flex items-center gap-1.5">
+          {item.id}
+          {(() => {
+            const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+            return rsvIds.some(id => reimpresionRsvIds.has(id)) ? (
+              <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/40 rounded-full whitespace-nowrap">Re-impresión</span>
+            ) : null;
+          })()}
+        </div>
+      </td>
       <td className="p-2 text-xs text-zinc-300">{item.arte_aprobado || 'Sin revisar'}</td>
       <td className="p-2">
         {isDigital && digitalSummary ? (
@@ -15095,6 +15142,17 @@ export function TareaSeguimientoPage() {
           </div>
         </div>
 
+        {/* Re-impresión success banner */}
+        {createTaskSuccess && (
+          <div className="flex items-center gap-3 px-4 py-3 bg-green-500/15 border border-green-500/30 rounded-xl">
+            <CheckCircle2 className="h-5 w-5 text-green-400 flex-shrink-0" />
+            <p className="text-sm text-green-300 flex-1">{createTaskSuccess}</p>
+            <button onClick={() => setCreateTaskSuccess(null)} className="text-green-400/60 hover:text-green-300 transition-colors">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {/* Incidencia Banner */}
         {urlIncidencia === '1' && (
           <div className="flex items-center gap-3 px-4 py-3 bg-orange-500/15 border border-orange-500/30 rounded-xl">
@@ -15386,6 +15444,19 @@ export function TareaSeguimientoPage() {
                     </button>
                   )}
                 </div>
+                {reimpresionRsvIds.size > 0 && (
+                  <button
+                    onClick={() => setSoloReimpresion(v => !v)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                      soloReimpresion
+                        ? 'bg-orange-500/20 text-orange-400 border-orange-500/40'
+                        : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-orange-500/40 hover:text-orange-400'
+                    }`}
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    Solo Re-impresión
+                  </button>
+                )}
               </div>
               <FilterToolbar
                 filters={filtersAtender}

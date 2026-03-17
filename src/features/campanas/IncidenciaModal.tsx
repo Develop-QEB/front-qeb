@@ -2,14 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, X } from 'lucide-react';
 
-const TIPOS_INCIDENCIA = [
-  'Siniestro',
-  'Grafiti',
-  'Vandalismo',
-  'Daño por clima',
-  'Otro',
-];
-
 interface Props {
   campanaId: number;
   campanaNombre: string;
@@ -25,8 +17,12 @@ export function IncidenciaModal({ campanaId, campanaNombre, isOpen, onClose }: P
   if (!isOpen) return null;
 
   const handleConfirm = () => {
-    const params = new URLSearchParams({ incidencia: '1', tipoIncidencia: tipo });
-    navigate(`/campanas/${campanaId}/tareas?${params.toString()}`);
+    if (tipo === 'Bloqueo') {
+      navigate('/inventarios');
+    } else {
+      const params = new URLSearchParams({ incidencia: '1', tipoIncidencia: tipo, tab: 'testigo', subtab: 'instaladas' });
+      navigate(`/campanas/${campanaId}/tareas?${params.toString()}`);
+    }
     onClose();
   };
 
@@ -56,21 +52,9 @@ export function IncidenciaModal({ campanaId, campanaNombre, isOpen, onClose }: P
               className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-orange-500/50"
             >
               <option value="">Seleccionar...</option>
-              {TIPOS_INCIDENCIA.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
+              <option value="Re-impresión">Re-impresión</option>
+              <option value="Bloqueo">Bloqueo</option>
             </select>
-          </div>
-
-          <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Notas (opcional)</label>
-            <textarea
-              value={nota}
-              onChange={e => setNota(e.target.value)}
-              rows={3}
-              placeholder="Describe la incidencia..."
-              className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-orange-500/50 placeholder:text-zinc-600"
-            />
           </div>
         </div>
 
@@ -87,7 +71,7 @@ export function IncidenciaModal({ campanaId, campanaNombre, isOpen, onClose }: P
             className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
           >
             <AlertTriangle className="h-4 w-4" />
-            Ir a Gestión de Artes
+            {tipo === 'Bloqueo' ? 'Ir a Inventarios' : 'Ir a Gestión de Artes'}
           </button>
         </div>
       </div>

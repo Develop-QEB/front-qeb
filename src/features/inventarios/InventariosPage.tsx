@@ -9,11 +9,14 @@ import {
 import { Header } from '../../components/layout/Header';
 import { useThemeStore } from '../../store/themeStore';
 import { inventariosService } from '../../services/inventarios.service';
+import { campanasService } from '../../services/campanas.service';
 import { Inventario } from '../../types';
 
 import { InventarioMap } from './InventarioMap';
+import { BloqueoModal, BloqueoData } from './BloqueoModal';
 
 const getEstatusStyles = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
+  Activo: { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
   Disponible: { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
   Reservado: { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
   Ocupado: { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
@@ -114,6 +117,8 @@ export function InventariosPage() {
   const [isHistorialOpen, setIsHistorialOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [bloqueoItem, setBloqueoItem] = useState<Inventario | null>(null);
+  const [isBloqueoSubmitting, setIsBloqueoSubmitting] = useState(false);
 
   // Bulk upload state
   const [isBulkOpen, setIsBulkOpen] = useState(false);
@@ -157,8 +162,55 @@ export function InventariosPage() {
 
   const toggleBlockMutation = useMutation({
     mutationFn: (id: number) => inventariosService.toggleBlock(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['inventarios'] }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventarios'] });
+      setBloqueoItem(null);
+    },
   });
+
+  const EN_USO_ESTATUS = ['Reservado', 'Ocupado', 'Vendido'];
+
+  const handleBloquearClick = (item: Inventario) => {
+    const realEstatus = item.estatus_real || item.estatus || '';
+    if (item.estatus === 'Bloqueado') {
+      toggleBlockMutation.mutate(item.id);
+    } else if (EN_USO_ESTATUS.includes(realEstatus)) {
+      // En uso → modal para crear tarea (sin bloquear)
+      setBloqueoItem(item);
+    } else {
+      // Libre → bloquear directo
+      toggleBlockMutation.mutate(item.id);
+    }
+  };
+
+  const handleConfirmarBloqueo = async (data: BloqueoData) => {
+    if (!bloqueoItem) return;
+    setIsBloqueoSubmitting(true);
+    try {
+      await inventariosService.toggleBlock(bloqueoItem.id);
+      queryClient.invalidateQueries({ queryKey: ['inventarios'] });
+
+      const descripcion = [
+        `Inventario #${bloqueoItem.id}${bloqueoItem.codigo_unico ? ` (${bloqueoItem.codigo_unico})` : ''} marcado como bloqueado.`,
+        bloqueoItem.ubicacion ? `Ubicación: ${bloqueoItem.ubicacion}` : null,
+        `Motivo: ${data.motivo}`,
+      ].filter(Boolean).join('\n');
+
+      await Promise.all(
+        data.campanas.map(c =>
+          campanasService.createTarea(c.campana_id, {
+            titulo: 'Ajuste Inventario Bloqueado',
+            descripcion,
+            tipo: 'Ajuste Inventario Bloqueado',
+          })
+        )
+      );
+
+      setBloqueoItem(null);
+    } finally {
+      setIsBloqueoSubmitting(false);
+    }
+  };
 
   // Sort
   const sortedData = useMemo(() => {
@@ -742,7 +794,7 @@ export function InventariosPage() {
                             </td>
                             <td className="px-4 py-3">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${estStyle.bg} ${estStyle.text} border ${estStyle.border}`}>
-                                {item.estatus_real || item.estatus || 'Sin estatus'}
+                                {(item.estatus_real || item.estatus || 'Sin estatus').replace('Disponible', 'Activo')}
                               </span>
                             </td>
                             <td className="px-4 py-3">
@@ -762,10 +814,11 @@ export function InventariosPage() {
                                   <History className="h-3.5 w-3.5" />
                                 </button>
                                 <button
-                                  onClick={() => toggleBlockMutation.mutate(item.id)}
-                                  className={`p-1.5 rounded-lg transition-colors ${isBlocked
-                                    ? isDark ? 'hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300' : 'hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700'
-                                    : `${isDark ? 'hover:bg-red-500/10 hover:text-red-400' : 'hover:bg-red-50 hover:text-red-600'} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`
+                                  onClick={() => handleBloquearClick(item)}
+                                  className={`p-1.5 rounded-lg transition-colors ${
+                                    isBlocked
+                                      ? isDark ? 'hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300' : 'hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700'
+                                      : `${isDark ? 'hover:bg-red-500/10 hover:text-red-400' : 'hover:bg-red-50 hover:text-red-600'} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`
                                   }`}
                                   title={isBlocked ? 'Desbloquear' : 'Bloquear'}
                                 >
@@ -1163,6 +1216,14 @@ export function InventariosPage() {
           </div>
         </div>
       )}
+
+      <BloqueoModal
+        isOpen={bloqueoItem !== null}
+        onClose={() => setBloqueoItem(null)}
+        item={bloqueoItem}
+        onConfirm={handleConfirmarBloqueo}
+        isSubmitting={isBloqueoSubmitting}
+      />
     </div>
   );
 }
