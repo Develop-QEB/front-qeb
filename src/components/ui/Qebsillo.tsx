@@ -191,7 +191,7 @@ function RichText({ text, onNavigate, isDark }: { text: string; onNavigate: (rou
   );
 }
 
-export function QEBbooh() {
+export function QEBooh() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
@@ -271,7 +271,7 @@ export function QEBbooh() {
       <button onClick={() => setIsOpen(!isOpen)}
         className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 ${
           isOpen ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500'
-        }`} title="QEBbooh">
+        }`} title="QEBooh">
         {isOpen ? <X className="h-6 w-6 text-white" /> : <MessageCircle className="h-6 w-6 text-white" />}
       </button>
 
@@ -284,7 +284,7 @@ export function QEBbooh() {
             <div className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-white" />
               <div>
-                <span className="text-base font-bold text-white">QEBbooh</span>
+                <span className="text-base font-bold text-white">QEBooh</span>
                 <span className="text-xs text-purple-200 ml-2">
                   {activeModal ? `${currentScreen} › ${activeModal}` : currentScreen}
                 </span>
@@ -303,7 +303,7 @@ export function QEBbooh() {
               <div className="flex flex-col items-center justify-center h-full text-center py-8">
                 <Bot className={`h-12 w-12 mb-3 ${isDark ? 'text-purple-400/30' : 'text-purple-300'}`} />
                 <p className={`text-sm font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                  Hola! Soy QEBbooh
+                  Hola! Soy QEBooh
                 </p>
                 <p className={`text-xs mt-1 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
                   Estas en {currentScreen} - preguntame lo que necesites
