@@ -3,7 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { cn } from '../../lib/utils';
 import { LoadingScreen } from '../ui/LoadingScreen';
-import { Qebsillo } from '../ui/Qebsillo';
+import { QEBbooh } from '../ui/Qebsillo';
 import { usePrefetch } from '../../hooks/usePrefetch';
 import { useThemeStore } from '../../store/themeStore';
 
@@ -51,7 +51,7 @@ export function MainLayout() {
         <Outlet />
       </main>
 
-      <Qebsillo />
+      <QEBbooh />
     </div>
   );
 }
