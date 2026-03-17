@@ -6,6 +6,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { useModalStore } from '../../store/modalStore';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions, RolePermissions } from '../../lib/permissions';
+import { getScreenContext } from '../../lib/screenContexts';
 
 // Map of module keywords to routes for inline links
 const MODULE_LINKS: { keyword: RegExp; route: string }[] = [
@@ -208,6 +209,7 @@ export function QEBooh() {
 
   const currentScreen = useMemo(() => getScreenName(location.pathname), [location.pathname]);
   const suggestions = useMemo(() => getSuggestions(location.pathname), [location.pathname]);
+  const uiContext = useMemo(() => getScreenContext(currentScreen, activeModal), [currentScreen, activeModal]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -229,7 +231,7 @@ export function QEBooh() {
     setIsLoading(true);
 
     try {
-      const reply = await chatbotService.send(newMessages, location.pathname, activeModal, permsSummary);
+      const reply = await chatbotService.send(newMessages, location.pathname, activeModal, permsSummary, uiContext);
       setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Ups, tuve un problema al responder. Intenta de nuevo en un momento.' }]);

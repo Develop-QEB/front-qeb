@@ -71,6 +71,9 @@ export const SOCKET_EVENTS = {
 
   // General
   DATOS_ACTUALIZADOS: 'datos:actualizados',
+
+  // Chatbot
+  CHATBOT_LOG_NUEVO: 'chatbot:log:nuevo',
 };
 
 let socketInstance: Socket | null = null;
@@ -954,6 +957,30 @@ export function useSocketReservaProgreso(
       socket.off(SOCKET_EVENTS.RESERVA_PROGRESO, handleReservaProgreso);
     };
   }, [propuestaId, onProgress]);
+}
+
+/**
+ * Hook para admins: escucha nuevos logs del chatbot en tiempo real
+ */
+export function useSocketChatbotAdmin(onNuevoLog: () => void) {
+  const joinedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    if (!joinedRef.current) {
+      joinRoom(socket, 'join-chatbot-admin');
+      joinedRef.current = true;
+    }
+
+    socket.on(SOCKET_EVENTS.CHATBOT_LOG_NUEVO, onNuevoLog);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.CHATBOT_LOG_NUEVO, onNuevoLog);
+      leaveRoom(socket, 'join-chatbot-admin');
+      joinedRef.current = false;
+    };
+  }, [onNuevoLog]);
 }
 
 /**
