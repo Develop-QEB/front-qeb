@@ -763,13 +763,17 @@ export function InventariosPage() {
                                 </button>
                                 <button
                                   onClick={() => toggleBlockMutation.mutate(item.id)}
+                                  disabled={toggleBlockMutation.isPending && toggleBlockMutation.variables === item.id}
                                   className={`p-1.5 rounded-lg transition-colors ${isBlocked
                                     ? isDark ? 'hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300' : 'hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700'
                                     : `${isDark ? 'hover:bg-red-500/10 hover:text-red-400' : 'hover:bg-red-50 hover:text-red-600'} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`
-                                  }`}
+                                  } disabled:opacity-50`}
                                   title={isBlocked ? 'Desbloquear' : 'Bloquear'}
                                 >
-                                  {isBlocked ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                                  {toggleBlockMutation.isPending && toggleBlockMutation.variables === item.id
+                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    : isBlocked ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />
+                                  }
                                 </button>
                               </div>
                             </td>

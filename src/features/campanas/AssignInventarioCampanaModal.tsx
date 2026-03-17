@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, Loader2
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from '../propuestas/AdvancedMapComponent';
@@ -458,7 +458,12 @@ function SearchableSelect({
           }`}
       >
         <span className="truncate text-left flex-1">
-          {value && renderSelected ? renderSelected(value) : (displayValue || label)}
+          {loading && !value ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Cargando...
+            </span>
+          ) : value && renderSelected ? renderSelected(value) : (displayValue || label)}
         </span>
         {value ? (
           <X className="h-4 w-4 hover:text-white flex-shrink-0" onClick={(e) => { e.stopPropagation(); onClear(); }} />
@@ -487,7 +492,10 @@ function SearchableSelect({
             </div>
             <div className="max-h-72 overflow-auto">
               {loading ? (
-                <div className="px-3 py-4 text-center text-zinc-500 text-sm">Cargando...</div>
+                <div className="px-3 py-6 flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
+                  <span className="text-sm text-zinc-500">Cargando artículos...</span>
+                </div>
               ) : filteredOptions.length === 0 ? (
                 <div className="px-3 py-4 text-center text-zinc-500 text-sm">
                   {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}

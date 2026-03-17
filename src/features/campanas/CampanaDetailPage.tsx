@@ -1762,7 +1762,7 @@ export function CampanaDetailPage() {
                       : 'bg-purple-600 hover:bg-purple-700 text-white'
                   }`}
                 >
-                  <FileSpreadsheet className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
+                  {assignAPSMutation.isPending ? <Loader2 className="h-3 sm:h-3.5 w-3 sm:w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3 sm:h-3.5 w-3 sm:w-3.5" />}
                   <span className="hidden sm:inline">{assignAPSMutation.isPending ? 'Asignando...' : `APS${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
                   <span className="sm:hidden">{assignAPSMutation.isPending ? '...' : `APS${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
                 </button>

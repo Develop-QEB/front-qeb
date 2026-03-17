@@ -2022,7 +2022,7 @@ function UploadArtModal({
                           O agrega nuevas
                         </label>
                         <div className="flex gap-2">
-                          <label className="flex-1 cursor-pointer">
+                          <label className={`flex-1 ${isUploadingFile ? 'pointer-events-none' : 'cursor-pointer'}`}>
                             <input
                               type="file"
                               onChange={(e) => {
@@ -2033,11 +2033,19 @@ function UploadArtModal({
                               accept="image/*,.pdf"
                               multiple
                               className="hidden"
-                              disabled={isSubmitting}
+                              disabled={isSubmitting || isUploadingFile}
                             />
-                            <div className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-purple-600/20 border border-purple-500/30 rounded-lg hover:bg-purple-600/30 transition-colors">
-                              <Upload className="h-3.5 w-3.5 text-purple-400" />
-                              <span className="text-purple-300">Subir archivo</span>
+                            <div className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs border rounded-lg transition-colors ${
+                              isUploadingFile
+                                ? 'bg-purple-600/10 border-purple-500/20 opacity-70'
+                                : 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30'
+                            }`}>
+                              {isUploadingFile ? (
+                                <Loader2 className="h-3.5 w-3.5 text-purple-400 animate-spin" />
+                              ) : (
+                                <Upload className="h-3.5 w-3.5 text-purple-400" />
+                              )}
+                              <span className="text-purple-300">{isUploadingFile ? 'Subiendo...' : 'Subir archivo'}</span>
                             </div>
                           </label>
                           <div className="flex-1 flex gap-1">
@@ -7251,8 +7259,8 @@ function TaskDetailModal({
                           disabled={isUpdating}
                           className="flex items-center gap-2 px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors disabled:opacity-50"
                         >
-                          <Check className="h-4 w-4" />
-                          Guardar indicaciones
+                          {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                          {isUpdating ? 'Guardando...' : 'Guardar indicaciones'}
                         </button>
                       )}
                       <button
@@ -7644,8 +7652,8 @@ function TaskDetailModal({
                           disabled={isUpdating}
                           className="flex items-center gap-2 px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors disabled:opacity-50"
                         >
-                          <Check className="h-4 w-4" />
-                          Guardar indicaciones
+                          {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                          {isUpdating ? 'Guardando...' : 'Guardar indicaciones'}
                         </button>
                       )}
                       <button
