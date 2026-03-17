@@ -197,7 +197,7 @@ export function InventariosPage() {
   };
 
   const openEdit = (item: Inventario) => {
-    const realEstatus = (item as Record<string, unknown>).estatus_real as string || item.estatus;
+    const realEstatus = (item as unknown as Record<string, unknown>).estatus_real as string || item.estatus;
     const isOcupado = realEstatus === 'Ocupado' || realEstatus === 'Reservado';
     setEditItemOcupado(isOcupado);
     setFormData({
