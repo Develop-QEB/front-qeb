@@ -191,7 +191,7 @@ function RichText({ text, onNavigate, isDark }: { text: string; onNavigate: (rou
   );
 }
 
-export function Qebsillo() {
+export function QEBbooh() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
@@ -251,7 +251,7 @@ export function Qebsillo() {
           <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-purple-500/20">
             {navActions.map((nav, i) => (
               <button key={i} onClick={() => handleNavigate(nav.route)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all hover:scale-105 active:scale-95 ${
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all hover:scale-105 active:scale-95 ${
                   isDark
                     ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30'
                     : 'bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200'
@@ -271,12 +271,12 @@ export function Qebsillo() {
       <button onClick={() => setIsOpen(!isOpen)}
         className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 ${
           isOpen ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500'
-        }`} title="Qebsillo - Asistente">
+        }`} title="QEBbooh">
         {isOpen ? <X className="h-6 w-6 text-white" /> : <MessageCircle className="h-6 w-6 text-white" />}
       </button>
 
       {isOpen && (
-        <div className={`fixed bottom-24 right-6 z-50 w-[440px] max-h-[600px] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
+        <div className={`fixed bottom-24 right-6 z-50 w-[520px] max-h-[700px] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
           isDark ? 'bg-zinc-900 border-purple-500/20' : 'bg-white border-gray-200'
         }`}>
           {/* Header */}
@@ -284,8 +284,8 @@ export function Qebsillo() {
             <div className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-white" />
               <div>
-                <span className="text-sm font-bold text-white">Qebsillo</span>
-                <span className="text-[10px] text-purple-200 ml-2">
+                <span className="text-sm font-bold text-white">QEBbooh</span>
+                <span className="text-xs text-purple-200 ml-2">
                   {activeModal ? `${currentScreen} › ${activeModal}` : currentScreen}
                 </span>
               </div>
@@ -298,12 +298,12 @@ export function Qebsillo() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[300px]">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[380px]">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center py-8">
                 <Bot className={`h-12 w-12 mb-3 ${isDark ? 'text-purple-400/30' : 'text-purple-300'}`} />
                 <p className={`text-sm font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                  Hola! Soy Qebsillo
+                  Hola! Soy QEBbooh
                 </p>
                 <p className={`text-xs mt-1 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
                   Estas en {currentScreen} - preguntame lo que necesites
@@ -311,7 +311,7 @@ export function Qebsillo() {
                 <div className="mt-4 space-y-1.5 w-full">
                   {suggestions.map((q) => (
                     <button key={q} onClick={() => handleSend(q)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                         isDark
                           ? 'bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 border border-purple-500/20'
                           : 'bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200'
@@ -323,7 +323,7 @@ export function Qebsillo() {
 
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap ${
+                <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                   msg.role === 'user'
                     ? 'bg-purple-600 text-white rounded-br-md'
                     : isDark
