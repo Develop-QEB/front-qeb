@@ -5194,91 +5194,170 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             </span>
                           )}
                         </label>
-                        <select
-                          value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
-                          onChange={(e) => {
-                            if (!canEditResumen || editingCaraHasReservas) return;
-                            if (e.target.value) {
-                              const [year, cat] = e.target.value.split('-').map(Number);
-                              if (tipoPeriodo === 'mensual') {
-                                const fechaIni = new Date(year, cat - 1, 1);
-                                const fechaFin = new Date(year, cat, 0);
-                                setNewCara({
-                                  ...newCara,
-                                  catorcena_inicio: cat,
-                                  anio_inicio: year,
-                                  catorcena_fin: cat,
-                                  anio_fin: year,
-                                  inicio_periodo: fechaIni.toISOString().split('T')[0],
-                                  fin_periodo: fechaFin.toISOString().split('T')[0]
-                                });
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Catorcena/Mes Inicio */}
+                          <select
+                            value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
+                            onChange={(e) => {
+                              if (!canEditResumen || editingCaraHasReservas) return;
+                              if (e.target.value) {
+                                const [year, cat] = e.target.value.split('-').map(Number);
+                                if (tipoPeriodo === 'mensual') {
+                                  const fechaIni = new Date(year, cat - 1, 1);
+                                  // If no fin selected or fin < inicio, set fin = inicio
+                                  const finYear = newCara.anio_fin && (newCara.anio_fin * 100 + (newCara.catorcena_fin || 0)) >= (year * 100 + cat) ? newCara.anio_fin : year;
+                                  const finCat = newCara.catorcena_fin && (newCara.anio_fin || 0) * 100 + newCara.catorcena_fin >= year * 100 + cat ? newCara.catorcena_fin : cat;
+                                  const fechaFin = new Date(finYear, finCat, 0);
+                                  setNewCara({
+                                    ...newCara,
+                                    catorcena_inicio: cat,
+                                    anio_inicio: year,
+                                    catorcena_fin: finCat,
+                                    anio_fin: finYear,
+                                    inicio_periodo: fechaIni.toISOString().split('T')[0],
+                                    fin_periodo: fechaFin.toISOString().split('T')[0]
+                                  });
+                                } else {
+                                  const periodIni = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
+                                  // If no fin or fin < inicio, set fin = inicio
+                                  const currentFinVal = (newCara.anio_fin || 0) * 100 + (newCara.catorcena_fin || 0);
+                                  const newIniVal = year * 100 + cat;
+                                  let finCat = newCara.catorcena_fin;
+                                  let finYear = newCara.anio_fin;
+                                  let finPeriodo = newCara.fin_periodo;
+                                  if (!finCat || currentFinVal < newIniVal) {
+                                    finCat = cat;
+                                    finYear = year;
+                                    finPeriodo = periodIni?.fecha_fin || '';
+                                  }
+                                  setNewCara({
+                                    ...newCara,
+                                    catorcena_inicio: cat,
+                                    anio_inicio: year,
+                                    catorcena_fin: finCat,
+                                    anio_fin: finYear,
+                                    inicio_periodo: periodIni?.fecha_inicio || '',
+                                    fin_periodo: finPeriodo
+                                  });
+                                }
                               } else {
-                                const period = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
                                 setNewCara({
                                   ...newCara,
-                                  catorcena_inicio: cat,
-                                  anio_inicio: year,
-                                  catorcena_fin: cat,
-                                  anio_fin: year,
-                                  inicio_periodo: period?.fecha_inicio || '',
-                                  fin_periodo: period?.fecha_fin || ''
+                                  catorcena_inicio: undefined,
+                                  anio_inicio: undefined,
+                                  catorcena_fin: undefined,
+                                  anio_fin: undefined,
+                                  inicio_periodo: '',
+                                  fin_periodo: ''
                                 });
                               }
-                            } else {
-                              setNewCara({
-                                ...newCara,
-                                catorcena_inicio: undefined,
-                                anio_inicio: undefined,
-                                catorcena_fin: undefined,
-                                anio_fin: undefined,
-                                inicio_periodo: '',
-                                fin_periodo: ''
-                              });
-                            }
-                          }}
-                          disabled={!canEditResumen || editingCaraHasReservas}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
-                        >
-                          <option value="">{tipoPeriodo === 'mensual' ? 'Seleccionar mes' : 'Seleccionar catorcena'}</option>
-                          {tipoPeriodo === 'mensual' ? (
-                            (() => {
-                              // Generate monthly options from propuesta date range
-                              const options: { year: number; month: number }[] = [];
-                              if (propuesta.fecha_inicio && propuesta.fecha_fin) {
-                                const start = new Date(propuesta.fecha_inicio);
-                                const end = new Date(propuesta.fecha_fin);
-                                let y = start.getFullYear(), m = start.getMonth() + 1;
-                                const endY = end.getFullYear(), endM = end.getMonth() + 1;
-                                while (y < endY || (y === endY && m <= endM)) {
-                                  options.push({ year: y, month: m });
-                                  m++;
-                                  if (m > 12) { m = 1; y++; }
+                            }}
+                            disabled={!canEditResumen || editingCaraHasReservas}
+                            className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          >
+                            <option value="">{tipoPeriodo === 'mensual' ? 'Mes inicio' : 'Cat. inicio'}</option>
+                            {tipoPeriodo === 'mensual' ? (
+                              (() => {
+                                const options: { year: number; month: number }[] = [];
+                                if (propuesta.fecha_inicio && propuesta.fecha_fin) {
+                                  const start = new Date(propuesta.fecha_inicio);
+                                  const end = new Date(propuesta.fecha_fin);
+                                  let y = start.getFullYear(), m = start.getMonth() + 1;
+                                  const endY = end.getFullYear(), endM = end.getMonth() + 1;
+                                  while (y < endY || (y === endY && m <= endM)) {
+                                    options.push({ year: y, month: m });
+                                    m++;
+                                    if (m > 12) { m = 1; y++; }
+                                  }
+                                }
+                                return options.map(o => (
+                                  <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>
+                                    {MESES_LABEL[o.month - 1]} {o.year}
+                                  </option>
+                                ));
+                              })()
+                            ) : (
+                              catorcenasData?.data
+                                .filter(c => {
+                                  if (!catorcenaInicio || !yearInicio || !catorcenaFin || !yearFin) return true;
+                                  const catValue = c.a_o * 100 + c.numero_catorcena;
+                                  return catValue >= yearInicio * 100 + catorcenaInicio && catValue <= yearFin * 100 + catorcenaFin;
+                                })
+                                .map(c => (
+                                  <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
+                                    Cat {c.numero_catorcena} / {c.a_o}
+                                  </option>
+                                ))
+                            )}
+                          </select>
+
+                          {/* Catorcena/Mes Fin */}
+                          <select
+                            value={newCara.catorcena_fin && newCara.anio_fin ? `${newCara.anio_fin}-${newCara.catorcena_fin}` : ''}
+                            onChange={(e) => {
+                              if (!canEditResumen || editingCaraHasReservas) return;
+                              if (e.target.value) {
+                                const [year, cat] = e.target.value.split('-').map(Number);
+                                if (tipoPeriodo === 'mensual') {
+                                  const fechaFin = new Date(year, cat, 0);
+                                  setNewCara({
+                                    ...newCara,
+                                    catorcena_fin: cat,
+                                    anio_fin: year,
+                                    fin_periodo: fechaFin.toISOString().split('T')[0]
+                                  });
+                                } else {
+                                  const periodFin = catorcenasData?.data.find(c => c.a_o === year && c.numero_catorcena === cat);
+                                  setNewCara({
+                                    ...newCara,
+                                    catorcena_fin: cat,
+                                    anio_fin: year,
+                                    fin_periodo: periodFin?.fecha_fin || ''
+                                  });
                                 }
                               }
-                              return options.map(o => (
-                                <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>
-                                  {MESES_LABEL[o.month - 1]} {o.year}
-                                </option>
-                              ));
-                            })()
-                          ) : (
-                            catorcenasData?.data
-                              .filter(c => {
-                                if (!catorcenaInicio || !yearInicio || !catorcenaFin || !yearFin) {
-                                  return true;
+                            }}
+                            disabled={!canEditResumen || editingCaraHasReservas || !newCara.catorcena_inicio}
+                            className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || !newCara.catorcena_inicio) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          >
+                            <option value="">{tipoPeriodo === 'mensual' ? 'Mes fin' : 'Cat. fin'}</option>
+                            {tipoPeriodo === 'mensual' ? (
+                              (() => {
+                                const options: { year: number; month: number }[] = [];
+                                if (propuesta.fecha_inicio && propuesta.fecha_fin && newCara.catorcena_inicio && newCara.anio_inicio) {
+                                  const start = new Date(propuesta.fecha_inicio);
+                                  const end = new Date(propuesta.fecha_fin);
+                                  let y = start.getFullYear(), m = start.getMonth() + 1;
+                                  const endY = end.getFullYear(), endM = end.getMonth() + 1;
+                                  const minVal = newCara.anio_inicio * 100 + newCara.catorcena_inicio;
+                                  while (y < endY || (y === endY && m <= endM)) {
+                                    if (y * 100 + m >= minVal) options.push({ year: y, month: m });
+                                    m++;
+                                    if (m > 12) { m = 1; y++; }
+                                  }
                                 }
-                                const catValue = c.a_o * 100 + c.numero_catorcena;
-                                const minValue = yearInicio * 100 + catorcenaInicio;
-                                const maxValue = yearFin * 100 + catorcenaFin;
-                                return catValue >= minValue && catValue <= maxValue;
-                              })
-                              .map(c => (
-                                <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
-                                  Cat {c.numero_catorcena} / {c.a_o}
-                                </option>
-                              ))
-                          )}
-                        </select>
+                                return options.map(o => (
+                                  <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>
+                                    {MESES_LABEL[o.month - 1]} {o.year}
+                                  </option>
+                                ));
+                              })()
+                            ) : (
+                              catorcenasData?.data
+                                .filter(c => {
+                                  const catValue = c.a_o * 100 + c.numero_catorcena;
+                                  const minValue = (newCara.anio_inicio || 0) * 100 + (newCara.catorcena_inicio || 0);
+                                  const maxValue = (yearFin || 9999) * 100 + (catorcenaFin || 99);
+                                  return catValue >= minValue && catValue <= maxValue;
+                                })
+                                .map(c => (
+                                  <option key={`${c.a_o}-${c.numero_catorcena}`} value={`${c.a_o}-${c.numero_catorcena}`}>
+                                    Cat {c.numero_catorcena} / {c.a_o}
+                                  </option>
+                                ))
+                            )}
+                          </select>
+                        </div>
                       </div>
                     </div>
 

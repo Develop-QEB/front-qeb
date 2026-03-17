@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, isMigratedCampaign, HistorialItem } from '../../services/campanas.service';
+import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, resolveBaseEntry, isMigratedCampaign, HistorialItem, SAPDeliveryNoteMigrated } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import { Badge } from '../../components/ui/badge';
@@ -1042,7 +1042,25 @@ export function CampanaDetailPage() {
         : inventarioConAPS;
 
       // Construir el payload
-      const deliveryNote = buildDeliveryNote(campana, itemsToPost, campana.sap_database);
+      let deliveryNote = buildDeliveryNote(campana, itemsToPost, campana.sap_database);
+
+      // Si es migrada, resolver BaseEntry/BaseLine desde SAP (buscar DocEntry real)
+      console.log('isMigratedCampaign:', isMigratedCampaign(campana), 'comentario:', campana.comentario_cambio_status);
+      if (isMigratedCampaign(campana)) {
+        const db = campana.sap_database || 'PB_SBOIMUTRADE';
+        console.log('Resolving BaseEntry from SAP... DB:', db, 'DocNum:', campana.id);
+        try {
+          deliveryNote = await resolveBaseEntry(
+            deliveryNote as SAPDeliveryNoteMigrated,
+            campana.id?.toString() || '',
+            db
+          );
+          console.log('BaseEntry resolved:', (deliveryNote as any).DocumentLines?.[0]?.BaseEntry);
+        } catch (err) {
+          console.error('ERROR resolving BaseEntry:', err);
+        }
+      }
+
       console.log('========== DELIVERY NOTE JSON ==========');
       console.log('SAP Database:', campana.sap_database);
       console.log(JSON.stringify(deliveryNote, null, 2));
@@ -3389,15 +3407,23 @@ export function CampanaDetailPage() {
                           </div>
                           <div className="flex justify-between">
                             <span className="text-zinc-500">Campaña:</span>
-                            <span className="text-zinc-300">{campana.nombre}</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Camp || campana.nombre}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">BaseType:</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.BaseType}</span>
+                            <span className="text-zinc-500">CardCode:</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.CardCode}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">BaseDocNum (APS):</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.BaseDocNum}</span>
+                            <span className="text-zinc-500">Razón Social:</span>
+                            <span className="text-zinc-300 text-right max-w-[200px]">{previewDeliveryNote.U_CRM_R_S || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">BaseType (en líneas):</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.DocumentLines?.[0]?.BaseType}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">BaseEntry (en líneas):</span>
+                            <span className="text-zinc-300">{previewDeliveryNote.DocumentLines?.[0]?.BaseEntry || '(se resuelve al enviar)'}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-zinc-500">Base SAP:</span>

@@ -50,10 +50,14 @@ export interface SAPDeliveryNote {
   DocumentLines: SAPDocumentLine[];
 }
 
-export interface SAPDeliveryNoteMigrated {
+export interface SAPDocumentLineMigrated extends SAPDocumentLine {
   BaseType: number;
-  BaseDocNum: string;
-  DocumentLines: SAPDocumentLine[];
+  BaseEntry: number;
+  BaseLine: number;
+}
+
+export interface SAPDeliveryNoteMigrated extends Omit<SAPDeliveryNote, 'DocumentLines'> {
+  DocumentLines: SAPDocumentLineMigrated[];
 }
 
 export interface SAPPostResponse {
@@ -415,16 +419,7 @@ export function buildDeliveryNote(
     };
   });
 
-  // Si es campaña migrada desde INVIAN, JSON simplificado
-  if (isMigratedCampaign(campana)) {
-    return {
-      BaseType: 17,
-      BaseDocNum: campana.id?.toString() || '',
-      DocumentLines: documentLines,
-    };
-  }
-
-  // Construir el objeto DeliveryNote completo (campañas QEB)
+  // Construir el objeto DeliveryNote completo
   const series = sapDatabase ? getSeriesForSapDatabase(sapDatabase as SapDatabase) : 162;
   const deliveryNote: SAPDeliveryNote = {
     Series: series,
@@ -449,7 +444,63 @@ export function buildDeliveryNote(
     DocumentLines: documentLines,
   };
 
+  // Si es campaña migrada desde INVIAN, agregar BaseType/BaseEntry/BaseLine en cada línea
+  // BaseEntry y BaseLine se resuelven después con resolveBaseEntry()
+  if (isMigratedCampaign(campana)) {
+    return {
+      ...deliveryNote,
+      DocumentLines: documentLines.map((line, idx) => ({
+        ...line,
+        BaseType: 17,
+        BaseEntry: 0, // placeholder - se resuelve con resolveBaseEntry()
+        BaseLine: idx,
+      })),
+    } as SAPDeliveryNoteMigrated;
+  }
+
   return deliveryNote;
+}
+
+// Busca el DocEntry de una Order en SAP por DocNum y actualiza BaseEntry/BaseLine en el DeliveryNote
+export async function resolveBaseEntry(
+  deliveryNote: SAPDeliveryNoteMigrated,
+  docNum: string,
+  sapDatabase: string
+): Promise<SAPDeliveryNoteMigrated> {
+  // Mapear nombre de ambiente a DB real de SAP
+  const dbMap: Record<string, string> = {
+    'TRADE': 'PB_SBOIMUTRADE',
+    'CIMU': 'PB_SBOCIMU',
+    'TEST': 'PB_SBOCIMU',
+    'SBOCIMU': 'SBOCIMU',
+    'PB_SBOCIMU': 'PB_SBOCIMU',
+    'SBOIMUTRADE': 'SBOIMUTRADE',
+    'PB_SBOIMUTRADE': 'PB_SBOIMUTRADE',
+  };
+  const db = dbMap[sapDatabase] || 'PB_SBOCIMU';
+
+  const response = await fetch(`${SAP_BASE_URL}/order-by-docnum/${db}/${docNum}`);
+  if (!response.ok) {
+    throw new Error(`No se encontró la Order con DocNum ${docNum} en ${db}`);
+  }
+
+  const order = await response.json();
+  const docEntry = order.DocEntry;
+
+  // Mapear cada línea del DeliveryNote a la línea correspondiente de la Order por ItemCode
+  const updatedLines = deliveryNote.DocumentLines.map(line => {
+    const orderLine = order.DocumentLines.find((ol: { ItemCode: string; LineNum: number }) => ol.ItemCode === line.ItemCode);
+    return {
+      ...line,
+      BaseEntry: docEntry,
+      BaseLine: orderLine ? orderLine.LineNum : line.BaseLine,
+    };
+  });
+
+  return {
+    ...deliveryNote,
+    DocumentLines: updatedLines,
+  };
 }
 
 // Función para hacer POST a SAP
