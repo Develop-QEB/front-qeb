@@ -50,10 +50,10 @@ PASO 2 - "Campaña":
   - "Estado": Disponible, Reservado, etc.
   - "Formato": tipo de formato (espectacular, mural, etc.).
   - "Tipo": Tradicional o Digital.
-  - "Período Inicio / Fin": catorcenas o meses específicos.
-  - "Renta": precio de renta del espacio.
-  - "Bonificación": monto bonificado si aplica.
-  - "Tarifa Pública": precio público del espacio.
+  - "Período Inicio / Fin": catorcenas o meses específicos dentro del rango de la solicitud.
+  - "Renta": número de caras (espacios) que el cliente paga en este artículo. No es dinero, es cantidad de inventario.
+  - "Bonificación": número de caras bonificadas, es decir, espacios que se dan gratis al cliente como parte del trato comercial. No es un descuento en dinero, son caras adicionales sin costo.
+  - "Tarifa Pública": número de caras a tarifa pública (precio de lista) en este artículo. Tampoco es dinero, es cantidad.
   - "NSE": nivel socioeconómico objetivo (botones de selección múltiple: A/B, C+, C, D+, D, E).
   - Botón "Eliminar" (rojo): elimina esa cara.
 - Botón "Agregar Cara": añade una nueva fila de espacio a la solicitud.
