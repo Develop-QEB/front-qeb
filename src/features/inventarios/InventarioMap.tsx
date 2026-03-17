@@ -89,7 +89,7 @@ export function InventarioMap({ tipo, estatus, plaza }: InventarioMapProps) {
           <div style="min-width: 200px;">
             <div style="font-weight: 600; margin-bottom: 8px;">${inv.codigo_unico || 'Sin codigo'}</div>
             <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
-              <strong>Tipo:</strong> ${inv.tipo_de_mueble || '-'}
+              <strong>Tipo:</strong> ${inv.mueble || '-'}
             </div>
             <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
               <strong>Estatus:</strong> ${inv.estatus || '-'}

@@ -2034,7 +2034,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         inv.ubicacion?.toLowerCase().includes(term) ||
         inv.tipo_de_cara?.toLowerCase().includes(term) ||
         inv.nivel_socioeconomico?.toLowerCase().includes(term) ||
-        inv.tipo_de_mueble?.toLowerCase().includes(term)
+        inv.mueble?.toLowerCase().includes(term)
       );
     }
 

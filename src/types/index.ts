@@ -139,7 +139,7 @@ export interface InventarioMapItem {
   id: number;
   codigo_unico: string | null;
   ubicacion: string | null;
-  tipo_de_mueble: string | null;
+  mueble: string | null;
   tipo_de_cara: string | null;
   cara: string | null;
   latitud: number;

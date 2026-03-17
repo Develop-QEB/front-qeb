@@ -1,0 +1,18 @@
+codigo_unico,tipo_de_mueble,tipo_de_cara,tradicional_digital,plaza,estado,municipio,ubicacion,latitud,longitud,ancho,alto,tarifa_publica,tarifa_piso,estatus
+1229_Flujo_Ciudad de México,PARABUS,Flujo,Tradicional,Ciudad de México,Ciudad de México,ÁLVARO OBREGÓN,VASCO DE QUIROGA - ACCESO PLAZA SANTA FE (ESTACIONAMIENTO),19.3646,-99.2704,1.21,1.77,8500,6000,Disponible
+1229_Contraflujo_Ciudad de México,PARABUS,Contraflujo,Tradicional,Ciudad de México,Ciudad de México,ÁLVARO OBREGÓN,VASCO DE QUIROGA - ACCESO PLAZA SANTA FE (ESTACIONAMIENTO),19.3646,-99.2704,1.21,1.77,8500,6000,Disponible
+1231_Flujo_Ciudad de México,PARABUS,Flujo,Tradicional,CDMX ZONA PONIENTE,Ciudad de México,ÁLVARO OBREGÓN,AV. CARLOS LAZO - TECNOLOGICO DE MONTERREY,19.3606,-99.261,1.21,1.77,9000,6500,Disponible
+1232_Flujo_Ciudad de México,PARABUS,Flujo,Tradicional,Ciudad de México,Ciudad de México,ÁLVARO OBREGÓN,AVENIDA TAMAULIPAS - AVENIDA SANTA FE FRENTE AL SAM'S,19.3548,-99.2761,1.21,1.77,7500,5000,Disponible
+5000_Flujo_Guadalajara,MUPI,Flujo,Tradicional,Guadalajara,Jalisco,Guadalajara,AV. VALLARTA - PLAZA DEL SOL,20.6597,-103.3496,1.2,1.8,5500,3800,Disponible
+5001_Contraflujo_Guadalajara,MUPI,Contraflujo,Tradicional,Guadalajara,Jalisco,Guadalajara,AV. LÓPEZ MATEOS - PLAZA PATRIA,20.7100,-103.3900,1.2,1.8,5500,3800,Disponible
+5002_Flujo_Monterrey,ESPECTACULAR,Flujo,Digital,Monterrey,Nuevo León,Monterrey,AV. CONSTITUCIÓN - MACROPLAZA,25.6866,-100.3161,12.0,4.0,25000,18000,Disponible
+5003_Flujo_Querétaro,PANTALLA,Flujo,Digital,Querétaro,Querétaro,Querétaro,BLVD. BERNARDO QUINTANA - CENTRO SUR,20.5888,-100.3899,3.0,2.0,15000,10000,Disponible
+5004_Flujo_Puebla,PARABUS,Flujo,Tradicional,Puebla,Puebla,Puebla,BLVD. HÉROES DEL 5 DE MAYO - ANGELÓPOLIS,19.0414,-98.2063,1.21,1.77,6000,4200,Disponible
+5005_Contraflujo_Mérida,MUPI,Contraflujo,Tradicional,Mérida,Yucatán,Mérida,PASEO DE MONTEJO - MONUMENTO A LA PATRIA,20.9674,-89.6250,1.2,1.8,4800,3200,Disponible
+5000_Flujo_Guadalajara,MUPI,Flujo,Tradicional,Guadalajara,Jalisco,Guadalajara,AV. VALLARTA - PLAZA DEL SOL,20.6597,-103.3496,1.2,1.8,5500,3800,Disponible
+5006_Flujo_León,MUPI,Izquierda,Tradicional,León,Guanajuato,León,BLVD. ADOLFO LÓPEZ MATEOS - PLAZA MAYOR,21.1250,-101.6860,1.2,1.8,4500,3000,Disponible
+5007_Flujo_Tijuana,PARABUS,Flujo,Híbrido,Tijuana,Baja California,Tijuana,BLVD. AGUA CALIENTE - PLAZA RÍO,32.5149,-117.0382,1.21,1.77,5000,3500,Disponible
+,MUPI,Flujo,Tradicional,Guadalajara,Jalisco,Guadalajara,AV. AMERICAS 1500,20.6800,-103.3700,1.2,1.8,5000,3500,Disponible
+5008_Flujo_Cancún,,,,,,,,,,,,,
+5009_Flujo_Toluca,PARABUS,Flujo,Tradicional,Toluca,Estado de México,Toluca,PASEO TOLLOCAN - TERMINAL,19.2826,-99.6557,1.21,1.77,abc,3000,Disponible
+5010_Flujo_Acapulco,MUPI,Flujo,Tradicional,Acapulco,Guerrero,Acapulco,AV. COSTERA MIGUEL ALEMÁN - DIANA,16.8531,-99.8237,1.2,hola,4000,2800,Disponible

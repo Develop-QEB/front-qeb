@@ -71,7 +71,7 @@ const FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'codigo_unico', label: 'Codigo', type: 'string' },
   { field: 'plaza', label: 'Plaza', type: 'string' },
   { field: 'tipo_de_cara', label: 'Tipo', type: 'string' },
-  { field: 'tipo_de_mueble', label: 'Formato', type: 'string' },
+  { field: 'mueble', label: 'Formato', type: 'string' },
   { field: 'articulo', label: 'Articulo', type: 'string' },
   { field: 'caras_totales', label: 'Caras', type: 'number' },
   { field: 'tarifa_publica', label: 'Tarifa', type: 'number' },
@@ -209,7 +209,7 @@ export function CompartirPropuestaPage() {
     if (!inventario) return [];
     const counts: Record<string, number> = {};
     inventario.forEach(i => {
-      const formato = i.tipo_de_mueble || 'Otros';
+      const formato = i.mueble || 'Otros';
       counts[formato] = (counts[formato] || 0) + (Number(i.caras_totales) || 0);
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -238,7 +238,7 @@ export function CompartirPropuestaPage() {
         i.codigo_unico?.toLowerCase().includes(search) ||
         i.plaza?.toLowerCase().includes(search) ||
         i.ubicacion?.toLowerCase().includes(search) ||
-        i.tipo_de_mueble?.toLowerCase().includes(search) ||
+        i.mueble?.toLowerCase().includes(search) ||
         i.articulo?.toLowerCase().includes(search)
       );
     }
@@ -273,7 +273,7 @@ export function CompartirPropuestaPage() {
         items,
         totalCaras: items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0),
         totalInversion: items.reduce((sum, i) => sum + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 1)), 0),
-        formatos: [...new Set(items.map(i => i.tipo_de_mueble || 'N/A'))],
+        formatos: [...new Set(items.map(i => i.mueble || 'N/A'))],
         tipos: [...new Set(items.map(i => i.tipo_de_cara || 'N/A'))],
         plazas: [...new Set(items.map(i => i.plaza || 'N/A'))],
       }));
@@ -338,7 +338,7 @@ export function CompartirPropuestaPage() {
     if (!inventario) return;
     const headers = ['Código', 'Plaza', 'Ubicación', 'Tipo Cara', 'Formato', 'Caras', 'Tarifa', 'Periodo'];
     const rows = inventario.map(i => [
-      i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.tipo_de_mueble,
+      i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble,
       i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo)
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
@@ -363,7 +363,7 @@ export function CompartirPropuestaPage() {
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
               Tipo: ${i.tipo_de_cara || 'N/A'}<br/>
-              Formato: ${i.tipo_de_mueble || 'N/A'}<br/>
+              Formato: ${i.mueble || 'N/A'}<br/>
               Caras: ${i.caras_totales}
             ]]>
           </description>
@@ -404,7 +404,7 @@ export function CompartirPropuestaPage() {
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
               Tipo: ${i.tipo_de_cara || 'N/A'}<br/>
-              Formato: ${i.tipo_de_mueble || 'N/A'}<br/>
+              Formato: ${i.mueble || 'N/A'}<br/>
               Caras: ${i.caras_totales}
             ]]>
           </description>
@@ -441,7 +441,7 @@ export function CompartirPropuestaPage() {
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
               Tipo: ${i.tipo_de_cara || 'N/A'}<br/>
-              Formato: ${i.tipo_de_mueble || 'N/A'}<br/>
+              Formato: ${i.mueble || 'N/A'}<br/>
               Caras: ${i.caras_totales}<br/>
               Periodo: ${tipoPeriodo === 'mensual' && i.inicio_periodo ? (() => { const parts = i.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : 'N/A'; })() : i.numero_catorcena ? `Cat ${i.numero_catorcena} / ${i.anio_catorcena}` : 'N/A'}
             ]]>
@@ -762,7 +762,7 @@ export function CompartirPropuestaPage() {
           const tableData = items.map(i => [
             String(i.id),
             (i.ubicacion || '').substring(0, 50),
-            i.tipo_de_mueble || i.mueble || '',
+            i.mueble || '',
             i.municipio || '',
             i.latitud?.toFixed(6) || '-',
             i.longitud?.toFixed(6) || '-',
@@ -1290,7 +1290,7 @@ export function CompartirPropuestaPage() {
                                             </td>
                                             <td className="px-3 py-2 text-blue-300 font-mono text-xs">{item.codigo_unico}</td>
                                             <td className="px-3 py-2 text-zinc-300 text-xs">{item.plaza || '-'}</td>
-                                            <td className="px-3 py-2 text-zinc-400 text-xs">{item.tipo_de_mueble || '-'}</td>
+                                            <td className="px-3 py-2 text-zinc-400 text-xs">{item.mueble || '-'}</td>
                                             <td className="px-3 py-2 text-center font-semibold text-white text-xs">{item.caras_totales}</td>
                                             <td className="px-3 py-2 text-right text-zinc-500 text-xs font-mono">{item.latitud?.toFixed(6) || '-'}</td>
                                             <td className="px-3 py-2 text-right text-zinc-500 text-xs font-mono">{item.longitud?.toFixed(6) || '-'}</td>
@@ -1416,7 +1416,7 @@ export function CompartirPropuestaPage() {
                       <div className="text-xs space-y-1">
                         <p><strong>Plaza:</strong> {selectedMarker.plaza || 'N/A'}</p>
                         <p><strong>Tipo:</strong> {selectedMarker.tipo_de_cara || 'N/A'}</p>
-                        <p><strong>Formato:</strong> {selectedMarker.tipo_de_mueble || 'N/A'}</p>
+                        <p><strong>Formato:</strong> {selectedMarker.mueble || 'N/A'}</p>
                         <p><strong>Ubicación:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
                         <p><strong>Caras:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(selectedMarker.tarifa_publica || 0)}</p>

@@ -31,7 +31,7 @@ const EMPTY_FORM: Record<string, string> = {
   tarifa_piso: '', tarifa_publica: '',
 };
 
-type SortCol = 'id' | 'codigo_unico' | 'tipo_de_mueble' | 'plaza' | 'estatus' | 'tarifa_publica';
+type SortCol = 'id' | 'codigo_unico' | 'mueble' | 'plaza' | 'estatus' | 'tarifa_publica';
 
 // FilterChip Component matching CampanasPage style
 function FilterChip({ label, options, value, onChange, onClear }: {
@@ -175,7 +175,7 @@ export function InventariosPage() {
       switch (sortCol) {
         case 'id': aVal = a.id; bVal = b.id; break;
         case 'codigo_unico': aVal = a.codigo_unico || ''; bVal = b.codigo_unico || ''; break;
-        case 'tipo_de_mueble': aVal = a.tipo_de_mueble || ''; bVal = b.tipo_de_mueble || ''; break;
+        case 'mueble': aVal = a.mueble || ''; bVal = b.mueble || ''; break;
         case 'plaza': aVal = a.plaza || ''; bVal = b.plaza || ''; break;
         case 'estatus': aVal = a.estatus || ''; bVal = b.estatus || ''; break;
         case 'tarifa_publica': aVal = a.tarifa_publica || 0; bVal = b.tarifa_publica || 0; break;
@@ -765,7 +765,7 @@ export function InventariosPage() {
                         {[
                           { col: 'id' as SortCol, label: 'ID', sortable: true },
                           { col: 'codigo_unico' as SortCol, label: 'Código', sortable: true },
-                          { col: 'tipo_de_mueble' as SortCol, label: 'Tipo', sortable: true },
+                          { col: 'mueble' as SortCol, label: 'Mueble', sortable: true },
                           { col: '' as SortCol, label: 'Ubicación', sortable: false },
                           { col: 'plaza' as SortCol, label: 'Plaza', sortable: true },
                           { col: '' as SortCol, label: 'Cara', sortable: false },
@@ -801,7 +801,7 @@ export function InventariosPage() {
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1.5">
-                                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.tipo_de_mueble || '-'}</span>
+                                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.mueble || '-'}</span>
                                 {item.tradicional_digital === 'Digital' && (
                                   <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/30`}>
                                     <Monitor className="h-2.5 w-2.5 inline mr-0.5" />DIG
