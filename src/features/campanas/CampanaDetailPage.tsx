@@ -1044,21 +1044,16 @@ export function CampanaDetailPage() {
       // Construir el payload
       let deliveryNote = buildDeliveryNote(campana, itemsToPost, campana.sap_database);
 
-      // Si es migrada, resolver BaseEntry/BaseLine desde SAP (buscar DocEntry real)
-      console.log('isMigratedCampaign:', isMigratedCampaign(campana), 'comentario:', campana.comentario_cambio_status);
+      // Si es migrada, resolver BaseEntry desde SAP
       if (isMigratedCampaign(campana)) {
-        const db = campana.sap_database || 'PB_SBOIMUTRADE';
+        const db = campana.sap_database || 'TRADE';
         console.log('Resolving BaseEntry from SAP... DB:', db, 'DocNum:', campana.id);
-        try {
-          deliveryNote = await resolveBaseEntry(
-            deliveryNote as SAPDeliveryNoteMigrated,
-            campana.id?.toString() || '',
-            db
-          );
-          console.log('BaseEntry resolved:', (deliveryNote as any).DocumentLines?.[0]?.BaseEntry);
-        } catch (err) {
-          console.error('ERROR resolving BaseEntry:', err);
-        }
+        deliveryNote = await resolveBaseEntry(
+          deliveryNote as SAPDeliveryNoteMigrated,
+          campana.id?.toString() || '',
+          db
+        );
+        console.log('BaseEntry resolved:', (deliveryNote as SAPDeliveryNoteMigrated).DocumentLines?.[0]?.BaseEntry);
       }
 
       console.log('========== DELIVERY NOTE JSON ==========');
@@ -3423,7 +3418,7 @@ export function CampanaDetailPage() {
                           </div>
                           <div className="flex justify-between">
                             <span className="text-zinc-500">BaseEntry (en líneas):</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.DocumentLines?.[0]?.BaseEntry || '(se resuelve al enviar)'}</span>
+                            <span className="text-zinc-300">(se resuelve al enviar)</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-zinc-500">Base SAP:</span>

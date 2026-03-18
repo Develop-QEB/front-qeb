@@ -63,7 +63,7 @@ export interface SAPDeliveryNoteMigrated extends Omit<SAPDeliveryNote, 'Document
 export interface SAPPostResponse {
   success: boolean;
   data?: {
-    DocEntry?: number;
+    BaseEntry?: number;
     DocNum?: number;
     [key: string]: unknown;
   };
@@ -445,16 +445,15 @@ export function buildDeliveryNote(
     DocumentLines: documentLines,
   };
 
-  // Si es campaña migrada desde INVIAN, agregar BaseType/BaseEntry/BaseLine en cada línea
-  // BaseEntry y BaseLine se resuelven después con resolveBaseEntry()
+  // Si es campaña migrada desde INVIAN, agregar BaseType/BaseDocNum en cada línea
   if (isMigratedCampaign(campana)) {
     return {
       ...deliveryNote,
-      DocumentLines: documentLines.map((line, idx) => ({
+      DocumentLines: documentLines.map(line => ({
         ...line,
         BaseType: 17,
-        BaseEntry: 0, // placeholder - se resuelve con resolveBaseEntry()
-        BaseLine: idx,
+        BaseEntry: 0, // se resuelve con resolveBaseEntry()
+        BaseLine: 0, // se resuelve con resolveBaseEntry()
       })),
     } as SAPDeliveryNoteMigrated;
   }
@@ -462,21 +461,16 @@ export function buildDeliveryNote(
   return deliveryNote;
 }
 
-// Busca el DocEntry de una Order en SAP por DocNum y actualiza BaseEntry/BaseLine en el DeliveryNote
+// Busca el BaseEntry de una Order en SAP por DocNum (APS)
 export async function resolveBaseEntry(
   deliveryNote: SAPDeliveryNoteMigrated,
   docNum: string,
   sapDatabase: string
 ): Promise<SAPDeliveryNoteMigrated> {
-  // Mapear nombre de ambiente a DB real de SAP
   const dbMap: Record<string, string> = {
-    'TRADE': 'PB_SBOIMUTRADE',
-    'CIMU': 'PB_SBOCIMU',
+    'TRADE': 'SBOIMUTRADE',
+    'CIMU': 'SBOCIMU',
     'TEST': 'PB_SBOCIMU',
-    'SBOCIMU': 'SBOCIMU',
-    'PB_SBOCIMU': 'PB_SBOCIMU',
-    'SBOIMUTRADE': 'SBOIMUTRADE',
-    'PB_SBOIMUTRADE': 'PB_SBOIMUTRADE',
   };
   const db = dbMap[sapDatabase] || 'PB_SBOCIMU';
 
@@ -486,21 +480,18 @@ export async function resolveBaseEntry(
   }
 
   const order = await response.json();
-  const docEntry = order.DocEntry;
-
-  // Mapear cada línea del DeliveryNote a la línea correspondiente de la Order por ItemCode
-  const updatedLines = deliveryNote.DocumentLines.map(line => {
-    const orderLine = order.DocumentLines.find((ol: { ItemCode: string; LineNum: number }) => ol.ItemCode === line.ItemCode);
-    return {
-      ...line,
-      BaseEntry: docEntry,
-      BaseLine: orderLine ? orderLine.LineNum : line.BaseLine,
-    };
-  });
 
   return {
     ...deliveryNote,
-    DocumentLines: updatedLines,
+    DocumentLines: deliveryNote.DocumentLines.map(line => {
+      const matchingLines = order.DocumentLines.filter((ol: { ItemCode: string; LineNum: number }) => ol.ItemCode === line.ItemCode);
+      const orderLine = matchingLines.length > 0 ? matchingLines[matchingLines.length - 1] : null;
+      return {
+        ...line,
+        BaseEntry: order.DocEntry,
+        BaseLine: orderLine ? orderLine.LineNum : 0,
+      };
+    }),
   };
 }
 
