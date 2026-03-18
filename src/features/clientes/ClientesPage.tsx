@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Users, Building2, Tag, Database, Cloud, Plus, Trash2,
   Filter, ChevronDown, ChevronRight, X, Layers, Package, RefreshCw,
-  Eye, User, Calendar, Hash, FileText, ArrowUpDown, ArrowUp, ArrowDown, Check
+  Eye, User, Calendar, Hash, FileText, ArrowUpDown, ArrowUp, ArrowDown, Check, Loader2
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { clientesService } from '../../services/clientes.service';
@@ -115,6 +116,7 @@ interface ViewClienteModalProps {
 }
 
 function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
+  useModalTracker('Ver Cliente', isOpen);
   const isDark = useThemeStore((s) => s.theme === 'dark');
 
   // Bloquear scroll del body cuando el modal está abierto
@@ -547,6 +549,7 @@ export function ClientesPage() {
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  useModalTracker('Registrar Cliente', showCreateModal);
 
   // Estados para filtros avanzados
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -1546,7 +1549,8 @@ export function ClientesPage() {
                 <button type="button" onClick={() => setShowCreateModal(false)} className={`px-4 py-2 rounded-lg border ${isDark ? 'border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500' : 'border-gray-300 text-gray-500 hover:text-gray-700 hover:border-gray-400'} text-sm transition-all`}>
                   Cancelar
                 </button>
-                <button type="submit" disabled={createMutation.isPending} className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white text-sm font-medium transition-all disabled:opacity-50">
+                <button type="submit" disabled={createMutation.isPending} className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white text-sm font-medium transition-all disabled:opacity-50 flex items-center gap-2">
+                  {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   {createMutation.isPending ? 'Creando...' : 'Crear Cliente'}
                 </button>
               </div>

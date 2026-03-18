@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Eye, Edit2, PlayCircle, MessageSquare, Download, FileText,
@@ -198,6 +199,7 @@ interface ViewSolicitudModalProps {
 }
 
 export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAtender, onStatus, canEdit = true, canAtender = false }: ViewSolicitudModalProps) {
+  useModalTracker('Ver Solicitud', isOpen);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
@@ -1099,6 +1101,7 @@ interface StatusModalProps {
 }
 
 export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, statusReadOnly = false }: StatusModalProps) {
+  useModalTracker('Cambiar Estado Solicitud', isOpen);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');

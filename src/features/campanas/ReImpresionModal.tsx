@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, X, Search, User, MapPin, Loader2 } from 'lucide-react';
 import { solicitudesService } from '../../services/solicitudes.service';
@@ -38,6 +39,7 @@ interface Props {
 }
 
 export function ReImpresionModal({ isOpen, onClose, selectedItems, onSubmit, isSubmitting, error }: Props) {
+  useModalTracker('Re-impresión', isOpen);
   const [tipoIncidencia, setTipoIncidencia] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [userSearch, setUserSearch] = useState('');

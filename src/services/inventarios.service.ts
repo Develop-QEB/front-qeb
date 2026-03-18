@@ -4,8 +4,23 @@ import { Inventario, InventarioMapItem, InventarioStats, PaginatedResponse, ApiR
 export interface BulkCreateResult {
   insertados: number;
   duplicados: number;
+  actualizados?: number;
+  duplicados_ocupados?: number;
   errores: { fila: number; campo: string; mensaje: string }[];
   total: number;
+}
+
+export interface BulkCheckItem {
+  codigo_unico: string;
+  estatus: string | null;
+  estatus_real: string | null;
+  id: number | null;
+}
+
+export interface BulkCheckResult {
+  nuevos: string[];
+  sobreescribibles: BulkCheckItem[];
+  ocupados: BulkCheckItem[];
 }
 
 export interface InventariosParams {
@@ -243,9 +258,18 @@ export const inventariosService = {
     return response.data.data;
   },
 
+  // Bulk check inventarios against DB
+  async bulkCheck(codigos: string[]): Promise<BulkCheckResult> {
+    const response = await api.post<ApiResponse<BulkCheckResult>>('/inventarios/bulk-check', { codigos });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al verificar inventarios');
+    }
+    return response.data.data;
+  },
+
   // Bulk create inventarios from CSV
-  async bulkCreate(inventarios: Record<string, unknown>[]): Promise<BulkCreateResult> {
-    const response = await api.post<ApiResponse<BulkCreateResult>>('/inventarios/bulk', { inventarios });
+  async bulkCreate(inventarios: Record<string, unknown>[], overwrite_codigos?: string[]): Promise<BulkCreateResult> {
+    const response = await api.post<ApiResponse<BulkCreateResult>>('/inventarios/bulk', { inventarios, overwrite_codigos });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al crear inventarios masivamente');
     }

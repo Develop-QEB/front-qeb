@@ -108,7 +108,7 @@ const FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'codigo_unico', label: 'Codigo', type: 'string' },
   { field: 'plaza', label: 'Plaza', type: 'string' },
   { field: 'tipo_de_cara', label: 'Tipo', type: 'string' },
-  { field: 'tipo_de_mueble', label: 'Formato', type: 'string' },
+  { field: 'mueble', label: 'Formato', type: 'string' },
   { field: 'articulo', label: 'Articulo', type: 'string' },
   { field: 'caras_totales', label: 'Caras', type: 'number' },
   { field: 'tarifa_publica', label: 'Tarifa', type: 'number' },
@@ -253,7 +253,7 @@ export function ClientePropuestaPage() {
         i.codigo_unico?.toLowerCase().includes(search) ||
         i.plaza?.toLowerCase().includes(search) ||
         i.ubicacion?.toLowerCase().includes(search) ||
-        i.tipo_de_mueble?.toLowerCase().includes(search) ||
+        i.mueble?.toLowerCase().includes(search) ||
         i.articulo?.toLowerCase().includes(search)
       );
     }
@@ -288,7 +288,7 @@ export function ClientePropuestaPage() {
         items,
         totalCaras: items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0),
         totalInversion: items.reduce((sum, i) => sum + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 1)), 0),
-        formatos: [...new Set(items.map(i => i.tipo_de_mueble || 'N/A'))],
+        formatos: [...new Set(items.map(i => i.mueble || 'N/A'))],
         tipos: [...new Set(items.map(i => i.tipo_de_cara || 'N/A'))],
         plazas: [...new Set(items.map(i => i.plaza || 'N/A'))],
       }));
@@ -314,7 +314,7 @@ export function ClientePropuestaPage() {
   const chartFormatos = useMemo(() => {
     const counts: Record<string, number> = {};
     inventario.forEach(i => {
-      const formato = i.tipo_de_mueble || 'Otros';
+      const formato = i.mueble || 'Otros';
       counts[formato] = (counts[formato] || 0) + (Number(i.caras_totales) || 0);
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -371,7 +371,7 @@ export function ClientePropuestaPage() {
   const handleDownloadCSV = () => {
     const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Articulo', 'Caras', 'Tarifa', 'Periodo'];
     const rows = inventario.map(i => [
-      i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.tipo_de_mueble, i.articulo,
+      i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.articulo,
       i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo)
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
@@ -393,7 +393,7 @@ export function ClientePropuestaPage() {
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
               Tipo: ${i.tipo_de_cara || 'N/A'}<br/>
-              Formato: ${i.tipo_de_mueble || 'N/A'}<br/>
+              Formato: ${i.mueble || 'N/A'}<br/>
               Caras: ${i.caras_totales}<br/>
               Tarifa: ${formatCurrency(i.tarifa_publica || 0)}
             ]]>
@@ -421,7 +421,7 @@ export function ClientePropuestaPage() {
       .map(i => `
         <Placemark>
           <name>${i.codigo_unico}</name>
-          <description><![CDATA[Plaza: ${i.plaza || 'N/A'}<br/>Tipo: ${i.tipo_de_cara || 'N/A'}<br/>Formato: ${i.tipo_de_mueble || 'N/A'}<br/>Caras: ${i.caras_totales}<br/>Tarifa: ${formatCurrency(i.tarifa_publica || 0)}]]></description>
+          <description><![CDATA[Plaza: ${i.plaza || 'N/A'}<br/>Tipo: ${i.tipo_de_cara || 'N/A'}<br/>Formato: ${i.mueble || 'N/A'}<br/>Caras: ${i.caras_totales}<br/>Tarifa: ${formatCurrency(i.tarifa_publica || 0)}]]></description>
           <Point><coordinates>${i.longitud},${i.latitud},0</coordinates></Point>
         </Placemark>`).join('');
     const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document><name>Propuesta ${propuestaId} - ${selectedItems.size} seleccionados</name>${placemarks}</Document>\n</kml>`;
@@ -623,7 +623,7 @@ export function ClientePropuestaPage() {
             body: items.map(i => [
               i.plaza || '-',
               (i.ubicacion || '-').substring(0, 50),
-              i.tipo_de_mueble || '-',
+              i.mueble || '-',
               String(i.caras_totales || 0),
               i.latitud?.toFixed(6) || '-',
               i.longitud?.toFixed(6) || '-',
@@ -1066,7 +1066,7 @@ export function ClientePropuestaPage() {
                                               <input type="checkbox" checked={selectedItems.has(item.id)} onChange={() => toggleItemSelection(item.id)} className="checkbox-purple" />
                                             </td>
                                             <td className="px-3 py-2 text-gray-700 text-xs">{item.plaza || '-'}</td>
-                                            <td className="px-3 py-2 text-gray-600 text-xs">{item.tipo_de_mueble || '-'}</td>
+                                            <td className="px-3 py-2 text-gray-600 text-xs">{item.mueble || '-'}</td>
                                             <td className="px-3 py-2 text-center font-semibold text-gray-800 text-xs">{item.caras_totales}</td>
                                             <td className="px-3 py-2 text-right text-gray-400 text-xs font-mono">{item.latitud?.toFixed(6) || '-'}</td>
                                             <td className="px-3 py-2 text-right text-gray-400 text-xs font-mono">{item.longitud?.toFixed(6) || '-'}</td>
@@ -1209,7 +1209,7 @@ export function ClientePropuestaPage() {
                       <div className="text-xs space-y-1">
                         <p><strong>Plaza:</strong> {selectedMarker.plaza || 'N/A'}</p>
                         <p><strong>Tipo:</strong> {selectedMarker.tipo_de_cara || 'N/A'}</p>
-                        <p><strong>Formato:</strong> {selectedMarker.tipo_de_mueble || 'N/A'}</p>
+                        <p><strong>Formato:</strong> {selectedMarker.mueble || 'N/A'}</p>
                         <p><strong>Ubicacion:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
                         <p><strong>Caras:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(selectedMarker.tarifa_publica || 0)}</p>

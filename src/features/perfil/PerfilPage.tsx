@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { User, Mail, Briefcase, Building2, Lock, Save, Eye, EyeOff, CheckCircle, AlertCircle, Camera } from 'lucide-react';
+import { User, Mail, Briefcase, Building2, Lock, Save, Eye, EyeOff, CheckCircle, AlertCircle, Camera, Loader2 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { authService } from '../../services/auth.service';
 import { useAuthStore } from '../../store/authStore';
@@ -334,7 +334,7 @@ export function PerfilPage() {
                     disabled={updateProfileMutation.isPending}
                     className="px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
-                    <Save className="h-4 w-4" />
+                    {updateProfileMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     {updateProfileMutation.isPending ? 'Guardando...' : 'Guardar Cambios'}
                   </button>
                 </div>
@@ -433,7 +433,7 @@ export function PerfilPage() {
                   disabled={changePasswordMutation.isPending || !passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword}
                   className="px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Lock className="h-4 w-4" />
+                  {changePasswordMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
                   {changePasswordMutation.isPending ? 'Cambiando...' : 'Cambiar Contraseña'}
                 </button>
               </div>

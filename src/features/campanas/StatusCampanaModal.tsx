@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, MessageSquare, Send, Loader2, MessageSquareOff } from 'lucide-react';
 import { campanasService } from '../../services/campanas.service';
@@ -26,6 +27,7 @@ const getStatusOptions = (isDark: boolean) => [
 ];
 
 export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = false }: StatusCampanaModalProps) {
+  useModalTracker('Cambiar Estado Campaña', isOpen);
   const queryClient = useQueryClient();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const user = useAuthStore((state) => state.user);

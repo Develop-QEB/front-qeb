@@ -21,6 +21,7 @@ import { NotificacionesPage } from './features/notificaciones/NotificacionesPage
 import { CorreosPage } from './features/correos/CorreosPage';
 import { PerfilPage } from './features/perfil/PerfilPage';
 import { UsuariosAdminPage } from './features/admin/UsuariosAdminPage';
+import { ChatbotHistorialPage } from './features/admin/ChatbotHistorialPage';
 import { DevTicketsPage } from './features/tickets/DevTicketsPage';
 import { useAuthStore } from './store/authStore';
 import { getPermissions } from './lib/permissions';
@@ -75,6 +76,16 @@ function AdminUsuariosRoute() {
   return <UsuariosAdminPage />;
 }
 
+function AdminChatbotRoute() {
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+
+  if (!user || !permissions.canSeeAdminUsuarios) {
+    return <Navigate to={getFirstAvailableRoute(permissions)} replace />;
+  }
+  return <ChatbotHistorialPage />;
+}
+
 // Componente para proteger ruta de Gestión de Artes
 function GestionArtesRoute() {
   const user = useAuthStore((state) => state.user);
@@ -126,6 +137,7 @@ function App() {
             <Route path="/correos" element={<CorreosPage />} />
             <Route path="/perfil" element={<PerfilPage />} />
             <Route path="/admin/usuarios" element={<AdminUsuariosRoute />} />
+            <Route path="/admin/chatbot" element={<AdminChatbotRoute />} />
             <Route path="/dev/tickets" element={<DevTicketsRoute />} />
           </Route>
 

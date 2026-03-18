@@ -7,7 +7,7 @@ import {
   PanelRight, FolderOpen, Clock, CheckCircle, AlertCircle, Circle,
   MessageSquare, Send, Plus, Pencil, Trash2, StickyNote,
   Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList,
-  Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check
+  Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check, Loader2
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { notificacionesService, CaraAutorizacion, ResumenAutorizacion } from '../../services/notificaciones.service';
@@ -1581,7 +1581,7 @@ function TaskDrawer({
                 } disabled:opacity-50`}
               >
                 {marcarLeidaMutation.isPending ? (
-                  'Actualizando...'
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Actualizando...</>
                 ) : tarea.estatus === 'Atendido' ? (
                   <>
                     <Circle className="h-4 w-4" />
@@ -1967,11 +1967,11 @@ function TaskDrawer({
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   {aprobarMutation.isPending ? (
-                    <span className="animate-spin">⏳</span>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <CheckCircle className="h-4 w-4" />
                   )}
-                  Aprobar {carasPendientes.length} cara{carasPendientes.length !== 1 ? 's' : ''}
+                  {aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} cara${carasPendientes.length !== 1 ? 's' : ''}`}
                 </button>
                 <button
                   onClick={() => setShowRechazoInput(true)}
@@ -1996,6 +1996,7 @@ function TaskDrawer({
                     disabled={rechazarMutation.isPending || !rechazoMotivo.trim()}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
+                    {rechazarMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                     {rechazarMutation.isPending ? 'Rechazando...' : 'Confirmar Rechazo'}
                   </button>
                   <button

@@ -1148,6 +1148,8 @@ function UploadArtModal({
   onSubmitDigital,
   onSubmitTradicional,
   artesExistentes,
+  addedArtes,
+  onAddedArtesChange,
   isLoadingArtes,
   isSubmitting,
   error,
@@ -1162,6 +1164,8 @@ function UploadArtModal({
   onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[] }) => void;
   onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[] }) => void;
   artesExistentes: ArteExistente[];
+  addedArtes: ArteExistente[];
+  onAddedArtesChange: (artes: ArteExistente[]) => void;
   isLoadingArtes: boolean;
   isSubmitting: boolean;
   error: string | null;
@@ -1176,6 +1180,9 @@ function UploadArtModal({
   const [link, setLink] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState<{ nombre: string; usos: number; url: string } | null>(null);
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+
+  // Local library: extends artesExistentes with uploaded files/URLs (addedArtes persists in parent)
+  const localArtes = useMemo(() => [...artesExistentes, ...addedArtes], [artesExistentes, addedArtes]);
 
   // Tab del modal: Artes o Fichas Técnicas
   const [modalTab, setModalTab] = useState<'artes' | 'fichas'>('artes');
@@ -1230,6 +1237,8 @@ function UploadArtModal({
   const [modalSearch, setModalSearch] = useState('');
   const [modalGroupBy, setModalGroupBy] = useState<'none' | 'aps' | 'catorcena' | 'grupo'>('none');
   const [modalSortBy, setModalSortBy] = useState<'codigo' | 'aps' | 'catorcena'>('codigo');
+  const [modalPage, setModalPage] = useState(1);
+  const MODAL_PAGE_SIZE = 5;
 
   // Preview URL basado en la opción seleccionada
   const previewUrl = useMemo(() => {
@@ -1471,6 +1480,7 @@ function UploadArtModal({
     setModalSearch('');
     setModalGroupBy('none');
     setModalSortBy('codigo');
+    setModalPage(1);
     setDuplicateWarning(null);
     setDigitalFiles([]);
     setDraggedFile(null);
@@ -1529,8 +1539,7 @@ function UploadArtModal({
 
   // Helpers para el wizard tradicional
   // No permitir avanzar si hay archivos subiendo o imágenes sin URL
-  const hasUploadingImages = Array.from(selectedGalleryImages.values()).some(img => img.source === 'upload' && !img.url);
-  const canGoToStep2 = selectedGalleryImages.size > 0 && !isUploadingFile && !hasUploadingImages;
+  const canGoToStep2 = selectedGalleryImages.size > 0 && !isUploadingFile;
 
   const toggleGalleryImage = (id: string, url: string) => {
     setSelectedGalleryImages(prev => {
@@ -1552,52 +1561,33 @@ function UploadArtModal({
   const addUploadedFile = async (selectedFile: File) => {
     const id = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    // Create preview first
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const preview = event.target?.result as string;
-      // Show preview immediately with loading state
-      setSelectedGalleryImages(prev => {
-        const next = new Map(prev);
-        next.set(id, { url: '', source: 'upload', preview });
-        return next;
-      });
-
-      // Upload to Spaces immediately
-      try {
-        setIsUploadingFile(true);
-        const uploadResult = await campanasService.uploadArteFile(selectedFile);
-        setSelectedGalleryImages(prev => {
-          const next = new Map(prev);
-          const existing = next.get(id);
-          if (existing) {
-            next.set(id, { ...existing, url: uploadResult.url });
-          }
-          return next;
-        });
-      } catch (err) {
-        console.error('Error uploading file:', err);
-        // Remove the failed upload
-        setSelectedGalleryImages(prev => {
-          const next = new Map(prev);
-          next.delete(id);
-          return next;
-        });
-      } finally {
-        setIsUploadingFile(false);
-      }
-    };
-    reader.readAsDataURL(selectedFile);
+    try {
+      setIsUploadingFile(true);
+      const uploadResult = await campanasService.uploadArteFile(selectedFile);
+      // Add to library (not selected) — persists in parent
+      onAddedArtesChange([...addedArtes, {
+        id,
+        nombre: selectedFile.name,
+        url: uploadResult.url,
+        usos: 0,
+      }]);
+    } catch (err) {
+      console.error('Error uploading file:', err);
+    } finally {
+      setIsUploadingFile(false);
+    }
   };
 
   const addUrlImage = (url: string) => {
     if (!url.trim()) return;
     const id = `url-${Date.now()}`;
-    setSelectedGalleryImages(prev => {
-      const next = new Map(prev);
-      next.set(id, { url, source: 'url' });
-      return next;
-    });
+    // Add to library (not selected) — persists in parent
+    onAddedArtesChange([...addedArtes, {
+      id,
+      nombre: url.split('/').pop() || 'URL image',
+      url,
+      usos: 0,
+    }]);
   };
 
   const removeGalleryImage = (id: string) => {
@@ -1792,14 +1782,14 @@ function UploadArtModal({
                   {/* Galería de artes digitales existentes */}
                   <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                     <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                      Biblioteca de contenido digital ({artesExistentes.length})
+                      Biblioteca de contenido digital ({localArtes.length})
                     </label>
                     <div className="flex-1 min-h-[120px] max-h-[200px] border border-border rounded-lg bg-zinc-900/50 overflow-auto p-2">
                       {isLoadingArtes ? (
                         <div className="h-full flex items-center justify-center">
                           <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
                         </div>
-                      ) : artesExistentes.length === 0 ? (
+                      ) : localArtes.length === 0 ? (
                         <div className="h-full flex items-center justify-center text-center text-zinc-500">
                           <div>
                             <Film className="h-8 w-8 mx-auto mb-1 opacity-30" />
@@ -1808,7 +1798,7 @@ function UploadArtModal({
                         </div>
                       ) : (
                         <div className="grid grid-cols-6 gap-1.5">
-                          {artesExistentes.map((art) => {
+                          {localArtes.map((art) => {
                             const isVideo = /\.(mp4|mov|webm|avi)$/i.test(art.url || '');
                             return (
                               <div
@@ -1975,23 +1965,24 @@ function UploadArtModal({
                       {/* Galería de artes existentes */}
                       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                         <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                          Biblioteca de artes ({artesExistentes.length})
+                          Biblioteca de artes ({localArtes.length})
+                          {isUploadingFile && <Loader2 className="inline h-3 w-3 animate-spin text-purple-400 ml-1.5" />}
                         </label>
                         <div className="flex-1 min-h-[120px] max-h-[260px] border border-border rounded-lg bg-zinc-900/50 overflow-auto p-2">
                           {isLoadingArtes ? (
                             <div className="h-full flex items-center justify-center">
                               <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
                             </div>
-                          ) : artesExistentes.length === 0 ? (
+                          ) : localArtes.length === 0 ? (
                             <div className="h-full flex items-center justify-center text-center text-zinc-500">
                               <div>
                                 <Image className="h-8 w-8 mx-auto mb-1 opacity-30" />
-                                <p className="text-[10px]">No se han subido imágenes a esta campaña</p>
+                                <p className="text-[10px]">No hay imágenes. Sube archivos o agrega URLs abajo.</p>
                               </div>
                             </div>
                           ) : (
                             <div className="grid grid-cols-6 gap-1.5">
-                              {artesExistentes.map((art) => {
+                              {localArtes.map((art) => {
                                 const isSelected = selectedGalleryImages.has(art.id);
                                 return (
                                   <button
@@ -2031,7 +2022,7 @@ function UploadArtModal({
                           O agrega nuevas
                         </label>
                         <div className="flex gap-2">
-                          <label className="flex-1 cursor-pointer">
+                          <label className={`flex-1 ${isUploadingFile ? 'pointer-events-none' : 'cursor-pointer'}`}>
                             <input
                               type="file"
                               onChange={(e) => {
@@ -2042,11 +2033,19 @@ function UploadArtModal({
                               accept="image/*,.pdf"
                               multiple
                               className="hidden"
-                              disabled={isSubmitting}
+                              disabled={isSubmitting || isUploadingFile}
                             />
-                            <div className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-purple-600/20 border border-purple-500/30 rounded-lg hover:bg-purple-600/30 transition-colors">
-                              <Upload className="h-3.5 w-3.5 text-purple-400" />
-                              <span className="text-purple-300">Subir archivo</span>
+                            <div className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs border rounded-lg transition-colors ${
+                              isUploadingFile
+                                ? 'bg-purple-600/10 border-purple-500/20 opacity-70'
+                                : 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30'
+                            }`}>
+                              {isUploadingFile ? (
+                                <Loader2 className="h-3.5 w-3.5 text-purple-400 animate-spin" />
+                              ) : (
+                                <Upload className="h-3.5 w-3.5 text-purple-400" />
+                              )}
+                              <span className="text-purple-300">{isUploadingFile ? 'Subiendo...' : 'Subir archivo'}</span>
                             </div>
                           </label>
                           <div className="flex-1 flex gap-1">
@@ -2163,13 +2162,13 @@ function UploadArtModal({
                     type="text"
                     placeholder="Buscar..."
                     value={modalSearch}
-                    onChange={(e) => setModalSearch(e.target.value)}
+                    onChange={(e) => { setModalSearch(e.target.value); setModalPage(1); }}
                     className="w-full pl-6 pr-2 py-1 text-[10px] bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-purple-500"
                   />
                 </div>
                 <select
                   value={modalGroupBy}
-                  onChange={(e) => setModalGroupBy(e.target.value as typeof modalGroupBy)}
+                  onChange={(e) => { setModalGroupBy(e.target.value as typeof modalGroupBy); setModalPage(1); }}
                   className="px-2 py-1 text-[10px] bg-background border border-border rounded focus:ring-1 focus:ring-purple-500"
                 >
                   <option value="none">Sin agrupar</option>
@@ -2189,33 +2188,35 @@ function UploadArtModal({
               </div>
 
               {/* Table */}
-              <div className="flex-1 min-h-0 border border-border rounded-lg overflow-hidden">
+              <div className="flex-1 min-h-0 border border-border rounded-lg overflow-hidden bg-card/50">
                 <div className="h-full overflow-auto">
                   {groupedModalInventory ? (
                     // Grouped Table View
                     <div>
                       {Object.entries(groupedModalInventory).map(([groupKey, items]) => (
                         <div key={groupKey}>
-                          <div className="px-3 py-1.5 bg-purple-900/30 sticky top-0 z-10 flex items-center justify-between border-b border-border">
-                            <span className="text-[11px] font-semibold text-purple-300">{groupKey}</span>
-                            <span className="text-[10px] text-zinc-500">{items.length} items</span>
+                          <div className="px-4 py-2 bg-purple-900/20 sticky top-0 z-10 flex items-center justify-between border-b border-border">
+                            <span className="text-xs font-bold text-white">{groupKey}</span>
+                            <span className="text-[10px] text-zinc-500">{items.length} cara{items.length !== 1 ? 's' : ''}</span>
                           </div>
-                          <table className="w-full text-[10px]">
-                            <thead className="bg-purple-900/10 sticky top-7 z-[5]">
-                              <tr className="text-left border-b border-border/50">
-                                <th className="px-2 py-1 font-medium text-purple-300">APS</th>
-                                <th className="px-2 py-1 font-medium text-purple-300">Código</th>
-                                <th className="px-2 py-1 font-medium text-purple-300">Ubicación</th>
-                                <th className="px-2 py-1 font-medium text-purple-300">Mueble</th>
+                          <table className="w-full text-xs">
+                            <thead className="bg-purple-900/20">
+                              <tr className="text-left border-b border-border">
+                                <th className="p-2 font-medium text-purple-300">APS</th>
+                                <th className="p-2 font-medium text-purple-300">Código</th>
+                                <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                <th className="p-2 font-medium text-purple-300">Formato</th>
+                                <th className="p-2 font-medium text-purple-300">Ciudad</th>
                               </tr>
                             </thead>
                             <tbody>
                               {items.map((item) => (
-                                <tr key={item.id} className="border-b border-border/30 hover:bg-purple-900/10">
-                                  <td className="px-2 py-1.5 text-purple-400 font-medium">{item.aps}</td>
-                                  <td className="px-2 py-1.5 text-white font-medium">{item.codigo_unico}</td>
-                                  <td className="px-2 py-1.5 text-zinc-400 max-w-[100px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
-                                  <td className="px-2 py-1.5 text-zinc-400">{item.mueble}</td>
+                                <tr key={item.id} className="border-b border-border/50 hover:bg-purple-900/20 transition-colors">
+                                  <td className="p-2 text-xs text-purple-400 font-medium">{item.aps}</td>
+                                  <td className="p-2 text-xs text-white font-medium">{item.codigo_unico}</td>
+                                  <td className="p-2 text-xs text-zinc-300 max-w-[150px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
+                                  <td className="p-2 text-xs text-zinc-300">{item.mueble}</td>
+                                  <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -2224,37 +2225,75 @@ function UploadArtModal({
                       ))}
                     </div>
                   ) : (
-                    // Flat Table View
-                    <table className="w-full text-[10px]">
-                      <thead className="bg-purple-900/20 sticky top-0 z-10">
-                        <tr className="text-left border-b border-border">
-                          <th className="px-2 py-1.5 font-medium text-purple-300">APS</th>
-                          <th className="px-2 py-1.5 font-medium text-purple-300">Código</th>
-                          <th className="px-2 py-1.5 font-medium text-purple-300">Ubicación</th>
-                          <th className="px-2 py-1.5 font-medium text-purple-300">Mueble</th>
-                          <th className="px-2 py-1.5 font-medium text-purple-300">Ciudad</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredModalInventory.length === 0 ? (
-                          <tr>
-                            <td colSpan={5} className="px-4 py-6 text-center text-zinc-500">
-                              Sin resultados
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredModalInventory.map((item) => (
-                            <tr key={item.id} className="border-b border-border/30 hover:bg-purple-900/10">
-                              <td className="px-2 py-1.5 text-purple-400 font-medium">{item.aps}</td>
-                              <td className="px-2 py-1.5 text-white font-medium">{item.codigo_unico}</td>
-                              <td className="px-2 py-1.5 text-zinc-400 max-w-[100px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
-                              <td className="px-2 py-1.5 text-zinc-400">{item.mueble}</td>
-                              <td className="px-2 py-1.5 text-zinc-400">{item.ciudad}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+                    // Flat Table View with pagination
+                    (() => {
+                      const totalPages = Math.ceil(filteredModalInventory.length / MODAL_PAGE_SIZE);
+                      const currentPage = Math.min(modalPage, totalPages || 1);
+                      const startIdx = (currentPage - 1) * MODAL_PAGE_SIZE;
+                      const pageItems = filteredModalInventory.slice(startIdx, startIdx + MODAL_PAGE_SIZE);
+                      return (
+                        <div className="flex flex-col h-full">
+                          <div className="flex-1 min-h-0 overflow-auto">
+                            <table className="w-full text-xs">
+                              <thead className="sticky top-0 bg-purple-900/20 z-10">
+                                <tr className="border-b border-border text-left">
+                                  <th className="p-2 font-medium text-purple-300">APS</th>
+                                  <th className="p-2 font-medium text-purple-300">Código</th>
+                                  <th className="p-2 font-medium text-purple-300">Ubicación</th>
+                                  <th className="p-2 font-medium text-purple-300">Formato</th>
+                                  <th className="p-2 font-medium text-purple-300">Ciudad</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {pageItems.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={5} className="px-4 py-6 text-center text-zinc-500">
+                                      Sin resultados
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  pageItems.map((item) => (
+                                    <tr key={item.id} className="border-b border-border/50 hover:bg-purple-900/20 transition-colors">
+                                      <td className="p-2 text-xs text-purple-400 font-medium">{item.aps}</td>
+                                      <td className="p-2 text-xs text-white font-medium">{item.codigo_unico}</td>
+                                      <td className="p-2 text-xs text-zinc-300 max-w-[150px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
+                                      <td className="p-2 text-xs text-zinc-300">{item.mueble}</td>
+                                      <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                          {totalPages > 1 && (
+                            <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-purple-900/10 flex-shrink-0">
+                              <span className="text-[10px] text-zinc-400">
+                                {startIdx + 1}-{Math.min(startIdx + MODAL_PAGE_SIZE, filteredModalInventory.length)} de {filteredModalInventory.length}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => setModalPage(p => Math.max(1, p - 1))}
+                                  disabled={currentPage <= 1}
+                                  className="p-1 rounded hover:bg-purple-900/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  <ChevronLeft className="h-3.5 w-3.5 text-purple-300" />
+                                </button>
+                                <span className="text-[10px] text-purple-300 min-w-[40px] text-center">
+                                  {currentPage}/{totalPages}
+                                </span>
+                                <button
+                                  onClick={() => setModalPage(p => Math.min(totalPages, p + 1))}
+                                  disabled={currentPage >= totalPages}
+                                  className="p-1 rounded hover:bg-purple-900/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  <ChevronRight className="h-3.5 w-3.5 text-purple-300" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
                   )}
                 </div>
               </div>
@@ -7220,8 +7259,8 @@ function TaskDetailModal({
                           disabled={isUpdating}
                           className="flex items-center gap-2 px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors disabled:opacity-50"
                         >
-                          <Check className="h-4 w-4" />
-                          Guardar indicaciones
+                          {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                          {isUpdating ? 'Guardando...' : 'Guardar indicaciones'}
                         </button>
                       )}
                       <button
@@ -7613,8 +7652,8 @@ function TaskDetailModal({
                           disabled={isUpdating}
                           className="flex items-center gap-2 px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors disabled:opacity-50"
                         >
-                          <Check className="h-4 w-4" />
-                          Guardar indicaciones
+                          {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                          {isUpdating ? 'Guardando...' : 'Guardar indicaciones'}
                         </button>
                       )}
                       <button
@@ -12226,6 +12265,7 @@ export function TareaSeguimientoPage() {
   // Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploadArtModalOpen, setIsUploadArtModalOpen] = useState(false);
+  const [parentAddedArtes, setParentAddedArtes] = useState<ArteExistente[]>([]);
   const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
 
@@ -18179,6 +18219,8 @@ export function TareaSeguimientoPage() {
         onSubmitDigital={handleUploadDigitalArt}
         onSubmitTradicional={handleUploadTradicionalArt}
         artesExistentes={artesExistentes}
+        addedArtes={parentAddedArtes}
+        onAddedArtesChange={setParentAddedArtes}
         isLoadingArtes={isLoadingArtes}
         isSubmitting={assignArteMutation.isPending}
         error={uploadArtError}

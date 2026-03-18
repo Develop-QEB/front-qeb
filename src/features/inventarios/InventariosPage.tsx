@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { useThemeStore } from '../../store/themeStore';
-import { inventariosService } from '../../services/inventarios.service';
+import { inventariosService, BulkCheckResult } from '../../services/inventarios.service';
 import { campanasService } from '../../services/campanas.service';
 import { Inventario } from '../../types';
 
@@ -34,7 +34,7 @@ const EMPTY_FORM: Record<string, string> = {
   tarifa_piso: '', tarifa_publica: '',
 };
 
-type SortCol = 'id' | 'codigo_unico' | 'tipo_de_mueble' | 'plaza' | 'estatus' | 'tarifa_publica';
+type SortCol = 'id' | 'codigo_unico' | 'mueble' | 'plaza' | 'estatus' | 'tarifa_publica';
 
 // FilterChip Component matching CampanasPage style
 function FilterChip({ label, options, value, onChange, onClear }: {
@@ -125,9 +125,14 @@ export function InventariosPage() {
   const [bulkCsvData, setBulkCsvData] = useState<Record<string, string>[]>([]);
   const [bulkValidation, setBulkValidation] = useState<{ valid: number; errors: { fila: number; campo: string; mensaje: string }[]; duplicatesInCsv: number }>({ valid: 0, errors: [], duplicatesInCsv: 0 });
   const [bulkUploading, setBulkUploading] = useState(false);
-  const [bulkResult, setBulkResult] = useState<{ insertados: number; duplicados: number; errores: { fila: number; campo: string; mensaje: string }[]; total: number } | null>(null);
+  const [bulkResult, setBulkResult] = useState<{ insertados: number; duplicados: number; actualizados?: number; duplicados_ocupados?: number; errores: { fila: number; campo: string; mensaje: string }[]; total: number } | null>(null);
+  const [bulkCheckResult, setBulkCheckResult] = useState<BulkCheckResult | null>(null);
+  const [bulkChecking, setBulkChecking] = useState(false);
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  const [bulkStep, setBulkStep] = useState<'upload' | 'check' | 'result'>('upload');
   const bulkInputRef = useRef<HTMLInputElement>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [editItemOcupado, setEditItemOcupado] = useState(false);
   const [formData, setFormData] = useState<Record<string, string>>({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
 
@@ -222,7 +227,7 @@ export function InventariosPage() {
       switch (sortCol) {
         case 'id': aVal = a.id; bVal = b.id; break;
         case 'codigo_unico': aVal = a.codigo_unico || ''; bVal = b.codigo_unico || ''; break;
-        case 'tipo_de_mueble': aVal = a.tipo_de_mueble || ''; bVal = b.tipo_de_mueble || ''; break;
+        case 'mueble': aVal = a.mueble || ''; bVal = b.mueble || ''; break;
         case 'plaza': aVal = a.plaza || ''; bVal = b.plaza || ''; break;
         case 'estatus': aVal = a.estatus || ''; bVal = b.estatus || ''; break;
         case 'tarifa_publica': aVal = a.tarifa_publica || 0; bVal = b.tarifa_publica || 0; break;
@@ -244,6 +249,9 @@ export function InventariosPage() {
   };
 
   const openEdit = (item: Inventario) => {
+    const realEstatus = (item as unknown as Record<string, unknown>).estatus_real as string || item.estatus;
+    const isOcupado = realEstatus === 'Ocupado' || realEstatus === 'Reservado';
+    setEditItemOcupado(isOcupado);
     setFormData({
       codigo_unico: item.codigo_unico || '', ubicacion: item.ubicacion || '', tipo_de_cara: item.tipo_de_cara || '',
       cara: item.cara || '', mueble: item.mueble || '', latitud: String(item.latitud || ''), longitud: String(item.longitud || ''),
@@ -291,6 +299,45 @@ export function InventariosPage() {
     const norm = normalizeHeader(raw);
     return HEADER_MAP[norm] || raw.toLowerCase().replace(/\s+/g, '_');
   };
+
+  const revalidateBulkData = useCallback((data: Record<string, string>[]) => {
+    const errors: { fila: number; campo: string; mensaje: string }[] = [];
+    const codigosSeen = new Set<string>();
+    let duplicatesInCsv = 0;
+
+    data.forEach((row, idx) => {
+      const fila = idx + 1;
+      for (const field of BULK_REQUIRED_FIELDS) {
+        if (!row[field] || row[field].trim() === '') {
+          errors.push({ fila, campo: field, mensaje: 'Campo requerido vacío' });
+        }
+      }
+      const codigo = row.codigo_unico?.trim();
+      if (codigo) {
+        if (codigosSeen.has(codigo)) {
+          errors.push({ fila, campo: 'codigo_unico', mensaje: 'Duplicado dentro del CSV' });
+          duplicatesInCsv++;
+        }
+        codigosSeen.add(codigo);
+      }
+      if (row.tipo_de_cara && !['Flujo', 'Contraflujo'].includes(row.tipo_de_cara)) {
+        errors.push({ fila, campo: 'tipo_de_cara', mensaje: 'Debe ser Flujo o Contraflujo' });
+      }
+      if (row.tradicional_digital && !['Tradicional', 'Digital'].includes(row.tradicional_digital)) {
+        errors.push({ fila, campo: 'tradicional_digital', mensaje: 'Debe ser Tradicional o Digital' });
+      }
+      const numFields = ['latitud', 'longitud', 'ancho', 'alto', 'cp', 'total_espacios', 'tarifa_publica', 'tarifa_piso'];
+      for (const nf of numFields) {
+        if (row[nf] && row[nf].trim() !== '' && isNaN(Number(row[nf]))) {
+          errors.push({ fila, campo: nf, mensaje: 'Debe ser un número válido' });
+        }
+      }
+    });
+
+    const errorFilas = new Set(errors.map(e => e.fila));
+    const validCount = data.length - errorFilas.size;
+    setBulkValidation({ valid: validCount, errors, duplicatesInCsv });
+  }, []);
 
   const downloadTemplate = useCallback(() => {
     const keys = FORM_FIELDS.map(f => f.key);
@@ -350,79 +397,99 @@ export function InventariosPage() {
         parsed.push(row);
       }
 
-      // Client-side validation
-      const errors: { fila: number; campo: string; mensaje: string }[] = [];
-      const codigosSeen = new Set<string>();
-      let duplicatesInCsv = 0;
-
-      parsed.forEach((row, idx) => {
-        const fila = idx + 1;
-
-        // Required fields
-        for (const field of BULK_REQUIRED_FIELDS) {
-          if (!row[field] || row[field].trim() === '') {
-            errors.push({ fila, campo: field, mensaje: 'Campo requerido vacío' });
-          }
-        }
-
-        // Duplicate within CSV
-        const codigo = row.codigo_unico?.trim();
-        if (codigo) {
-          if (codigosSeen.has(codigo)) {
-            errors.push({ fila, campo: 'codigo_unico', mensaje: 'Duplicado dentro del CSV' });
-            duplicatesInCsv++;
-          }
-          codigosSeen.add(codigo);
-        }
-
-        // Enum validation
-        if (row.tipo_de_cara && !['Flujo', 'Contraflujo'].includes(row.tipo_de_cara)) {
-          errors.push({ fila, campo: 'tipo_de_cara', mensaje: 'Debe ser Flujo o Contraflujo' });
-        }
-        if (row.tradicional_digital && !['Tradicional', 'Digital'].includes(row.tradicional_digital)) {
-          errors.push({ fila, campo: 'tradicional_digital', mensaje: 'Debe ser Tradicional o Digital' });
-        }
-
-        // Numeric validation
-        const numFields = ['latitud', 'longitud', 'ancho', 'alto', 'cp', 'total_espacios', 'tarifa_publica', 'tarifa_piso'];
-        for (const nf of numFields) {
-          if (row[nf] && row[nf].trim() !== '' && isNaN(Number(row[nf]))) {
-            errors.push({ fila, campo: nf, mensaje: 'Debe ser un número válido' });
-          }
-        }
-      });
-
-      const errorFilas = new Set(errors.map(e => e.fila));
-      const validCount = parsed.length - errorFilas.size;
-
       setBulkCsvData(parsed);
-      setBulkValidation({ valid: validCount, errors, duplicatesInCsv });
+      revalidateBulkData(parsed);
       setBulkResult(null);
+      setBulkStep('upload');
     };
     reader.readAsText(file);
   }, []);
 
+  const updateBulkRow = (idx: number, field: string, value: string) => {
+    const updated = [...bulkCsvData];
+    updated[idx] = { ...updated[idx], [field]: value };
+    setBulkCsvData(updated);
+    revalidateBulkData(updated);
+  };
+
+  const deleteBulkRow = (idx: number) => {
+    const updated = bulkCsvData.filter((_, i) => i !== idx);
+    setBulkCsvData(updated);
+    revalidateBulkData(updated);
+  };
+
+  const handleBulkCheck = async () => {
+    const errorFilas = new Set(bulkValidation.errors.map(e => e.fila));
+    const validRows = bulkCsvData.filter((_, idx) => !errorFilas.has(idx + 1));
+    const codigos = validRows.map(r => r.codigo_unico?.trim()).filter(Boolean);
+    if (codigos.length === 0) return;
+
+    setBulkChecking(true);
+    try {
+      const result = await inventariosService.bulkCheck(codigos);
+      setBulkCheckResult(result);
+      setConfirmOverwrite(false);
+      setBulkStep('check');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al verificar inventarios');
+    } finally {
+      setBulkChecking(false);
+    }
+  };
+
   const handleBulkSubmit = async () => {
-    // Only send rows without errors
     const errorFilas = new Set(bulkValidation.errors.map(e => e.fila));
     const validRows = bulkCsvData.filter((_, idx) => !errorFilas.has(idx + 1));
     if (validRows.length === 0) return;
 
+    // Si tenemos check result, filtrar ocupados y preparar overwrite
+    const ocupadosCodigos = new Set(bulkCheckResult?.ocupados.map(o => o.codigo_unico) || []);
+    const rowsToSend = bulkCheckResult
+      ? validRows.filter(r => !ocupadosCodigos.has(r.codigo_unico?.trim()))
+      : validRows;
+
+    const overwriteCodigos = confirmOverwrite && bulkCheckResult
+      ? bulkCheckResult.sobreescribibles.map(s => s.codigo_unico)
+      : undefined;
+
     setBulkUploading(true);
     try {
-      const result = await inventariosService.bulkCreate(validRows);
-      setBulkResult(result);
+      const result = await inventariosService.bulkCreate(rowsToSend, overwriteCodigos);
+      setBulkResult({ ...result, duplicados_ocupados: ocupadosCodigos.size });
+      setBulkStep('result');
       queryClient.invalidateQueries({ queryKey: ['inventarios'] });
     } catch (err) {
       setBulkResult({
         insertados: 0,
         duplicados: 0,
         errores: [{ fila: 0, campo: 'general', mensaje: err instanceof Error ? err.message : 'Error al subir inventarios' }],
-        total: validRows.length,
+        total: rowsToSend.length,
       });
+      setBulkStep('result');
     } finally {
       setBulkUploading(false);
     }
+  };
+
+  const downloadOcupadosCsv = () => {
+    if (!bulkCheckResult?.ocupados.length) return;
+    const ocupadosCodigos = new Set(bulkCheckResult.ocupados.map(o => o.codigo_unico));
+    const ocupadosRows = bulkCsvData.filter(r => ocupadosCodigos.has(r.codigo_unico?.trim()));
+    if (ocupadosRows.length === 0) return;
+
+    const keys = Object.keys(ocupadosRows[0]);
+    const header = keys.join(',');
+    const rows = ocupadosRows.map(r => keys.map(k => `"${(r[k] || '').replace(/"/g, '""')}"`).join(','));
+    const csv = '\ufeff' + header + '\n' + rows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'inventarios_ocupados.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const closeBulkModal = () => {
@@ -430,6 +497,10 @@ export function InventariosPage() {
     setBulkCsvData([]);
     setBulkValidation({ valid: 0, errors: [], duplicatesInCsv: 0 });
     setBulkResult(null);
+    setBulkCheckResult(null);
+    setBulkChecking(false);
+    setConfirmOverwrite(false);
+    setBulkStep('upload');
     if (bulkInputRef.current) bulkInputRef.current.value = '';
   };
 
@@ -504,6 +575,15 @@ export function InventariosPage() {
         </div>
         {/* Body */}
         <div className="flex-1 overflow-auto p-5">
+          {isEdit && editItemOcupado && (
+            <div className={`mb-4 flex items-center gap-3 px-4 py-3 rounded-xl ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'} border`}>
+              <AlertTriangle className={`h-5 w-5 flex-shrink-0 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+              <div>
+                <p className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Inventario Ocupado/Reservado</p>
+                <p className={`text-xs ${isDark ? 'text-red-400/70' : 'text-red-500'}`}>Este inventario tiene reservas activas. No se permite editar.</p>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             {FORM_FIELDS.map(f => (
               <div key={f.key} className={f.span === 2 ? 'col-span-2' : ''}>
@@ -512,7 +592,8 @@ export function InventariosPage() {
                   <select
                     value={formData[f.key] || ''}
                     onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                    className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all`}
+                    disabled={isEdit && editItemOcupado}
+                    className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     <option value="">— Seleccionar —</option>
                     {f.options.map(o => <option key={o} value={o}>{o}</option>)}
@@ -522,8 +603,9 @@ export function InventariosPage() {
                     type={f.type || 'text'}
                     value={formData[f.key] || ''}
                     onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
+                    disabled={isEdit && editItemOcupado}
                     step={f.type === 'number' ? 'any' : undefined}
-                    className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50 text-white placeholder:text-zinc-600' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all`}
+                    className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50 text-white placeholder:text-zinc-600' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                   />
                 )}
               </div>
@@ -536,14 +618,16 @@ export function InventariosPage() {
             className={`px-4 py-2.5 rounded-xl text-sm ${isDark ? 'text-zinc-400 hover:text-white border-zinc-700/50 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-900 border-gray-200 hover:bg-gray-100'} border transition-all`}>
             Cancelar
           </button>
-          <button
-            onClick={() => handleSave(isEdit)}
-            disabled={saving}
-            className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-purple-500/20"
-          >
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isEdit ? 'Guardar Cambios' : 'Crear Inventario'}
-          </button>
+          {!(isEdit && editItemOcupado) && (
+            <button
+              onClick={() => handleSave(isEdit)}
+              disabled={saving}
+              className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-purple-500/20"
+            >
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isEdit ? 'Guardar Cambios' : 'Crear Inventario'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -733,7 +817,7 @@ export function InventariosPage() {
                         {[
                           { col: 'id' as SortCol, label: 'ID', sortable: true },
                           { col: 'codigo_unico' as SortCol, label: 'Código', sortable: true },
-                          { col: 'tipo_de_mueble' as SortCol, label: 'Tipo', sortable: true },
+                          { col: 'mueble' as SortCol, label: 'Mueble', sortable: true },
                           { col: '' as SortCol, label: 'Ubicación', sortable: false },
                           { col: 'plaza' as SortCol, label: 'Plaza', sortable: true },
                           { col: '' as SortCol, label: 'Cara', sortable: false },
@@ -769,7 +853,7 @@ export function InventariosPage() {
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1.5">
-                                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.tipo_de_mueble || '-'}</span>
+                                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.mueble || '-'}</span>
                                 {item.tradicional_digital === 'Digital' && (
                                   <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/30`}>
                                     <Monitor className="h-2.5 w-2.5 inline mr-0.5" />DIG
@@ -814,15 +898,18 @@ export function InventariosPage() {
                                   <History className="h-3.5 w-3.5" />
                                 </button>
                                 <button
-                                  onClick={() => handleBloquearClick(item)}
-                                  className={`p-1.5 rounded-lg transition-colors ${
-                                    isBlocked
-                                      ? isDark ? 'hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300' : 'hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700'
-                                      : `${isDark ? 'hover:bg-red-500/10 hover:text-red-400' : 'hover:bg-red-50 hover:text-red-600'} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`
-                                  }`}
+                                  onClick={() => toggleBlockMutation.mutate(item.id)}
+                                  disabled={toggleBlockMutation.isPending && toggleBlockMutation.variables === item.id}
+                                  className={`p-1.5 rounded-lg transition-colors ${isBlocked
+                                    ? isDark ? 'hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300' : 'hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700'
+                                    : `${isDark ? 'hover:bg-red-500/10 hover:text-red-400' : 'hover:bg-red-50 hover:text-red-600'} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`
+                                  } disabled:opacity-50`}
                                   title={isBlocked ? 'Desbloquear' : 'Bloquear'}
                                 >
-                                  {isBlocked ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                                  {toggleBlockMutation.isPending && toggleBlockMutation.variables === item.id
+                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    : isBlocked ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />
+                                  }
                                 </button>
                               </div>
                             </td>
@@ -1038,7 +1125,7 @@ export function InventariosPage() {
               </div>
 
               {/* Step 2: Preview */}
-              {bulkCsvData.length > 0 && !bulkResult && (
+              {bulkCsvData.length > 0 && bulkStep === 'upload' && (
                 <>
                   {/* Counters */}
                   <div className="flex items-center gap-3 flex-wrap">
@@ -1081,21 +1168,23 @@ export function InventariosPage() {
                     </div>
                   )}
 
-                  {/* Preview table */}
+                  {/* Editable preview table */}
                   <div className={`border ${isDark ? 'border-zinc-800' : 'border-gray-200'} rounded-xl overflow-hidden`}>
-                    <div className="max-h-64 overflow-auto">
+                    <div className="max-h-80 overflow-auto">
                       <table className="w-full text-xs">
-                        <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} sticky top-0`}>
+                        <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} sticky top-0 z-10`}>
                           <tr>
-                            <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>#</th>
-                            <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Código Único</th>
-                            <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Tipo Mueble</th>
-                            <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Cara</th>
-                            <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>T/D</th>
-                            <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Plaza</th>
-                            <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Estado</th>
-                            <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Municipio</th>
-                            <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Estatus</th>
+                            <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-8`}>#</th>
+                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Código Único</th>
+                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Tipo Mueble</th>
+                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-24`}>Cara</th>
+                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-24`}>T/D</th>
+                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Plaza</th>
+                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Estado</th>
+                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Municipio</th>
+                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-20`}>Tarifa Pub.</th>
+                            <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-16`}>Estatus</th>
+                            <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-8`}></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1104,42 +1193,60 @@ export function InventariosPage() {
                             const rowErrors = bulkValidation.errors.filter(e => e.fila === filaNum);
                             const hasError = rowErrors.length > 0;
                             const isDupInCsv = rowErrors.some(e => e.mensaje === 'Duplicado dentro del CSV');
+                            const fieldHasError = (field: string) => rowErrors.some(e => e.campo === field);
+                            const inputClass = (field: string) => `w-full px-1.5 py-1 ${isDark ? 'bg-zinc-800/80 text-white' : 'bg-white text-gray-900'} ${fieldHasError(field) ? 'border-red-500 ring-1 ring-red-500/30' : isDark ? 'border-zinc-700/50' : 'border-gray-200'} border rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-purple-500/50`;
                             return (
                               <tr
                                 key={idx}
-                                className={`border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} ${hasError ? (isDupInCsv ? 'bg-amber-500/5' : 'bg-red-500/5') : isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'}`}
-                                title={hasError ? rowErrors.map(e => `${e.campo}: ${e.mensaje}`).join(', ') : undefined}
+                                className={`border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-100'} ${hasError ? (isDupInCsv ? 'bg-amber-500/5' : 'bg-red-500/5') : ''}`}
+                                title={hasError ? rowErrors.map(e => `${e.campo}: ${e.mensaje}`).join('\n') : undefined}
                               >
-                                <td className={`px-2 py-1.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{filaNum}</td>
-                                <td className={`px-2 py-1.5 font-mono ${rowErrors.some(e => e.campo === 'codigo_unico') ? 'text-red-400' : isDark ? 'text-white' : 'text-gray-900'}`}>
-                                  {row.codigo_unico || <span className="text-red-400/60 italic">vacío</span>}
+                                <td className={`px-1 py-1 text-center ${isDark ? 'text-zinc-600' : 'text-gray-400'} text-[10px]`}>{filaNum}</td>
+                                <td className="px-1 py-1">
+                                  <input value={row.codigo_unico || ''} onChange={e => updateBulkRow(idx, 'codigo_unico', e.target.value)} className={`${inputClass('codigo_unico')} font-mono`} />
                                 </td>
-                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'tipo_de_mueble') ? 'text-red-400' : isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                                  {row.tipo_de_mueble || <span className="text-red-400/60 italic">vacío</span>}
+                                <td className="px-1 py-1">
+                                  <input value={row.tipo_de_mueble || ''} onChange={e => updateBulkRow(idx, 'tipo_de_mueble', e.target.value)} className={inputClass('tipo_de_mueble')} />
                                 </td>
-                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'tipo_de_cara') ? 'text-red-400' : isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                                  {row.tipo_de_cara || '-'}
+                                <td className="px-1 py-1">
+                                  <select value={row.tipo_de_cara || ''} onChange={e => updateBulkRow(idx, 'tipo_de_cara', e.target.value)} className={inputClass('tipo_de_cara')}>
+                                    <option value="">—</option>
+                                    <option value="Flujo">Flujo</option>
+                                    <option value="Contraflujo">Contraflujo</option>
+                                  </select>
                                 </td>
-                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'tradicional_digital') ? 'text-red-400' : isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                                  {row.tradicional_digital || '-'}
+                                <td className="px-1 py-1">
+                                  <select value={row.tradicional_digital || ''} onChange={e => updateBulkRow(idx, 'tradicional_digital', e.target.value)} className={inputClass('tradicional_digital')}>
+                                    <option value="">—</option>
+                                    <option value="Tradicional">Tradicional</option>
+                                    <option value="Digital">Digital</option>
+                                  </select>
                                 </td>
-                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'plaza') ? 'text-red-400' : isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                                  {row.plaza || <span className="text-red-400/60 italic">vacío</span>}
+                                <td className="px-1 py-1">
+                                  <input value={row.plaza || ''} onChange={e => updateBulkRow(idx, 'plaza', e.target.value)} className={inputClass('plaza')} />
                                 </td>
-                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'estado') ? 'text-red-400' : isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                                  {row.estado || <span className="text-red-400/60 italic">vacío</span>}
+                                <td className="px-1 py-1">
+                                  <input value={row.estado || ''} onChange={e => updateBulkRow(idx, 'estado', e.target.value)} className={inputClass('estado')} />
                                 </td>
-                                <td className={`px-2 py-1.5 ${rowErrors.some(e => e.campo === 'municipio') ? 'text-red-400' : isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                                  {row.municipio || <span className="text-red-400/60 italic">vacío</span>}
+                                <td className="px-1 py-1">
+                                  <input value={row.municipio || ''} onChange={e => updateBulkRow(idx, 'municipio', e.target.value)} className={inputClass('municipio')} />
                                 </td>
-                                <td className="px-2 py-1.5">
+                                <td className="px-1 py-1">
+                                  <input value={row.tarifa_publica || ''} onChange={e => updateBulkRow(idx, 'tarifa_publica', e.target.value)} className={inputClass('tarifa_publica')} />
+                                </td>
+                                <td className="px-1 py-1 text-center">
                                   {hasError ? (
-                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${isDupInCsv ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') : (isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-50 text-red-700')}`}>
-                                      {isDupInCsv ? 'Duplicado' : 'Error'}
+                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${isDupInCsv ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700') : (isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700')}`}>
+                                      {isDupInCsv ? 'DUP' : 'ERR'}
                                     </span>
                                   ) : (
-                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}>OK</span>
+                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>OK</span>
                                   )}
+                                </td>
+                                <td className="px-1 py-1 text-center">
+                                  <button onClick={() => deleteBulkRow(idx)} className={`p-0.5 rounded ${isDark ? 'hover:bg-red-500/20 text-zinc-600 hover:text-red-400' : 'hover:bg-red-50 text-gray-400 hover:text-red-600'} transition-colors`} title="Eliminar fila">
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
                                 </td>
                               </tr>
                             );
@@ -1151,8 +1258,153 @@ export function InventariosPage() {
                 </>
               )}
 
-              {/* Step 3: Result */}
-              {bulkResult && (
+              {/* Step 3: Check Result - Confirm overwrite */}
+              {bulkStep === 'check' && bulkCheckResult && (
+                <div className="space-y-4">
+                  <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Resultado de verificación contra la base de datos:</p>
+
+                  <div className="flex items-center gap-4 flex-wrap">
+                    {/* Nuevos */}
+                    <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'} border`}>
+                      <CheckCircle2 className={`h-5 w-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                      <div>
+                        <p className={`text-sm font-medium ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{bulkCheckResult.nuevos.length} nuevos</p>
+                        <p className={`text-[10px] ${isDark ? 'text-emerald-400/60' : 'text-emerald-500'}`}>Se insertarán normalmente</p>
+                      </div>
+                    </div>
+
+                    {/* Sobreescribibles */}
+                    {bulkCheckResult.sobreescribibles.length > 0 && (
+                      <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'} border`}>
+                        <AlertCircle className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
+                        <div>
+                          <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{bulkCheckResult.sobreescribibles.length} existentes (no ocupados)</p>
+                          <p className={`text-[10px] ${isDark ? 'text-amber-400/60' : 'text-amber-500'}`}>Se pueden sobreescribir</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Ocupados */}
+                    {bulkCheckResult.ocupados.length > 0 && (
+                      <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'} border`}>
+                        <Ban className={`h-5 w-5 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+                        <div>
+                          <p className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>{bulkCheckResult.ocupados.length} ocupados/bloqueados</p>
+                          <p className={`text-[10px] ${isDark ? 'text-red-400/60' : 'text-red-500'}`}>No se pueden sobreescribir</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sobreescribir checkbox + editable table */}
+                  {bulkCheckResult.sobreescribibles.length > 0 && (
+                    <div className="space-y-3">
+                      <label className={`flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer ${isDark ? 'bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10' : 'bg-amber-50 border-amber-200 hover:bg-amber-100'} border transition-colors`}>
+                        <input
+                          type="checkbox"
+                          checked={confirmOverwrite}
+                          onChange={e => setConfirmOverwrite(e.target.checked)}
+                          className="w-4 h-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                        />
+                        <div>
+                          <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                            Sobreescribir {bulkCheckResult.sobreescribibles.length} inventarios existentes (no ocupados)
+                          </p>
+                          <p className={`text-[10px] ${isDark ? 'text-amber-400/60' : 'text-amber-500'}`}>
+                            Revisa y edita los datos antes de subir
+                          </p>
+                        </div>
+                      </label>
+
+                      {confirmOverwrite && (
+                        <div className={`border ${isDark ? 'border-amber-500/20' : 'border-amber-200'} rounded-xl overflow-hidden`}>
+                          <div className="max-h-64 overflow-auto">
+                            <table className="w-full text-xs">
+                              <thead className={`${isDark ? 'bg-amber-900/20' : 'bg-amber-50'} sticky top-0`}>
+                                <tr>
+                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Código Único</th>
+                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Tipo Mueble</th>
+                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Cara</th>
+                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>T/D</th>
+                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Plaza</th>
+                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Estado</th>
+                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Municipio</th>
+                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Tarifa Pub.</th>
+                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Tarifa Piso</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {bulkCheckResult.sobreescribibles.map((item) => {
+                                  const csvRow = bulkCsvData.find(r => r.codigo_unico?.trim() === item.codigo_unico);
+                                  if (!csvRow) return null;
+                                  const csvIdx = bulkCsvData.indexOf(csvRow);
+                                  const editCell = (field: string, value: string) => {
+                                    const updated = [...bulkCsvData];
+                                    updated[csvIdx] = { ...updated[csvIdx], [field]: value };
+                                    setBulkCsvData(updated);
+                                  };
+                                  const inputClass = `w-full px-1.5 py-1 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-amber-500/50`;
+                                  return (
+                                    <tr key={item.codigo_unico} className={`border-t ${isDark ? 'border-zinc-800/50' : 'border-amber-100'}`}>
+                                      <td className={`px-2 py-1.5 font-mono ${isDark ? 'text-amber-300' : 'text-amber-700'} text-[11px]`}>{item.codigo_unico}</td>
+                                      <td className="px-1 py-1"><input value={csvRow.tipo_de_mueble || ''} onChange={e => editCell('tipo_de_mueble', e.target.value)} className={inputClass} /></td>
+                                      <td className="px-1 py-1">
+                                        <select value={csvRow.tipo_de_cara || ''} onChange={e => editCell('tipo_de_cara', e.target.value)} className={inputClass}>
+                                          <option value="Flujo">Flujo</option>
+                                          <option value="Contraflujo">Contraflujo</option>
+                                        </select>
+                                      </td>
+                                      <td className="px-1 py-1">
+                                        <select value={csvRow.tradicional_digital || ''} onChange={e => editCell('tradicional_digital', e.target.value)} className={inputClass}>
+                                          <option value="Tradicional">Tradicional</option>
+                                          <option value="Digital">Digital</option>
+                                        </select>
+                                      </td>
+                                      <td className="px-1 py-1"><input value={csvRow.plaza || ''} onChange={e => editCell('plaza', e.target.value)} className={inputClass} /></td>
+                                      <td className="px-1 py-1"><input value={csvRow.estado || ''} onChange={e => editCell('estado', e.target.value)} className={inputClass} /></td>
+                                      <td className="px-1 py-1"><input value={csvRow.municipio || ''} onChange={e => editCell('municipio', e.target.value)} className={inputClass} /></td>
+                                      <td className="px-1 py-1"><input value={csvRow.tarifa_publica || ''} onChange={e => editCell('tarifa_publica', e.target.value)} className={inputClass} /></td>
+                                      <td className="px-1 py-1"><input value={csvRow.tarifa_piso || ''} onChange={e => editCell('tarifa_piso', e.target.value)} className={inputClass} /></td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Ocupados detail + download */}
+                  {bulkCheckResult.ocupados.length > 0 && (
+                    <div className={`${isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-200'} border rounded-xl p-4 space-y-3`}>
+                      <div className="flex items-center justify-between">
+                        <p className={`text-xs font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+                          Inventarios ocupados que NO se sobreescribirán:
+                        </p>
+                        <button
+                          onClick={downloadOcupadosCsv}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30' : 'bg-red-100 text-red-700 hover:bg-red-200'} transition-colors`}
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Descargar CSV ocupados
+                        </button>
+                      </div>
+                      <div className="max-h-32 overflow-auto space-y-1">
+                        {bulkCheckResult.ocupados.map((item, idx) => (
+                          <p key={idx} className={`text-[11px] ${isDark ? 'text-red-300/80' : 'text-red-600'}`}>
+                            <span className="font-mono">{item.codigo_unico}</span> — Estatus: <span className="font-medium">{item.estatus_real || item.estatus}</span>
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 4: Result */}
+              {bulkStep === 'result' && bulkResult && (
                 <div className="space-y-3">
                   <div className="flex items-center gap-4 flex-wrap">
                     {bulkResult.insertados > 0 && (
@@ -1164,12 +1416,30 @@ export function InventariosPage() {
                         </div>
                       </div>
                     )}
+                    {(bulkResult.actualizados || 0) > 0 && (
+                      <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-blue-500/10 border-blue-500/20' : 'bg-blue-50 border-blue-200'} border`}>
+                        <Edit2 className={`h-5 w-5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                        <div>
+                          <p className={`text-sm font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>{bulkResult.actualizados} actualizados</p>
+                          <p className={`text-[10px] ${isDark ? 'text-blue-400/60' : 'text-blue-500'}`}>Sobreescritos con datos del CSV</p>
+                        </div>
+                      </div>
+                    )}
                     {bulkResult.duplicados > 0 && (
                       <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'} border`}>
                         <AlertCircle className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
                         <div>
-                          <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{bulkResult.duplicados} duplicados</p>
-                          <p className={`text-[10px] ${isDark ? 'text-amber-400/60' : 'text-amber-500'}`}>Ya existían en la BD</p>
+                          <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{bulkResult.duplicados} duplicados omitidos</p>
+                          <p className={`text-[10px] ${isDark ? 'text-amber-400/60' : 'text-amber-500'}`}>Ya existían (sin sobreescritura)</p>
+                        </div>
+                      </div>
+                    )}
+                    {(bulkResult.duplicados_ocupados || 0) > 0 && (
+                      <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'} border`}>
+                        <Ban className={`h-5 w-5 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+                        <div>
+                          <p className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>{bulkResult.duplicados_ocupados} ocupados</p>
+                          <p className={`text-[10px] ${isDark ? 'text-red-400/60' : 'text-red-500'}`}>No se sobreescribieron</p>
                         </div>
                       </div>
                     )}
@@ -1198,18 +1468,36 @@ export function InventariosPage() {
 
             {/* Footer */}
             <div className={`p-5 border-t ${isDark ? 'border-amber-500/20 bg-gradient-to-r from-amber-900/10 via-transparent to-orange-900/10' : 'border-amber-200 bg-gradient-to-r from-amber-50/50 via-transparent to-orange-50/50'} flex justify-end gap-3`}>
+              {bulkStep === 'check' && (
+                <button onClick={() => { setBulkStep('upload'); setBulkCheckResult(null); }}
+                  className={`px-4 py-2.5 rounded-xl text-sm ${isDark ? 'text-zinc-400 hover:text-white border-zinc-700/50 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-900 border-gray-200 hover:bg-gray-100'} border transition-all`}>
+                  Volver
+                </button>
+              )}
               <button onClick={closeBulkModal}
                 className={`px-4 py-2.5 rounded-xl text-sm ${isDark ? 'text-zinc-400 hover:text-white border-zinc-700/50 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-900 border-gray-200 hover:bg-gray-100'} border transition-all`}>
-                {bulkResult ? 'Cerrar' : 'Cancelar'}
+                {bulkStep === 'result' ? 'Cerrar' : 'Cancelar'}
               </button>
-              {!bulkResult && bulkCsvData.length > 0 && bulkValidation.valid > 0 && (
+              {/* Verify button (step upload -> check) */}
+              {bulkStep === 'upload' && bulkCsvData.length > 0 && bulkValidation.valid > 0 && (
+                <button
+                  onClick={handleBulkCheck}
+                  disabled={bulkChecking}
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
+                >
+                  {bulkChecking && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Verificar {bulkValidation.valid} inventarios
+                </button>
+              )}
+              {/* Submit button (step check -> result) */}
+              {bulkStep === 'check' && bulkCheckResult && (
                 <button
                   onClick={handleBulkSubmit}
                   disabled={bulkUploading}
                   className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
                 >
                   {bulkUploading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Subir {bulkValidation.valid} inventarios
+                  Subir {bulkCheckResult.nuevos.length + (confirmOverwrite ? bulkCheckResult.sobreescribibles.length : 0)} inventarios
                 </button>
               )}
             </div>

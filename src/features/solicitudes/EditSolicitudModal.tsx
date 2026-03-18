@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, Check, Users, Building2,
@@ -111,6 +112,8 @@ interface NewCaraEntry {
   nse: string[];
   catorcenaNum: number;
   catorcenaYear: number;
+  catorcenaNumFin: number;
+  catorcenaYearFin: number;
   periodoInicio: string;
   periodoFin: string;
   renta: number;
@@ -278,6 +281,7 @@ function MultiSelectTags({
 
 // ====== MAIN COMPONENT ======
 export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
+  useModalTracker('Editar Solicitud', isOpen);
   const queryClient = useQueryClient();
 
   // Form state
@@ -311,7 +315,8 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
     formato: '',
     tipo: '' as 'Tradicional' | 'Digital' | '',
     nse: [] as string[],
-    periodo: '',
+    periodoInicioSel: '',
+    periodoFinSel: '',
     renta: 1,
     bonificacion: 0,
     tarifaPublica: 0,
@@ -568,14 +573,19 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
   };
 
   const handleAddNewCara = () => {
-    if (!newCaraForm.articulo || !newCaraForm.estado || !newCaraForm.formato || !newCaraForm.tipo || newCaraForm.nse.length === 0 || !newCaraForm.periodo) return;
+    if (!newCaraForm.articulo || !newCaraForm.estado || !newCaraForm.formato || !newCaraForm.tipo || newCaraForm.nse.length === 0 || !newCaraForm.periodoInicioSel || !newCaraForm.periodoFinSel) return;
 
-    const [yearStr, catStr] = newCaraForm.periodo.split('-');
-    const catorcenaYear = parseInt(yearStr);
-    const catorcenaNum = parseInt(catStr);
+    const [yearStrI, catStrI] = newCaraForm.periodoInicioSel.split('-');
+    const catorcenaYear = parseInt(yearStrI);
+    const catorcenaNum = parseInt(catStrI);
 
-    const period = availablePeriods.find(p => p.a_o === catorcenaYear && p.numero_catorcena === catorcenaNum);
-    if (!period) return;
+    const [yearStrF, catStrF] = newCaraForm.periodoFinSel.split('-');
+    const catorcenaYearFin = parseInt(yearStrF);
+    const catorcenaNumFin = parseInt(catStrF);
+
+    const periodInicio = availablePeriods.find(p => p.a_o === catorcenaYear && p.numero_catorcena === catorcenaNum);
+    const periodFin = availablePeriods.find(p => p.a_o === catorcenaYearFin && p.numero_catorcena === catorcenaNumFin);
+    if (!periodInicio || !periodFin) return;
 
     const newCara: NewCaraEntry = {
       tempId: `new-${Date.now()}-${Math.random()}`,
@@ -587,8 +597,10 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
       nse: newCaraForm.nse,
       catorcenaNum,
       catorcenaYear,
-      periodoInicio: period.fecha_inicio,
-      periodoFin: period.fecha_fin,
+      catorcenaNumFin,
+      catorcenaYearFin,
+      periodoInicio: periodInicio.fecha_inicio,
+      periodoFin: periodFin.fecha_fin,
       renta: newCaraForm.renta,
       bonificacion: newCaraForm.bonificacion,
       tarifaPublica: newCaraForm.tarifaPublica,
@@ -596,7 +608,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
 
     setNewCaras([...newCaras, newCara]);
     setNewCaraForm({
-      articulo: null, estado: '', ciudades: [], formato: '', tipo: '', nse: [], periodo: '', renta: 1, bonificacion: 0, tarifaPublica: 0,
+      articulo: null, estado: '', ciudades: [], formato: '', tipo: '', nse: [], periodoInicioSel: '', periodoFinSel: '', renta: 1, bonificacion: 0, tarifaPublica: 0,
     });
   };
 
@@ -1018,14 +1030,37 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                         </select>
                       </div>
 
-                      {/* Periodo */}
+                      {/* Periodo Inicio */}
                       <div>
-                        <label className="text-xs text-zinc-500">Periodo</label>
-                        <select value={newCaraForm.periodo} onChange={(e) => setNewCaraForm({ ...newCaraForm, periodo: e.target.value })}
+                        <label className="text-xs text-zinc-500">Catorcena Inicio</label>
+                        <select value={newCaraForm.periodoInicioSel} onChange={(e) => {
+                          const val = e.target.value;
+                          const update: Record<string, string> = { periodoInicioSel: val };
+                          // If fin is before inicio, reset fin
+                          if (newCaraForm.periodoFinSel && val > newCaraForm.periodoFinSel) {
+                            update.periodoFinSel = val;
+                          }
+                          // If no fin selected, auto-set to same
+                          if (!newCaraForm.periodoFinSel && val) {
+                            update.periodoFinSel = val;
+                          }
+                          setNewCaraForm({ ...newCaraForm, ...update });
+                        }}
                           disabled={availablePeriods.length === 0}
                           className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none disabled:opacity-50">
                           <option value="">Seleccionar</option>
                           {availablePeriods.map(p => <option key={`${p.a_o}-${p.numero_catorcena}`} value={`${p.a_o}-${p.numero_catorcena}`}>Cat. {p.numero_catorcena} / {p.a_o}</option>)}
+                        </select>
+                      </div>
+
+                      {/* Periodo Fin */}
+                      <div>
+                        <label className="text-xs text-zinc-500">Catorcena Fin</label>
+                        <select value={newCaraForm.periodoFinSel} onChange={(e) => setNewCaraForm({ ...newCaraForm, periodoFinSel: e.target.value })}
+                          disabled={!newCaraForm.periodoInicioSel}
+                          className="w-full mt-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none disabled:opacity-50">
+                          <option value="">Seleccionar</option>
+                          {availablePeriods.filter(p => `${p.a_o}-${p.numero_catorcena}` >= (newCaraForm.periodoInicioSel || '')).map(p => <option key={`${p.a_o}-${p.numero_catorcena}`} value={`${p.a_o}-${p.numero_catorcena}`}>Cat. {p.numero_catorcena} / {p.a_o}</option>)}
                         </select>
                       </div>
 
@@ -1078,7 +1113,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                     )}
 
                     <button type="button" onClick={handleAddNewCara}
-                      disabled={!newCaraForm.articulo || !newCaraForm.estado || !newCaraForm.formato || !newCaraForm.tipo || newCaraForm.nse.length === 0 || !newCaraForm.periodo}
+                      disabled={!newCaraForm.articulo || !newCaraForm.estado || !newCaraForm.formato || !newCaraForm.tipo || newCaraForm.nse.length === 0 || !newCaraForm.periodoInicioSel || !newCaraForm.periodoFinSel}
                       className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors">
                       <Plus className="h-4 w-4" />
                       Agregar Cara
@@ -1098,6 +1133,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                           <thead>
                             <tr className="bg-emerald-600/20">
                               <th className="px-3 py-2 text-left text-xs text-emerald-200">Artículo</th>
+                              <th className="px-3 py-2 text-left text-xs text-emerald-200">Periodo</th>
                               <th className="px-3 py-2 text-left text-xs text-emerald-200">Estado</th>
                               <th className="px-3 py-2 text-left text-xs text-emerald-200">Formato</th>
                               <th className="px-3 py-2 text-center text-xs text-emerald-200">Renta</th>
@@ -1111,6 +1147,14 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                             {newCaras.map((cara) => (
                               <tr key={cara.tempId} className="hover:bg-emerald-600/10">
                                 <td className="px-3 py-2 text-white text-xs">{cara.articulo.ItemCode}</td>
+                                <td className="px-3 py-2 text-zinc-300 text-xs">
+                                  {cara.catorcenaNum === cara.catorcenaNumFin && cara.catorcenaYear === cara.catorcenaYearFin
+                                    ? `Cat ${cara.catorcenaNum} / ${cara.catorcenaYear}`
+                                    : cara.catorcenaYear === cara.catorcenaYearFin
+                                      ? `Cat ${cara.catorcenaNum}-${cara.catorcenaNumFin} / ${cara.catorcenaYear}`
+                                      : `Cat ${cara.catorcenaNum}/${cara.catorcenaYear} - ${cara.catorcenaNumFin}/${cara.catorcenaYearFin}`
+                                  }
+                                </td>
                                 <td className="px-3 py-2 text-zinc-300 text-xs">{cara.estado}</td>
                                 <td className="px-3 py-2 text-zinc-300 text-xs">{cara.formato}</td>
                                 <td className="px-3 py-2 text-center text-white">{cara.renta}</td>

@@ -11,6 +11,7 @@ import {
   LogOut,
   ChevronLeft,
   HelpCircle,
+  Bot,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
@@ -162,6 +163,38 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             ))}
           </ul>
         </nav>
+
+        {/* Admin section */}
+        {permissions.canSeeAdminUsuarios && (
+          <div className={`border-t ${borderColor} px-2 py-3 space-y-1`}>
+            {[
+              { name: 'Usuarios', href: '/admin/usuarios', icon: Users },
+              { name: 'Historial QEBooh', href: '/admin/chatbot', icon: Bot },
+            ].map(item => (
+              <NavLink
+                key={item.href}
+                to={item.href}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-light transition-all duration-200',
+                    isActive
+                      ? isDark
+                        ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/10 text-purple-300 border border-purple-500/30'
+                        : 'bg-gradient-to-r from-purple-100 to-pink-50 text-purple-700 border border-purple-200'
+                      : isDark
+                        ? 'text-zinc-400 hover:bg-purple-900/30 hover:text-purple-300'
+                        : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700',
+                    collapsed && 'justify-center px-2'
+                  )
+                }
+                title={collapsed ? item.name : undefined}
+              >
+                <item.icon className="h-5 w-5 flex-shrink-0" />
+                {!collapsed && <span>{item.name}</span>}
+              </NavLink>
+            ))}
+          </div>
+        )}
 
         {/* User section */}
         <div className={`border-t ${borderColor} p-4`}>

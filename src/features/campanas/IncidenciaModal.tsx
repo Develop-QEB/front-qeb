@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, X } from 'lucide-react';
+import { useModalTracker } from '../../hooks/useModalTracker';
 
 interface Props {
   campanaId: number;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function IncidenciaModal({ campanaId, campanaNombre, isOpen, onClose }: Props) {
+  useModalTracker('Nueva Incidencia', isOpen);
   const navigate = useNavigate();
   const [tipo, setTipo] = useState('');
   const [nota, setNota] = useState('');

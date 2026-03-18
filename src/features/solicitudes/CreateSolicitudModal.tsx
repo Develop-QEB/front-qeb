@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, Upload, ChevronDown, ChevronRight, Check, Users, Building2,
@@ -714,6 +715,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const queryClient = useQueryClient();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const isEditMode = !!editSolicitudId;
+  useModalTracker(isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud', isOpen);
 
   // Socket para actualizar usuarios en tiempo real cuando cambian miembros de equipos
   useSocketEquipos();
