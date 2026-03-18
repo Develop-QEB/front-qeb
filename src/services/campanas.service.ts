@@ -118,6 +118,7 @@ export interface InventarioReservado {
   codigo_unico: string;
   solicitud_caras_id: number | null;
   mueble: string | null;
+  tipo_de_mueble: string | null;
   estado: string | null;
   tipo_de_cara: string | null;
   caras_totales: number;
