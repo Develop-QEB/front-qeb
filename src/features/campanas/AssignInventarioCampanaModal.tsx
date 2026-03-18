@@ -84,19 +84,11 @@ interface CaraItem {
 interface SAPArticulo {
   ItemCode: string;
   ItemName: string;
+  U_IMU_PublicPrice?: number | null;
+  ItemPrices?: { PriceList: number; Price: number }[];
 }
 
-// Tarifa publica lookup map based on ItemCode
-const TARIFA_PUBLICA_MAP: Record<string, number> = {
-  'RT-BL-COB-MX': 2500, 'RT-BP1-SEC1-01-NAUC': 110000, 'RT-BP1-SEC1-02-NAUC': 110000,
-  'RT-BP2-SEC1-01-NAUC': 50000, 'RT-BP2-SEC1-02-NAUC': 50000, 'RT-BP3-SEC1-01-NAUC': 60000,
-  'RT-BP3-SEC1-02-NAUC': 60000, 'RT-BP4-SEC1-01-NAUC': 55000, 'RT-BP5-SEC1-01-NAUC': 36667,
-  'RT-CL-COB-MX': 6127, 'RT-CL-PRA-MX': 9190, 'RT-DIG-01-MR': 9842, 'RT-DIG-01-MX': 9482,
-  'RT-DIG-01-PB': 8500, 'RT-ES-DIG-EM': 40000, 'RT-KCD-GDL-FL': 35000, 'RT-KCD-GDL-PER': 26900,
-  'RT-KCS-AGS': 27500, 'RT-KCS-GDL': 30000, 'RT-KCS-LEN': 27500, 'RT-KCS-MEX-PER': 60000,
-  'RT-KCS-SLP': 27500, 'RT-KCS-ZAP': 30000, 'RT-P1-COB-GD': 6127, 'RT-P1-COB-MX': 6127,
-  'RT-P1-COB-ZP': 6127, 'RT-P2-COB-GD': 5000, 'RT-P2-COB-MR': 4000, 'RT-P2-COB-MX': 5000,
-};
+// Tarifas from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
 // Ciudad -> Estado mapping for auto-selection
 const CIUDAD_ESTADO_MAP: Record<string, string> = {
@@ -139,11 +131,17 @@ const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
   return 'Tradicional';
 };
 
-// Get tarifa from ItemCode
-const getTarifaFromItemCode = (itemCode: string): number => {
-  if (!itemCode) return 0;
-  const code = itemCode.toUpperCase().trim();
-  return TARIFA_PUBLICA_MAP[code] || 850;
+// Get tarifa publica from SAP article
+const getTarifaPublicaFromArticulo = (articulo: SAPArticulo): number => {
+  if (!articulo) return 0;
+  return articulo.U_IMU_PublicPrice || 0;
+};
+
+// Get tarifa piso from PriceList 11
+const getTarifaPisoFromArticulo = (articulo: SAPArticulo): number => {
+  if (!articulo?.ItemPrices) return 0;
+  const pl11 = articulo.ItemPrices.find(p => p.PriceList === 11);
+  return pl11?.Price || 0;
 };
 
 // Multi-city auto-fill rules for specific article patterns
@@ -1537,6 +1535,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const handleSaveCara = async () => {
     if (!newCara.formato || !newCara.estados) {
       alert('Por favor completa al menos el formato y estado');
+      return;
+    }
+
+    // Validar tarifa pública: si es 0, solo CT y BF/CF pueden avanzar
+    const artCode = (newCara.articulo || '').toUpperCase();
+    const esCortesia = artCode.startsWith('CT');
+    const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
+    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion) {
+      alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
 
@@ -5141,7 +5148,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           onChange={(item: SAPArticulo) => {
                             setSelectedArticulo(item);
                             // Auto-complete all fields from article
-                            const tarifa = getTarifaFromItemCode(item.ItemCode);
+                            const tarifa = getTarifaPublicaFromArticulo(item);
+                            const tarifaPiso = getTarifaPisoFromArticulo(item);
                             const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
                             const formato = getFormatoFromArticulo(item.ItemName);
                             const tipo = getTipoFromName(item.ItemName);
@@ -5153,6 +5161,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               ...newCara,
                               articulo: item.ItemCode,
                               tarifa_publica: isTarifaCero ? 0 : tarifa,
+                              costo: isTarifaCero ? 0 : tarifaPiso,
                               caras: isCortesia ? 0 : newCara.caras,
                               caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
                               caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,

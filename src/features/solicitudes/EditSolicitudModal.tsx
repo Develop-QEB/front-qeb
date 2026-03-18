@@ -9,23 +9,13 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { formatCurrency } from '../../lib/utils';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS, clearSapCache } from '../../lib/sapCache';
 
-// ====== TARIFA PUBLICA & COSTO MAPS ======
-const TARIFA_PUBLICA_MAP: Record<string, number> = {
-  'RT-BL-COB-MX': 2500, 'RT-BP1-SEC1-01-NAUC': 110000, 'RT-BP1-SEC1-02-NAUC': 110000,
-  'RT-BP2-SEC1-01-NAUC': 50000, 'RT-BP2-SEC1-02-NAUC': 50000, 'RT-BP3-SEC1-01-NAUC': 60000,
-  'RT-BP3-SEC1-02-NAUC': 60000, 'RT-BP4-SEC1-01-NAUC': 55000, 'RT-BP5-SEC1-01-NAUC': 36667,
-  'RT-CL-COB-MX': 6127, 'RT-CL-PRA-MX': 9190, 'RT-DIG-01-MX': 9482, 'RT-DIG-02-MX': 9482,
-  'RT-P1-COB-MX': 6127, 'RT-P1-COB-GD': 6127, 'RT-P1-DIG-MX': 9482, 'RT-P1-PRA-MX': 9190,
-  'RT-KCS-GDL': 30000, 'RT-KCS-GDL-PER': 30000, 'RT-TUC-GDL': 84000, 'RT-TUV-GDL': 112000,
-};
-
-const getTarifaFromItemCode = (itemCode: string): { costo: number; tarifa_publica: number } => {
-  if (!itemCode) return { costo: 0, tarifa_publica: 0 };
-  const code = itemCode.toUpperCase().trim();
-  if (TARIFA_PUBLICA_MAP[code] !== undefined) {
-    return { costo: 650, tarifa_publica: TARIFA_PUBLICA_MAP[code] };
-  }
-  return { costo: 650, tarifa_publica: 850 };
+// Tarifas from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
+const getTarifaFromArticulo = (articulo: SAPArticulo): { costo: number; tarifa_publica: number } => {
+  if (!articulo) return { costo: 0, tarifa_publica: 0 };
+  const tarifa_publica = articulo.U_IMU_PublicPrice || 0;
+  const pl11 = articulo.ItemPrices?.find(p => p.PriceList === 11);
+  const costo = pl11?.Price || 0;
+  return { costo, tarifa_publica };
 };
 
 // City-State mapping
@@ -85,6 +75,8 @@ interface SAPCuicItem {
 interface SAPArticulo {
   ItemCode: string;
   ItemName: string;
+  U_IMU_PublicPrice?: number | null;
+  ItemPrices?: { PriceList: number; Price: number }[];
 }
 
 interface ExistingCaraEntry {
@@ -575,6 +567,15 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
   const handleAddNewCara = () => {
     if (!newCaraForm.articulo || !newCaraForm.estado || !newCaraForm.formato || !newCaraForm.tipo || newCaraForm.nse.length === 0 || !newCaraForm.periodoInicioSel || !newCaraForm.periodoFinSel) return;
 
+    // Validar tarifa pública: si es 0, solo CT y BF/CF pueden avanzar
+    const artCode = newCaraForm.articulo.ItemCode?.toUpperCase() || '';
+    const esCortesia = artCode.startsWith('CT');
+    const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
+    if (newCaraForm.tarifaPublica <= 0 && !esCortesia && !esBonificacion) {
+      alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
+      return;
+    }
+
     const [yearStrI, catStrI] = newCaraForm.periodoInicioSel.split('-');
     const catorcenaYear = parseInt(yearStrI);
     const catorcenaNum = parseInt(catStrI);
@@ -968,7 +969,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                           options={articulosData || []}
                           value={newCaraForm.articulo}
                           onChange={(item) => {
-                            const tarifa = getTarifaFromItemCode(item.ItemCode);
+                            const tarifa = getTarifaFromArticulo(item);
                             const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
                             const formato = getFormatoFromArticulo(item.ItemName);
                             const tipo = getTipoFromName(item.ItemName);

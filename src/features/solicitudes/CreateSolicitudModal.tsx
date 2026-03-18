@@ -18,213 +18,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { useFormPersist } from '../../hooks/useFormPersist';
 import { uploadsService } from '../../services/uploads.service';
 
-// Tarifa publica lookup map based on ItemCode (full SAP codes with tarifa_publica values)
-const TARIFA_PUBLICA_MAP: Record<string, number> = {
-  'RT-BL-COB-MX': 2500,
-  'RT-BP1-SEC1-01-NAUC': 110000,
-  'RT-BP1-SEC1-02-NAUC': 110000,
-  'RT-BP2-SEC1-01-NAUC': 50000,
-  'RT-BP2-SEC1-02-NAUC': 50000,
-  'RT-BP3-SEC1-01-NAUC': 60000,
-  'RT-BP3-SEC1-02-NAUC': 60000,
-  'RT-BP4-SEC1-01-NAUC': 55000,
-  'RT-BP5-SEC1-01-NAUC': 36667,
-  'RT-BP5-SEC1-02-NAUC': 36667,
-  'RT-BP5-SEC1-03-NAUC': 36667,
-  'RT-BP5-SEC1-04-NAUC': 36667,
-  'RT-BP5-SEC2-01-NAUC': 36667,
-  'RT-BP5-SEC2-02-NAUC': 36667,
-  'RT-BP5-SEC2-03-NAUC': 36667,
-  'RT-BP5-SEC2-04-NAUC': 36667,
-  'RT-BP5-SEC3-01-NAUC': 36667,
-  'RT-BP5-SEC3-02-NAUC': 36667,
-  'RT-BP5-SEC3-03-NAUC': 36667,
-  'RT-BP5-SEC3-04-NAUC': 36667,
-  'RT-BP5-SEC4-01-NAUC': 36667,
-  'RT-BP5-SEC4-02-NAUC': 36667,
-  'RT-BP5-SEC4-03-NAUC': 36667,
-  'RT-BP5-SEC4-04-NAUC': 36667,
-  'RT-CDMX-DI-IT': 0,
-  'RT-CDMX-PA-IT': 0,
-  'RT-CDMX-WIFI': 0,
-  'RT-CL-COB-BR': 3768,
-  'RT-CL-COB-MX': 6127,
-  'RT-CL-COB-PH': 3768,
-  'RT-CL-COB-TJ': 3768,
-  'RT-CL-PRA-MX': 9190,
-  'RT-DIG-01-MR': 9842,
-  'RT-DIG-01-MX': 9482,
-  'RT-DIG-01-PB': 8500,
-  'RT-DIG-02-MX': 9482,
-  'RT-DIG-03-MX': 9482,
-  'RT-DIG-04-MX': 9482,
-  'RT-DIG-PRG-PB': 0,
-  'RT-ES-DIG-EM': 40000,
-  'RT-GDL-WIFI': 0,
-  'RT-GDL-WIFI-DIG': 0,
-  'RT-KCD-GDL-FL': 35000,
-  'RT-KCD-GDL-PER': 26900,
-  'RT-KCS-AGS': 27500,
-  'RT-KCS-AGS-PER': 30000,
-  'RT-KCS-GDL': 30000,
-  'RT-KCS-GDL-PER': 30000,
-  'RT-KCS-LEN': 27500,
-  'RT-KCS-LEN-PER': 30000,
-  'RT-KCS-MEX-PER': 60000,
-  'RT-KCS-MTY-PER': 2500,
-  'RT-KCS-PH-PER': 30000,
-  'RT-KCS-SLP': 27500,
-  'RT-KCS-SLP-PER': 30000,
-  'RT-KCS-VER-PER': 60000,
-  'RT-KCS-ZAP': 30000,
-  'RT-KCS-ZAP-FL': 30000,
-  'RT-KCS-ZAP-PER': 30000,
-  'RT-MMC-GDL-MA': 0,
-  'RT-MMC-GDL-MB': 0,
-  'RT-MMC-GDL-MC': 0,
-  'RT-MMC-GDL-MP': 0,
-  'RT-MMC-GDL-VE': 0,
-  'RT-MMC-GDL-VI': 0,
-  'RT-MTY-DI-IT': 0,
-  'RT-MTY-PA-IT': 0,
-  'RT-MTY-WIFI': 0,
-  'RT-P1-COB-CH': 3768,
-  'RT-P1-COB-CL': 3768,
-  'RT-P1-COB-EM': 6127,
-  'RT-P1-COB-GD': 6127,
-  'RT-P1-COB-MR': 3768,
-  'RT-P1-COB-MX': 6127,
-  'RT-P1-COB-MY': 6127,
-  'RT-P1-COB-PB': 3768,
-  'RT-P1-COB-QR': 3768,
-  'RT-P1-COB-SA': 3768,
-  'RT-P1-COB-TL': 6127,
-  'RT-P1-COB-ZP': 6127,
-  'RT-P1-DIG-GD': 6127,
-  'RT-P1-DIG-MX': 9482,
-  'RT-P1-DIG-MY': 6127,
-  'RT-P1-PRA-MX': 9190,
-  'RT-P1-PRC-EM': 9190,
-  'RT-P1-PRC-MX': 9190,
-  'RT-P2-COB-AC': 3768,
-  'RT-P2-COB-BR': 3768,
-  'RT-P2-COB-MZ': 3768,
-  'RT-P2-COB-OX': 3768,
-  'RT-P2-COB-PH': 3768,
-  'RT-P2-COB-PV': 3768,
-  'RT-P2-COB-TJ': 3768,
-  'RT-P3-COB-BR': 3768,
-  'RT-P4-COB-CU': 3768,
-  'RT-P4-COB-MZ': 0,
-  'RT-P4-COB-ZP': 6127,
-  'RT-PTE-GDL': 45000,
-  'RT-TUC-GDL': 84000,
-  'RT-TUV-GDL': 112000,
-};
-
-// Costo lookup map (for reference)
-const COSTO_MAP: Record<string, number> = {
-  'RT-BL-COB-MX': 1875,
-  'RT-BP1-SEC1-01-NAUC': 50000,
-  'RT-BP1-SEC1-02-NAUC': 50000,
-  'RT-BP2-SEC1-01-NAUC': 35000,
-  'RT-BP2-SEC1-02-NAUC': 35000,
-  'RT-BP3-SEC1-01-NAUC': 40000,
-  'RT-BP3-SEC1-02-NAUC': 40000,
-  'RT-BP4-SEC1-01-NAUC': 30000,
-  'RT-BP5-SEC1-01-NAUC': 22000,
-  'RT-BP5-SEC1-02-NAUC': 22000,
-  'RT-BP5-SEC1-03-NAUC': 22000,
-  'RT-BP5-SEC1-04-NAUC': 22000,
-  'RT-BP5-SEC2-01-NAUC': 22000,
-  'RT-BP5-SEC2-02-NAUC': 22000,
-  'RT-BP5-SEC2-03-NAUC': 22000,
-  'RT-BP5-SEC2-04-NAUC': 22000,
-  'RT-BP5-SEC3-01-NAUC': 22000,
-  'RT-BP5-SEC3-02-NAUC': 22000,
-  'RT-BP5-SEC3-03-NAUC': 22000,
-  'RT-BP5-SEC3-04-NAUC': 22000,
-  'RT-BP5-SEC4-01-NAUC': 22000,
-  'RT-BP5-SEC4-02-NAUC': 22000,
-  'RT-BP5-SEC4-03-NAUC': 22000,
-  'RT-BP5-SEC4-04-NAUC': 22000,
-  'RT-CDMX-DI-IT': 3,
-  'RT-CDMX-PA-IT': 3,
-  'RT-CDMX-WIFI': 3,
-  'RT-CL-COB-BR': 2400,
-  'RT-CL-COB-MX': 3400,
-  'RT-CL-COB-PH': 2400,
-  'RT-CL-COB-TJ': 2400,
-  'RT-CL-PRA-MX': 4100,
-  'RT-DIG-01-MR': 4100,
-  'RT-DIG-01-MX': 5000,
-  'RT-DIG-01-PB': 4100,
-  'RT-DIG-02-MX': 5000,
-  'RT-DIG-03-MX': 5000,
-  'RT-DIG-04-MX': 5000,
-  'RT-DIG-PRG-PB': 5000,
-  'RT-ES-DIG-EM': 25000,
-  'RT-GDL-WIFI': 3,
-  'RT-GDL-WIFI-DIG': 3,
-  'RT-KCD-GDL-FL': 23000,
-  'RT-KCD-GDL-PER': 20000,
-  'RT-KCS-AGS': 18000,
-  'RT-KCS-AGS-PER': 14000,
-  'RT-KCS-GDL': 20000,
-  'RT-KCS-GDL-PER': 14000,
-  'RT-KCS-LEN': 18000,
-  'RT-KCS-LEN-PER': 14000,
-  'RT-KCS-MEX-PER': 25000,
-  'RT-KCS-MTY-PER': 20000,
-  'RT-KCS-PH-PER': 14000,
-  'RT-KCS-SLP': 18000,
-  'RT-KCS-SLP-PER': 14000,
-  'RT-KCS-VER-PER': 14000,
-  'RT-KCS-ZAP': 20000,
-  'RT-KCS-ZAP-FL': 14000,
-  'RT-KCS-ZAP-PER': 14000,
-  'RT-MMC-GDL-MA': 20000,
-  'RT-MMC-GDL-MB': 15000,
-  'RT-MMC-GDL-MC': 10000,
-  'RT-MMC-GDL-MP': 2000,
-  'RT-MMC-GDL-VE': 15000,
-  'RT-MMC-GDL-VI': 20000,
-  'RT-MTY-DI-IT': 3,
-  'RT-MTY-PA-IT': 3,
-  'RT-MTY-WIFI': 3,
-  'RT-P1-COB-CH': 2400,
-  'RT-P1-COB-CL': 2400,
-  'RT-P1-COB-EM': 3400,
-  'RT-P1-COB-GD': 3100,
-  'RT-P1-COB-MR': 2400,
-  'RT-P1-COB-MX': 3400,
-  'RT-P1-COB-MY': 3100,
-  'RT-P1-COB-PB': 2400,
-  'RT-P1-COB-QR': 2400,
-  'RT-P1-COB-SA': 2400,
-  'RT-P1-COB-TL': 2400,
-  'RT-P1-COB-ZP': 3100,
-  'RT-P1-DIG-GD': 4000,
-  'RT-P1-DIG-MX': 5000,
-  'RT-P1-DIG-MY': 4000,
-  'RT-P1-PRA-MX': 4100,
-  'RT-P1-PRC-EM': 4100,
-  'RT-P1-PRC-MX': 4100,
-  'RT-P2-COB-AC': 2400,
-  'RT-P2-COB-BR': 2400,
-  'RT-P2-COB-MZ': 2400,
-  'RT-P2-COB-OX': 2400,
-  'RT-P2-COB-PH': 2400,
-  'RT-P2-COB-PV': 2400,
-  'RT-P2-COB-TJ': 2400,
-  'RT-P3-COB-BR': 2400,
-  'RT-P4-COB-CU': 2400,
-  'RT-P4-COB-MZ': 2400,
-  'RT-P4-COB-ZP': 3100,
-  'RT-PTE-GDL': 20000,
-  'RT-TUC-GDL': 50000,
-  'RT-TUV-GDL': 50000,
-};
+// Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
 // Formato auto-detection from article name
 const getFormatoFromArticulo = (itemName: string): string => {
@@ -333,21 +127,13 @@ const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
   return 'Tradicional';
 };
 
-// Get tarifa and costo from ItemCode - exact match first, then default calculation
-const getTarifaFromItemCode = (itemCode: string, caras: number = 1): { costo: number; tarifa_publica: number } => {
-  if (!itemCode) return { costo: 0, tarifa_publica: 0 };
-
-  const code = itemCode.toUpperCase().trim();
-
-  // Check exact match in tarifa map
-  if (TARIFA_PUBLICA_MAP[code] !== undefined) {
-    const tarifa = TARIFA_PUBLICA_MAP[code];
-    const costo = COSTO_MAP[code] || (caras * 650);
-    return { costo, tarifa_publica: tarifa };
-  }
-
-  // Default calculation: caras * 650 for costo, caras * 850 for tarifa
-  return { costo: caras * 650, tarifa_publica: caras * 850 };
+// Get tarifa publica and costo (tarifa piso) from SAP article data
+const getTarifaFromArticulo = (articulo: SAPArticulo): { costo: number; tarifa_publica: number } => {
+  if (!articulo) return { costo: 0, tarifa_publica: 0 };
+  const tarifa_publica = articulo.U_IMU_PublicPrice || 0;
+  const pl11 = articulo.ItemPrices?.find(p => p.PriceList === 11);
+  const costo = pl11?.Price || 0;
+  return { costo, tarifa_publica };
 };
 
 // Multi-city auto-fill rules for specific article patterns
@@ -441,6 +227,8 @@ interface SAPCuicItem {
 interface SAPArticulo {
   ItemCode: string;
   ItemName: string;
+  U_IMU_PublicPrice?: number | null;
+  ItemPrices?: { PriceList: number; Price: number }[];
 }
 
 interface CaraEntry {
@@ -1254,6 +1042,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Add cara entry
   const handleAddCara = async () => {
     if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0) return;
+
+    // Validar tarifa pública: si es 0, solo CT y BF/CF pueden avanzar
+    const artCode = newCara.articulo.ItemCode?.toUpperCase() || '';
+    const esCortesia = artCode.startsWith('CT');
+    const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
+    if (newCara.tarifaPublica <= 0 && !esCortesia && !esBonificacion) {
+      alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
+      return;
+    }
 
     let catorcenaYear: number;
     let catorcenaNum: number;
@@ -2345,7 +2142,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     value={newCara.articulo}
                     onChange={(item) => {
                       // Auto-set tarifa publica from ItemCode mapping
-                      const tarifa = getTarifaFromItemCode(item.ItemCode);
+                      const tarifa = getTarifaFromArticulo(item);
                       // Auto-set estado and ciudades from ItemName
                       const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
                       // Auto-set formato from ItemName
