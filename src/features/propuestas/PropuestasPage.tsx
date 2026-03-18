@@ -561,6 +561,10 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   const reservasIncompletas = useMemo(() => {
     if (!caras || !reservas) return false;
     return caras.some(cara => {
+      // Artículos de impresión (IM) no requieren reservas — siempre completos
+      const articulo = (cara as any).articulo || '';
+      if (articulo.toUpperCase().startsWith('IM')) return false;
+
       const caraReservas = (reservas as any[]).filter(r => r.solicitud_cara_id === cara.id);
       // Bonificacion is determined by estatus='Bonificado', not by tipo_de_cara
       const bonificacionReservado = caraReservas.filter(r => r.estatus === 'Bonificado').length;
