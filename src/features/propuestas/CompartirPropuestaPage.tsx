@@ -1290,7 +1290,12 @@ export function CompartirPropuestaPage() {
                                             </td>
                                             <td className="px-3 py-2 text-blue-300 font-mono text-xs">{item.codigo_unico}</td>
                                             <td className="px-3 py-2 text-zinc-300 text-xs">{item.plaza || '-'}</td>
-                                            <td className="px-3 py-2 text-zinc-400 text-xs">{item.mueble || '-'}</td>
+                                            <td className="px-3 py-2 text-zinc-400 text-xs">
+                                              {item.mueble || '-'}
+                                              {item.tipo_de_mueble && item.tipo_de_mueble !== item.mueble && (
+                                                <span className="block text-[10px] text-zinc-500">{item.tipo_de_mueble}</span>
+                                              )}
+                                            </td>
                                             <td className="px-3 py-2 text-center font-semibold text-white text-xs">{item.caras_totales}</td>
                                             <td className="px-3 py-2 text-right text-zinc-500 text-xs font-mono">{item.latitud?.toFixed(6) || '-'}</td>
                                             <td className="px-3 py-2 text-right text-zinc-500 text-xs font-mono">{item.longitud?.toFixed(6) || '-'}</td>

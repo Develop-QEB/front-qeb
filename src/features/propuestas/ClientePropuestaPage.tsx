@@ -1066,7 +1066,12 @@ export function ClientePropuestaPage() {
                                               <input type="checkbox" checked={selectedItems.has(item.id)} onChange={() => toggleItemSelection(item.id)} className="checkbox-purple" />
                                             </td>
                                             <td className="px-3 py-2 text-gray-700 text-xs">{item.plaza || '-'}</td>
-                                            <td className="px-3 py-2 text-gray-600 text-xs">{item.mueble || '-'}</td>
+                                            <td className="px-3 py-2 text-gray-600 text-xs">
+                                              {item.mueble || '-'}
+                                              {item.tipo_de_mueble && item.tipo_de_mueble !== item.mueble && (
+                                                <span className="block text-[10px] text-gray-400">{item.tipo_de_mueble}</span>
+                                              )}
+                                            </td>
                                             <td className="px-3 py-2 text-center font-semibold text-gray-800 text-xs">{item.caras_totales}</td>
                                             <td className="px-3 py-2 text-right text-gray-400 text-xs font-mono">{item.latitud?.toFixed(6) || '-'}</td>
                                             <td className="px-3 py-2 text-right text-gray-400 text-xs font-mono">{item.longitud?.toFixed(6) || '-'}</td>

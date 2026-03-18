@@ -964,8 +964,8 @@ export function CampanaDetailPage() {
 
   // Función para descargar CSV (inventario reservado)
   const downloadCSVReservado = useCallback(() => {
-    const headers = ['Código', 'Grupo ID', 'Mueble', 'Estado', 'Tipo', 'Caras'];
-    const fields: (keyof InventarioReservado)[] = ['codigo_unico', 'solicitud_caras_id', 'mueble', 'estado', 'tipo_de_cara', 'caras_totales'];
+    const headers = ['Código', 'Grupo ID', 'Mueble', 'Tipo de Mueble', 'Estado', 'Tipo', 'Caras'];
+    const fields: (keyof InventarioReservado)[] = ['codigo_unico', 'solicitud_caras_id', 'mueble', 'tipo_de_mueble', 'estado', 'tipo_de_cara', 'caras_totales'];
 
     const csvContent = [
       headers.join(','),

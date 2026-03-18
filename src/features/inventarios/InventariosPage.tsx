@@ -818,6 +818,7 @@ export function InventariosPage() {
                           { col: 'id' as SortCol, label: 'ID', sortable: true },
                           { col: 'codigo_unico' as SortCol, label: 'Código', sortable: true },
                           { col: 'mueble' as SortCol, label: 'Mueble', sortable: true },
+                          { col: '' as SortCol, label: 'Formato', sortable: false },
                           { col: '' as SortCol, label: 'Ubicación', sortable: false },
                           { col: 'plaza' as SortCol, label: 'Plaza', sortable: true },
                           { col: '' as SortCol, label: 'Cara', sortable: false },
@@ -860,6 +861,9 @@ export function InventariosPage() {
                                   </span>
                                 )}
                               </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.tipo_de_mueble || '-'}</span>
                             </td>
                             <td className="px-4 py-3">
                               <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} max-w-[200px] truncate block`} title={item.ubicacion || ''}>{item.ubicacion || '-'}</span>

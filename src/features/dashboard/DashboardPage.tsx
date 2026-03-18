@@ -1085,7 +1085,12 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
         </td>
         <td className={`px-4 py-3 text-sm ${isDark ? 'text-white' : 'text-gray-800'}`}>{item.plaza || '-'}</td>
         <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{item.municipio || '-'}</td>
-        <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>{item.mueble || '-'}</td>
+        <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>
+          {item.mueble || '-'}
+          {item.tipo_de_mueble && item.tipo_de_mueble !== item.mueble && (
+            <span className={`block text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.tipo_de_mueble}</span>
+          )}
+        </td>
         <td className="px-4 py-3">
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${item.tradicional_digital === 'Digital' ? `${isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200'} border` : `${isDark ? 'bg-pink-500/20 text-pink-300 border-pink-500/30' : 'bg-pink-50 text-pink-700 border-pink-200'} border`}`}>
             {item.tradicional_digital || 'Tradicional'}
