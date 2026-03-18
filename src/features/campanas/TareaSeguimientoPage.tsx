@@ -1147,6 +1147,7 @@ function UploadArtModal({
   onSubmit,
   onSubmitDigital,
   onSubmitTradicional,
+  onSubmitDigitalFromLibrary,
   artesExistentes,
   addedArtes,
   onAddedArtesChange,
@@ -1163,6 +1164,7 @@ function UploadArtModal({
   onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => void;
   onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[] }) => void;
   onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[] }) => void;
+  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[] }) => void;
   artesExistentes: ArteExistente[];
   addedArtes: ArteExistente[];
   onAddedArtesChange: (artes: ArteExistente[]) => void;
@@ -1190,6 +1192,12 @@ function UploadArtModal({
   // Estado para archivos digitales (múltiples)
   const [digitalFiles, setDigitalFiles] = useState<DigitalFile[]>([]);
   const [draggedFile, setDraggedFile] = useState<string | null>(null);
+
+  // Estado para wizard digital (2 pasos, como tradicional)
+  const [digitalWizardStep, setDigitalWizardStep] = useState<1 | 2>(1);
+  const [selectedDigitalImages, setSelectedDigitalImages] = useState<Map<string, { url: string; source: 'existing' | 'upload'; preview?: string; isVideo: boolean }>>(new Map());
+  const [digitalImageNotes, setDigitalImageNotes] = useState<Map<string, string>>(new Map());
+  const [isUploadingDigitalFile, setIsUploadingDigitalFile] = useState(false);
 
   // Estado para wizard de artes tradicionales (2 pasos)
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
@@ -1430,7 +1438,22 @@ function UploadArtModal({
   };
 
   const handleSubmit = () => {
-    // Si es digital y hay archivos digitales, usar el handler de digital
+    // Flujo digital con wizard - enviar archivos seleccionados de la biblioteca con notas
+    if (isDigitalInventory && digitalWizardStep === 2 && onSubmitDigitalFromLibrary) {
+      const archivos = Array.from(selectedDigitalImages.entries()).map(([key, img], idx) => ({
+        archivo: img.url,
+        nota: digitalImageNotes.get(key)?.trim() || '',
+        spot: idx + 1,
+        tipo: img.isVideo ? 'video' : 'image',
+      }));
+      onSubmitDigitalFromLibrary({
+        archivos,
+        inventoryIds: selectedInventory.map((i) => i.id),
+      });
+      return;
+    }
+
+    // Fallback: flujo digital legacy (archivos subidos directamente)
     if (isDigitalInventory && digitalFiles.length > 0 && onSubmitDigital) {
       onSubmitDigital({
         files: digitalFiles.map(f => ({ file: f.file, spot: f.spot })),
@@ -1487,6 +1510,9 @@ function UploadArtModal({
     setWizardStep(1);
     setSelectedGalleryImages(new Map());
     setImageNotes(new Map());
+    setDigitalWizardStep(1);
+    setSelectedDigitalImages(new Map());
+    setDigitalImageNotes(new Map());
     setModalTab('artes');
     setExpandedFichaFolders(new Set());
     onClose();
@@ -1506,9 +1532,13 @@ function UploadArtModal({
   const isSubmitDisabled = () => {
     if (isSubmitting) return true;
 
-    // Para inventario digital
+    // Para inventario digital con wizard
     if (isDigitalInventory) {
-      return digitalFiles.length === 0;
+      if (digitalWizardStep === 2) {
+        return selectedDigitalImages.size === 0;
+      }
+      // En paso 1 no se usa el botón submit (se usa "Siguiente")
+      return true;
     }
 
     // Para inventario tradicional con wizard
@@ -1589,6 +1619,57 @@ function UploadArtModal({
       usos: 0,
     }]);
   };
+
+  // Helpers para el wizard digital
+  const toggleDigitalGalleryImage = (id: string, url: string, isVideo: boolean) => {
+    setSelectedDigitalImages(prev => {
+      const next = new Map(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        setDigitalImageNotes(prevNotes => {
+          const nn = new Map(prevNotes);
+          nn.delete(id);
+          return nn;
+        });
+      } else {
+        next.set(id, { url, source: 'existing', isVideo });
+      }
+      return next;
+    });
+  };
+
+  const addUploadedDigitalFile = async (selectedFile: File) => {
+    const id = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      setIsUploadingDigitalFile(true);
+      const uploadResult = await campanasService.uploadArteFile(selectedFile);
+      onAddedArtesChange([...addedArtes, {
+        id,
+        nombre: selectedFile.name,
+        url: uploadResult.url,
+        usos: 0,
+      }]);
+    } catch (err) {
+      console.error('Error uploading digital file:', err);
+    } finally {
+      setIsUploadingDigitalFile(false);
+    }
+  };
+
+  const removeDigitalGalleryImage = (id: string) => {
+    setSelectedDigitalImages(prev => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+    setDigitalImageNotes(prev => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const canGoToDigitalStep2 = selectedDigitalImages.size > 0 && !isUploadingDigitalFile;
 
   const removeGalleryImage = (id: string) => {
     setSelectedGalleryImages(prev => {
@@ -1777,167 +1858,199 @@ function UploadArtModal({
             {/* Left Column - Upload Options & Preview */}
             <div className="flex flex-col space-y-4">
               {isDigitalInventory ? (
-                /* ===== INTERFAZ DIGITAL - Estilo galería similar a tradicional ===== */
+                /* ===== INTERFAZ DIGITAL - WIZARD 2 PASOS ===== */
                 <>
-                  {/* Galería de artes digitales existentes */}
-                  <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                      Biblioteca de contenido digital ({localArtes.length})
-                    </label>
-                    <div className="flex-1 min-h-[120px] max-h-[200px] border border-border rounded-lg bg-zinc-900/50 overflow-auto p-2">
-                      {isLoadingArtes ? (
-                        <div className="h-full flex items-center justify-center">
-                          <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+                  {/* Step indicator */}
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={`flex items-center gap-1.5 ${digitalWizardStep === 1 ? 'text-cyan-300' : 'text-zinc-500'}`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        digitalWizardStep === 1 ? 'bg-cyan-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                      }`}>1</div>
+                      <span className="text-xs font-medium">Seleccionar</span>
+                    </div>
+                    <div className="flex-1 h-px bg-border" />
+                    <div className={`flex items-center gap-1.5 ${digitalWizardStep === 2 ? 'text-cyan-300' : 'text-zinc-500'}`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        digitalWizardStep === 2 ? 'bg-cyan-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                      }`}>2</div>
+                      <span className="text-xs font-medium">Notas</span>
+                    </div>
+                  </div>
+
+                  {digitalWizardStep === 1 ? (
+                    /* ===== PASO 1: Biblioteca + seleccionar ===== */
+                    <>
+                      {/* Galería de artes digitales existentes */}
+                      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          Biblioteca de contenido digital ({localArtes.length})
+                          {isUploadingDigitalFile && <Loader2 className="inline h-3 w-3 animate-spin text-cyan-400 ml-1.5" />}
+                        </label>
+                        <div className="flex-1 min-h-[120px] max-h-[260px] border border-border rounded-lg bg-zinc-900/50 overflow-auto p-2">
+                          {isLoadingArtes ? (
+                            <div className="h-full flex items-center justify-center">
+                              <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+                            </div>
+                          ) : localArtes.length === 0 ? (
+                            <div className="h-full flex items-center justify-center text-center text-zinc-500">
+                              <div>
+                                <Film className="h-8 w-8 mx-auto mb-1 opacity-30" />
+                                <p className="text-[10px]">No hay archivos. Sube imágenes o videos abajo.</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-6 gap-1.5">
+                              {localArtes.map((art) => {
+                                const isVideo = /\.(mp4|mov|webm|avi)$/i.test(art.url || '');
+                                const isSelected = selectedDigitalImages.has(art.id);
+                                return (
+                                  <button
+                                    key={art.id}
+                                    onClick={() => toggleDigitalGalleryImage(art.id, art.url, isVideo)}
+                                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all group ${
+                                      isSelected
+                                        ? 'border-cyan-400 ring-2 ring-cyan-400/30'
+                                        : 'border-transparent hover:border-cyan-400/50'
+                                    }`}
+                                    title={art.nombre}
+                                  >
+                                    {isVideo ? (
+                                      <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+                                        <Play className="h-5 w-5 text-cyan-400" />
+                                      </div>
+                                    ) : (
+                                      <img
+                                        src={getImageUrl(art.url) || ''}
+                                        alt={art.nombre}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    )}
+                                    {isSelected && (
+                                      <div className="absolute inset-0 bg-cyan-600/30 flex items-center justify-center">
+                                        <Check className="h-4 w-4 text-white" />
+                                      </div>
+                                    )}
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
+                                      <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                      ) : localArtes.length === 0 ? (
-                        <div className="h-full flex items-center justify-center text-center text-zinc-500">
-                          <div>
-                            <Film className="h-8 w-8 mx-auto mb-1 opacity-30" />
-                            <p className="text-[10px]">No se han subido archivos digitales a esta campaña</p>
+                      </div>
+
+                      {/* Subir archivos a la biblioteca */}
+                      <div className="space-y-2">
+                        <label className="block text-xs font-medium text-zinc-400">
+                          Subir a la biblioteca
+                        </label>
+                        <div className="flex gap-2">
+                          <label className={`flex-1 ${isUploadingDigitalFile ? 'pointer-events-none' : 'cursor-pointer'}`}>
+                            <input
+                              type="file"
+                              onChange={(e) => {
+                                const files = e.target.files;
+                                if (!files) return;
+                                Array.from(files).forEach(f => {
+                                  if (f.type.startsWith('image/') || f.type.startsWith('video/')) {
+                                    addUploadedDigitalFile(f);
+                                  }
+                                });
+                                e.target.value = '';
+                              }}
+                              accept="image/*,video/*"
+                              multiple
+                              className="hidden"
+                              disabled={isSubmitting || isUploadingDigitalFile}
+                            />
+                            <div className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-cyan-600/20 border border-cyan-500/30 rounded-lg hover:bg-cyan-600/30 transition-colors">
+                              <Upload className="h-3.5 w-3.5 text-cyan-400" />
+                              <span className="text-cyan-300">Subir archivos</span>
+                            </div>
+                          </label>
+                          <div className="flex items-center">
+                            <p className="text-[10px] text-zinc-500">
+                              JPG, PNG, GIF, MP4, MOV, WEBM
+                            </p>
                           </div>
                         </div>
-                      ) : (
-                        <div className="grid grid-cols-6 gap-1.5">
-                          {localArtes.map((art) => {
-                            const isVideo = /\.(mp4|mov|webm|avi)$/i.test(art.url || '');
+                      </div>
+
+                      {/* Resumen de seleccionados */}
+                      {selectedDigitalImages.size > 0 && (
+                        <div className="p-2 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                          <p className="text-[10px] text-cyan-300">
+                            <Check className="h-3 w-3 inline mr-1" />
+                            {selectedDigitalImages.size} archivo{selectedDigitalImages.size !== 1 ? 's' : ''} seleccionado{selectedDigitalImages.size !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* ===== PASO 2: Notas opcionales por archivo ===== */
+                    <>
+                      <div className="flex-1 min-h-0 overflow-auto">
+                        <label className="block text-xs font-medium text-zinc-400 mb-2">
+                          Notas por archivo (opcional) — {selectedDigitalImages.size} archivo{selectedDigitalImages.size !== 1 ? 's' : ''}
+                        </label>
+                        <div className="space-y-3">
+                          {Array.from(selectedDigitalImages.entries()).map(([id, img], idx) => {
+                            const art = localArtes.find(a => a.id === id);
+                            const fileName = art?.nombre || img.url.split('/').pop() || 'Archivo';
                             return (
-                              <div
-                                key={art.id}
-                                className="relative aspect-square rounded-lg overflow-hidden border-2 border-transparent group"
-                                title={art.nombre}
-                              >
-                                {isVideo ? (
-                                  <div className="w-full h-full flex items-center justify-center bg-zinc-700">
-                                    <Play className="h-5 w-5 text-cyan-400" />
+                              <div key={id} className="p-3 bg-cyan-900/20 border border-cyan-500/30 rounded-lg">
+                                <div className="flex gap-3 mb-2">
+                                  {/* Thumbnail */}
+                                  <div className="flex-shrink-0 w-16 h-12 bg-zinc-800 rounded overflow-hidden">
+                                    {img.isVideo ? (
+                                      <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+                                        <Play className="h-5 w-5 text-cyan-400" />
+                                      </div>
+                                    ) : (
+                                      <img
+                                        src={getImageUrl(img.url) || ''}
+                                        alt={fileName}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    )}
                                   </div>
-                                ) : (
-                                  <img
-                                    src={getImageUrl(art.url) || ''}
-                                    alt={art.nombre}
-                                    className="w-full h-full object-cover"
-                                  />
-                                )}
-                                <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                  <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex-shrink-0 w-5 h-5 rounded-full bg-cyan-600/30 flex items-center justify-center">
+                                        <span className="text-[9px] font-bold text-cyan-300">{idx + 1}</span>
+                                      </div>
+                                      <span className="text-xs text-white truncate" title={fileName}>{fileName}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeDigitalGalleryImage(id)}
+                                        className="ml-auto flex-shrink-0 p-1 text-zinc-500 hover:text-red-400 rounded transition-colors"
+                                        title="Quitar"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  </div>
                                 </div>
+                                <textarea
+                                  value={digitalImageNotes.get(id) || ''}
+                                  onChange={(e) => setDigitalImageNotes(prev => {
+                                    const next = new Map(prev);
+                                    next.set(id, e.target.value);
+                                    return next;
+                                  })}
+                                  rows={2}
+                                  placeholder="Nota (opcional)..."
+                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500 resize-none"
+                                />
                               </div>
                             );
                           })}
                         </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Agregar nuevos archivos */}
-                  <div className="space-y-2">
-                    <label className="block text-xs font-medium text-zinc-400">
-                      Agregar archivos para rotación
-                    </label>
-                    <div className="flex gap-2">
-                      <label className="flex-1 cursor-pointer">
-                        <input
-                          type="file"
-                          onChange={handleDigitalFilesChange}
-                          accept="image/*,video/*"
-                          multiple
-                          disabled={isSubmitting}
-                          className="hidden"
-                        />
-                        <div className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-cyan-600/20 border border-cyan-500/30 rounded-lg hover:bg-cyan-600/30 transition-colors">
-                          <Upload className="h-3.5 w-3.5 text-cyan-400" />
-                          <span className="text-cyan-300">Subir archivos</span>
-                        </div>
-                      </label>
-                      <div className="flex items-center">
-                        <p className="text-[10px] text-zinc-500">
-                          JPG, PNG, GIF, MP4, MOV, WEBM
-                        </p>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Lista de archivos seleccionados con drag & drop */}
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-medium text-zinc-400">
-                        Archivos seleccionados
-                      </label>
-                      <Badge className="bg-cyan-600/30 text-cyan-300 border-cyan-500/30 text-[10px]">
-                        {digitalFiles.length} archivo{digitalFiles.length !== 1 ? 's' : ''}
-                      </Badge>
-                    </div>
-                    <div className="flex-1 min-h-[100px] max-h-[180px] border border-border rounded-lg bg-zinc-900/50 overflow-auto">
-                      {digitalFiles.length === 0 ? (
-                        <div className="h-full min-h-[100px] flex items-center justify-center text-center text-zinc-500">
-                          <div>
-                            <Upload className="h-8 w-8 mx-auto mb-1 opacity-30" />
-                            <p className="text-[10px]">
-                              Sube archivos para agregarlos a la rotación
-                            </p>
-                            <p className="text-[9px] text-zinc-600 mt-0.5">Arrastra para reordenar</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="p-2 space-y-1.5">
-                          {digitalFiles.map((digitalFile, index) => (
-                            <div
-                              key={digitalFile.id}
-                              draggable
-                              onDragStart={() => handleDragStart(digitalFile.id)}
-                              onDragOver={(e) => handleDragOver(e, digitalFile.id)}
-                              onDragEnd={handleDragEnd}
-                              className={`flex items-center gap-2 p-1.5 rounded-lg border transition-all cursor-move ${
-                                draggedFile === digitalFile.id
-                                  ? 'border-cyan-500 bg-cyan-500/20 opacity-50'
-                                  : 'border-border bg-background hover:border-cyan-500/50'
-                              }`}
-                            >
-                              <div className="flex-shrink-0 text-zinc-500 hover:text-cyan-400 cursor-grab">
-                                <GripVertical className="h-3.5 w-3.5" />
-                              </div>
-                              <div className="flex-shrink-0 w-5 h-5 rounded-full bg-cyan-600/30 flex items-center justify-center">
-                                <span className="text-[9px] font-bold text-cyan-300">{digitalFile.spot}</span>
-                              </div>
-                              <div className="flex-shrink-0 w-10 h-10 rounded overflow-hidden bg-zinc-800">
-                                {digitalFile.type === 'video' ? (
-                                  <div className="w-full h-full flex items-center justify-center bg-zinc-700">
-                                    <Play className="h-4 w-4 text-cyan-400" />
-                                  </div>
-                                ) : (
-                                  <img
-                                    src={digitalFile.preview}
-                                    alt={`Preview ${index + 1}`}
-                                    className="w-full h-full object-cover"
-                                  />
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[10px] text-white truncate" title={digitalFile.file.name}>
-                                  {digitalFile.file.name}
-                                </p>
-                                <p className="text-[9px] text-zinc-500 flex items-center gap-1">
-                                  {digitalFile.type === 'video' ? (
-                                    <Film className="h-2.5 w-2.5 text-cyan-400" />
-                                  ) : (
-                                    <Image className="h-2.5 w-2.5 text-cyan-400" />
-                                  )}
-                                  {digitalFile.type === 'video' ? 'Video' : 'Imagen'} • {(digitalFile.file.size / 1024 / 1024).toFixed(2)} MB
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveDigitalFile(digitalFile.id)}
-                                className="flex-shrink-0 p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                                title="Eliminar archivo"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                    </>
+                  )}
                 </>
               ) : (
                 /* ===== INTERFAZ TRADICIONAL - WIZARD 2 PASOS ===== */
@@ -2305,9 +2418,11 @@ function UploadArtModal({
         {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-border flex-shrink-0">
           <div>
-            {modalTab === 'artes' && !isDigitalInventory && wizardStep === 2 && (
+            {modalTab === 'artes' && (
+              (isDigitalInventory && digitalWizardStep === 2) || (!isDigitalInventory && wizardStep === 2)
+            ) && (
               <button
-                onClick={() => setWizardStep(1)}
+                onClick={() => isDigitalInventory ? setDigitalWizardStep(1) : setWizardStep(1)}
                 disabled={isSubmitting}
                 className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-300 transition-colors disabled:opacity-50"
               >
@@ -2331,6 +2446,15 @@ function UploadArtModal({
               >
                 Cerrar
               </button>
+            ) : isDigitalInventory && digitalWizardStep === 1 ? (
+              <button
+                onClick={() => setDigitalWizardStep(2)}
+                disabled={!canGoToDigitalStep2}
+                className="flex items-center gap-1 px-4 py-2 text-sm font-medium bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Siguiente
+                <ChevronRight className="h-4 w-4" />
+              </button>
             ) : !isDigitalInventory && wizardStep === 1 ? (
               <button
                 onClick={() => setWizardStep(2)}
@@ -2344,7 +2468,7 @@ function UploadArtModal({
               <button
                 onClick={handleSubmit}
                 disabled={isSubmitDisabled()}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium ${isDigitalInventory ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-purple-600 hover:bg-purple-700'} text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
                 {isSubmitting ? 'Guardando...' : 'Finalizar'}
@@ -2363,7 +2487,7 @@ const TIPOS_TAREA = [
   { value: 'Revisión de artes', label: 'Revisión de artes', description: 'Revisión y aprobación de artes' },
   { value: 'Impresión', label: 'Impresión', description: 'Impresión de materiales publicitarios' },
   { value: 'Testigo', label: 'Testigo', description: 'Validación de instalación con evidencia fotográfica' },
-  { value: 'Programación', label: 'Programación', description: 'Programación de artes digitales con indicaciones' },
+  { value: 'Programación para Tráfico', label: 'Programación para Tráfico', description: 'Programación de artes digitales — asignada a Tráfico' },
   { value: 'Orden de Programación', label: 'Orden de Programación', description: 'Orden de programación para tráfico' },
   { value: 'Orden de Instalación', label: 'Orden de Instalación', description: 'Orden de instalación para tráfico' },
   { value: 'Re-impresión', label: 'Re-impresión', description: 'Re-impresión por incidencia (grafiti, siniestro, vandalismo, etc.)' },
@@ -3376,6 +3500,7 @@ function TaskDetailModal({
   onCreateRecepcion,
   onCreateRecepcionFaltante,
   onUpdateTask,
+  onCompleteProgramacionTrafico,
   isUpdating,
   campanaId,
   canResolveProduccionTasks = true,
@@ -3408,6 +3533,7 @@ function TaskDetailModal({
     faltantesReservaIds?: string[]
   ) => Promise<void>;
   onUpdateTask: (taskId: string, data: { evidencia?: string; estatus?: string }) => Promise<void>;
+  onCompleteProgramacionTrafico?: (taskId: string, operacionesAsignados: { id: number; nombre: string }[], indicaciones: Record<string, string>, archivos: { archivo: string; spot: number; tipo: string }[]) => Promise<void>;
   isUpdating: boolean;
   campanaId: number;
   canResolveProduccionTasks?: boolean;
@@ -3420,6 +3546,13 @@ function TaskDetailModal({
 }) {
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
+
+  // Usuarios para asignar operaciones en Programación para Tráfico
+  const { data: todosUsuariosDetail } = useQuery({
+    queryKey: ['solicitudes-users', 'all-users-detail'],
+    queryFn: () => solicitudesService.getUsers(undefined, false),
+    enabled: isOpen && task?.tipo === 'Programación para Tráfico',
+  });
 
   const [activeTab, setActiveTab] = useState<TaskDetailTab>('resumen');
   const [selectedArteIds, setSelectedArteIds] = useState<Set<string>>(new Set());
@@ -3645,11 +3778,51 @@ function TaskDetailModal({
   // Estado para indicaciones editables en Orden de Programación (Pendiente)
   const [ordenIndicaciones, setOrdenIndicaciones] = useState<Record<string, string>>({});
 
+  // Estados para Programación para Tráfico - indicaciones editables y asignar operaciones
+  const [traficoEditingArchivo, setTraficoEditingArchivo] = useState<string | null>(null);
+  const [traficoIndicaciones, setTraficoIndicaciones] = useState<Record<string, string>>({});
+  const [traficoOperacionesAsignados, setTraficoOperacionesAsignados] = useState<{ id: number; nombre: string }[]>([]);
+  const [traficoOperacionesSearch, setTraficoOperacionesSearch] = useState('');
+  const [showTraficoOperacionesDropdown, setShowTraficoOperacionesDropdown] = useState(false);
+  const [isSavingTraficoIndicacion, setIsSavingTraficoIndicacion] = useState(false);
+
   // Reset orden indicaciones when task changes
   useEffect(() => {
     setOrdenIndicaciones({});
     setIsSendingOrden(false);
+    // Reset Programación para Tráfico states
+    setTraficoEditingArchivo(null);
+    setTraficoIndicaciones({});
+    setTraficoOperacionesAsignados([]);
+    setTraficoOperacionesSearch('');
   }, [task?.id]);
+
+  // Cargar operaciones asignados y indicaciones de evidencia cuando se abre Programación para Tráfico
+  useEffect(() => {
+    if (task?.tipo === 'Programación para Tráfico' && task.evidencia) {
+      try {
+        const parsed = JSON.parse(task.evidencia);
+        if (parsed.indicaciones) setTraficoIndicaciones(parsed.indicaciones);
+        if (parsed.operaciones_asignados) setTraficoOperacionesAsignados(parsed.operaciones_asignados);
+      } catch (e) { /* ignore */ }
+    }
+  }, [task?.id, task?.tipo, task?.evidencia]);
+
+  const filteredTraficoOperaciones = useMemo(() => {
+    if (!todosUsuariosDetail) return [];
+    const selectedIds = new Set(traficoOperacionesAsignados.map(u => u.id));
+    const operacionesUsers = todosUsuariosDetail.filter(u =>
+      (u.area?.toLowerCase() === 'operaciones' ||
+       u.puesto?.toLowerCase().includes('operaciones')) &&
+      !selectedIds.has(u.id)
+    );
+    if (!traficoOperacionesSearch.trim()) return operacionesUsers;
+    const search = traficoOperacionesSearch.toLowerCase();
+    return operacionesUsers.filter(u =>
+      u.nombre.toLowerCase().includes(search) ||
+      String(u.id).includes(search)
+    );
+  }, [todosUsuariosDetail, traficoOperacionesSearch, traficoOperacionesAsignados]);
 
   // Estado para nodos expandidos en las tablas de Impresión y Recepción
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
@@ -3770,6 +3943,13 @@ function TaskDetailModal({
   const [editImageNotes, setEditImageNotes] = useState<Map<string, string>>(new Map());
   const [isEditUploadingFile, setIsEditUploadingFile] = useState(false);
 
+  // Estados para wizard digital en Editar tab (biblioteca + selección + notas)
+  const [digitalEditWizardStep, setDigitalEditWizardStep] = useState<1 | 2>(1);
+  const [selectedDigitalEditImages, setSelectedDigitalEditImages] = useState<Map<string, { url: string; source: 'existing' | 'upload'; preview?: string; isVideo: boolean }>>(new Map());
+  const [digitalEditImageNotes, setDigitalEditImageNotes] = useState<Map<string, string>>(new Map());
+  const [isDigitalEditUploadingFile, setIsDigitalEditUploadingFile] = useState(false);
+  const [digitalEditAddedArtes, setDigitalEditAddedArtes] = useState<ArteExistente[]>([]);
+
   // Estados para filtros y agrupaciones - Paso 1 (Resumen)
   const [filtersResumen, setFiltersResumen] = useState<FilterCondition[]>([]);
   const [showFiltersResumen, setShowFiltersResumen] = useState(false);
@@ -3858,7 +4038,7 @@ function TaskDetailModal({
   // Efecto para cargar archivos digitales para el tab "Resumen" en Programación si no están en evidencia
   useEffect(() => {
     const loadArchivosForResumen = async () => {
-      if (!isOpen || (task?.tipo !== 'Programación' && task?.tipo !== 'Orden de Programación' && task?.tipo !== 'Orden de Instalación' && task?.tipo !== 'Instalación')) {
+      if (!isOpen || (task?.tipo !== 'Programación' && task?.tipo !== 'Programación para Tráfico' && task?.tipo !== 'Orden de Programación' && task?.tipo !== 'Orden de Instalación' && task?.tipo !== 'Instalación')) {
         setLoadedArchivosDigitales([]);
         return;
       }
@@ -4129,6 +4309,11 @@ function TaskDetailModal({
         setExistingDigitalFilesEditar([]);
         setDigitalFilesEditar([]);
         setFilesToDelete([]);
+        // Reset digital edit wizard
+        setDigitalEditWizardStep(1);
+        setSelectedDigitalEditImages(new Map());
+        setDigitalEditImageNotes(new Map());
+        setDigitalEditAddedArtes([]);
         return;
       }
 
@@ -4734,6 +4919,69 @@ function TaskDetailModal({
   const editHasUploadingImages = Array.from(editSelectedImages.values()).some(img => img.source === 'upload' && !img.url);
   const editCanGoToStep2 = editSelectedImages.size > 0 && !isEditUploadingFile && !editHasUploadingImages;
   const editAllNotesReady = editSelectedImages.size > 0 && Array.from(editSelectedImages.keys()).every(id => editImageNotes.get(id)?.trim());
+
+  // Helpers para wizard digital en Editar
+  const digitalEditLocalArtes = useMemo(() => [...artesExistentes, ...digitalEditAddedArtes], [artesExistentes, digitalEditAddedArtes]);
+  const digitalEditCanGoToStep2 = selectedDigitalEditImages.size > 0 && !isDigitalEditUploadingFile;
+
+  const toggleDigitalEditGalleryImage = (id: string, url: string, isVideo: boolean) => {
+    setSelectedDigitalEditImages(prev => {
+      const next = new Map(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        setDigitalEditImageNotes(pn => { const nn = new Map(pn); nn.delete(id); return nn; });
+      } else {
+        next.set(id, { url, source: 'existing', isVideo });
+      }
+      return next;
+    });
+  };
+
+  const addDigitalEditUploadedFile = async (selectedFile: File) => {
+    const id = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      setIsDigitalEditUploadingFile(true);
+      const uploadResult = await campanasService.uploadArteFile(selectedFile);
+      setDigitalEditAddedArtes(prev => [...prev, {
+        id,
+        nombre: selectedFile.name,
+        url: uploadResult.url,
+        usos: 0,
+      }]);
+    } catch (err) {
+      console.error('Error uploading digital file:', err);
+    } finally {
+      setIsDigitalEditUploadingFile(false);
+    }
+  };
+
+  const handleUpdateDigitalFromLibrary = async () => {
+    const reservaIds = selectedArteItems.flatMap(item =>
+      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+    );
+    if (reservaIds.length === 0) return;
+
+    const archivos = Array.from(selectedDigitalEditImages.entries()).map(([key, img], idx) => ({
+      archivo: img.url,
+      spot: idx + 1,
+      nombre: img.url.split('/').pop() || 'archivo',
+      tipo: img.isVideo ? 'video' : 'image',
+      nota: digitalEditImageNotes.get(key)?.trim() || '',
+    })).filter(a => a.archivo);
+
+    if (archivos.length === 0) return;
+
+    try {
+      await campanasService.assignArteDigital(campanaId, reservaIds, archivos);
+      setSelectedArteIds(new Set());
+      setSelectedDigitalEditImages(new Map());
+      setDigitalEditImageNotes(new Map());
+      setDigitalEditWizardStep(1);
+      setDigitalEditAddedArtes([]);
+    } catch (error) {
+      console.error('Error al actualizar artes digitales:', error);
+    }
+  };
 
   const toggleEditGalleryImage = (id: string, url: string) => {
     setEditSelectedImages(prev => {
@@ -5357,7 +5605,7 @@ function TaskDetailModal({
           </div>
 
           {/* Tabs - Solo mostrar si NO es tarea de Impresión, Recepción, Instalación ni Testigo */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Orden de Programación' && (
+          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Programación para Tráfico' && task.tipo !== 'Orden de Programación' && (
             <div className="flex flex-wrap gap-2 mt-4">
               {tabs
                 .filter(tab => canResolveCurrentTask || tab.key === 'resumen')
@@ -8408,6 +8656,434 @@ function TaskDetailModal({
             </div>
           )}
 
+          {/* === VISTA ESPECIAL PARA TAREAS DE PROGRAMACIÓN PARA TRÁFICO === */}
+          {task.tipo === 'Programación para Tráfico' && (
+            <div className="space-y-6">
+              {/* Tabs */}
+              <div className="flex gap-2 border-b border-border pb-2">
+                <button
+                  onClick={() => setProgramacionTab('resumen')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'resumen'
+                      ? 'bg-teal-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Resumen
+                </button>
+                <button
+                  onClick={() => setProgramacionTab('tabla')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                    programacionTab === 'tabla'
+                      ? 'bg-teal-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Ver tabla ({taskInventory.length})
+                </button>
+              </div>
+
+              {/* Tab Resumen */}
+              {programacionTab === 'resumen' && (
+                <>
+                  {/* Info de la Tarea */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-teal-300 mb-3">Información de la Tarea</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <p className="text-white font-medium">{task.titulo || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Estatus:</span>
+                        <p className={`font-medium ${task.estatus === 'Completado' || task.estatus === 'Atendido' ? 'text-green-400' : task.estatus === 'Activo' || task.estatus === 'Pendiente' ? 'text-yellow-400' : 'text-blue-400'}`}>
+                          {task.estatus}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Asignado:</span>
+                        <p className="text-white font-medium">{task.asignado || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Periodo:</span>
+                        <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Creador:</span>
+                        <p className="text-white">{task.creador || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <p className="text-white">{task.fecha_inicio || '-'}</p>
+                      </div>
+                      {task.descripcion && (
+                        <div className="col-span-2">
+                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <p className="text-white">{task.descripcion}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Asignar Operaciones */}
+                  {(task.estatus === 'Activo' || task.estatus === 'Pendiente') && (
+                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                      <h4 className="text-sm font-medium text-teal-300 mb-3">Asignar Operaciones</h4>
+                      <p className="text-[10px] text-zinc-500 mb-2">
+                        Al completar esta tarea, se creará una tarea de Programación asignada a estos usuarios.
+                      </p>
+                      {traficoOperacionesAsignados.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {traficoOperacionesAsignados.map((u) => (
+                            <span
+                              key={u.id}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-amber-600/30 text-amber-300 rounded-full"
+                            >
+                              {u.nombre}
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const updated = traficoOperacionesAsignados.filter(x => x.id !== u.id);
+                                  setTraficoOperacionesAsignados(updated);
+                                  // Guardar en evidencia
+                                  try {
+                                    const parsed = task.evidencia ? JSON.parse(task.evidencia) : {};
+                                    parsed.operaciones_asignados = updated;
+                                    await onUpdateTask(task.id, { evidencia: JSON.stringify(parsed) });
+                                  } catch (e) { /* ignore */ }
+                                }}
+                                className="hover:text-white"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={traficoOperacionesSearch}
+                          onChange={(e) => {
+                            setTraficoOperacionesSearch(e.target.value);
+                            setShowTraficoOperacionesDropdown(true);
+                          }}
+                          onFocus={() => setShowTraficoOperacionesDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowTraficoOperacionesDropdown(false), 200)}
+                          placeholder="Buscar usuario de Operaciones..."
+                          disabled={isUpdating}
+                          className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-50"
+                        />
+                        {showTraficoOperacionesDropdown && filteredTraficoOperaciones.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {filteredTraficoOperaciones.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={async () => {
+                                  const updated = [...traficoOperacionesAsignados, { id: u.id, nombre: u.nombre }];
+                                  setTraficoOperacionesAsignados(updated);
+                                  setTraficoOperacionesSearch('');
+                                  setShowTraficoOperacionesDropdown(false);
+                                  // Guardar en evidencia
+                                  try {
+                                    const parsed = task.evidencia ? JSON.parse(task.evidencia) : {};
+                                    parsed.operaciones_asignados = updated;
+                                    await onUpdateTask(task.id, { evidencia: JSON.stringify(parsed) });
+                                  } catch (e) { /* ignore */ }
+                                }}
+                                className="w-full px-3 py-2 text-sm text-left hover:bg-amber-900/30 transition-colors"
+                              >
+                                {u.id}, {u.nombre}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Indicaciones por Arte - Editables */}
+                  <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                    <h4 className="text-sm font-medium text-teal-300 mb-3">Indicaciones de Programación por Arte</h4>
+                    {(() => {
+                      let archivosFromEvidencia: { archivo: string; archivoData?: string; spot: number; tipo: string }[] = [];
+                      try {
+                        if (task.evidencia) {
+                          const parsed = JSON.parse(task.evidencia);
+                          archivosFromEvidencia = parsed.archivos || [];
+                        }
+                      } catch (e) {
+                        console.error('Error parsing programacion evidencia:', e);
+                      }
+
+                      const evidenciaHasArchivoData = archivosFromEvidencia.length > 0 &&
+                        archivosFromEvidencia.every(a => a.archivoData && a.archivoData.trim() !== '');
+                      const archivos = evidenciaHasArchivoData ? archivosFromEvidencia : loadedArchivosDigitales;
+
+                      if (isLoadingArchivosDigitales) {
+                        return (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-teal-400 mr-2" />
+                            <span className="text-zinc-400 text-sm">Cargando archivos digitales...</span>
+                          </div>
+                        );
+                      }
+
+                      if (archivos.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-zinc-500 text-sm">
+                            <Image className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                            No hay archivos digitales asociados a esta tarea
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-4">
+                          {archivos.map((archivo, index) => {
+                            const fileName = archivo.archivo.split('/').pop() || archivo.archivo;
+                            const isVideo = archivo.tipo === 'video';
+                            const indicacion = traficoIndicaciones[archivo.archivo] || '';
+                            const fileUrl = getImageUrl(archivo.archivoData || archivo.archivo);
+                            const isEditing = traficoEditingArchivo === archivo.archivo;
+
+                            return (
+                              <div key={index} className="flex gap-4 p-3 border rounded-lg bg-teal-900/10 border-teal-500/20">
+                                {/* Thumbnail */}
+                                <div className="flex-shrink-0 w-24 h-16 bg-zinc-800 rounded overflow-hidden">
+                                  {isVideo ? (
+                                    <div className="w-full h-full flex items-center justify-center bg-zinc-800">
+                                      <Play className="h-6 w-6 text-teal-400" />
+                                    </div>
+                                  ) : fileUrl ? (
+                                    <img src={fileUrl} alt={fileName} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-6 w-6 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Info y indicaciones */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2 mb-2">
+                                    <div className="flex items-center gap-2">
+                                      {isVideo ? <Video className="h-4 w-4 text-blue-400" /> : <Image className="h-4 w-4 text-green-400" />}
+                                      <span className="text-sm text-white font-medium truncate" title={fileName}>{fileName}</span>
+                                      <span className="text-[10px] text-zinc-400 bg-zinc-700 px-1.5 py-0.5 rounded">Spot {archivo.spot}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {/* Editar indicación */}
+                                      {(task.estatus === 'Activo' || task.estatus === 'Pendiente') && !isEditing && (
+                                        <button
+                                          onClick={() => setTraficoEditingArchivo(archivo.archivo)}
+                                          className="flex items-center gap-1 px-2 py-1 bg-teal-600/20 text-teal-400 rounded text-xs hover:bg-teal-600/30 transition-colors"
+                                          title="Editar indicación"
+                                        >
+                                          <Edit3 className="h-3 w-3" />
+                                        </button>
+                                      )}
+                                      {/* Descargar */}
+                                      <a
+                                        href={fileUrl || '#'}
+                                        download={fileName}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1 px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs hover:bg-blue-600/30 transition-colors"
+                                      >
+                                        <Download className="h-3 w-3" />
+                                        Descargar
+                                      </a>
+                                    </div>
+                                  </div>
+
+                                  {isEditing ? (
+                                    <div className="space-y-2">
+                                      <textarea
+                                        value={indicacion}
+                                        onChange={(e) => setTraficoIndicaciones(prev => ({ ...prev, [archivo.archivo]: e.target.value }))}
+                                        className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-teal-500/50 rounded-lg resize-none focus:ring-1 focus:ring-teal-500"
+                                        rows={3}
+                                        placeholder="Indicaciones de programación..."
+                                      />
+                                      <div className="flex justify-end gap-2">
+                                        <button
+                                          onClick={() => setTraficoEditingArchivo(null)}
+                                          className="px-2 py-1 text-xs bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600 transition-colors"
+                                        >
+                                          Cancelar
+                                        </button>
+                                        <button
+                                          onClick={async () => {
+                                            setIsSavingTraficoIndicacion(true);
+                                            try {
+                                              const parsed = task.evidencia ? JSON.parse(task.evidencia) : {};
+                                              parsed.indicaciones = { ...parsed.indicaciones, ...traficoIndicaciones };
+                                              await onUpdateTask(task.id, { evidencia: JSON.stringify(parsed) });
+                                              setTraficoEditingArchivo(null);
+                                            } catch (e) {
+                                              console.error('Error saving indicacion:', e);
+                                            } finally {
+                                              setIsSavingTraficoIndicacion(false);
+                                            }
+                                          }}
+                                          disabled={isSavingTraficoIndicacion}
+                                          className="flex items-center gap-1 px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors disabled:opacity-50"
+                                        >
+                                          {isSavingTraficoIndicacion ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                          Guardar
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="bg-zinc-800/60 rounded p-2">
+                                      <p className="text-xs text-white whitespace-pre-wrap">
+                                        {indicacion || <span className="text-zinc-500 italic">Sin indicaciones especificadas</span>}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Botón para completar - requiere operaciones asignados */}
+                  {(task.estatus === 'Activo' || task.estatus === 'Pendiente') && canResolveProduccionTasks && (
+                    <div className="mt-4">
+                      {traficoOperacionesAsignados.length === 0 && (
+                        <div className="flex items-center gap-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-3">
+                          <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                          <p className="text-xs text-amber-300">Asigna al menos un usuario de Operaciones para poder completar esta tarea.</p>
+                        </div>
+                      )}
+                      <div className="flex justify-end">
+                        <button
+                          onClick={async () => {
+                            if (!onCompleteProgramacionTrafico) return;
+                            let archivos: { archivo: string; spot: number; tipo: string }[] = [];
+                            try {
+                              const parsed = task.evidencia ? JSON.parse(task.evidencia) : {};
+                              archivos = parsed.archivos || [];
+                            } catch (e) { /* ignore */ }
+                            await onCompleteProgramacionTrafico(task.id, traficoOperacionesAsignados, traficoIndicaciones, archivos);
+                          }}
+                          disabled={isUpdating || traficoOperacionesAsignados.length === 0}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                            !isUpdating && traficoOperacionesAsignados.length > 0
+                              ? 'bg-green-600 text-white hover:bg-green-700'
+                              : 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
+                          } disabled:opacity-50`}
+                        >
+                          {isUpdating ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Completando...
+                            </>
+                          ) : (
+                            <>
+                              <Check className="h-4 w-4" />
+                              Completar y Crear Programación
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Tab Ver Tabla */}
+              {programacionTab === 'tabla' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-zinc-400">{filteredProgramacionModalData.length} de {taskInventory.length} items</span>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                        <input
+                          type="text"
+                          placeholder="Buscar por ID, código, nombre archivo..."
+                          value={programacionModalSearch}
+                          onChange={(e) => setProgramacionModalSearch(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-teal-500 w-64"
+                        />
+                        {programacionModalSearch && (
+                          <button
+                            onClick={() => setProgramacionModalSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="max-h-[500px] overflow-auto border border-border rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead className="bg-zinc-800/80 sticky top-0 z-10">
+                        <tr>
+                          <th className="p-2 text-left text-xs font-medium text-zinc-400">ID</th>
+                          <th className="p-2 text-left text-xs font-medium text-zinc-400">Archivo</th>
+                          <th className="p-2 text-left text-xs font-medium text-zinc-400">Código</th>
+                          <th className="p-2 text-left text-xs font-medium text-zinc-400">Tipo</th>
+                          <th className="p-2 text-left text-xs font-medium text-zinc-400">Ubicación</th>
+                          <th className="p-2 text-left text-xs font-medium text-zinc-400">Plaza</th>
+                          <th className="p-2 text-left text-xs font-medium text-zinc-400">Mueble</th>
+                          <th className="p-2 text-left text-xs font-medium text-zinc-400">Ciudad</th>
+                          <th className="p-2 text-left text-xs font-medium text-zinc-400">NSE</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredProgramacionModalData.map((item) => {
+                          const digitalSummary = getDigitalSummaryForItem(item);
+                          return (
+                          <tr key={item.id} className="border-b border-border/50 hover:bg-teal-900/20">
+                            <td className="p-2 text-xs text-zinc-300">{item.id}</td>
+                            <td className="p-2">
+                              {digitalSummary ? (
+                                <button
+                                  onClick={() => {
+                                    const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
+                                    if (rsvIds.length > 0) openDigitalGalleryModal(rsvIds[0], item.codigo_unico);
+                                  }}
+                                  className="w-10 h-8 rounded bg-cyan-500/20 border border-cyan-500/50 flex flex-col items-center justify-center hover:bg-cyan-500/30"
+                                >
+                                  <Film className="h-3 w-3 text-cyan-400" />
+                                  <span className="text-cyan-400 font-bold text-[9px]">{digitalSummary.total}</span>
+                                </button>
+                              ) : item.archivo_arte ? (
+                                <div className="w-10 h-8 rounded overflow-hidden bg-zinc-800">
+                                  <img src={getImageUrl(item.archivo_arte) || ''} alt="" className="w-full h-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="w-10 h-8 rounded bg-zinc-800 flex items-center justify-center">
+                                  <Image className="h-3 w-3 text-zinc-600" />
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-2 text-xs text-zinc-300 font-mono">{item.codigo_unico}</td>
+                            <td className="p-2 text-xs text-zinc-300">{item.tradicional_digital}</td>
+                            <td className="p-2 text-xs text-zinc-300 truncate max-w-[150px]">{item.ubicacion}</td>
+                            <td className="p-2 text-xs text-zinc-300">{item.plaza}</td>
+                            <td className="p-2 text-xs text-zinc-300">{item.mueble}</td>
+                            <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
+                            <td className="p-2 text-xs text-zinc-300">{item.nse}</td>
+                          </tr>
+                        );})}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* === VISTA ESPECIAL PARA TAREAS DE TESTIGO === */}
           {task.tipo === 'Testigo' && (
             <TestigoTaskView
@@ -8427,7 +9103,7 @@ function TaskDetailModal({
           )}
 
           {/* Tab Resumen - Solo para tareas que NO son Impresión, Recepción, Instalación, Testigo, Programación ni Orden de Programación */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Orden de Programación' && activeTab === 'resumen' && (
+          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Programación para Tráfico' && task.tipo !== 'Orden de Programación' && activeTab === 'resumen' && (
             <div className="space-y-4">
               {/* Info de la tarea - Compacta */}
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
@@ -9021,275 +9697,244 @@ function TaskDetailModal({
 
               {/* Columna Derecha - Opciones de edicion */}
               <div className="space-y-4">
-                {isDigitalEditarSelection ? (
-                  /* ===== INTERFAZ DIGITAL - MÚLTIPLES ARCHIVOS ===== */
+                {selectedArteIds.size === 0 ? (
+                  /* ===== SIN SELECCIÓN - Mensaje informativo ===== */
+                  <div className="flex flex-col items-center justify-center h-64 text-center">
+                    <ChevronLeft className="h-10 w-10 text-zinc-600 mb-3" />
+                    <p className="text-sm text-zinc-400 font-medium">Selecciona items en la tabla</p>
+                    <p className="text-xs text-zinc-500 mt-1">Marca con el checkbox los items que deseas editar</p>
+                  </div>
+                ) : isDigitalEditarSelection ? (
+                  /* ===== INTERFAZ DIGITAL - WIZARD 2 PASOS (BIBLIOTECA) ===== */
                   <>
-                    {/* Header info */}
-                    <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
-                      <div className="flex items-start gap-2">
-                        <Film className="h-4 w-4 text-cyan-400 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs text-cyan-300 font-medium">
-                            Inventario Digital - Rotación de contenido
-                          </p>
-                          <p className="text-[10px] text-cyan-400/70 mt-1">
-                            Puedes subir múltiples imágenes y/o videos que se mostrarán en rotación.
-                            Arrastra para reordenar la secuencia.
-                          </p>
-                        </div>
+                    {/* Step indicator */}
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className={`flex items-center gap-1.5 ${digitalEditWizardStep === 1 ? 'text-cyan-300' : 'text-zinc-500'}`}>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          digitalEditWizardStep === 1 ? 'bg-cyan-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                        }`}>1</div>
+                        <span className="text-xs font-medium">Seleccionar</span>
+                      </div>
+                      <div className="flex-1 h-px bg-border" />
+                      <div className={`flex items-center gap-1.5 ${digitalEditWizardStep === 2 ? 'text-cyan-300' : 'text-zinc-500'}`}>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          digitalEditWizardStep === 2 ? 'bg-cyan-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                        }`}>2</div>
+                        <span className="text-xs font-medium">Notas</span>
                       </div>
                     </div>
 
-                    {/* Boton de actualizar */}
-                    <div className="flex justify-center">
-                      <button
-                        onClick={handleUpdateImageDigital}
-                        disabled={selectedArteIds.size === 0 || (digitalFilesEditar.length === 0 && filesToDelete.length === 0) || isUpdating}
-                        className={`flex items-center justify-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
-                          selectedArteIds.size > 0 && (digitalFilesEditar.length > 0 || filesToDelete.length > 0) && !isUpdating
-                            ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
-                            : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                        }`}
-                      >
-                        {isUpdating ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
-                            <span className="truncate">Actualizando...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="h-4 w-4 flex-shrink-0" />
-                            <span className="truncate">
-                              {filesToDelete.length > 0 && digitalFilesEditar.length === 0
-                                ? 'Eliminar Archivos'
-                                : filesToDelete.length > 0
-                                ? 'Actualizar y Eliminar'
-                                : 'Actualizar Arte Digital'}
-                            </span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* File Input */}
-                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                      <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                        Agregar archivos
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="file"
-                          onChange={handleDigitalFilesChangeEditar}
-                          accept="image/*,video/*"
-                          multiple
-                          disabled={isUpdating}
-                          className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-cyan-600 file:text-white hover:file:bg-cyan-700 disabled:opacity-50"
-                        />
-                      </div>
-                      <p className="mt-2 text-[10px] text-zinc-500">
-                        Formatos: JPG, PNG, GIF, WEBP, MP4, MOV, WEBM (max 50MB por archivo)
-                      </p>
-                    </div>
-
-                    {/* Lista de archivos con drag & drop */}
-                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-medium text-zinc-400">
-                          Archivos para rotación
-                        </label>
-                        <div className="flex items-center gap-2">
-                          {filesToDelete.length > 0 && (
-                            <Badge className="bg-red-600/30 text-red-300 border-red-500/30 text-[10px]">
-                              {filesToDelete.length} a eliminar
-                            </Badge>
-                          )}
-                          {digitalFilesEditar.length > 0 && (
-                            <Badge className="bg-green-600/30 text-green-300 border-green-500/30 text-[10px]">
-                              {digitalFilesEditar.length} nuevo{digitalFilesEditar.length !== 1 ? 's' : ''}
-                            </Badge>
-                          )}
-                          <Badge className="bg-cyan-600/30 text-cyan-300 border-cyan-500/30 text-[10px]">
-                            {existingDigitalFilesEditar.filter(f => !filesToDelete.includes(f.id)).length + digitalFilesEditar.length} total
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="h-64 border border-border rounded-lg bg-zinc-900/50 overflow-auto">
-                        {isLoadingExistingFiles ? (
-                          <div className="h-full flex items-center justify-center text-center text-zinc-500">
-                            <div>
-                              <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-cyan-400" />
-                              <p className="text-xs">Cargando archivos existentes...</p>
-                            </div>
+                    {digitalEditWizardStep === 1 ? (
+                      /* ===== PASO 1: Biblioteca + seleccionar ===== */
+                      <>
+                        {/* Galería de artes digitales */}
+                        <div className="bg-zinc-900/50 rounded-lg p-3 border border-border">
+                          <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                            Biblioteca de contenido digital ({digitalEditLocalArtes.length})
+                            {isDigitalEditUploadingFile && <Loader2 className="inline h-3 w-3 animate-spin text-cyan-400 ml-1.5" />}
+                          </label>
+                          <div className="min-h-[100px] max-h-[200px] border border-border rounded-lg bg-zinc-900/50 overflow-auto p-2">
+                            {isLoadingArtes ? (
+                              <div className="h-full flex items-center justify-center">
+                                <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+                              </div>
+                            ) : digitalEditLocalArtes.length === 0 ? (
+                              <div className="h-full flex items-center justify-center text-center text-zinc-500">
+                                <div>
+                                  <Film className="h-6 w-6 mx-auto mb-1 opacity-30" />
+                                  <p className="text-[10px]">No hay archivos. Sube imágenes o videos abajo.</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {digitalEditLocalArtes.map((art) => {
+                                  const isVideo = /\.(mp4|mov|webm|avi)$/i.test(art.url || '');
+                                  const isSelected = selectedDigitalEditImages.has(art.id);
+                                  return (
+                                    <button
+                                      key={art.id}
+                                      onClick={() => toggleDigitalEditGalleryImage(art.id, art.url, isVideo)}
+                                      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all group ${
+                                        isSelected
+                                          ? 'border-cyan-400 ring-2 ring-cyan-400/30'
+                                          : 'border-transparent hover:border-cyan-400/50'
+                                      }`}
+                                      title={art.nombre}
+                                    >
+                                      {isVideo ? (
+                                        <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+                                          <Play className="h-5 w-5 text-cyan-400" />
+                                        </div>
+                                      ) : (
+                                        <img src={getImageUrl(art.url) || ''} alt={art.nombre} className="w-full h-full object-cover" />
+                                      )}
+                                      {isSelected && (
+                                        <div className="absolute inset-0 bg-cyan-600/30 flex items-center justify-center">
+                                          <Check className="h-4 w-4 text-white" />
+                                        </div>
+                                      )}
+                                      <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
+                                        <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                        ) : existingDigitalFilesEditar.length === 0 && digitalFilesEditar.length === 0 ? (
-                          <div className="h-full flex items-center justify-center text-center text-zinc-500">
-                            <div>
-                              <Upload className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                              <p className="text-xs">
-                                No hay archivos. Selecciona archivos para agregarlos a la rotación.
+                        </div>
+
+                        {/* Subir archivos a la biblioteca */}
+                        <div className="space-y-2">
+                          <label className="block text-xs font-medium text-zinc-400">Subir a la biblioteca</label>
+                          <div className="flex gap-2">
+                            <label className={`flex-1 ${isDigitalEditUploadingFile ? 'pointer-events-none' : 'cursor-pointer'}`}>
+                              <input
+                                type="file"
+                                onChange={(e) => {
+                                  const files = e.target.files;
+                                  if (!files) return;
+                                  Array.from(files).forEach(f => {
+                                    if (f.type.startsWith('image/') || f.type.startsWith('video/')) {
+                                      addDigitalEditUploadedFile(f);
+                                    }
+                                  });
+                                  e.target.value = '';
+                                }}
+                                accept="image/*,video/*"
+                                multiple
+                                className="hidden"
+                                disabled={isUpdating || isDigitalEditUploadingFile}
+                              />
+                              <div className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-cyan-600/20 border border-cyan-500/30 rounded-lg hover:bg-cyan-600/30 transition-colors">
+                                <Upload className="h-3.5 w-3.5 text-cyan-400" />
+                                <span className="text-cyan-300">Subir archivos</span>
+                              </div>
+                            </label>
+                            <div className="flex items-center">
+                              <p className="text-[10px] text-zinc-500">
+                                JPG, PNG, GIF, MP4, MOV, WEBM
                               </p>
                             </div>
                           </div>
-                        ) : (
-                          <div className="p-2 space-y-2">
-                            {/* Archivos existentes del servidor */}
-                            {existingDigitalFilesEditar.map((existingFile) => {
-                              const isMarkedForDeletion = filesToDelete.includes(existingFile.id);
-                              // Usar archivoData (base64) si está disponible
-                              const imageUrl = getImageUrl(existingFile.archivoData || existingFile.archivo);
-                              return (
-                                <div
-                                  key={`existing-${existingFile.id}`}
-                                  className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${
-                                    isMarkedForDeletion
-                                      ? 'border-red-500/50 bg-red-500/10 opacity-60'
-                                      : 'border-zinc-600 bg-zinc-800/50 hover:border-cyan-500/50'
-                                  }`}
-                                >
-                                  {/* Existing Badge */}
-                                  <div className="flex-shrink-0 px-1.5 py-0.5 rounded bg-zinc-600/50 text-[8px] text-zinc-400 font-medium">
-                                    EXISTE
-                                  </div>
+                        </div>
 
-                                  {/* Spot Number */}
-                                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-600/50 flex items-center justify-center">
-                                    <span className="text-[10px] font-bold text-zinc-300">{existingFile.spot}</span>
-                                  </div>
-
-                                  {/* Preview */}
-                                  <div className="flex-shrink-0 w-10 h-10 rounded overflow-hidden bg-zinc-800">
-                                    {existingFile.tipo === 'video' ? (
-                                      <div className="w-full h-full flex items-center justify-center bg-zinc-700">
-                                        <Play className="h-4 w-4 text-cyan-400" />
-                                      </div>
-                                    ) : (
-                                      <img
-                                        src={imageUrl || ''}
-                                        alt={`Archivo ${existingFile.spot}`}
-                                        className="w-full h-full object-cover"
-                                      />
-                                    )}
-                                  </div>
-
-                                  {/* File Info */}
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-[10px] text-white truncate" title={existingFile.archivo}>
-                                      {existingFile.archivo.split('/').pop() || 'archivo'}
-                                    </p>
-                                    <p className="text-[9px] text-zinc-500 flex items-center gap-1">
-                                      {existingFile.tipo === 'video' ? (
-                                        <Film className="h-2.5 w-2.5 text-cyan-400" />
-                                      ) : (
-                                        <Image className="h-2.5 w-2.5 text-purple-400" />
-                                      )}
-                                      {existingFile.tipo === 'video' ? 'Video' : 'Imagen'} • Guardado en servidor
-                                    </p>
-                                  </div>
-
-                                  {/* Delete/Restore Button */}
-                                  {isMarkedForDeletion ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRestoreExistingFileEditar(existingFile.id)}
-                                      className="flex-shrink-0 p-1 text-green-400 hover:text-green-300 hover:bg-green-500/10 rounded transition-colors"
-                                      title="Restaurar archivo"
-                                    >
-                                      <RefreshCw className="h-3.5 w-3.5" />
-                                    </button>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveExistingFileEditar(existingFile.id)}
-                                      className="flex-shrink-0 p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                                      title="Eliminar archivo"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
-
-                            {/* Separador si hay ambos tipos */}
-                            {existingDigitalFilesEditar.length > 0 && digitalFilesEditar.length > 0 && (
-                              <div className="flex items-center gap-2 py-1">
-                                <div className="flex-1 h-px bg-green-500/30"></div>
-                                <span className="text-[10px] text-green-400 font-medium">Nuevos archivos</span>
-                                <div className="flex-1 h-px bg-green-500/30"></div>
-                              </div>
-                            )}
-
-                            {/* Archivos nuevos (por subir) */}
-                            {digitalFilesEditar.map((digitalFile, index) => (
-                              <div
-                                key={digitalFile.id}
-                                draggable
-                                onDragStart={() => handleDragStartEditar(digitalFile.id)}
-                                onDragOver={(e) => handleDragOverEditar(e, digitalFile.id)}
-                                onDragEnd={handleDragEndEditar}
-                                className={`flex items-center gap-2 p-2 rounded-lg border transition-all cursor-move ${
-                                  draggedFileEditar === digitalFile.id
-                                    ? 'border-cyan-500 bg-cyan-500/20 opacity-50'
-                                    : 'border-green-500/30 bg-green-500/5 hover:border-green-500/50'
-                                }`}
-                              >
-                                {/* Drag Handle */}
-                                <div className="flex-shrink-0 text-zinc-500 hover:text-cyan-400 cursor-grab">
-                                  <GripVertical className="h-4 w-4" />
-                                </div>
-
-                                {/* Spot Number */}
-                                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-green-600/30 flex items-center justify-center">
-                                  <span className="text-[10px] font-bold text-green-300">{digitalFile.spot}</span>
-                                </div>
-
-                                {/* Preview */}
-                                <div className="flex-shrink-0 w-10 h-10 rounded overflow-hidden bg-zinc-800">
-                                  {digitalFile.type === 'video' ? (
+                        {/* Selected preview */}
+                        {selectedDigitalEditImages.size > 0 && (
+                          <div className="bg-zinc-900/50 rounded-lg p-3 border border-cyan-500/30">
+                            <label className="block text-xs font-medium text-cyan-300 mb-1.5">
+                              {selectedDigitalEditImages.size} archivo{selectedDigitalEditImages.size !== 1 ? 's' : ''} seleccionado{selectedDigitalEditImages.size !== 1 ? 's' : ''}
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              {Array.from(selectedDigitalEditImages.entries()).map(([id, img]) => (
+                                <div key={id} className="relative w-12 h-12 rounded overflow-hidden border border-cyan-500/50">
+                                  {img.isVideo ? (
                                     <div className="w-full h-full flex items-center justify-center bg-zinc-700">
-                                      <Play className="h-4 w-4 text-cyan-400" />
+                                      <Play className="h-3 w-3 text-cyan-400" />
                                     </div>
                                   ) : (
-                                    <img
-                                      src={digitalFile.preview}
-                                      alt={`Preview ${index + 1}`}
-                                      className="w-full h-full object-cover"
-                                    />
+                                    <img src={getImageUrl(img.url) || img.preview || ''} alt="" className="w-full h-full object-cover" />
                                   )}
+                                  <button
+                                    onClick={() => toggleDigitalEditGalleryImage(id, '', false)}
+                                    className="absolute -top-1 -right-1 bg-red-600 rounded-full p-0.5"
+                                  >
+                                    <X className="h-2 w-2 text-white" />
+                                  </button>
                                 </div>
-
-                                {/* File Info */}
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-[10px] text-white truncate" title={digitalFile.file.name}>
-                                    {digitalFile.file.name}
-                                  </p>
-                                  <p className="text-[9px] text-zinc-500 flex items-center gap-1">
-                                    {digitalFile.type === 'video' ? (
-                                      <Film className="h-2.5 w-2.5 text-cyan-400" />
-                                    ) : (
-                                      <Image className="h-2.5 w-2.5 text-purple-400" />
-                                    )}
-                                    {digitalFile.type === 'video' ? 'Video' : 'Imagen'} •{' '}
-                                    {(digitalFile.file.size / 1024 / 1024).toFixed(2)} MB
-                                    <span className="text-green-400 ml-1">(Nuevo)</span>
-                                  </p>
-                                </div>
-
-                                {/* Delete Button */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveDigitalFileEditar(digitalFile.id)}
-                                  className="flex-shrink-0 p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                                  title="Eliminar archivo"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            ))}
+                              ))}
+                            </div>
                           </div>
                         )}
-                      </div>
-                    </div>
+
+                        {/* Siguiente */}
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => setDigitalEditWizardStep(2)}
+                            disabled={!digitalEditCanGoToStep2}
+                            className={`px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
+                              digitalEditCanGoToStep2
+                                ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                                : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                            }`}
+                          >
+                            Siguiente →
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      /* ===== PASO 2: Notas por archivo (opcional) ===== */
+                      <>
+                        <div className="space-y-3 max-h-[350px] overflow-auto">
+                          {Array.from(selectedDigitalEditImages.entries()).map(([id, img], idx) => {
+                            const isVideo = img.isVideo;
+                            return (
+                            <div key={id} className="bg-zinc-900/50 rounded-lg p-3 border border-border">
+                              <div className="flex gap-3">
+                                <div className="flex-shrink-0 w-16 h-16 rounded overflow-hidden bg-zinc-800">
+                                  {isVideo ? (
+                                    <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+                                      <Play className="h-6 w-6 text-cyan-400" />
+                                    </div>
+                                  ) : (
+                                    <img src={getImageUrl(img.url) || img.preview || ''} alt="" className="w-full h-full object-cover" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs text-zinc-400 mb-1">Archivo {idx + 1} {isVideo ? '(Video)' : '(Imagen)'}</p>
+                                  <textarea
+                                    value={digitalEditImageNotes.get(id) || ''}
+                                    onChange={(e) => setDigitalEditImageNotes(prev => new Map(prev).set(id, e.target.value))}
+                                    placeholder="Nota opcional para este archivo..."
+                                    className="w-full px-2 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg resize-none focus:ring-1 focus:ring-cyan-500"
+                                    rows={2}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          );})}
+                        </div>
+
+                        {/* Aviso si falta seleccionar en la tabla */}
+                        {selectedArteIds.size === 0 && (
+                          <div className="flex items-center gap-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                            <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                            <p className="text-xs text-amber-300">Selecciona al menos un item en la tabla de la izquierda para aplicar los cambios.</p>
+                          </div>
+                        )}
+
+                        {/* Footer */}
+                        <div className="flex justify-between">
+                          <button
+                            onClick={() => setDigitalEditWizardStep(1)}
+                            className="px-4 py-2 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
+                          >
+                            ← Atrás
+                          </button>
+                          <button
+                            onClick={handleUpdateDigitalFromLibrary}
+                            disabled={selectedDigitalEditImages.size === 0 || isUpdating || selectedArteIds.size === 0}
+                            className={`px-4 py-2 text-xs font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                              selectedDigitalEditImages.size > 0 && !isUpdating && selectedArteIds.size > 0
+                                ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                                : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                            }`}
+                          >
+                            {isUpdating ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Actualizando...
+                              </>
+                            ) : (
+                              <>
+                                <Check className="h-3.5 w-3.5" />
+                                Actualizar Arte Digital
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </>
                 ) : (
                   /* ===== INTERFAZ TRADICIONAL - WIZARD 2 PASOS ===== */
@@ -10175,10 +10820,14 @@ function CreateTaskModal({
   const [selectedAsignadosTestigo, setSelectedAsignadosTestigo] = useState<{ id: number; nombre: string }[]>([]);
   const [asignadoSearchTestigo, setAsignadoSearchTestigo] = useState('');
   const [showAsignadoDropdownTestigo, setShowAsignadoDropdownTestigo] = useState(false);
-  // Para Programación - múltiples asignados (área Operaciones)
+  // Para Programación para Tráfico - múltiples asignados (área Tráfico)
   const [selectedAsignadosProgramacion, setSelectedAsignadosProgramacion] = useState<{ id: number; nombre: string }[]>([]);
   const [asignadoSearchProgramacion, setAsignadoSearchProgramacion] = useState('');
   const [showAsignadoDropdownProgramacion, setShowAsignadoDropdownProgramacion] = useState(false);
+  // Para Programación para Tráfico - campo extra: asignar operaciones (se usará al finalizar)
+  const [selectedOperacionesProgramacion, setSelectedOperacionesProgramacion] = useState<{ id: number; nombre: string }[]>([]);
+  const [operacionesSearchProgramacion, setOperacionesSearchProgramacion] = useState('');
+  const [showOperacionesDropdownProgramacion, setShowOperacionesDropdownProgramacion] = useState(false);
   const [tipoIncidencia, setTipoIncidencia] = useState('');
   // Para Re-impresión - múltiples analistas (puesto Analista)
   const [selectedAnalistasReImpresion, setSelectedAnalistasReImpresion] = useState<{ id: number; nombre: string }[]>([]);
@@ -10234,7 +10883,7 @@ function CreateTaskModal({
 
   // Cargar archivos digitales cuando se selecciona tipo Programación
   useEffect(() => {
-    if (isOpen && selectedInventory.length > 0 && (tipo === 'Programación' || tipo === 'Orden de Programación')) {
+    if (isOpen && selectedInventory.length > 0 && (tipo === 'Programación' || tipo === 'Programación para Tráfico' || tipo === 'Orden de Programación')) {
       const loadDigitalFiles = async () => {
         setIsLoadingArchivosDigitales(true);
         try {
@@ -10245,7 +10894,14 @@ function CreateTaskModal({
           if (reservaIds.length > 0) {
             const idsParam = reservaIds.join(',');
             const imagenes = await campanasService.getImagenesDigitales(campanaId, idsParam);
-            setArchivosDigitalesProgramacion(imagenes.map(img => ({
+            // Deduplicar por archivo (distintas reservas pueden tener el mismo archivo)
+            const seen = new Set<string>();
+            const uniqueImagenes = imagenes.filter(img => {
+              if (seen.has(img.archivo)) return false;
+              seen.add(img.archivo);
+              return true;
+            });
+            setArchivosDigitalesProgramacion(uniqueImagenes.map(img => ({
               id: img.id,
               archivo: img.archivo,
               archivoData: img.archivoData,
@@ -10431,23 +11087,41 @@ function CreateTaskModal({
     );
   }, [todosUsuarios, asignadoSearchTestigo, selectedAsignadosTestigo]);
 
-  // Filtrar usuarios de Operaciones para Programación (excluir ya seleccionados)
+  // Filtrar usuarios de Tráfico para Programación para Tráfico (excluir ya seleccionados)
   const filteredUsuariosProgramacion = useMemo(() => {
     if (!todosUsuarios) return [];
     const selectedIds = new Set(selectedAsignadosProgramacion.map(u => u.id));
-    // Mostrar usuarios del área Operaciones O cuyo puesto contenga "Operaciones"
+    const traficoUsers = todosUsuarios.filter(u =>
+      (u.area?.toLowerCase() === 'tráfico' ||
+       u.area?.toLowerCase() === 'trafico' ||
+       u.puesto?.toLowerCase().includes('tráfico') ||
+       u.puesto?.toLowerCase().includes('trafico')) &&
+      !selectedIds.has(u.id)
+    );
+    if (!asignadoSearchProgramacion.trim()) return traficoUsers;
+    const search = asignadoSearchProgramacion.toLowerCase();
+    return traficoUsers.filter(u =>
+      u.nombre.toLowerCase().includes(search) ||
+      String(u.id).includes(search)
+    );
+  }, [todosUsuarios, asignadoSearchProgramacion, selectedAsignadosProgramacion]);
+
+  // Filtrar usuarios de Operaciones para campo extra en Programación para Tráfico
+  const filteredOperacionesProgramacion = useMemo(() => {
+    if (!todosUsuarios) return [];
+    const selectedIds = new Set(selectedOperacionesProgramacion.map(u => u.id));
     const operacionesUsers = todosUsuarios.filter(u =>
       (u.area?.toLowerCase() === 'operaciones' ||
        u.puesto?.toLowerCase().includes('operaciones')) &&
       !selectedIds.has(u.id)
     );
-    if (!asignadoSearchProgramacion.trim()) return operacionesUsers;
-    const search = asignadoSearchProgramacion.toLowerCase();
+    if (!operacionesSearchProgramacion.trim()) return operacionesUsers;
+    const search = operacionesSearchProgramacion.toLowerCase();
     return operacionesUsers.filter(u =>
       u.nombre.toLowerCase().includes(search) ||
       String(u.id).includes(search)
     );
-  }, [todosUsuarios, asignadoSearchProgramacion, selectedAsignadosProgramacion]);
+  }, [todosUsuarios, operacionesSearchProgramacion, selectedOperacionesProgramacion]);
 
   // Filtrar analistas para Re-impresión (excluir ya seleccionados)
   const filteredAnalistasReImpresion = useMemo(() => {
@@ -10592,14 +11266,29 @@ function CreateTaskModal({
         (payload as any).id_asignado = selectedAnalistasReImpresion.map(u => u.id).join(', ');
         payload.asignado = selectedAnalistasReImpresion.map(u => u.nombre).join(', ');
       }
-    } else if (tipo === 'Programación') {
-      // Campos adicionales para Programación
+    } else if (tipo === 'Programación para Tráfico') {
+      // Campos adicionales para Programación para Tráfico
       (payload as any).fecha_fin = fechaEntrega;
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
-      // Guardar indicaciones de programación como JSON en evidencia
-      // NOTA: NO incluir archivoData aquí porque puede ser muy grande (base64) y truncar el JSON
-      // Los archivos se cargan desde la API usando el nombre del archivo cuando se necesitan
+      (payload as any).evidencia = JSON.stringify({
+        indicaciones: programacionIndicaciones,
+        archivos: archivosDigitalesProgramacion.map(a => ({
+          archivo: a.archivo,
+          spot: a.spot,
+          tipo: a.tipo,
+        })),
+      });
+      // Asignados múltiples para Programación para Tráfico (área Tráfico)
+      if (selectedAsignadosProgramacion.length > 0) {
+        (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(', ');
+        payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
+      }
+    } else if (tipo === 'Programación') {
+      // Tarea de Programación (creada automáticamente al finalizar Programación para Tráfico)
+      (payload as any).fecha_fin = fechaEntrega;
+      (payload as any).fecha_creacion = new Date().toISOString();
+      (payload as any).listado_inventario = selectedIds.join(',');
       (payload as any).evidencia = JSON.stringify({
         indicaciones: programacionIndicaciones,
         archivos: archivosDigitalesProgramacion.map(a => ({
@@ -10610,9 +11299,7 @@ function CreateTaskModal({
       });
       // Asignados múltiples para Programación (área Operaciones)
       if (selectedAsignadosProgramacion.length > 0) {
-        // Guardar IDs separados por coma
         (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(', ');
-        // Guardar nombres separados por coma
         payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Orden de Programación') {
@@ -10696,10 +11383,14 @@ function CreateTaskModal({
     // Reset campos de Instalación indicaciones
     setInstalacionIndicaciones({});
     setArchivosInstalacion([]);
-    // Reset campos de Programación (múltiples asignados área Operaciones)
+    // Reset campos de Programación (múltiples asignados área Tráfico)
     setSelectedAsignadosProgramacion([]);
     setAsignadoSearchProgramacion('');
     setShowAsignadoDropdownProgramacion(false);
+    // Reset campo extra de Operaciones para Programación para Tráfico
+    setSelectedOperacionesProgramacion([]);
+    setOperacionesSearchProgramacion('');
+    setShowOperacionesDropdownProgramacion(false);
     onClose();
   };
 
@@ -10772,7 +11463,7 @@ function CreateTaskModal({
         {tipo && (
           <div className="space-y-4 border-t border-border pt-4">
             {/* Campos comunes - Título para tipos que no tienen formulario propio */}
-            {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Instalación' && tipo !== 'Orden de Instalación' && tipo !== 'Testigo' && tipo !== 'Programación' && (
+            {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Instalación' && tipo !== 'Orden de Instalación' && tipo !== 'Testigo' && tipo !== 'Programación' && tipo !== 'Programación para Tráfico' && tipo !== 'Orden de Programación' && (
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
                 <input
@@ -11111,8 +11802,8 @@ function CreateTaskModal({
               </>
             )}
 
-            {/* === FORMULARIO PROGRAMACIÓN / ORDEN DE PROGRAMACIÓN === */}
-            {(tipo === 'Programación' || tipo === 'Orden de Programación') && (
+            {/* === FORMULARIO PROGRAMACIÓN PARA TRÁFICO / PROGRAMACIÓN / ORDEN DE PROGRAMACIÓN === */}
+            {(tipo === 'Programación para Tráfico' || tipo === 'Programación' || tipo === 'Orden de Programación') && (
               <>
                 {/* Título */}
                 <div>
@@ -11152,9 +11843,11 @@ function CreateTaskModal({
                   />
                 </div>
 
-                {/* Asignado - Multi-select para Operaciones */}
+                {/* Asignado - Multi-select para Tráfico o Operaciones */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignado (Operaciones) *</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">
+                    Asignado ({tipo === 'Programación para Tráfico' ? 'Tráfico' : 'Operaciones'}) *
+                  </label>
                   {isLoadingUsuarios ? (
                     <div className="flex items-center gap-2 py-2 text-zinc-400">
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -11193,7 +11886,7 @@ function CreateTaskModal({
                           }}
                           onFocus={() => setShowAsignadoDropdownProgramacion(true)}
                           onBlur={() => setTimeout(() => setShowAsignadoDropdownProgramacion(false), 200)}
-                          placeholder="Buscar usuario de Operaciones..."
+                          placeholder={tipo === 'Programación para Tráfico' ? 'Buscar usuario de Tráfico...' : 'Buscar usuario de Operaciones...'}
                           disabled={isSubmitting}
                           className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
                         />
@@ -11821,11 +12514,11 @@ function CreateTaskModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !fechaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Re-impresión' ? (!tipoIncidencia || !descripcion.trim() || selectedAnalistasReImpresion.length === 0 || !fechaEntrega) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : tipo === 'Orden de Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0) : !titulo.trim()) || isSubmitting}
+            disabled={!tipo || (tipo === 'Revisión de artes' ? !descripcion.trim() : tipo === 'Testigo' ? (!titulo.trim() || !fechaEntrega || selectedAsignadosTestigo.length === 0) : tipo === 'Re-impresión' ? (!tipoIncidencia || !descripcion.trim() || selectedAnalistasReImpresion.length === 0 || !fechaEntrega) : tipo === 'Programación para Tráfico' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : tipo === 'Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0 || archivosDigitalesProgramacion.some(a => !programacionIndicaciones[a.archivo]?.trim())) : tipo === 'Orden de Programación' ? (!titulo.trim() || !descripcion.trim() || !fechaEntrega || selectedAsignadosProgramacion.length === 0 || isLoadingArchivosDigitales || archivosDigitalesProgramacion.length === 0) : !titulo.trim()) || isSubmitting}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {(isSubmitting || ((tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isSubmitting ? 'Generando...' : (tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales ? 'Cargando archivos...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : tipo === 'Testigo' ? 'Crear Testigo' : tipo === 'Re-impresión' ? 'Crear Re-impresión' : tipo === 'Orden de Programación' ? 'Crear Orden de Programación' : 'Crear tarea'}
+            {(isSubmitting || ((tipo === 'Programación para Tráfico' || tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales)) && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Generando...' : (tipo === 'Programación para Tráfico' || tipo === 'Programación' || tipo === 'Orden de Programación') && isLoadingArchivosDigitales ? 'Cargando archivos...' : tipo === 'Revisión de artes' ? 'Generar Revisión de artes' : tipo === 'Testigo' ? 'Crear Testigo' : tipo === 'Re-impresión' ? 'Crear Re-impresión' : tipo === 'Orden de Programación' ? 'Crear Orden de Programación' : tipo === 'Programación para Tráfico' ? 'Crear Programación para Tráfico' : 'Crear tarea'}
           </button>
         </div>
       </div>
@@ -13700,7 +14393,7 @@ export function TareaSeguimientoPage() {
       .filter((t) => {
         if (t.estatus === 'Atendido' || t.estatus === 'Completado' || t.estatus === 'Finalizada' || t.estatus === 'Activada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación', 'Orden de Instalación'];
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Programación para Tráfico', 'Orden de Programación', 'Orden de Instalación'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
@@ -13730,7 +14423,7 @@ export function TareaSeguimientoPage() {
       .filter((t) => {
         if (t.estatus !== 'Atendido' && t.estatus !== 'Completado' && t.estatus !== 'Finalizada' && t.estatus !== 'Activada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Orden de Programación', 'Orden de Instalación'];
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Programación para Tráfico', 'Orden de Programación', 'Orden de Instalación'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
@@ -14313,13 +15006,13 @@ export function TareaSeguimientoPage() {
 
     if (allAprobado) {
       if (allDigital) {
-        // Para digitales aprobados: Tráfico crea Orden de Programación, Operaciones crea Programación
+        // Para digitales aprobados: se crea Programación para Tráfico (ya no Programación directamente)
         if (permissions.canCreateOrdenProgramacion) {
           availableTipos = ['Orden de Programación'];
           initialTipo = 'Orden de Programación';
         } else {
-          availableTipos = ['Programación'];
-          initialTipo = 'Programación';
+          availableTipos = ['Programación para Tráfico'];
+          initialTipo = 'Programación para Tráfico';
         }
       } else if (hasIMU && !hasInImpresionFlow) {
         // Tradicionales con IMU: mostrar Impresión e Instalación
@@ -14624,6 +15317,52 @@ export function TareaSeguimientoPage() {
       setIsLoadingDigitalGallery(false);
     }
   }, [campanaId]);
+
+  // Handler para asignar arte digital desde biblioteca (wizard con notas)
+  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[] }) => {
+    const reservaIds = selectedInventoryItems.flatMap(item =>
+      item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+    );
+
+    if (reservaIds.length === 0) {
+      setUploadArtError('No se encontraron reservas para actualizar');
+      return;
+    }
+
+    try {
+      setUploadArtError(null);
+
+      const validArchivos = data.archivos.filter(a => a.archivo && a.archivo.trim() !== '');
+      if (validArchivos.length === 0) {
+        setUploadArtError('No se pudieron procesar los archivos.');
+        return;
+      }
+
+      // Usar el endpoint de asignación digital con archivos ya subidos
+      const filesWithMeta = validArchivos.map(a => ({
+        archivo: a.archivo,
+        spot: a.spot,
+        nombre: a.archivo.split('/').pop() || 'archivo',
+        tipo: a.tipo,
+        nota: a.nota,
+      }));
+
+      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithMeta);
+
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['digital-file-summaries', campanaId] });
+
+      setIsUploadArtModalOpen(false);
+      setSelectedInventoryIds(new Set());
+      setUploadArtError(null);
+    } catch (error) {
+      console.error('Error al asignar artes digitales:', error);
+      setUploadArtError(error instanceof Error ? error.message : 'Error al asignar artes digitales');
+    }
+  }, [selectedInventoryItems, campanaId, queryClient]);
 
   // Handler para subir artes tradicionales (múltiples con notas)
   const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[] }) => {
@@ -18218,6 +18957,7 @@ export function TareaSeguimientoPage() {
         onSubmit={handleUploadArt}
         onSubmitDigital={handleUploadDigitalArt}
         onSubmitTradicional={handleUploadTradicionalArt}
+        onSubmitDigitalFromLibrary={handleUploadDigitalFromLibrary}
         artesExistentes={artesExistentes}
         addedArtes={parentAddedArtes}
         onAddedArtesChange={setParentAddedArtes}
@@ -18497,6 +19237,42 @@ Por favor registra la cantidad de impresiones recibidas.`,
         tradicionalSummaryMap={tradicionalSummaryMap}
         openTradicionalGallery={openTradicionalGallery}
         tipoPeriodo={tipoPeriodo}
+        onCompleteProgramacionTrafico={async (taskId, operacionesAsignados, indicaciones, archivos) => {
+          if (!selectedTask) return;
+
+          // 1. Mark the Programación para Tráfico task as Atendido
+          await updateTareaMutation.mutateAsync({
+            tareaId: parseInt(taskId),
+            data: { estatus: 'Atendido' }
+          });
+
+          // 2. Build evidencia for the new Programación task
+          const evidenciaProgramacion = JSON.stringify({
+            indicaciones,
+            archivos,
+            operaciones_asignados: operacionesAsignados,
+          });
+
+          // 3. Create "Programación" task assigned to selected operaciones users
+          const nombresAsignados = operacionesAsignados.map(u => u.nombre).join(', ');
+          const idsAsignados = operacionesAsignados.map(u => String(u.id)).join(',');
+
+          await createTareaMutation.mutateAsync({
+            titulo: selectedTask.titulo || `Programación - ${selectedTask.identificador || ''}`,
+            descripcion: selectedTask.descripcion || 'Tarea de programación generada desde Programación para Tráfico.',
+            tipo: 'Programación',
+            asignado: nombresAsignados,
+            id_asignado: idsAsignados,
+            ids_reservas: selectedTask.inventario_ids?.join(',') || '',
+            fecha_fin: selectedTask.fecha_fin,
+            evidencia: evidenciaProgramacion,
+          });
+
+          // 4. Close modal and refresh
+          setIsTaskDetailModalOpen(false);
+          setSelectedTask(null);
+          queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+        }}
       />
 
       {/* Modal para ver archivo testigo */}

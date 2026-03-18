@@ -107,6 +107,14 @@ export const TIPO_CONFIG = {
     border: 'border-pink-500/30',
     icon: Send
   },
+
+  // Programación para Tráfico - Teal
+  'Programación para Tráfico': {
+    color: 'text-teal-400',
+    bg: 'bg-teal-500/20',
+    border: 'border-teal-500/30',
+    icon: ClipboardList
+  },
 } as const;
 
 // Default para tipos no definidos
