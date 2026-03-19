@@ -823,7 +823,8 @@ export function InventariosPage() {
                           { col: 'plaza' as SortCol, label: 'Plaza', sortable: true },
                           { col: '' as SortCol, label: 'Cara', sortable: false },
                           { col: '' as SortCol, label: 'Dimensiones', sortable: false },
-                          { col: 'estatus' as SortCol, label: 'Estatus', sortable: true },
+                          { col: 'estatus' as SortCol, label: 'Actividad', sortable: true },
+                          { col: '' as SortCol, label: 'Estatus', sortable: false },
                         ].map(({ col, label, sortable }) => (
                           <th
                             key={label}
@@ -882,7 +883,16 @@ export function InventariosPage() {
                             </td>
                             <td className="px-4 py-3">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${estStyle.bg} ${estStyle.text} border ${estStyle.border}`}>
-                                {(item.estatus_real || item.estatus || 'Sin estatus').replace('Disponible', 'Activo')}
+                                {realEstatus === 'Ocupado' || realEstatus === 'Reservado' ? 'Ocupado' : 'Disponible'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                                isBlocked
+                                  ? isDark ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200'
+                                  : isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              } border`}>
+                                {isBlocked ? 'Bloqueado' : 'Activo'}
                               </span>
                             </td>
                             <td className="px-4 py-3">
@@ -903,12 +913,12 @@ export function InventariosPage() {
                                 </button>
                                 <button
                                   onClick={() => toggleBlockMutation.mutate(item.id)}
-                                  disabled={toggleBlockMutation.isPending && toggleBlockMutation.variables === item.id}
+                                  disabled={(toggleBlockMutation.isPending && toggleBlockMutation.variables === item.id) || (!isBlocked && (realEstatus === 'Ocupado' || realEstatus === 'Reservado'))}
                                   className={`p-1.5 rounded-lg transition-colors ${isBlocked
                                     ? isDark ? 'hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300' : 'hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700'
                                     : `${isDark ? 'hover:bg-red-500/10 hover:text-red-400' : 'hover:bg-red-50 hover:text-red-600'} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`
                                   } disabled:opacity-50`}
-                                  title={isBlocked ? 'Desbloquear' : 'Bloquear'}
+                                  title={(!isBlocked && (realEstatus === 'Ocupado' || realEstatus === 'Reservado')) ? 'No se puede bloquear - inventario ocupado' : isBlocked ? 'Desbloquear' : 'Bloquear'}
                                 >
                                   {toggleBlockMutation.isPending && toggleBlockMutation.variables === item.id
                                     ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
