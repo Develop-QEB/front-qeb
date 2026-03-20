@@ -667,6 +667,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
+  const [excluirCategoria, setExcluirCategoria] = useState<string>('');
 
   // Custom Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -780,6 +781,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     queryFn: () => propuestasService.getReservasForModal(propuesta.id),
     enabled: isOpen && !!propuesta.id,
     refetchOnMount: 'always',
+  });
+
+  const { data: categoriasCliente } = useQuery({
+    queryKey: ['categorias-cliente'],
+    queryFn: () => inventariosService.getCategoriasCliente(),
+    enabled: isOpen,
+    staleTime: 5 * 60 * 1000,
   });
 
   // Load existing reservas into state when data arrives
@@ -1975,6 +1983,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setFlujoFilter('Todos'); // Always start with all
     setSortColumn('codigo_unico');
     setSortDirection('asc');
+    setExcluirCategoria('');
 
     // Fetch disponibles based on cara characteristics (gets all, filter in frontend)
     setIsSearching(true);
@@ -2000,6 +2009,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         fecha_inicio: cara.inicio_periodo || undefined,
         fecha_fin: cara.fin_periodo || undefined,
         solicitudCaraId: cara.id,
+        excluir_categoria: excluirCategoria || undefined,
       });
       setInventarioDisponible(response.data || []);
     } catch (error) {
@@ -2009,6 +2019,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setIsSearching(false);
     }
   };
+
+  // Re-search when excluirCategoria changes (if already in search view)
+  useEffect(() => {
+    if (viewState === 'search-inventory' && selectedCaraForSearch) {
+      handleSearchInventory(selectedCaraForSearch);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excluirCategoria]);
 
   // Refetch disponibles with current filters
   const handleRefetchDisponibles = async () => {
@@ -3515,6 +3533,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <X className="h-3 w-3 ml-0.5 cursor-pointer hover:text-emerald-200" onClick={clearPOIFilter} />
                     </div>
                   )}
+
+                  {/* Category Exclusion Filter */}
+                  <select
+                    value={excluirCategoria}
+                    onChange={(e) => setExcluirCategoria(e.target.value)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${excluirCategoria
+                      ? 'bg-red-500 text-white shadow border-red-500'
+                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                    }`}
+                  >
+                    <option value="">Excluir categoría...</option>
+                    {(categoriasCliente || []).map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
 
                   <div className="w-px h-6 bg-zinc-700" />
 
