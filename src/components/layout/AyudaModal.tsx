@@ -39,6 +39,27 @@ const tutorials: Tutorial[] = [
     title: 'Manual-Asesor-Comercial-QEB', 
     pdfUrl: 'https://drive.google.com/file/d/1mXExe-3UJ_zFTG4IkgKLwi_x6AtF0bko/preview'
   },
+  {
+    id: 'manual-analistas',
+    type: 'pdf' as const,
+    category: 'Analistas',
+    title: 'Manual-Analista-QEB',
+    pdfUrl: 'https://drive.google.com/file/d/1oIrHe80hrL5WxdstpD7oL7S_c63SZOvE/preview'
+  },
+  {
+    id: 'manual-diseños',
+    type: 'pdf' as const,
+    category: 'Diseño',
+    title: 'Manual-Diseño-QEB',
+    pdfUrl: 'https://drive.google.com/file/d/1nBQg3OYPuaBlNJCQVpzCttKCpbyfTr00/preview'
+  },
+  {
+    id: 'manual-trafico',
+    type: 'pdf' as const,
+    category: 'Trafico',
+    title: 'Manual-Trafico-QEB',
+    pdfUrl: 'https://drive.google.com/file/d/1rSLKyWxsO7EPHYIeLbs4btJjZ-1Snr1Y/preview'
+  }
 ];
 
 const categories = [...new Set(tutorials.map((t) => t.category))];
