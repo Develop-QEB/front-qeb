@@ -88,6 +88,13 @@ interface SAPArticulo {
   ItemPrices?: { PriceList: number; Price: number }[];
 }
 
+// Detectar si un artículo es de impresión (no requiere inventario)
+const isImpresionArticle = (itemCode: string, itemName?: string): boolean => {
+  if (itemCode.startsWith('IM')) return true;
+  if (itemName && itemName.toLowerCase().includes('impresion')) return true;
+  return false;
+};
+
 // Tarifas from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
 // Ciudad -> Estado mapping for auto-selection
@@ -1275,6 +1282,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Get cara completion status
   const getCaraCompletionStatus = (cara: CaraItem) => {
+    // Artículos de impresión siempre están completos (no requieren inventario)
+    if (cara.articulo && isImpresionArticle(cara.articulo)) {
+      return {
+        flujoReservado: 0, contraflujoReservado: 0, bonificacionReservado: 0,
+        flujoRequerido: 0, contraflujoRequerido: 0, bonificacionRequerido: 0,
+        flujoCompleto: true, contraflujoCompleto: true, bonificacionCompleto: true,
+        isComplete: true, totalReservado: 0, totalRequerido: 0,
+        flujoDiff: 0, contraflujoDiff: 0, bonificacionDiff: 0, totalDiff: 0,
+        needsAttention: false, isImpresion: true,
+      };
+    }
+
     const caraReservas = reservas.filter(r =>
       r.id.startsWith(cara.localId) || r.solicitudCaraId === cara.id
     );
@@ -5525,8 +5544,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const carasFaltantes = status.totalRequerido - status.totalReservado;
 
                             // Determine status color and indicator
-                            // Green = complete (reservado >= requerido), Amber = incomplete (reservado < requerido)
-                            const statusColor = status.isComplete ? 'emerald' : 'amber';
+                            const esImpresion = cara.articulo ? isImpresionArticle(cara.articulo) : false;
+                            // Blue = impresión (informativo), Green = complete, Amber = incomplete
+                            const statusColor = esImpresion ? 'blue' : status.isComplete ? 'emerald' : 'amber';
 
                             // Display text for diff:
                             // - Missing (totalDiff < 0): show "faltan X"
@@ -5538,12 +5558,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 : `faltan ${Math.abs(status.totalDiff)}`;
 
                             return (
-                              <div key={cara.localId} className={`${statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
+                              <div key={cara.localId} className={`${statusColor === 'blue' ? 'bg-blue-500/5' : statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
                                 {/* Cara row */}
                                 <div className="flex items-center gap-3 px-5 py-3 hover:bg-zinc-800/30 transition-colors">
                                   {/* Completion indicator */}
                                   <div className={`w-2 h-2 rounded-full ${
-                                    statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+                                    statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
                                   <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
@@ -5575,14 +5595,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Caras</span>
-                                      <div className="flex items-center gap-1">
-                                        <p className="text-white font-medium">{status.totalReservado}/{totalCaras}</p>
-                                        {diffDisplay && (
-                                          <span className={`text-xs font-medium ${status.totalDiff > 0 ? 'text-red-400' : 'text-amber-400'}`}>
-                                            ({diffDisplay})
-                                          </span>
-                                        )}
-                                      </div>
+                                      {esImpresion ? (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-medium">Impresión</span>
+                                      ) : (
+                                        <div className="flex items-center gap-1">
+                                          <p className="text-white font-medium">{status.totalReservado}/{totalCaras}</p>
+                                          {diffDisplay && (
+                                            <span className={`text-xs font-medium ${status.totalDiff > 0 ? 'text-red-400' : 'text-amber-400'}`}>
+                                              ({diffDisplay})
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                     <div>
                                       <span className="text-zinc-500 text-xs">Autorización</span>
@@ -5603,8 +5627,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    {/* Botón Buscar Inventario - deshabilitado si hay autorizaciones pendientes */}
-                                    {effectiveCanEdit && permissions.canBuscarInventarioEnModal && (() => {
+                                    {/* Botón Buscar Inventario - oculto para impresión, deshabilitado si hay autorizaciones pendientes */}
+                                    {effectiveCanEdit && permissions.canBuscarInventarioEnModal && !esImpresion && (() => {
                                       const tienePendientes = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
                                       const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
                                       const bloqueado = tienePendientes || tieneRechazado;

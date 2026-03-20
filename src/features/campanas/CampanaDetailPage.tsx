@@ -443,6 +443,39 @@ const TABLE_COLUMNS: TableColumn[] = [
   { field: 'medidas', label: 'Medidas' },
 ];
 
+// Columnas específicas para artículos de impresión (sin inventario)
+const TABLE_COLUMNS_IM: TableColumn[] = [
+  { field: 'articulo', label: 'Artículo' },
+  { field: 'formato', label: 'Formato' },
+  { field: 'caras_totales', label: 'Impresiones' },
+  { field: 'plaza', label: 'Ciudad' },
+  { field: 'tarifa_publica', label: 'Tarifa' },
+  { field: 'total_inversion', label: 'Inversión' },
+  { field: 'tipo_medio', label: 'Tipo' },
+  { field: 'inicio_periodo', label: 'Inicio' },
+  { field: 'fin_periodo', label: 'Fin' },
+  { field: 'estatus_reserva', label: 'Estatus' },
+];
+
+// Helper para detectar artículos de impresión
+const isIMArticle = (item: InventarioReservado | InventarioConAPS): boolean => {
+  return String(item.rsv_ids).startsWith('sc_');
+};
+
+const TABLE_COLUMNS_IM_APS: TableColumn[] = [
+  { field: 'articulo', label: 'Artículo' },
+  { field: 'formato', label: 'Formato' },
+  { field: 'caras_totales', label: 'Impresiones' },
+  { field: 'plaza', label: 'Ciudad' },
+  { field: 'tarifa_publica', label: 'Tarifa' },
+  { field: 'total_inversion', label: 'Inversión' },
+  { field: 'tipo_medio', label: 'Tipo' },
+  { field: 'inicio_periodo', label: 'Inicio' },
+  { field: 'fin_periodo', label: 'Fin' },
+  { field: 'aps', label: 'APS' },
+  { field: 'estatus_reserva', label: 'Estatus' },
+];
+
 const TABLE_COLUMNS_APS: TableColumn[] = [
   { field: 'codigo_unico', label: 'Código' },
   { field: 'articulo', label: 'Artículo' },
@@ -546,10 +579,43 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
   return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{value !== null && value !== undefined ? String(value) : '-'}</td>;
 }
 
+function renderIMCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', isDark = true) {
+  if (col.field === 'articulo') return <td key={col.field} className={`${p}`}><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>{item.articulo || '-'}</span></td>;
+  if (col.field === 'formato') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-[10px]`}>{(item as any).formato || '-'}</td>;
+  if (col.field === 'caras_totales') return <td key={col.field} className={`${p} text-center`}><span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700'}`}>{item.caras_totales}</span></td>;
+  if (col.field === 'plaza') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-[10px]`}>{item.plaza || '-'}</td>;
+  if (col.field === 'tarifa_publica') {
+    const t = Number((item as any).tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
+    return <td key={col.field} className={`${p} text-amber-400 text-right font-mono text-[10px]`}>{fmtMoney(t)}</td>;
+  }
+  if (col.field === 'total_inversion') {
+    const t = Number((item as any).tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
+    const inv = t * (Number(item.caras_totales) || 0);
+    return <td key={col.field} className={`${p} text-emerald-400 text-right font-mono font-medium text-[10px]`}>{fmtMoney(inv)}</td>;
+  }
+  if (col.field === 'tipo_medio') return <td key={col.field} className={`${p}`}><span className={`text-[10px] px-1.5 py-0.5 rounded ${(item as any).tipo_medio === 'Digital' ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700') : (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700')}`}>{(item as any).tipo_medio || '-'}</span></td>;
+  if (col.field === 'inicio_periodo') {
+    const d = item.inicio_periodo ? new Date(item.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+    return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{d}</td>;
+  }
+  if (col.field === 'fin_periodo') {
+    const d = (item as any).fin_periodo ? new Date((item as any).fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+    return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{d}</td>;
+  }
+  if (col.field === 'estatus_reserva') return <td key={col.field} className={p}><span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>{(item as any).estatus_reserva || 'Impresión'}</span></td>;
+  const value = (item as any)[col.field];
+  return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-[10px]`}>{value !== null && value !== undefined ? String(value) : '-'}</td>;
+}
+
 function renderAPSCell(item: InventarioConAPS, col: TableColumn, p = 'p-1.5', isDark = true) {
   if (col.field === 'aps') return <td key={col.field} className={`${p} text-center`}><span className={`px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-50 text-cyan-700'}`}>{item.aps}</span></td>;
   if (col.field === 'estatus_reserva') return <td key={col.field} className={p}><span className={`px-1.5 py-0.5 rounded text-[10px] ${item.estatus_reserva === 'confirmado' ? (isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700') : item.estatus_reserva === 'pendiente' ? (isDark ? 'bg-yellow-500/20 text-yellow-400' : 'bg-yellow-50 text-yellow-700') : (isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500')}`}>{item.estatus_reserva || 'N/A'}</span></td>;
   return renderReservadoCell(item, col, p, isDark);
+}
+
+function renderIMAPSCell(item: InventarioConAPS, col: TableColumn, p = 'p-1.5', isDark = true) {
+  if (col.field === 'aps') return <td key={col.field} className={`${p} text-center`}><span className={`px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-50 text-cyan-700'}`}>{item.aps}</span></td>;
+  return renderIMCell(item as unknown as InventarioReservado, col, p, isDark);
 }
 
 // Función para aplicar filtros a los datos
@@ -1392,7 +1458,8 @@ export function CampanaDetailPage() {
   });
 
   const assignAPSMutation = useMutation({
-    mutationFn: (inventarioIds: number[]) => campanasService.assignAPS(campanaId, inventarioIds),
+    mutationFn: (params: { inventarioIds: number[]; solicitudCarasIds: number[] }) =>
+      campanasService.assignAPS(campanaId, params.inventarioIds, params.solicitudCarasIds),
     onSuccess: (data) => {
       // Limpiar selección y refrescar datos
       setSelectedItems(new Set());
@@ -1410,13 +1477,16 @@ export function CampanaDetailPage() {
       alert('Selecciona al menos un elemento para asignar APS');
       return;
     }
-    // Obtener los IDs de inventario de los items seleccionados (incluyendo cortesías si el usuario elige asignar APS)
-    const inventarioIds = inventarioReservado
-      .filter(item => selectedItems.has(item.rsv_ids))
-      .map(item => item.id);
+    // Separar artículos normales (con inventario) de artículos IM (sin inventario)
+    const selectedReservado = inventarioReservado.filter(item => selectedItems.has(item.rsv_ids));
+    const normalItems = selectedReservado.filter(item => !String(item.rsv_ids).startsWith('sc_'));
+    const imItems = selectedReservado.filter(item => String(item.rsv_ids).startsWith('sc_'));
 
-    if (inventarioIds.length > 0) {
-      assignAPSMutation.mutate(inventarioIds);
+    const inventarioIds = normalItems.map(item => item.id);
+    const solicitudCarasIds = imItems.map(item => item.solicitud_caras_id).filter(Boolean);
+
+    if (inventarioIds.length > 0 || solicitudCarasIds.length > 0) {
+      assignAPSMutation.mutate({ inventarioIds, solicitudCarasIds });
     }
   };
 
@@ -2181,57 +2251,125 @@ export function CampanaDetailPage() {
                     description="Esta campaña no tiene inventarios sin APS"
                   />
                 ) : activeGroupings.length === 0 ? (
-                  // Sin agrupación
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-card z-10">
-                      <tr className="border-b border-border text-left">
-                        <th className="p-2 w-8">
-                          <button
-                            onClick={toggleSelectAll}
-                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                              selectedItems.size === filteredInventarioReservado.length && filteredInventarioReservado.length > 0
-                                ? 'bg-purple-600 border-purple-600'
-                                : 'border-purple-500/50 hover:border-purple-400'
-                            }`}
-                          >
-                            {selectedItems.size === filteredInventarioReservado.length && filteredInventarioReservado.length > 0 && (
-                              <Check className="h-3 w-3 text-white" />
-                            )}
-                          </button>
-                        </th>
-                        {visibleColumnsReservado.map(col => (
-                          <th key={col.field} className="p-2 font-medium text-purple-300">{col.label}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredInventarioReservado.map((item) => (
-                        <tr
-                          key={item.rsv_ids}
-                          id={`row-${item.rsv_ids}`}
-                          className={`border-b border-border/50 hover:bg-purple-900/20 transition-colors ${
-                            selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : ''
-                          }`}
-                        >
-                          <td className="p-2">
-                            <button
-                              onClick={() => toggleItemSelection(item.rsv_ids)}
-                              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                                selectedItems.has(item.rsv_ids)
-                                  ? 'bg-purple-600 border-purple-600'
-                                  : 'border-purple-500/50 hover:border-purple-400'
+                  // Sin agrupación - separar inventario normal de artículos IM
+                  <div>
+                    {/* Tabla de inventario normal */}
+                    {filteredInventarioReservado.filter(i => !isIMArticle(i)).length > 0 && (
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-card z-10">
+                          <tr className="border-b border-border text-left">
+                            <th className="p-2 w-8">
+                              <button
+                                onClick={toggleSelectAll}
+                                className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                  selectedItems.size === filteredInventarioReservado.length && filteredInventarioReservado.length > 0
+                                    ? 'bg-purple-600 border-purple-600'
+                                    : 'border-purple-500/50 hover:border-purple-400'
+                                }`}
+                              >
+                                {selectedItems.size === filteredInventarioReservado.length && filteredInventarioReservado.length > 0 && (
+                                  <Check className="h-3 w-3 text-white" />
+                                )}
+                              </button>
+                            </th>
+                            {visibleColumnsReservado.map(col => (
+                              <th key={col.field} className="p-2 font-medium text-purple-300">{col.label}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredInventarioReservado.filter(i => !isIMArticle(i)).map((item) => (
+                            <tr
+                              key={item.rsv_ids}
+                              id={`row-${item.rsv_ids}`}
+                              className={`border-b border-border/50 hover:bg-purple-900/20 transition-colors ${
+                                selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : ''
                               }`}
                             >
-                              {selectedItems.has(item.rsv_ids) && (
-                                <Check className="h-3 w-3 text-white" />
-                              )}
-                            </button>
-                          </td>
-                          {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-2'))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                              <td className="p-2">
+                                <button
+                                  onClick={() => toggleItemSelection(item.rsv_ids)}
+                                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                    selectedItems.has(item.rsv_ids)
+                                      ? 'bg-purple-600 border-purple-600'
+                                      : 'border-purple-500/50 hover:border-purple-400'
+                                  }`}
+                                >
+                                  {selectedItems.has(item.rsv_ids) && (
+                                    <Check className="h-3 w-3 text-white" />
+                                  )}
+                                </button>
+                              </td>
+                              {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-2'))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {/* Tabla de artículos de impresión */}
+                    {filteredInventarioReservado.filter(i => isIMArticle(i)).length > 0 && (
+                      <>
+                        <div className={`px-3 py-2 mt-2 border-b ${isDark ? 'border-blue-500/30 bg-blue-500/5' : 'border-blue-200 bg-blue-50'}`}>
+                          <span className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                            Artículos de Impresión
+                          </span>
+                        </div>
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-card z-10">
+                            <tr className="border-b border-border text-left">
+                              <th className="p-2 w-8">
+                                <button
+                                  onClick={() => {
+                                    const imItems = filteredInventarioReservado.filter(i => isIMArticle(i));
+                                    const allSelected = imItems.every(i => selectedItems.has(i.rsv_ids));
+                                    const next = new Set(selectedItems);
+                                    imItems.forEach(i => allSelected ? next.delete(i.rsv_ids) : next.add(i.rsv_ids));
+                                    setSelectedItems(next);
+                                  }}
+                                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors border-blue-500/50 hover:border-blue-400`}
+                                >
+                                  {filteredInventarioReservado.filter(i => isIMArticle(i)).every(i => selectedItems.has(i.rsv_ids)) && filteredInventarioReservado.filter(i => isIMArticle(i)).length > 0 && (
+                                    <Check className="h-3 w-3 text-white" />
+                                  )}
+                                </button>
+                              </th>
+                              {TABLE_COLUMNS_IM.map(col => (
+                                <th key={col.field} className={`p-2 font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>{col.label}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredInventarioReservado.filter(i => isIMArticle(i)).map((item) => (
+                              <tr
+                                key={item.rsv_ids}
+                                id={`row-${item.rsv_ids}`}
+                                className={`border-b border-border/50 hover:bg-blue-900/20 transition-colors ${
+                                  selectedItems.has(item.rsv_ids) ? 'bg-blue-500/20' : ''
+                                }`}
+                              >
+                                <td className="p-2">
+                                  <button
+                                    onClick={() => toggleItemSelection(item.rsv_ids)}
+                                    className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                      selectedItems.has(item.rsv_ids)
+                                        ? 'bg-blue-600 border-blue-600'
+                                        : 'border-blue-500/50 hover:border-blue-400'
+                                    }`}
+                                  >
+                                    {selectedItems.has(item.rsv_ids) && (
+                                      <Check className="h-3 w-3 text-white" />
+                                    )}
+                                  </button>
+                                </td>
+                                {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col, 'p-2'))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </>
+                    )}
+                  </div>
                 ) : (
                   // Con agrupación
                   <div className="space-y-2">
@@ -2341,43 +2479,91 @@ export function CampanaDetailPage() {
                                         {isSubExpanded && (
                                           <div>
                                             <GroupMetaBadges items={subItems} skipFields={activeGroupings} />
-                                            <table className="w-full text-xs">
-                                            <thead>
-                                              <tr className="border-b border-border/30 text-left">
-                                                <th className="p-1.5 w-8"></th>
-                                                {visibleColumnsReservado.map(col => (
-                                                  <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
-                                                ))}
-                                              </tr>
-                                            </thead>
-                                            <tbody>
-                                              {subItems.map((item) => (
-                                                <tr
-                                                  key={item.rsv_ids}
-                                                  id={`row-${item.rsv_ids}`}
-                                                  className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
-                                                    selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : ''
-                                                  }`}
-                                                >
-                                                  <td className="p-1.5 w-8">
-                                                    <button
-                                                      onClick={() => toggleItemSelection(item.rsv_ids)}
-                                                      className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
-                                                        selectedItems.has(item.rsv_ids)
-                                                          ? 'bg-purple-600 border-purple-600'
-                                                          : 'border-purple-500/50 hover:border-purple-400'
+                                            {subItems.filter(i => !isIMArticle(i)).length > 0 && (
+                                              <table className="w-full text-xs">
+                                                <thead>
+                                                  <tr className="border-b border-border/30 text-left">
+                                                    <th className="p-1.5 w-8"></th>
+                                                    {visibleColumnsReservado.map(col => (
+                                                      <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                                    ))}
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {subItems.filter(i => !isIMArticle(i)).map((item) => (
+                                                    <tr
+                                                      key={item.rsv_ids}
+                                                      id={`row-${item.rsv_ids}`}
+                                                      className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
+                                                        selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : ''
                                                       }`}
                                                     >
-                                                      {selectedItems.has(item.rsv_ids) && (
-                                                        <Check className="h-2.5 w-2.5 text-white" />
-                                                      )}
-                                                    </button>
-                                                  </td>
-                                                  {visibleColumnsReservado.map(col => renderReservadoCell(item, col))}
-                                                </tr>
-                                              ))}
-                                            </tbody>
-                                          </table>
+                                                      <td className="p-1.5 w-8">
+                                                        <button
+                                                          onClick={() => toggleItemSelection(item.rsv_ids)}
+                                                          className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                            selectedItems.has(item.rsv_ids)
+                                                              ? 'bg-purple-600 border-purple-600'
+                                                              : 'border-purple-500/50 hover:border-purple-400'
+                                                          }`}
+                                                        >
+                                                          {selectedItems.has(item.rsv_ids) && (
+                                                            <Check className="h-2.5 w-2.5 text-white" />
+                                                          )}
+                                                        </button>
+                                                      </td>
+                                                      {visibleColumnsReservado.map(col => renderReservadoCell(item, col))}
+                                                    </tr>
+                                                  ))}
+                                                </tbody>
+                                              </table>
+                                            )}
+                                            {subItems.filter(i => isIMArticle(i)).length > 0 && (
+                                              <>
+                                                <div className={`px-2 py-1 mt-1 border-b ${isDark ? 'border-blue-500/30 bg-blue-500/5' : 'border-blue-200 bg-blue-50'}`}>
+                                                  <span className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                                                    Artículos de Impresión
+                                                  </span>
+                                                </div>
+                                                <table className="w-full text-xs">
+                                                  <thead>
+                                                    <tr className="border-b border-border/30 text-left">
+                                                      <th className="p-1.5 w-8"></th>
+                                                      {TABLE_COLUMNS_IM.map(col => (
+                                                        <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>{col.label}</th>
+                                                      ))}
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    {subItems.filter(i => isIMArticle(i)).map((item) => (
+                                                      <tr
+                                                        key={item.rsv_ids}
+                                                        id={`row-${item.rsv_ids}`}
+                                                        className={`border-t border-border/30 hover:bg-blue-900/10 transition-colors ${
+                                                          selectedItems.has(item.rsv_ids) ? 'bg-blue-500/20' : ''
+                                                        }`}
+                                                      >
+                                                        <td className="p-1.5 w-8">
+                                                          <button
+                                                            onClick={() => toggleItemSelection(item.rsv_ids)}
+                                                            className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                              selectedItems.has(item.rsv_ids)
+                                                                ? 'bg-blue-600 border-blue-600'
+                                                                : 'border-blue-500/50 hover:border-blue-400'
+                                                            }`}
+                                                          >
+                                                            {selectedItems.has(item.rsv_ids) && (
+                                                              <Check className="h-2.5 w-2.5 text-white" />
+                                                            )}
+                                                          </button>
+                                                        </td>
+                                                        {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col))}
+                                                      </tr>
+                                                    ))}
+                                                  </tbody>
+                                                </table>
+                                              </>
+                                            )}
                                           </div>
                                         )}
                                       </div>
@@ -2386,43 +2572,93 @@ export function CampanaDetailPage() {
                                 </div>
                               ) : items ? (
                                 // Un solo nivel de agrupación
-                                <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="border-b border-border/30 text-left">
-                                      <th className="p-1.5 w-8"></th>
-                                      {visibleColumnsReservado.map(col => (
-                                        <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {items.map((item) => (
-                                      <tr
-                                        key={item.rsv_ids}
-                                        id={`row-${item.rsv_ids}`}
-                                        className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
-                                          selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : ''
-                                        }`}
-                                      >
-                                        <td className="p-1.5 w-8">
-                                          <button
-                                            onClick={() => toggleItemSelection(item.rsv_ids)}
-                                            className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
-                                              selectedItems.has(item.rsv_ids)
-                                                ? 'bg-purple-600 border-purple-600'
-                                                : 'border-purple-500/50 hover:border-purple-400'
+                                <>
+                                  {items.filter(i => !isIMArticle(i)).length > 0 && (
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="border-b border-border/30 text-left">
+                                          <th className="p-1.5 w-8"></th>
+                                          {visibleColumnsReservado.map(col => (
+                                            <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {items.filter(i => !isIMArticle(i)).map((item) => (
+                                          <tr
+                                            key={item.rsv_ids}
+                                            id={`row-${item.rsv_ids}`}
+                                            className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
+                                              selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : ''
                                             }`}
                                           >
-                                            {selectedItems.has(item.rsv_ids) && (
-                                              <Check className="h-2.5 w-2.5 text-white" />
-                                            )}
-                                          </button>
-                                        </td>
-                                        {visibleColumnsReservado.map(col => renderReservadoCell(item, col))}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                            <td className="p-1.5 w-8">
+                                              <button
+                                                onClick={() => toggleItemSelection(item.rsv_ids)}
+                                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                  selectedItems.has(item.rsv_ids)
+                                                    ? 'bg-purple-600 border-purple-600'
+                                                    : 'border-purple-500/50 hover:border-purple-400'
+                                                }`}
+                                              >
+                                                {selectedItems.has(item.rsv_ids) && (
+                                                  <Check className="h-2.5 w-2.5 text-white" />
+                                                )}
+                                              </button>
+                                            </td>
+                                            {visibleColumnsReservado.map(col => renderReservadoCell(item, col))}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                  {items.filter(i => isIMArticle(i)).length > 0 && (
+                                    <>
+                                      <div className={`px-2 py-1 mt-1 border-b ${isDark ? 'border-blue-500/30 bg-blue-500/5' : 'border-blue-200 bg-blue-50'}`}>
+                                        <span className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                                          Artículos de Impresión
+                                        </span>
+                                      </div>
+                                      <table className="w-full text-xs">
+                                        <thead>
+                                          <tr className="border-b border-border/30 text-left">
+                                            <th className="p-1.5 w-8"></th>
+                                            {TABLE_COLUMNS_IM.map(col => (
+                                              <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>{col.label}</th>
+                                            ))}
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {items.filter(i => isIMArticle(i)).map((item) => (
+                                            <tr
+                                              key={item.rsv_ids}
+                                              id={`row-${item.rsv_ids}`}
+                                              className={`border-t border-border/30 hover:bg-blue-900/10 transition-colors ${
+                                                selectedItems.has(item.rsv_ids) ? 'bg-blue-500/20' : ''
+                                              }`}
+                                            >
+                                              <td className="p-1.5 w-8">
+                                                <button
+                                                  onClick={() => toggleItemSelection(item.rsv_ids)}
+                                                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                    selectedItems.has(item.rsv_ids)
+                                                      ? 'bg-blue-600 border-blue-600'
+                                                      : 'border-blue-500/50 hover:border-blue-400'
+                                                  }`}
+                                                >
+                                                  {selectedItems.has(item.rsv_ids) && (
+                                                    <Check className="h-2.5 w-2.5 text-white" />
+                                                  )}
+                                                </button>
+                                              </td>
+                                              {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col))}
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </>
+                                  )}
+                                </>
                               ) : null}
                             </div>
                           )}
@@ -2848,57 +3084,125 @@ export function CampanaDetailPage() {
                   description="Aún no se han asignado APS a ningún espacio"
                 />
               ) : activeGroupingsAPS.length === 0 ? (
-                // Sin agrupación
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-card z-10">
-                    <tr className="border-b border-border text-left">
-                      <th className="p-2 w-8">
-                        <button
-                          onClick={toggleSelectAllAPS}
-                          className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                            selectedItemsAPS.size === filteredInventarioAPS.length && filteredInventarioAPS.length > 0
-                              ? 'bg-cyan-600 border-cyan-600'
-                              : 'border-cyan-500/50 hover:border-cyan-400'
-                          }`}
-                        >
-                          {selectedItemsAPS.size === filteredInventarioAPS.length && filteredInventarioAPS.length > 0 && (
-                            <Check className="h-3 w-3 text-white" />
-                          )}
-                        </button>
-                      </th>
-                      {visibleColumnsAPS.map(col => (
-                        <th key={col.field} className="p-2 font-medium text-purple-300">{col.label}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {inventarioConAPS.map((item) => (
-                      <tr
-                        key={item.rsv_ids}
-                        id={`row-aps-${item.rsv_ids}`}
-                        className={`border-b border-border/50 hover:bg-purple-900/20 transition-colors ${
-                          selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
-                        }`}
-                      >
-                        <td className="p-2">
-                          <button
-                            onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
-                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                              selectedItemsAPS.has(String(item.rsv_ids))
-                                ? 'bg-cyan-600 border-cyan-600'
-                                : 'border-cyan-500/50 hover:border-cyan-400'
+                // Sin agrupación - separar inventario normal de artículos IM
+                <div>
+                  {/* Tabla de inventario normal con APS */}
+                  {filteredInventarioAPS.filter(i => !isIMArticle(i)).length > 0 && (
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-card z-10">
+                        <tr className="border-b border-border text-left">
+                          <th className="p-2 w-8">
+                            <button
+                              onClick={toggleSelectAllAPS}
+                              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                selectedItemsAPS.size === filteredInventarioAPS.length && filteredInventarioAPS.length > 0
+                                  ? 'bg-cyan-600 border-cyan-600'
+                                  : 'border-cyan-500/50 hover:border-cyan-400'
+                              }`}
+                            >
+                              {selectedItemsAPS.size === filteredInventarioAPS.length && filteredInventarioAPS.length > 0 && (
+                                <Check className="h-3 w-3 text-white" />
+                              )}
+                            </button>
+                          </th>
+                          {visibleColumnsAPS.map(col => (
+                            <th key={col.field} className="p-2 font-medium text-purple-300">{col.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredInventarioAPS.filter(i => !isIMArticle(i)).map((item) => (
+                          <tr
+                            key={item.rsv_ids}
+                            id={`row-aps-${item.rsv_ids}`}
+                            className={`border-b border-border/50 hover:bg-purple-900/20 transition-colors ${
+                              selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
                             }`}
                           >
-                            {selectedItemsAPS.has(String(item.rsv_ids)) && (
-                              <Check className="h-3 w-3 text-white" />
-                            )}
-                          </button>
-                        </td>
-                        {visibleColumnsAPS.map(col => renderAPSCell(item, col, 'p-2'))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                            <td className="p-2">
+                              <button
+                                onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                  selectedItemsAPS.has(String(item.rsv_ids))
+                                    ? 'bg-cyan-600 border-cyan-600'
+                                    : 'border-cyan-500/50 hover:border-cyan-400'
+                                }`}
+                              >
+                                {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                  <Check className="h-3 w-3 text-white" />
+                                )}
+                              </button>
+                            </td>
+                            {visibleColumnsAPS.map(col => renderAPSCell(item, col, 'p-2'))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+
+                  {/* Tabla de artículos de impresión con APS */}
+                  {filteredInventarioAPS.filter(i => isIMArticle(i)).length > 0 && (
+                    <>
+                      <div className={`px-3 py-2 mt-2 border-b ${isDark ? 'border-blue-500/30 bg-blue-500/5' : 'border-blue-200 bg-blue-50'}`}>
+                        <span className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                          Artículos de Impresión
+                        </span>
+                      </div>
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-card z-10">
+                          <tr className="border-b border-border text-left">
+                            <th className="p-2 w-8">
+                              <button
+                                onClick={() => {
+                                  const imItems = filteredInventarioAPS.filter(i => isIMArticle(i));
+                                  const allSelected = imItems.every(i => selectedItemsAPS.has(String(i.rsv_ids)));
+                                  const next = new Set(selectedItemsAPS);
+                                  imItems.forEach(i => allSelected ? next.delete(String(i.rsv_ids)) : next.add(String(i.rsv_ids)));
+                                  setSelectedItemsAPS(next);
+                                }}
+                                className={`w-4 h-4 rounded border flex items-center justify-center transition-colors border-blue-500/50 hover:border-blue-400`}
+                              >
+                                {filteredInventarioAPS.filter(i => isIMArticle(i)).every(i => selectedItemsAPS.has(String(i.rsv_ids))) && filteredInventarioAPS.filter(i => isIMArticle(i)).length > 0 && (
+                                  <Check className="h-3 w-3 text-white" />
+                                )}
+                              </button>
+                            </th>
+                            {TABLE_COLUMNS_IM_APS.map(col => (
+                              <th key={col.field} className={`p-2 font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>{col.label}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredInventarioAPS.filter(i => isIMArticle(i)).map((item) => (
+                            <tr
+                              key={item.rsv_ids}
+                              id={`row-aps-${item.rsv_ids}`}
+                              className={`border-b border-border/50 hover:bg-blue-900/20 transition-colors ${
+                                selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-blue-500/20' : ''
+                              }`}
+                            >
+                              <td className="p-2">
+                                <button
+                                  onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                    selectedItemsAPS.has(String(item.rsv_ids))
+                                      ? 'bg-blue-600 border-blue-600'
+                                      : 'border-blue-500/50 hover:border-blue-400'
+                                  }`}
+                                >
+                                  {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                    <Check className="h-3 w-3 text-white" />
+                                  )}
+                                </button>
+                              </td>
+                              {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col, 'p-2'))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+                </div>
               ) : (
                 // Con agrupación (soporta hasta 3 niveles)
                 <div className="space-y-2">
@@ -2974,44 +3278,94 @@ export function CampanaDetailPage() {
                           <div className="px-2 py-1">
                             <GroupMetaBadges items={allGroupItemsAPS} skipFields={activeGroupingsAPS[0] === 'aps' ? [...activeGroupingsAPS, 'plaza', 'formato'] : activeGroupingsAPS} />
                             {isLevel1Array ? (
-                              // Solo 1 nivel - mostrar items directamente
-                              <table className="w-full text-xs">
-                                <thead>
-                                  <tr className="border-b border-border/30 text-left">
-                                    <th className="p-1.5 w-8"></th>
-                                    {visibleColumnsAPS.map(col => (
-                                      <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {(groupData as InventarioConAPS[]).map((item) => (
-                                    <tr
-                                      key={item.rsv_ids}
-                                      id={`row-aps-${item.rsv_ids}`}
-                                      className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
-                                        selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
-                                      }`}
-                                    >
-                                      <td className="p-1.5 w-8">
-                                        <button
-                                          onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
-                                          className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
-                                            selectedItemsAPS.has(String(item.rsv_ids))
-                                              ? 'bg-cyan-600 border-cyan-600'
-                                              : 'border-cyan-500/50 hover:border-cyan-400'
+                              // Solo 1 nivel - separar normal de IM
+                              <>
+                                {(groupData as InventarioConAPS[]).filter(i => !isIMArticle(i)).length > 0 && (
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="border-b border-border/30 text-left">
+                                        <th className="p-1.5 w-8"></th>
+                                        {visibleColumnsAPS.map(col => (
+                                          <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {(groupData as InventarioConAPS[]).filter(i => !isIMArticle(i)).map((item) => (
+                                        <tr
+                                          key={item.rsv_ids}
+                                          id={`row-aps-${item.rsv_ids}`}
+                                          className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
+                                            selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
                                           }`}
                                         >
-                                          {selectedItemsAPS.has(String(item.rsv_ids)) && (
-                                            <Check className="h-2.5 w-2.5 text-white" />
-                                          )}
-                                        </button>
-                                      </td>
-                                      {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                          <td className="p-1.5 w-8">
+                                            <button
+                                              onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                              className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                selectedItemsAPS.has(String(item.rsv_ids))
+                                                  ? 'bg-cyan-600 border-cyan-600'
+                                                  : 'border-cyan-500/50 hover:border-cyan-400'
+                                              }`}
+                                            >
+                                              {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                                <Check className="h-2.5 w-2.5 text-white" />
+                                              )}
+                                            </button>
+                                          </td>
+                                          {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                                {(groupData as InventarioConAPS[]).filter(i => isIMArticle(i)).length > 0 && (
+                                  <>
+                                    <div className={`px-2 py-1 mt-1 border-b ${isDark ? 'border-blue-500/30 bg-blue-500/5' : 'border-blue-200 bg-blue-50'}`}>
+                                      <span className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                                        Artículos de Impresión
+                                      </span>
+                                    </div>
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="border-b border-border/30 text-left">
+                                          <th className="p-1.5 w-8"></th>
+                                          {TABLE_COLUMNS_IM_APS.map(col => (
+                                            <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>{col.label}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {(groupData as InventarioConAPS[]).filter(i => isIMArticle(i)).map((item) => (
+                                          <tr
+                                            key={item.rsv_ids}
+                                            id={`row-aps-${item.rsv_ids}`}
+                                            className={`border-t border-border/30 hover:bg-blue-900/10 transition-colors ${
+                                              selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-blue-500/20' : ''
+                                            }`}
+                                          >
+                                            <td className="p-1.5 w-8">
+                                              <button
+                                                onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                  selectedItemsAPS.has(String(item.rsv_ids))
+                                                    ? 'bg-blue-600 border-blue-600'
+                                                    : 'border-blue-500/50 hover:border-blue-400'
+                                                }`}
+                                              >
+                                                {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                                  <Check className="h-2.5 w-2.5 text-white" />
+                                                )}
+                                              </button>
+                                            </td>
+                                            {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col))}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </>
+                                )}
+                              </>
                             ) : (
                               // Nivel 2 de agrupación
                               <div className="space-y-1">
@@ -3068,44 +3422,94 @@ export function CampanaDetailPage() {
                                         <div className="px-2 py-1">
                                           <GroupMetaBadges items={allSubItemsAPS} skipFields={activeGroupingsAPS[1] === 'aps' ? [...activeGroupingsAPS, 'plaza', 'formato'] : activeGroupingsAPS} />
                                           {isLevel2Array ? (
-                                            // Solo 2 niveles - mostrar items
-                                            <table className="w-full text-xs">
-                                              <thead>
-                                                <tr className="border-b border-border/30 text-left">
-                                                  <th className="p-1.5 w-8"></th>
-                                                  {visibleColumnsAPS.map(col => (
-                                                    <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
-                                                  ))}
-                                                </tr>
-                                              </thead>
-                                              <tbody>
-                                                {(subGroupData as InventarioConAPS[]).map((item) => (
-                                                  <tr
-                                                    key={item.rsv_ids}
-                                                    id={`row-aps-${item.rsv_ids}`}
-                                                    className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
-                                                      selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
-                                                    }`}
-                                                  >
-                                                    <td className="p-1.5 w-8">
-                                                      <button
-                                                        onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
-                                                        className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
-                                                          selectedItemsAPS.has(String(item.rsv_ids))
-                                                            ? 'bg-cyan-600 border-cyan-600'
-                                                            : 'border-cyan-500/50 hover:border-cyan-400'
+                                            // Solo 2 niveles - separar normal de IM
+                                            <>
+                                              {(subGroupData as InventarioConAPS[]).filter(i => !isIMArticle(i)).length > 0 && (
+                                                <table className="w-full text-xs">
+                                                  <thead>
+                                                    <tr className="border-b border-border/30 text-left">
+                                                      <th className="p-1.5 w-8"></th>
+                                                      {visibleColumnsAPS.map(col => (
+                                                        <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                                      ))}
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    {(subGroupData as InventarioConAPS[]).filter(i => !isIMArticle(i)).map((item) => (
+                                                      <tr
+                                                        key={item.rsv_ids}
+                                                        id={`row-aps-${item.rsv_ids}`}
+                                                        className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
+                                                          selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
                                                         }`}
                                                       >
-                                                        {selectedItemsAPS.has(String(item.rsv_ids)) && (
-                                                          <Check className="h-2.5 w-2.5 text-white" />
-                                                        )}
-                                                      </button>
-                                                    </td>
-                                                    {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
-                                                  </tr>
-                                                ))}
-                                              </tbody>
-                                            </table>
+                                                        <td className="p-1.5 w-8">
+                                                          <button
+                                                            onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                                            className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                              selectedItemsAPS.has(String(item.rsv_ids))
+                                                                ? 'bg-cyan-600 border-cyan-600'
+                                                                : 'border-cyan-500/50 hover:border-cyan-400'
+                                                            }`}
+                                                          >
+                                                            {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                                              <Check className="h-2.5 w-2.5 text-white" />
+                                                            )}
+                                                          </button>
+                                                        </td>
+                                                        {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
+                                                      </tr>
+                                                    ))}
+                                                  </tbody>
+                                                </table>
+                                              )}
+                                              {(subGroupData as InventarioConAPS[]).filter(i => isIMArticle(i)).length > 0 && (
+                                                <>
+                                                  <div className={`px-2 py-1 mt-1 border-b ${isDark ? 'border-blue-500/30 bg-blue-500/5' : 'border-blue-200 bg-blue-50'}`}>
+                                                    <span className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                                                      Artículos de Impresión
+                                                    </span>
+                                                  </div>
+                                                  <table className="w-full text-xs">
+                                                    <thead>
+                                                      <tr className="border-b border-border/30 text-left">
+                                                        <th className="p-1.5 w-8"></th>
+                                                        {TABLE_COLUMNS_IM_APS.map(col => (
+                                                          <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>{col.label}</th>
+                                                        ))}
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                      {(subGroupData as InventarioConAPS[]).filter(i => isIMArticle(i)).map((item) => (
+                                                        <tr
+                                                          key={item.rsv_ids}
+                                                          id={`row-aps-${item.rsv_ids}`}
+                                                          className={`border-t border-border/30 hover:bg-blue-900/10 transition-colors ${
+                                                            selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-blue-500/20' : ''
+                                                          }`}
+                                                        >
+                                                          <td className="p-1.5 w-8">
+                                                            <button
+                                                              onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                                              className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                                selectedItemsAPS.has(String(item.rsv_ids))
+                                                                  ? 'bg-blue-600 border-blue-600'
+                                                                  : 'border-blue-500/50 hover:border-blue-400'
+                                                              }`}
+                                                            >
+                                                              {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                                                <Check className="h-2.5 w-2.5 text-white" />
+                                                              )}
+                                                            </button>
+                                                          </td>
+                                                          {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col))}
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </>
+                                              )}
+                                            </>
                                           ) : (
                                             // Nivel 3 de agrupación
                                             <div className="space-y-1">
@@ -3158,43 +3562,91 @@ export function CampanaDetailPage() {
                                                     {isThirdExpanded && (
                                                       <div>
                                                         <GroupMetaBadges items={thirdItems} skipFields={activeGroupingsAPS[2] === 'aps' ? [...activeGroupingsAPS, 'plaza', 'formato'] : activeGroupingsAPS} />
-                                                        <table className="w-full text-xs">
-                                                          <thead>
-                                                            <tr className="border-b border-border/30 text-left">
-                                                              <th className="p-1.5 w-8"></th>
-                                                              {visibleColumnsAPS.map(col => (
-                                                                <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                                        {thirdItems.filter(i => !isIMArticle(i)).length > 0 && (
+                                                          <table className="w-full text-xs">
+                                                            <thead>
+                                                              <tr className="border-b border-border/30 text-left">
+                                                                <th className="p-1.5 w-8"></th>
+                                                                {visibleColumnsAPS.map(col => (
+                                                                  <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                                                ))}
+                                                              </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                              {thirdItems.filter(i => !isIMArticle(i)).map((item) => (
+                                                                <tr
+                                                                  key={item.rsv_ids}
+                                                                  id={`row-aps-${item.rsv_ids}`}
+                                                                  className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
+                                                                    selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
+                                                                  }`}
+                                                                >
+                                                                  <td className="p-1.5 w-8">
+                                                                    <button
+                                                                      onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                                                      className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                                        selectedItemsAPS.has(String(item.rsv_ids))
+                                                                          ? 'bg-cyan-600 border-cyan-600'
+                                                                          : 'border-cyan-500/50 hover:border-cyan-400'
+                                                                      }`}
+                                                                    >
+                                                                      {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                                                        <Check className="h-2.5 w-2.5 text-white" />
+                                                                      )}
+                                                                    </button>
+                                                                  </td>
+                                                                  {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
+                                                                </tr>
                                                               ))}
-                                                            </tr>
-                                                          </thead>
-                                                          <tbody>
-                                                            {thirdItems.map((item) => (
-                                                              <tr
-                                                                key={item.rsv_ids}
-                                                                id={`row-aps-${item.rsv_ids}`}
-                                                                className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
-                                                                  selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-yellow-500/20' : ''
-                                                                }`}
-                                                              >
-                                                                <td className="p-1.5 w-8">
-                                                                  <button
-                                                                    onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
-                                                                    className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
-                                                                      selectedItemsAPS.has(String(item.rsv_ids))
-                                                                        ? 'bg-cyan-600 border-cyan-600'
-                                                                        : 'border-cyan-500/50 hover:border-cyan-400'
+                                                            </tbody>
+                                                          </table>
+                                                        )}
+                                                        {thirdItems.filter(i => isIMArticle(i)).length > 0 && (
+                                                          <>
+                                                            <div className={`px-2 py-1 mt-1 border-b ${isDark ? 'border-blue-500/30 bg-blue-500/5' : 'border-blue-200 bg-blue-50'}`}>
+                                                              <span className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                                                                Artículos de Impresión
+                                                              </span>
+                                                            </div>
+                                                            <table className="w-full text-xs">
+                                                              <thead>
+                                                                <tr className="border-b border-border/30 text-left">
+                                                                  <th className="p-1.5 w-8"></th>
+                                                                  {TABLE_COLUMNS_IM_APS.map(col => (
+                                                                    <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>{col.label}</th>
+                                                                  ))}
+                                                                </tr>
+                                                              </thead>
+                                                              <tbody>
+                                                                {thirdItems.filter(i => isIMArticle(i)).map((item) => (
+                                                                  <tr
+                                                                    key={item.rsv_ids}
+                                                                    id={`row-aps-${item.rsv_ids}`}
+                                                                    className={`border-t border-border/30 hover:bg-blue-900/10 transition-colors ${
+                                                                      selectedItemsAPS.has(String(item.rsv_ids)) ? 'bg-blue-500/20' : ''
                                                                     }`}
                                                                   >
-                                                                    {selectedItemsAPS.has(String(item.rsv_ids)) && (
-                                                                      <Check className="h-2.5 w-2.5 text-white" />
-                                                                    )}
-                                                                  </button>
-                                                                </td>
-                                                                {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
-                                                              </tr>
-                                                            ))}
-                                                          </tbody>
-                                                        </table>
+                                                                    <td className="p-1.5 w-8">
+                                                                      <button
+                                                                        onClick={() => toggleItemSelectionAPS(String(item.rsv_ids))}
+                                                                        className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                                                                          selectedItemsAPS.has(String(item.rsv_ids))
+                                                                            ? 'bg-blue-600 border-blue-600'
+                                                                            : 'border-blue-500/50 hover:border-blue-400'
+                                                                        }`}
+                                                                      >
+                                                                        {selectedItemsAPS.has(String(item.rsv_ids)) && (
+                                                                          <Check className="h-2.5 w-2.5 text-white" />
+                                                                        )}
+                                                                      </button>
+                                                                    </td>
+                                                                    {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col))}
+                                                                  </tr>
+                                                                ))}
+                                                              </tbody>
+                                                            </table>
+                                                          </>
+                                                        )}
                                                       </div>
                                                     )}
                                                   </div>

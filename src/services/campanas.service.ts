@@ -641,8 +641,8 @@ export const campanasService = {
     return response.data.data;
   },
 
-  async assignAPS(id: number, inventarioIds: number[]): Promise<{ aps: number; message: string }> {
-    const response = await api.post<ApiResponse<{ aps: number; message: string }>>(`/campanas/${id}/assign-aps`, { inventarioIds });
+  async assignAPS(id: number, inventarioIds: number[], solicitudCarasIds?: number[]): Promise<{ aps: number; message: string }> {
+    const response = await api.post<ApiResponse<{ aps: number; message: string }>>(`/campanas/${id}/assign-aps`, { inventarioIds, campanaId: id, solicitudCarasIds });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar APS');
     }
