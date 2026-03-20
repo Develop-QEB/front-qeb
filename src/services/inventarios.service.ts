@@ -42,6 +42,7 @@ export interface DisponiblesParams {
   fecha_inicio?: string;
   fecha_fin?: string;
   solicitudCaraId?: number;
+  excluir_categoria?: string;
 }
 
 export interface InventarioDisponible extends Inventario {
@@ -290,6 +291,15 @@ export const inventariosService = {
     const response = await api.put<ApiResponse<Inventario>>(`/inventarios/${id}`, data);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al actualizar inventario');
+    }
+    return response.data.data;
+  },
+
+  // Get distinct client categories
+  async getCategoriasCliente(): Promise<string[]> {
+    const response = await api.get<ApiResponse<string[]>>('/inventarios/categorias-cliente');
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener categorías');
     }
     return response.data.data;
   },
