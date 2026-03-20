@@ -149,6 +149,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
   if (!isOpen || !item) return null;
 
   const estatusReal = item.estatus_real || item.estatus || '';
+  const yaEstaBloquedo = item.estatus === 'Bloqueado';
 
   const canConfirm = motivo.trim() && (analistas.length > 0 || trafico.length > 0);
 
@@ -179,7 +180,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-2">
             <Ban className="h-5 w-5 text-red-400" />
-            <h2 className="text-sm font-semibold text-white">Solicitar bloqueo de inventario</h2>
+            <h2 className="text-sm font-semibold text-white">{yaEstaBloquedo ? 'Crear tarea de revisión de bloqueo' : 'Bloquear inventario en uso'}</h2>
           </div>
           <button onClick={handleClose} className="text-zinc-500 hover:text-zinc-300"><X className="h-4 w-4" /></button>
         </div>
@@ -198,9 +199,13 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
           <div className="flex items-start gap-2.5 px-3 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
             <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-semibold text-amber-300">En uso — {estatusReal}</p>
+              <p className="text-xs font-semibold text-amber-300">
+                {yaEstaBloquedo ? 'Inventario bloqueado' : `En uso — ${estatusReal}`}
+              </p>
               <p className="text-xs text-amber-400/80 mt-0.5">
-                Se bloqueará el inventario y se creará una tarea "Ajuste Inventario Bloqueado" en cada campaña activa.
+                {yaEstaBloquedo
+                  ? 'Se creará una tarea para que un usuario pueda revisar y desbloquear manualmente.'
+                  : 'Se bloqueará el inventario y se creará una tarea "Ajuste Inventario Bloqueado" en cada campaña activa.'}
               </p>
             </div>
           </div>
@@ -231,12 +236,12 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
 
           {/* Motivo */}
           <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Motivo <span className="text-red-400">*</span></label>
+            <label className="text-xs text-zinc-400 mb-1 block">Indicaciones <span className="text-red-400">*</span></label>
             <textarea
               value={motivo}
               onChange={e => setMotivo(e.target.value)}
               rows={2}
-              placeholder="¿Por qué se necesita bloquear este inventario?"
+              placeholder="¿Qué debe revisarse para poder desbloquear este inventario?"
               className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-red-500/50 placeholder:text-zinc-600"
             />
           </div>
@@ -278,7 +283,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
             className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
           >
             {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-            {isSubmitting ? 'Enviando...' : 'Enviar tarea'}
+            {isSubmitting ? 'Creando...' : 'Crear tarea'}
           </button>
         </div>
       </div>
