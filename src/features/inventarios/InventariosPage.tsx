@@ -11,6 +11,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { inventariosService, BulkCheckResult } from '../../services/inventarios.service';
 import { campanasService } from '../../services/campanas.service';
+import { notificacionesService } from '../../services/notificaciones.service';
 import { Inventario } from '../../types';
 
 import { InventarioMap } from './InventarioMap';
@@ -121,6 +122,7 @@ export function InventariosPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [bloqueoItem, setBloqueoItem] = useState<Inventario | null>(null);
   const [isBloqueoSubmitting, setIsBloqueoSubmitting] = useState(false);
+  const [desbloqueoItem, setDesbloqueoItem] = useState<Inventario | null>(null);
 
   // Bulk upload state
   const [isBulkOpen, setIsBulkOpen] = useState(false);
@@ -178,16 +180,10 @@ export function InventariosPage() {
   const EN_USO_ESTATUS = ['Reservado', 'Ocupado', 'Vendido'];
 
   const handleBloquearClick = (item: Inventario) => {
-    const realEstatus = item.estatus_real || item.estatus || '';
     if (item.estatus === 'Bloqueado') {
-      // Ya bloqueado → modal para crear tarea de revisión (sin desbloquear)
-      setBloqueoItem(item);
-    } else if (EN_USO_ESTATUS.includes(realEstatus)) {
-      // En uso → modal primero, luego bloquear + crear tarea
-      setBloqueoItem(item);
+      setDesbloqueoItem(item);
     } else {
-      // Libre → bloquear directo
-      toggleBlockMutation.mutate(item.id);
+      setBloqueoItem(item);
     }
   };
 
@@ -195,31 +191,68 @@ export function InventariosPage() {
     if (!bloqueoItem) return;
     setIsBloqueoSubmitting(true);
     try {
-      const campanasList = data.campanas.map(c => `  • ${c.campana_nombre} (${c.cliente_nombre})`).join('\n');
-      const descripcion = [
+      const realEstatus = bloqueoItem.estatus_real || bloqueoItem.estatus || '';
+      const esLibre = bloqueoItem.estatus !== 'Bloqueado' && !EN_USO_ESTATUS.includes(realEstatus);
+      const fechaBloqueo = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+      // Info del inventario para descripción
+      const infoInventario = [
         `Inventario: #${bloqueoItem.id}${bloqueoItem.codigo_unico ? ` — ${bloqueoItem.codigo_unico}` : ''}`,
         bloqueoItem.ubicacion ? `Ubicación: ${bloqueoItem.ubicacion}` : null,
         bloqueoItem.plaza ? `Plaza: ${bloqueoItem.plaza}` : null,
-        campanasList ? `\nCampañas afectadas:\n${campanasList}` : null,
-        `\nIndicaciones: ${data.motivo}`,
-        user ? `\nSolicitado por: ${user.nombre}` : null,
       ].filter(Boolean).join('\n');
 
-      const asignados = [...data.analistas, ...data.trafico];
+      if (esLibre) {
+        // Disponible → bloquear
+        await toggleBlockMutation.mutateAsync(bloqueoItem.id);
+      } else {
+        // En uso o ya bloqueado → crear una tarea de ajuste por cada campaña
+        const asignados = [...data.analistas, ...data.trafico];
+        const campanasList = data.campanas.map(c => `  • ${c.campana_nombre} (${c.cliente_nombre})`).join('\n');
 
-      await Promise.all(
-        data.campanas.map(c =>
-          campanasService.createTarea(c.campana_id, {
-            titulo: 'Ajuste Inventario Bloqueado',
-            descripcion,
-            tipo: 'Ajuste Inventario Bloqueado',
-            ...(asignados.length > 0 && {
-              id_asignado: asignados.map(u => u.id).join(', '),
-              asignado: asignados.map(u => u.nombre).join(', '),
-            }),
+        await Promise.all(
+          data.campanas.map(c => {
+            const descripcion = [
+              infoInventario,
+              `\nFecha de bloqueo: ${fechaBloqueo}`,
+              `\nCampañas afectadas:\n${campanasList}`,
+              `\nIndicaciones: ${data.motivo}`,
+              user ? `\nSolicitado por: ${user.nombre}` : null,
+            ].filter(Boolean).join('\n');
+
+            return campanasService.createTarea(c.campana_id, {
+              titulo: 'Ajuste Inventario Bloqueado',
+              descripcion,
+              contenido: JSON.stringify([c]),
+              tipo: 'Ajuste Inventario Bloqueado',
+              ...(asignados.length > 0 && {
+                id_asignado: asignados.map(u => u.id).join(', '),
+                asignado: asignados.map(u => u.nombre).join(', '),
+              }),
+            });
           })
-        )
-      );
+        );
+      }
+
+      // Tarea de seguimiento de bloqueo asignada al usuario que bloqueó
+      const seguimientoDesc = [
+        infoInventario,
+        `\nFecha de bloqueo: ${fechaBloqueo}`,
+        `\nIndicaciones: ${data.motivo}`,
+        user ? `\nBloqueado por: ${user.nombre}` : null,
+      ].filter(Boolean).join('\n');
+
+      await notificacionesService.create({
+        titulo: `Seguimiento de bloqueo — #${bloqueoItem.id}${bloqueoItem.codigo_unico ? ` ${bloqueoItem.codigo_unico}` : ''}`,
+        descripcion: seguimientoDesc,
+        tipo: 'Notificación',
+        ...(user && {
+          id_responsable: user.id,
+          responsable: user.nombre,
+          id_asignado: String(user.id),
+          asignado: user.nombre,
+        }),
+      });
 
       setBloqueoItem(null);
     } finally {
@@ -935,16 +968,6 @@ export function InventariosPage() {
                                     : isBlocked ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />
                                   }
                                 </button>
-                                {/* {isBlocked && (
-                                  <button
-                                    onClick={() => toggleBlockMutation.mutate(item.id)}
-                                    disabled={toggleBlockMutation.isPending && toggleBlockMutation.variables === item.id}
-                                    className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-emerald-500/10 text-zinc-600 hover:text-emerald-400' : 'hover:bg-emerald-50 text-gray-400 hover:text-emerald-600'} disabled:opacity-50`}
-                                    title="Desbloquear"
-                                  >
-                                    <CheckCircle className="h-3.5 w-3.5" />
-                                  </button>
-                                )} */}
                               </div>
                             </td>
                           </tr>
@@ -1546,6 +1569,58 @@ export function InventariosPage() {
         onConfirm={handleConfirmarBloqueo}
         isSubmitting={isBloqueoSubmitting}
       />
+
+      {/* Modal de desbloqueo */}
+      {desbloqueoItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-xl w-full max-w-sm shadow-xl`}>
+            <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-emerald-400" />
+                <h2 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Desbloquear inventario</h2>
+              </div>
+              <button onClick={() => setDesbloqueoItem(null)} className={`${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600'}`}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-3">
+              <div className={`px-3 py-2.5 ${isDark ? 'bg-zinc-800/60' : 'bg-gray-50'} rounded-lg space-y-0.5`}>
+                <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                  <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>ID:</span>{' '}
+                  <span className={`font-mono ${isDark ? 'text-white' : 'text-gray-900'}`}>#{desbloqueoItem.id}</span>
+                  {desbloqueoItem.codigo_unico && <span className={`ml-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>· {desbloqueoItem.codigo_unico}</span>}
+                </p>
+                {desbloqueoItem.ubicacion && <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate`}>{desbloqueoItem.ubicacion}</p>}
+                {desbloqueoItem.plaza && <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{desbloqueoItem.plaza}</p>}
+              </div>
+
+              <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                ¿Estás seguro de que deseas desbloquear este inventario?
+              </p>
+            </div>
+
+            <div className={`flex gap-2 px-5 py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+              <button
+                onClick={() => setDesbloqueoItem(null)}
+                className={`flex-1 px-3 py-2 text-sm border rounded-lg transition-colors ${isDark ? 'text-zinc-400 border-zinc-700 hover:bg-zinc-800' : 'text-gray-500 border-gray-300 hover:bg-gray-50'}`}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  toggleBlockMutation.mutate(desbloqueoItem.id);
+                  setDesbloqueoItem(null);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
+              >
+                <CheckCircle className="h-4 w-4" />
+                Desbloquear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

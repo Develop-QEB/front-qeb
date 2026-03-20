@@ -1410,11 +1410,7 @@ export function CampanaDetailPage() {
       alert('Selecciona al menos un elemento para asignar APS');
       return;
     }
-    if (selectedHasCortesias) {
-      alert('Los artículos de Cortesía (CT) no requieren APS. Usa "Enviar a Gestor de Artes" para ellos.');
-      return;
-    }
-    // Obtener los IDs de inventario de los items seleccionados
+    // Obtener los IDs de inventario de los items seleccionados (incluyendo cortesías si el usuario elige asignar APS)
     const inventarioIds = inventarioReservado
       .filter(item => selectedItems.has(item.rsv_ids))
       .map(item => item.id);
@@ -1424,9 +1420,8 @@ export function CampanaDetailPage() {
     }
   };
 
-  // Cortesías (CT) no requieren APS: ir directo al gestor de artes
+  // Cortesías (CT): ir directo al gestor de artes sin APS
   const handleEnviarCortesiaAGestor = () => {
-    if (!selectedAreCortesias) return;
     navigate(`/campanas/${campanaId}/tareas`);
   };
 
@@ -1807,10 +1802,10 @@ export function CampanaDetailPage() {
               {permissions.canEditDetalleCampana && (
                 <button
                   onClick={handleAssignAPS}
-                  disabled={selectedItems.size === 0 || assignAPSMutation.isPending || selectedAreCortesias}
-                  title={selectedAreCortesias ? 'Las cortesías (CT) no requieren APS' : undefined}
+                  disabled={selectedItems.size === 0 || assignAPSMutation.isPending}
+                  title={selectedAreCortesias ? 'Las cortesías pueden tener APS opcional' : undefined}
                   className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-lg transition-colors ${
-                    selectedItems.size === 0 || selectedAreCortesias
+                    selectedItems.size === 0
                       ? 'bg-purple-900/30 text-purple-400/50 cursor-not-allowed'
                       : 'bg-purple-600 hover:bg-purple-700 text-white'
                   }`}
@@ -1820,8 +1815,8 @@ export function CampanaDetailPage() {
                   <span className="sm:hidden">{assignAPSMutation.isPending ? '...' : `APS${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
                 </button>
               )}
-              {/* Cortesías (CT): bypass APS → gestor de artes */}
-              {permissions.canEditDetalleCampana && selectedAreCortesias && (
+              {/* Cortesías (CT): bypass APS → gestor de artes (visible si algún item seleccionado es cortesía) */}
+              {permissions.canEditDetalleCampana && selectedHasCortesias && (
                 <button
                   onClick={handleEnviarCortesiaAGestor}
                   className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors"

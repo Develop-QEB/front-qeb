@@ -122,9 +122,13 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
 
   const campanasActivas = useMemo((): CampanaActiva[] => {
     if (!historialData) return [];
+    const hoy = new Date();
     const seen = new Set<number>();
     return historialData.historial
-      .filter(h => ['Reservado', 'Ocupado', 'Vendido'].includes(h.reserva_estatus))
+      .filter(h =>
+        ['Reservado', 'Ocupado', 'Vendido'].includes(h.reserva_estatus) &&
+        new Date(h.fin_periodo) >= hoy
+      )
       .reduce<CampanaActiva[]>((acc, h) => {
         if (!seen.has(h.campana_id)) {
           seen.add(h.campana_id);
@@ -150,8 +154,12 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
 
   const estatusReal = item.estatus_real || item.estatus || '';
   const yaEstaBloquedo = item.estatus === 'Bloqueado';
+  const enUso = ['Reservado', 'Ocupado', 'Vendido'].includes(estatusReal);
+  const esDisponible = !yaEstaBloquedo && !enUso;
 
-  const canConfirm = motivo.trim() && (analistas.length > 0 || trafico.length > 0);
+  const canConfirm = esDisponible
+    ? motivo.trim().length > 0
+    : motivo.trim().length > 0 && (analistas.length > 0 || trafico.length > 0);
 
   const handleConfirm = async () => {
     await onConfirm({ motivo, analistas, trafico, campanas: campanasActivas });
@@ -180,7 +188,9 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-2">
             <Ban className="h-5 w-5 text-red-400" />
-            <h2 className="text-sm font-semibold text-white">{yaEstaBloquedo ? 'Crear tarea de revisión de bloqueo' : 'Bloquear inventario en uso'}</h2>
+            <h2 className="text-sm font-semibold text-white">
+              {yaEstaBloquedo ? 'Crear tarea de revisión de bloqueo' : esDisponible ? 'Bloquear inventario' : 'Bloquear inventario en uso'}
+            </h2>
           </div>
           <button onClick={handleClose} className="text-zinc-500 hover:text-zinc-300"><X className="h-4 w-4" /></button>
         </div>
@@ -196,80 +206,104 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
             {item.plaza && <p className="text-xs text-zinc-500">{item.plaza}</p>}
           </div>
 
-          <div className="flex items-start gap-2.5 px-3 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-            <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-xs font-semibold text-amber-300">
-                {yaEstaBloquedo ? 'Inventario bloqueado' : `En uso — ${estatusReal}`}
-              </p>
-              <p className="text-xs text-amber-400/80 mt-0.5">
-                {yaEstaBloquedo
-                  ? 'Se creará una tarea para que un usuario pueda revisar y desbloquear manualmente.'
-                  : 'Se bloqueará el inventario y se creará una tarea "Ajuste Inventario Bloqueado" en cada campaña activa.'}
-              </p>
-            </div>
-          </div>
-
-          {/* Campañas activas */}
-          {campanasActivas.length > 0 && (
-            <div>
-              <p className="text-xs text-zinc-400 mb-1.5 font-medium">Campañas afectadas</p>
-              <div className="space-y-1">
-                {campanasActivas.map(c => (
-                  <a
-                    key={c.campana_id}
-                    href={`/campanas/${c.campana_id}/tareas`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between px-3 py-2 bg-zinc-800/60 border border-zinc-700 rounded-lg hover:border-orange-500/40 transition-colors group"
-                  >
-                    <div>
-                      <p className="text-xs text-white">{c.campana_nombre}</p>
-                      <p className="text-[10px] text-zinc-500">{c.cliente_nombre}</p>
-                    </div>
-                    <ExternalLink className="h-3 w-3 text-zinc-600 group-hover:text-orange-400 flex-shrink-0" />
-                  </a>
-                ))}
+          {esDisponible ? (
+            <>
+              <div className="flex items-start gap-2.5 px-3 py-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <Ban className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-red-300">
+                  Se bloqueará este inventario. Indica el motivo para que se pueda desbloquear después.
+                </p>
               </div>
-            </div>
-          )}
 
-          {/* Motivo */}
-          <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Indicaciones <span className="text-red-400">*</span></label>
-            <textarea
-              value={motivo}
-              onChange={e => setMotivo(e.target.value)}
-              rows={2}
-              placeholder="¿Qué debe revisarse para poder desbloquear este inventario?"
-              className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-red-500/50 placeholder:text-zinc-600"
-            />
-          </div>
-
-          {/* Selectores */}
-          {isLoadingUsers ? (
-            <div className="flex items-center gap-2 text-xs text-zinc-500">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando usuarios...
-            </div>
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Indicaciones <span className="text-red-400">*</span></label>
+                <textarea
+                  value={motivo}
+                  onChange={e => setMotivo(e.target.value)}
+                  rows={3}
+                  placeholder="¿Por qué se bloquea este inventario?"
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-red-500/50 placeholder:text-zinc-600"
+                />
+              </div>
+            </>
           ) : (
-            <div className="space-y-4">
-              <UserSelector
-                label="Analistas *"
-                users={analistasDisponibles}
-                selected={analistas}
-                onToggle={toggleAnalista}
-                search={searchAnalista}
-                onSearch={setSearchAnalista}
-              />
-              <UserSelector
-                label="Tráfico *"
-                users={traficoDisponibles.length > 0 ? traficoDisponibles : allUsers}
-                selected={trafico}
-                onToggle={toggleTrafico}
-                search={searchTrafico}
-                onSearch={setSearchTrafico}
-              />
-            </div>
+            <>
+              <div className="flex items-start gap-2.5 px-3 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-300">
+                    {yaEstaBloquedo ? 'Inventario bloqueado' : `En uso — ${estatusReal}`}
+                  </p>
+                  <p className="text-xs text-amber-400/80 mt-0.5">
+                    {yaEstaBloquedo
+                      ? 'Se creará una tarea para que un usuario pueda revisar y desbloquear manualmente.'
+                      : 'Se bloqueará el inventario y se creará una tarea "Ajuste Inventario Bloqueado" en cada campaña activa.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Campañas activas */}
+              {campanasActivas.length > 0 && (
+                <div>
+                  <p className="text-xs text-zinc-400 mb-1.5 font-medium">Campañas afectadas</p>
+                  <div className="space-y-1">
+                    {campanasActivas.map(c => (
+                      <a
+                        key={c.campana_id}
+                        href={`/campanas/${c.campana_id}/tareas`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-between px-3 py-2 bg-zinc-800/60 border border-zinc-700 rounded-lg hover:border-orange-500/40 transition-colors group"
+                      >
+                        <div>
+                          <p className="text-xs text-white">{c.campana_nombre}</p>
+                          <p className="text-[10px] text-zinc-500">{c.cliente_nombre}</p>
+                        </div>
+                        <ExternalLink className="h-3 w-3 text-zinc-600 group-hover:text-orange-400 flex-shrink-0" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Motivo */}
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Indicaciones <span className="text-red-400">*</span></label>
+                <textarea
+                  value={motivo}
+                  onChange={e => setMotivo(e.target.value)}
+                  rows={2}
+                  placeholder="¿Qué debe revisarse para poder desbloquear este inventario?"
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-red-500/50 placeholder:text-zinc-600"
+                />
+              </div>
+
+              {/* Selectores */}
+              {isLoadingUsers ? (
+                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando usuarios...
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <UserSelector
+                    label="Analistas *"
+                    users={analistasDisponibles}
+                    selected={analistas}
+                    onToggle={toggleAnalista}
+                    search={searchAnalista}
+                    onSearch={setSearchAnalista}
+                  />
+                  <UserSelector
+                    label="Tráfico *"
+                    users={traficoDisponibles.length > 0 ? traficoDisponibles : allUsers}
+                    selected={trafico}
+                    onToggle={toggleTrafico}
+                    search={searchTrafico}
+                    onSearch={setSearchTrafico}
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -283,7 +317,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
             className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
           >
             {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-            {isSubmitting ? 'Creando...' : 'Crear tarea'}
+            {isSubmitting ? (esDisponible ? 'Bloqueando...' : 'Creando...') : (esDisponible ? 'Bloquear inventario' : 'Crear tarea')}
           </button>
         </div>
       </div>

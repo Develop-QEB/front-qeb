@@ -17,6 +17,8 @@ export interface CreateTareaParams {
   descripcion?: string;
   tipo?: string;
   fecha_fin?: string;
+  id_responsable?: number;
+  responsable?: string;
   asignado?: string;
   id_asignado?: string;
   id_solicitud?: string;

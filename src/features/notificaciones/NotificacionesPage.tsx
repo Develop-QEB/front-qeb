@@ -1220,6 +1220,10 @@ function isGestionArtesTarea(tipo?: string | null): boolean {
 
 // Función para verificar si hay navegación disponible
 function hasNavigationRoute(tarea: Notificacion): boolean {
+  // Tareas de Ajuste Inventario Bloqueado no tienen navegación
+  if (tarea.tipo === 'Ajuste Inventario Bloqueado') {
+    return false;
+  }
   // Si tiene referencia_tipo y referencia_id válidos
   if (tarea.referencia_tipo && tarea.referencia_id && tarea.referencia_tipo !== 'sistema') {
     return true;
@@ -1724,6 +1728,45 @@ function TaskDrawer({
             </div>
           </div>
         )}
+
+        {/* Campañas afectadas — Ajuste Inventario Bloqueado */}
+        {tarea.tipo === 'Ajuste Inventario Bloqueado' && tarea.contenido && (() => {
+          try {
+            const campanas = JSON.parse(tarea.contenido) as Array<{ campana_id: number; campana_nombre: string; cliente_nombre: string }>;
+            if (!Array.isArray(campanas) || campanas.length === 0) return null;
+            return (
+              <div className={`p-5 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+                <h3 className="text-xs font-medium text-red-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Campañas afectadas
+                </h3>
+                <div className="space-y-1.5">
+                  {campanas.map(c => (
+                    <a
+                      key={c.campana_id}
+                      href={`/campanas/detail/${c.campana_id}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (onNavigate) onNavigate(`/campanas/detail/${c.campana_id}`);
+                      }}
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-lg border transition-colors group ${
+                        isDark
+                          ? 'bg-zinc-800/60 border-zinc-700 hover:border-orange-500/40'
+                          : 'bg-gray-50 border-gray-200 hover:border-orange-400'
+                      }`}
+                    >
+                      <div>
+                        <p className={`text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{c.campana_nombre}</p>
+                        <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{c.cliente_nombre}</p>
+                      </div>
+                      <ExternalLink className={`h-3 w-3 flex-shrink-0 ${isDark ? 'text-zinc-600 group-hover:text-orange-400' : 'text-gray-400 group-hover:text-orange-500'}`} />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            );
+          } catch { return null; }
+        })()}
 
         {/* Detalles en cards */}
         <div className="p-5 space-y-3">
