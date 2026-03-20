@@ -141,6 +141,7 @@ export interface InventarioReservado {
   renta?: number | null;
   ancho?: number | null;
   alto?: number | null;
+  cortesia?: number | null; // 1 = cortesía (de solicitudCaras.cortesia), 0 = normal
 }
 
 export interface InventarioConAPS extends InventarioReservado {
