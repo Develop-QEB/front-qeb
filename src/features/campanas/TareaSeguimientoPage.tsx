@@ -54,7 +54,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioConArte, TareaCampana, ArteExistente, DigitalFileSummary, TradicionalFileSummary, FichasTecnicasNode } from '../../services/campanas.service';
+import { campanasService, InventarioConArte, InventarioConAPS, TareaCampana, ArteExistente, DigitalFileSummary, TradicionalFileSummary, FichasTecnicasNode } from '../../services/campanas.service';
 import { proveedoresService } from '../../services/proveedores.service';
 import { Proveedor, Catorcena } from '../../types';
 import { solicitudesService } from '../../services/solicitudes.service';
@@ -3510,6 +3510,7 @@ function TaskDetailModal({
   tradicionalSummaryMap,
   openTradicionalGallery,
   tipoPeriodo = 'catorcena',
+  campana = null,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -3543,6 +3544,7 @@ function TaskDetailModal({
   tradicionalSummaryMap: Map<number, TradicionalFileSummary>;
   openTradicionalGallery: (reservaIds: number | number[], codigoUnico: string) => void;
   tipoPeriodo?: string;
+  campana?: any;
 }) {
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
@@ -5605,7 +5607,7 @@ function TaskDetailModal({
           </div>
 
           {/* Tabs - Solo mostrar si NO es tarea de Impresión, Recepción, Instalación ni Testigo */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Programación para Tráfico' && task.tipo !== 'Orden de Programación' && (
+          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Programación para Tráfico' && task.tipo !== 'Orden de Programación' && task.tipo !== 'Orden de Impresión' && (
             <div className="flex flex-wrap gap-2 mt-4">
               {tabs
                 .filter(tab => canResolveCurrentTask || tab.key === 'resumen')
@@ -5630,6 +5632,164 @@ function TaskDetailModal({
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-4 sm:p-6">
+          {/* === VISTA ESPECIAL PARA ORDEN DE IMPRESIÓN === */}
+          {task.tipo === 'Orden de Impresión' && (
+            <div className="space-y-4">
+              {/* Datos de Campaña y Cliente */}
+              {campana && (
+                <div className="bg-zinc-900/50 rounded-lg p-4 border border-blue-500/20">
+                  <h4 className="text-sm font-medium text-blue-300 mb-3 flex items-center gap-2">
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Campaña y Cliente
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <span className="text-zinc-500">Campaña:</span>
+                      <p className="text-white font-medium">{campana.nombre || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">CUIC:</span>
+                      <p className="text-white font-medium">{campana.cuic || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Cliente:</span>
+                      <p className="text-white font-medium">{campana.T0_U_Cliente || campana.cliente_nombre || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Marca:</span>
+                      <p className="text-white font-medium">{campana.T2_U_Marca || '-'}</p>
+                    </div>
+                    {campana.catorcena_inicio_num && (
+                      <div>
+                        <span className="text-zinc-500">Periodo:</span>
+                        <p className="text-white font-medium">
+                          Cat {campana.catorcena_inicio_num}/{campana.catorcena_inicio_anio}
+                          {campana.catorcena_fin_num && campana.catorcena_fin_num !== campana.catorcena_inicio_num
+                            ? ` - Cat ${campana.catorcena_fin_num}/${campana.catorcena_fin_anio}`
+                            : ''}
+                        </p>
+                      </div>
+                    )}
+                    {campana.T0_U_Asesor && (
+                      <div>
+                        <span className="text-zinc-500">Asesor:</span>
+                        <p className="text-white font-medium">{campana.T0_U_Asesor}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Info de la orden */}
+              <div className="bg-zinc-900/50 rounded-lg p-4 border border-blue-500/20">
+                <h4 className="text-sm font-medium text-blue-300 mb-3 flex items-center gap-2">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Información de la Orden
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <span className="text-zinc-500">ID:</span>
+                    <p className="text-white font-medium">{task.id}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Estatus:</span>
+                    <p className="text-white font-medium">{task.estatus}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Fecha Inicio:</span>
+                    <p className="text-white font-medium">{task.fecha_inicio || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Fecha Fin:</span>
+                    <p className="text-white font-medium">{task.fecha_fin || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Responsable:</span>
+                    <p className="text-white font-medium">{task.responsable || task.creador || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Asignado:</span>
+                    <p className="text-white font-medium">{task.asignado || '-'}</p>
+                  </div>
+                </div>
+                {task.nombre_proveedores && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <span className="text-zinc-500 text-sm">Proveedor:</span>
+                    <p className="text-white text-sm font-medium mt-1">{task.nombre_proveedores}</p>
+                  </div>
+                )}
+                {task.descripcion && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <span className="text-zinc-500 text-sm">Descripción:</span>
+                    <p className="text-white text-sm mt-1">{task.descripcion}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Artículos de la orden */}
+              {task.contenido && (
+                <div className="bg-zinc-900/50 rounded-lg border border-blue-500/20">
+                  <div className="px-4 py-3 border-b border-border">
+                    <h4 className="text-sm font-medium text-blue-300">Artículos de la Orden</h4>
+                  </div>
+                  <div className="p-3">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border/30 text-left">
+                          <th className="p-2 font-medium text-blue-300">Artículo</th>
+                          <th className="p-2 font-medium text-blue-300">Formato</th>
+                          <th className="p-2 font-medium text-blue-300">Impresiones</th>
+                          <th className="p-2 font-medium text-blue-300">Ciudad</th>
+                          <th className="p-2 font-medium text-blue-300">APS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {task.contenido.split('\n').filter(Boolean).map((line, idx) => {
+                          const parts = line.split(' | ').map(s => s.trim());
+                          return (
+                            <tr key={idx} className="border-b border-border/20 hover:bg-blue-900/10">
+                              <td className="p-2">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-300">
+                                  {parts[0] || '-'}
+                                </span>
+                              </td>
+                              <td className="p-2 text-zinc-300">{parts[1] || '-'}</td>
+                              <td className="p-2 text-center">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300">
+                                  {parts[2] || '-'}
+                                </span>
+                              </td>
+                              <td className="p-2 text-zinc-300">{parts[3] || '-'}</td>
+                              <td className="p-2 text-center">
+                                <span className="px-1.5 py-0.5 rounded font-medium bg-cyan-500/20 text-cyan-400">
+                                  {parts[4]?.replace('APS: ', '') || '-'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Botón de finalizar */}
+              {canResolveCurrentTask && task.estatus !== 'Atendido' && task.estatus !== 'Completado' && task.estatus !== 'Finalizada' && (
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={() => onTaskComplete(task.id)}
+                    disabled={isUpdating}
+                    className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    Finalizar Orden
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* === VISTA ESPECIAL PARA TAREAS DE IMPRESIÓN === */}
           {task.tipo === 'Impresión' && (
             <div className="space-y-6">
@@ -9103,7 +9263,7 @@ function TaskDetailModal({
           )}
 
           {/* Tab Resumen - Solo para tareas que NO son Impresión, Recepción, Instalación, Testigo, Programación ni Orden de Programación */}
-          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Programación para Tráfico' && task.tipo !== 'Orden de Programación' && activeTab === 'resumen' && (
+          {task.tipo !== 'Impresión' && task.tipo !== 'Recepción' && task.tipo !== 'Instalación' && task.tipo !== 'Testigo' && task.tipo !== 'Programación' && task.tipo !== 'Programación para Tráfico' && task.tipo !== 'Orden de Programación' && task.tipo !== 'Orden de Impresión' && activeTab === 'resumen' && (
             <div className="space-y-4">
               {/* Info de la tarea - Compacta */}
               <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
@@ -10679,6 +10839,261 @@ function TaskDetailModal({
         isLoading={isLoadingDigitalGallery}
         title={digitalGalleryTitle}
       />
+    </div>
+  );
+}
+
+// Modal para crear Orden de Impresión (artículos IM)
+function OrdenImpresionModal({
+  isOpen,
+  onClose,
+  selectedItems,
+  campanaId,
+  campanaNombre,
+  onSubmit,
+  isSubmitting,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedItems: InventoryRow[];
+  campanaId: number;
+  campanaNombre: string;
+  onSubmit: (data: { titulo: string; descripcion: string; tipo: string; listado_inventario: string; proveedores_id?: number; nombre_proveedores?: string; asignado?: string; id_asignado?: string; contenido?: string }) => void;
+  isSubmitting: boolean;
+}) {
+  const [titulo, setTitulo] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [proveedorId, setProveedorId] = useState<number | null>(null);
+  const [selectedAsignados, setSelectedAsignados] = useState<{ id: number; nombre: string }[]>([]);
+  const [asignadoSearch, setAsignadoSearch] = useState('');
+  const [showAsignadoDropdown, setShowAsignadoDropdown] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Proveedores
+  const { data: proveedoresData, isLoading: isLoadingProveedores } = useQuery({
+    queryKey: ['proveedores-lista'],
+    queryFn: () => proveedoresService.getAll({ limit: 100, estado: 'activo' }),
+    enabled: isOpen,
+  });
+  const proveedores = proveedoresData?.data || [];
+
+  // Usuarios de Compras
+  const { data: todosUsuarios } = useQuery({
+    queryKey: ['solicitudes-users', 'all-users-impresion'],
+    queryFn: () => solicitudesService.getUsers(undefined, false),
+    enabled: isOpen,
+  });
+
+  const filteredUsuarios = useMemo(() => {
+    if (!todosUsuarios) return [];
+    const selectedIds = new Set(selectedAsignados.map(u => u.id));
+    const comprasUsers = todosUsuarios.filter(u =>
+      u.area?.toLowerCase() === 'compras' && !selectedIds.has(u.id)
+    );
+    if (!asignadoSearch.trim()) return comprasUsers;
+    const search = asignadoSearch.toLowerCase();
+    return comprasUsers.filter(u =>
+      u.nombre.toLowerCase().includes(search) || String(u.id).includes(search)
+    );
+  }, [todosUsuarios, asignadoSearch, selectedAsignados]);
+
+  // Auto-preseleccionar usuarios de Compras
+  useEffect(() => {
+    if (isOpen && todosUsuarios) {
+      const comprasUsers = todosUsuarios.filter(u => u.area?.toLowerCase() === 'compras');
+      setSelectedAsignados(comprasUsers.map(u => ({ id: u.id, nombre: u.nombre })));
+    }
+  }, [isOpen, todosUsuarios]);
+
+  // Auto-generar título
+  useEffect(() => {
+    if (isOpen && selectedItems.length > 0) {
+      setTitulo(`Orden de Impresión - ${campanaNombre || `Campaña #${campanaId}`}`);
+      setDescripcion('');
+      setProveedorId(null);
+      setError(null);
+    }
+  }, [isOpen, selectedItems, campanaId, campanaNombre]);
+
+  const handleSubmit = () => {
+    if (!titulo.trim()) { setError('El título es obligatorio'); return; }
+    if (!descripcion.trim()) { setError('La descripción es obligatoria'); return; }
+    if (!proveedorId) { setError('Selecciona un proveedor'); return; }
+    if (selectedAsignados.length === 0) { setError('Selecciona al menos un asignado del área de Compras'); return; }
+    setError(null);
+
+    const selectedProveedor = proveedores.find(p => p.id === proveedorId);
+    const listadoIds = selectedItems.map(i => i.id).join(',');
+
+    // Construir contenido con info de artículos
+    const articulosInfo = selectedItems.map(i =>
+      `${i.articulo || i.codigo_unico} | ${i.mueble || '-'} | ${i.caras_totales} imp. | ${i.plaza || '-'} | APS: ${i.aps || '-'}`
+    ).join('\n');
+
+    onSubmit({
+      titulo: titulo.trim(),
+      descripcion: descripcion.trim(),
+      tipo: 'Orden de Impresión',
+      listado_inventario: listadoIds,
+      proveedores_id: proveedorId || undefined,
+      nombre_proveedores: selectedProveedor?.nombre || undefined,
+      asignado: selectedAsignados.map(u => u.nombre).join(', '),
+      id_asignado: selectedAsignados.map(u => u.id).join(','),
+      contenido: articulosInfo,
+    });
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-border bg-gradient-to-r from-blue-500/10 to-purple-500/10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-blue-400" />
+              <h3 className="text-sm font-semibold text-white">Crear Orden de Impresión</h3>
+            </div>
+            <button onClick={onClose} className="p-1 hover:bg-zinc-700 rounded"><X className="h-4 w-4" /></button>
+          </div>
+          <p className="text-xs text-zinc-400 mt-1">{selectedItems.length} artículo(s) seleccionado(s)</p>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Artículos seleccionados */}
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Artículos</label>
+            <div className="bg-zinc-900/50 rounded-lg border border-border max-h-32 overflow-y-auto">
+              {selectedItems.map(item => (
+                <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-border/30 last:border-0">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-300">
+                    {item.articulo || item.codigo_unico}
+                  </span>
+                  <span className="text-[10px] text-zinc-400">{item.mueble || '-'}</span>
+                  <span className="ml-auto text-[10px] font-bold text-amber-300">{item.caras_totales} imp.</span>
+                  <span className="text-[10px] text-zinc-500">{item.plaza || '-'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Título */}
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+            <input
+              type="text"
+              value={titulo}
+              onChange={e => setTitulo(e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder="Título de la orden"
+            />
+          </div>
+
+          {/* Descripción */}
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción *</label>
+            <textarea
+              value={descripcion}
+              onChange={e => setDescripcion(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+              placeholder="Indicaciones adicionales..."
+            />
+          </div>
+
+          {/* Proveedor */}
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Proveedor *</label>
+            {isLoadingProveedores ? (
+              <div className="flex items-center gap-2 py-2 text-zinc-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Cargando proveedores...</span>
+              </div>
+            ) : (
+              <select
+                value={proveedorId || ''}
+                onChange={e => setProveedorId(e.target.value ? parseInt(e.target.value) : null)}
+                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">-- Seleccionar proveedor --</option>
+                {proveedores.map(p => (
+                  <option key={p.id} value={p.id}>{p.nombre} {p.ciudad ? `(${p.ciudad})` : ''}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Asignados (Compras) */}
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados (Área Compras) *</label>
+            {/* Tags de seleccionados */}
+            {selectedAsignados.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2">
+                {selectedAsignados.map(u => (
+                  <span key={u.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                    {u.nombre}
+                    <button onClick={() => setSelectedAsignados(prev => prev.filter(a => a.id !== u.id))} className="hover:text-white">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* Buscador */}
+            <div className="relative">
+              <input
+                type="text"
+                value={asignadoSearch}
+                onChange={e => { setAsignadoSearch(e.target.value); setShowAsignadoDropdown(true); }}
+                onFocus={() => setShowAsignadoDropdown(true)}
+                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="Buscar usuario de Compras..."
+              />
+              {showAsignadoDropdown && filteredUsuarios.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-xl max-h-32 overflow-y-auto">
+                  {filteredUsuarios.map(u => (
+                    <button
+                      key={u.id}
+                      onClick={() => {
+                        setSelectedAsignados(prev => [...prev, { id: u.id, nombre: u.nombre }]);
+                        setAsignadoSearch('');
+                        setShowAsignadoDropdown(false);
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-xs hover:bg-blue-500/20 transition-colors flex items-center justify-between"
+                    >
+                      <span>{u.nombre}</span>
+                      <span className="text-[10px] text-zinc-500">{u.area || ''}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-border flex items-center justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors">
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !titulo.trim() || !descripcion.trim() || !proveedorId || selectedAsignados.length === 0}
+            className="px-4 py-2 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {isSubmitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+            Crear Orden
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -12918,7 +13333,7 @@ export function TareaSeguimientoPage() {
   const [sortFieldImpresiones, setSortFieldImpresiones] = useState<string | null>(null);
   const [sortDirectionImpresiones, setSortDirectionImpresiones] = useState<'asc' | 'desc'>('asc');
   const [showSortImpresiones, setShowSortImpresiones] = useState(false);
-  const [activeEstadoImpresionTab, setActiveEstadoImpresionTab] = useState<'en_impresion' | 'pendiente_recepcion' | 'recibido'>('en_impresion');
+  const [activeEstadoImpresionTab, setActiveEstadoImpresionTab] = useState<'orden_impresion' | 'en_impresion' | 'pendiente_recepcion' | 'recibido'>('orden_impresion');
 
   // --- Validar Instalación (testigo) ---
   const [filtersTestigo, setFiltersTestigo] = useState<FilterCondition[]>([]);
@@ -12961,6 +13376,9 @@ export function TareaSeguimientoPage() {
   const [parentAddedArtes, setParentAddedArtes] = useState<ArteExistente[]>([]);
   const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
+
+  // Orden Impresión Modal state
+  const [isOrdenImpresionModalOpen, setIsOrdenImpresionModalOpen] = useState(false);
 
   // Digital Gallery Modal state
   const [isDigitalGalleryOpen, setIsDigitalGalleryOpen] = useState(false);
@@ -13045,6 +13463,19 @@ export function TareaSeguimientoPage() {
     queryKey: ['campana-inventario-testigos', campanaId],
     queryFn: () => campanasService.getInventarioTestigos(campanaId),
     enabled: campanaId > 0 && (activeMainTab === 'testigo' || !initialTabDetermined),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  // Artículos de Impresión (IM) con APS - para subtab "Orden Impresión"
+  const { data: imArticlesAPI = [] } = useQuery({
+    queryKey: ['campana-inventario-aps', campanaId],
+    queryFn: () => campanasService.getInventarioConAPS(campanaId),
+    enabled: campanaId > 0 && activeMainTab === 'impresiones',
+    select: (data) => data.filter((item: InventarioConAPS) => String(item.rsv_ids).startsWith('sc_')),
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -13926,6 +14357,34 @@ export function TareaSeguimientoPage() {
     });
   }, [tareasAPI, inventarioArteAPI, transformInventarioToRow]);
 
+  // Transform artículos IM con APS para subtab "Orden Impresión"
+  const inventoryOrdenImpresionData = useMemo((): InventoryRow[] => {
+    return imArticlesAPI.map((item: InventarioConAPS) => ({
+      id: String(item.rsv_ids),
+      rsv_id: String(item.rsv_ids),
+      codigo_unico: item.codigo_unico || item.articulo || '',
+      tipo_de_cara: 'Impresión',
+      catorcena: item.numero_catorcena || 0,
+      anio: item.anio_catorcena || 0,
+      aps: item.aps || null,
+      grupo_id: null,
+      estatus: 'Impresión',
+      espacio: '',
+      inicio_periodo: item.inicio_periodo?.split('T')[0] || '',
+      fin_periodo: item.fin_periodo?.split('T')[0] || '',
+      caras_totales: item.caras_totales || 0,
+      tipo_medio: item.tipo_medio || '',
+      mueble: item.formato || '',
+      ciudad: (item as any).estado || '',
+      plaza: item.plaza || '',
+      municipio: '',
+      nse: '',
+      ubicacion: '',
+      tradicional_digital: 'Tradicional' as const,
+      articulo: item.articulo || '',
+    }));
+  }, [imArticlesAPI]);
+
   // Mapa de rsv_id -> estado de impresión (para mostrar en tab Aprobado)
   const impresionStatusMap = useMemo(() => {
     const map = new Map<string, { estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido'; titulo: string }>();
@@ -14268,6 +14727,27 @@ export function TareaSeguimientoPage() {
 
   // Datos filtrados para Impresiones (por estado y formato)
   const filteredImpresionesData = useMemo(() => {
+    // Subtab "Orden Impresión" usa datos propios (artículos IM)
+    if (activeEstadoImpresionTab === 'orden_impresion') {
+      let data: InventoryRow[] = inventoryOrdenImpresionData;
+      data = applyFilters(data, filtersImpresiones);
+      if (sortFieldImpresiones) {
+        data = [...data].sort((a, b) => {
+          const aVal = a[sortFieldImpresiones as keyof InventoryRow];
+          const bVal = b[sortFieldImpresiones as keyof InventoryRow];
+          if (aVal === null || aVal === undefined) return 1;
+          if (bVal === null || bVal === undefined) return -1;
+          let comparison = 0;
+          if (typeof aVal === 'number' && typeof bVal === 'number') {
+            comparison = aVal - bVal;
+          } else {
+            comparison = String(aVal).localeCompare(String(bVal));
+          }
+          return sortDirectionImpresiones === 'asc' ? comparison : -comparison;
+        });
+      }
+      return data;
+    }
     let data = inventoryImpresionesData;
     // Filtrar por estado de impresión
     data = data.filter(item => item.estado_impresion === activeEstadoImpresionTab);
@@ -14296,7 +14776,7 @@ export function TareaSeguimientoPage() {
       });
     }
     return data;
-  }, [inventoryImpresionesData, activeFormat, activeEstadoImpresionTab, filtersImpresiones, sortFieldImpresiones, sortDirectionImpresiones]);
+  }, [inventoryImpresionesData, inventoryOrdenImpresionData, activeFormat, activeEstadoImpresionTab, filtersImpresiones, sortFieldImpresiones, sortDirectionImpresiones]);
 
   // Determinar si la campaña tiene items tradicionales y/o digitales
   // Combinar inventario sin arte + con arte para tener la visión completa
@@ -14311,7 +14791,7 @@ export function TareaSeguimientoPage() {
   }, [inventorySinArteData, inventoryArteData]);
 
   // Tab de Impresiones: solo visible si hay inventarios tradicionales
-  const shouldShowImpresionesTab = campaignHasTradicional;
+  const shouldShowImpresionesTab = campaignHasTradicional || inventoryOrdenImpresionData.length > 0;
   // Tab de Programación: solo visible si hay inventarios digitales
   const shouldShowProgramacionTab = campaignHasDigital;
 
@@ -14393,7 +14873,7 @@ export function TareaSeguimientoPage() {
       .filter((t) => {
         if (t.estatus === 'Atendido' || t.estatus === 'Completado' || t.estatus === 'Finalizada' || t.estatus === 'Activada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Programación para Tráfico', 'Orden de Programación', 'Orden de Instalación'];
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Programación para Tráfico', 'Orden de Programación', 'Orden de Instalación', 'Orden de Impresión'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
@@ -14408,6 +14888,7 @@ export function TareaSeguimientoPage() {
         asignado: t.asignado || '',
         descripcion: t.descripcion || '',
         titulo: t.titulo || '',
+        contenido: t.contenido || undefined,
         inventario_ids: (t.ids_reservas || t.listado_inventario) ? (t.ids_reservas || t.listado_inventario)!.split(',') : [],
         ids_reservas: t.ids_reservas || t.listado_inventario || undefined,
         campana_id: campanaId,
@@ -14423,7 +14904,7 @@ export function TareaSeguimientoPage() {
       .filter((t) => {
         if (t.estatus !== 'Atendido' && t.estatus !== 'Completado' && t.estatus !== 'Finalizada' && t.estatus !== 'Activada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
-        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Programación para Tráfico', 'Orden de Programación', 'Orden de Instalación'];
+        const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Programación para Tráfico', 'Orden de Programación', 'Orden de Instalación', 'Orden de Impresión'];
         return TIPOS_GESTION_ARTES.includes(t.tipo || '');
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
@@ -14438,6 +14919,7 @@ export function TareaSeguimientoPage() {
         asignado: t.asignado || '',
         descripcion: t.descripcion || '',
         titulo: t.titulo || '',
+        contenido: t.contenido || undefined,
         inventario_ids: (t.ids_reservas || t.listado_inventario) ? (t.ids_reservas || t.listado_inventario)!.split(',') : [],
         ids_reservas: t.ids_reservas || t.listado_inventario || undefined,
         campana_id: campanaId,
@@ -15186,6 +15668,28 @@ export function TareaSeguimientoPage() {
       setCreateTaskError(error instanceof Error ? error.message : 'Error al crear tarea');
     }
   }, [selectedInventoryItems, createTareaMutation, updateInstaladoMutation, campanaId, queryClient, getSelectedImpresionFlowConflicts, setActiveMainTab]);
+
+  // Handler para crear Orden de Impresión (artículos IM)
+  const handleCreateOrdenImpresion = useCallback(async (data: { titulo: string; descripcion: string; tipo: string; listado_inventario: string; proveedores_id?: number; nombre_proveedores?: string; asignado?: string; id_asignado?: string; contenido?: string }) => {
+    try {
+      await createTareaMutation.mutateAsync({
+        titulo: data.titulo,
+        descripcion: data.descripcion,
+        tipo: data.tipo,
+        listado_inventario: data.listado_inventario,
+        proveedores_id: data.proveedores_id,
+        nombre_proveedores: data.nombre_proveedores,
+        asignado: data.asignado,
+        id_asignado: data.id_asignado,
+        contenido: data.contenido,
+      });
+      setIsOrdenImpresionModalOpen(false);
+      setSelectedInventoryIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+    } catch (error) {
+      console.error('Error al crear orden de impresión:', error);
+    }
+  }, [createTareaMutation, campanaId, queryClient]);
 
   const handleUploadArt = useCallback(async (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => {
     // Get reserva IDs from selected inventory items
@@ -16053,7 +16557,7 @@ export function TareaSeguimientoPage() {
           </div>
 
           {/* Sub-tabs: Formato - Solo mostrar si hay elementos y no estamos en Programación (que es solo digital) */}
-          {activeMainTab !== 'programacion' && (formatCounts.tradicional > 0 || formatCounts.digital > 0) && (
+          {activeMainTab !== 'programacion' && !(activeMainTab === 'impresiones' && activeEstadoImpresionTab === 'orden_impresion') && (formatCounts.tradicional > 0 || formatCounts.digital > 0) && (
             <div className="px-4 py-2 border-b border-border bg-purple-900/5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -16634,6 +17138,7 @@ export function TareaSeguimientoPage() {
                   const recibido = Math.max(0, completedImpresiones - pendingRecepcion);
 
                   return [
+                    { key: 'orden_impresion' as const, label: 'Orden Impresión', count: inventoryOrdenImpresionData.length },
                     { key: 'en_impresion' as const, label: 'En Impresion', count: activeImpresiones },
                     { key: 'pendiente_recepcion' as const, label: 'Pend. Recepcion', count: pendingRecepcion },
                     { key: 'recibido' as const, label: 'Recibido', count: recibido },
@@ -16662,8 +17167,8 @@ export function TareaSeguimientoPage() {
             </div>
           )}
 
-          {/* Info Bar (Impresiones tab) - Solo para sub-tabs que no son 'recibido' */}
-          {activeMainTab === 'impresiones' && activeEstadoImpresionTab !== 'recibido' && (
+          {/* Info Bar (Impresiones tab) - Solo para sub-tabs que no son 'recibido' ni 'orden_impresion' */}
+          {activeMainTab === 'impresiones' && activeEstadoImpresionTab !== 'recibido' && activeEstadoImpresionTab !== 'orden_impresion' && (
             <div className="px-4 py-2 border-b border-border flex items-center justify-between">
               <span className="text-xs text-zinc-400">
                 {filteredImpresionesData.length} items en este estado
@@ -16680,7 +17185,7 @@ export function TareaSeguimientoPage() {
           {/* Filter Toolbar (Impresiones tab) */}
           {activeMainTab === 'impresiones' && (
             <div className="px-4 py-2 border-b border-border flex items-center justify-between">
-              <span className="text-xs text-zinc-400">{filteredImpresionesData.length} de {inventoryImpresionesData.length} items</span>
+              <span className="text-xs text-zinc-400">{filteredImpresionesData.length} de {activeEstadoImpresionTab === 'orden_impresion' ? inventoryOrdenImpresionData.length : inventoryImpresionesData.length} items</span>
               <FilterToolbar
                 filters={filtersImpresiones}
                 showFilters={showFiltersImpresiones}
@@ -16822,7 +17327,9 @@ export function TareaSeguimientoPage() {
                     : activeMainTab === 'atender'
                     ? 'Sin artes para revisar'
                     : activeMainTab === 'impresiones'
-                    ? 'Sin impresiones pendientes'
+                    ? activeEstadoImpresionTab === 'orden_impresion'
+                      ? 'Sin artículos de impresión'
+                      : 'Sin impresiones pendientes'
                     : inventoryArteData.length > 0
                       ? 'Aun no hay artes aprobados'
                       : 'Sin testigos pendientes'
@@ -16841,13 +17348,140 @@ export function TareaSeguimientoPage() {
                           : 'No hay artes pendientes de revision en esta campaña'
                       : 'No hay artes de tipo ' + activeFormat + ' para revisar'
                     : activeMainTab === 'impresiones'
-                    ? 'Crea una tarea de Impresion desde "Revisar y Aprobar" para ver items aqui'
+                    ? activeEstadoImpresionTab === 'orden_impresion'
+                      ? 'Los artículos de impresión aparecerán aquí cuando tengan APS asignado'
+                      : 'Crea una tarea de Impresion desde "Revisar y Aprobar" para ver items aqui'
                     : inventoryArteData.length > 0
                       ? 'Primero aprueba los artes en "Revisar y Aprobar" para que aparezcan aqui'
                       : 'Los testigos se generan despues de aprobar e instalar los artes'
                 }
                 icon={activeMainTab === 'versionario' ? Image : activeMainTab === 'atender' ? Eye : activeMainTab === 'impresiones' ? Printer : Camera}
               />
+            ) : activeMainTab === 'impresiones' && activeEstadoImpresionTab === 'orden_impresion' ? (
+              // Vista de artículos de impresión (IM) - Orden Impresión
+              <div>
+                {/* Action bar */}
+                {selectedInventoryIds.size > 0 && (
+                  <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-blue-900/20 to-transparent flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 rounded-lg border border-blue-500/30">
+                        <CheckCircle2 className="h-4 w-4 text-blue-400" />
+                        <span className="text-sm font-medium text-blue-300">
+                          {selectedInventoryIds.size} artículo(s) seleccionado(s)
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setSelectedInventoryIds(new Set())}
+                        className="text-xs text-zinc-400 hover:text-zinc-300"
+                      >
+                        Limpiar selección
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => setIsOrdenImpresionModalOpen(true)}
+                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
+                      Crear Orden de Impresión
+                    </button>
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-card z-10">
+                      <tr className="border-b border-border text-left">
+                        <th className="p-2 w-8">
+                          <button
+                            onClick={() => {
+                              const allIds = filteredImpresionesData.map(i => i.id);
+                              const allSelected = allIds.every(id => selectedInventoryIds.has(id));
+                              if (allSelected) {
+                                setSelectedInventoryIds(new Set());
+                              } else {
+                                setSelectedInventoryIds(new Set(allIds));
+                              }
+                            }}
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                              filteredImpresionesData.length > 0 && filteredImpresionesData.every(i => selectedInventoryIds.has(i.id))
+                                ? 'bg-blue-600 border-blue-600'
+                                : 'border-blue-500/50 hover:border-blue-400'
+                            }`}
+                          >
+                            {filteredImpresionesData.length > 0 && filteredImpresionesData.every(i => selectedInventoryIds.has(i.id)) && (
+                              <Check className="h-3 w-3 text-white" />
+                            )}
+                          </button>
+                        </th>
+                        {[
+                          { field: 'articulo', label: 'Artículo' },
+                          { field: 'mueble', label: 'Formato' },
+                          { field: 'caras_totales', label: 'Impresiones' },
+                          { field: 'plaza', label: 'Ciudad' },
+                          { field: 'aps', label: 'APS' },
+                          { field: 'inicio_periodo', label: 'Inicio' },
+                          { field: 'fin_periodo', label: 'Fin' },
+                          { field: 'estatus', label: 'Estatus' },
+                        ].map(col => (
+                          <th key={col.field} className="p-2 font-medium text-blue-300">{col.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredImpresionesData.map((item) => (
+                        <tr
+                          key={item.id}
+                          className={`border-b border-border/50 hover:bg-blue-900/20 transition-colors ${
+                            selectedInventoryIds.has(item.id) ? 'bg-blue-500/10' : ''
+                          }`}
+                        >
+                          <td className="p-2 w-8">
+                            <button
+                              onClick={() => toggleInventorySelection(item.id)}
+                              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                selectedInventoryIds.has(item.id)
+                                  ? 'bg-blue-600 border-blue-600'
+                                  : 'border-blue-500/50 hover:border-blue-400'
+                              }`}
+                            >
+                              {selectedInventoryIds.has(item.id) && (
+                                <Check className="h-3 w-3 text-white" />
+                              )}
+                            </button>
+                          </td>
+                          <td className="p-2">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-300">
+                              {item.articulo || item.codigo_unico || '-'}
+                            </span>
+                          </td>
+                          <td className="p-2 text-zinc-300 text-[10px]">{item.mueble || '-'}</td>
+                          <td className="p-2 text-center">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300">
+                              {item.caras_totales}
+                            </span>
+                          </td>
+                          <td className="p-2 text-zinc-300 text-[10px]">{item.plaza || item.ciudad || '-'}</td>
+                          <td className="p-2 text-center">
+                            <span className="px-1.5 py-0.5 rounded font-medium bg-cyan-500/20 text-cyan-400">
+                              {item.aps || '-'}
+                            </span>
+                          </td>
+                          <td className="p-2 text-zinc-400 text-[10px]">
+                            {item.inicio_periodo ? new Date(item.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                          </td>
+                          <td className="p-2 text-zinc-400 text-[10px]">
+                            {item.fin_periodo ? new Date(item.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                          </td>
+                          <td className="p-2">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-300">
+                              Impresión
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             ) : activeMainTab === 'impresiones' && activeEstadoImpresionTab === 'recibido' ? (
               // Vista de cards para recibido (mismo estilo que pendiente de recepcion)
               <div className="divide-y divide-border">
@@ -18722,6 +19356,17 @@ export function TareaSeguimientoPage() {
         availableTipos={availableTaskTipos}
       />
 
+      {/* Orden Impresión Modal */}
+      <OrdenImpresionModal
+        isOpen={isOrdenImpresionModalOpen}
+        onClose={() => setIsOrdenImpresionModalOpen(false)}
+        selectedItems={filteredImpresionesData.filter(i => selectedInventoryIds.has(i.id))}
+        campanaId={campanaId}
+        campanaNombre={(campana as any)?.nombre || ''}
+        onSubmit={handleCreateOrdenImpresion}
+        isSubmitting={createTareaMutation.isPending}
+      />
+
       {/* Confirm Clear Art Modal */}
       {isConfirmClearModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -19237,6 +19882,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
         tradicionalSummaryMap={tradicionalSummaryMap}
         openTradicionalGallery={openTradicionalGallery}
         tipoPeriodo={tipoPeriodo}
+        campana={campana}
         onCompleteProgramacionTrafico={async (taskId, operacionesAsignados, indicaciones, archivos) => {
           if (!selectedTask) return;
 
