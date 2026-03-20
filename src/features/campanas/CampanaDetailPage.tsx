@@ -1483,7 +1483,7 @@ export function CampanaDetailPage() {
     const imItems = selectedReservado.filter(item => String(item.rsv_ids).startsWith('sc_'));
 
     const inventarioIds = normalItems.map(item => item.id);
-    const solicitudCarasIds = imItems.map(item => item.solicitud_caras_id).filter(Boolean);
+    const solicitudCarasIds = imItems.map(item => item.solicitud_caras_id).filter((id): id is number => id !== null);
 
     if (inventarioIds.length > 0 || solicitudCarasIds.length > 0) {
       assignAPSMutation.mutate({ inventarioIds, solicitudCarasIds });

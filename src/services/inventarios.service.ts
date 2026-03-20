@@ -30,6 +30,7 @@ export interface InventariosParams {
   tipo?: string;
   estatus?: string;
   plaza?: string;
+  campanaId?: number;
 }
 
 export interface DisponiblesParams {

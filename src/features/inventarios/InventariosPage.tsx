@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Map, List, History, X, Loader2, AlertCircle, Calendar as CalendarIcon,
@@ -106,6 +107,9 @@ export function InventariosPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const campanaIdParam = searchParams.get('campanaId');
+  const campanaNombreParam = searchParams.get('campanaNombre');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [tipo, setTipo] = useState('');
@@ -141,10 +145,11 @@ export function InventariosPage() {
   const [saving, setSaving] = useState(false);
 
   const limit = 50;
+  const campanaIdNum = campanaIdParam ? parseInt(campanaIdParam) : undefined;
   const { data, isLoading } = useQuery({
-    queryKey: ['inventarios', page, search, tipo, estatus, plaza],
+    queryKey: ['inventarios', page, search, tipo, estatus, plaza, campanaIdNum],
     queryFn: () =>
-      inventariosService.getAll({ page, limit, search, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined }),
+      inventariosService.getAll({ page, limit, search, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined, campanaId: campanaIdNum }),
   });
 
   const { data: tipos } = useQuery({ queryKey: ['inventarios', 'tipos'], queryFn: () => inventariosService.getTipos() });
@@ -565,7 +570,7 @@ export function InventariosPage() {
 
   const totalPages = data?.pagination?.totalPages || 1;
   const totalItems = data?.pagination?.total || 0;
-  const hasActiveFilters = !!(tipo || plaza || estatus || search);
+  const hasActiveFilters = !!(tipo || plaza || estatus || search || campanaIdParam);
 
   // Form fields for create/edit
   const FORM_FIELDS: { key: string; label: string; type?: string; options?: string[]; span?: number }[] = [
@@ -723,6 +728,26 @@ export function InventariosPage() {
             </div>
           </div>
         </div>
+
+        {/* Campaign filter banner */}
+        {campanaIdParam && campanaNombreParam && (
+          <div className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border ${isDark ? 'border-orange-500/30 bg-orange-500/10' : 'border-orange-300 bg-orange-50'}`}>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className={`h-4 w-4 ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
+              <span className={`text-sm ${isDark ? 'text-orange-300' : 'text-orange-700'}`}>
+                Mostrando inventarios de la campaña: <strong>{campanaNombreParam}</strong>
+                {data && <span className="ml-1 opacity-70">({data.pagination.total} inventarios)</span>}
+              </span>
+            </div>
+            <button
+              onClick={() => setSearchParams({})}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isDark ? 'bg-orange-500/20 text-orange-300 hover:bg-orange-500/30' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}
+            >
+              <X className="h-3.5 w-3.5" />
+              Mostrar todos
+            </button>
+          </div>
+        )}
 
         {/* Control Bar - matching CampanasPage */}
         <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>
@@ -978,7 +1003,7 @@ export function InventariosPage() {
                 </div>
 
                 {/* Pagination - matching CampanasPage */}
-                {totalPages > 1 && (
+                {totalPages > 1 && !campanaIdParam && (
                   <div className={`flex items-center justify-between border-t ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-200 bg-gradient-to-r from-purple-50/50 via-transparent to-fuchsia-50/50'} px-4 py-3`}>
                     <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-600/70'}`}>
                       Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
