@@ -20,7 +20,8 @@ export function IncidenciaModal({ campanaId, campanaNombre, isOpen, onClose }: P
 
   const handleConfirm = () => {
     if (tipo === 'Bloqueo') {
-      navigate('/inventarios');
+      const params = new URLSearchParams({ campanaId: String(campanaId), campanaNombre });
+      navigate(`/inventarios?${params.toString()}`);
     } else {
       const params = new URLSearchParams({ incidencia: '1', tipoIncidencia: tipo, tab: 'testigo', subtab: 'instaladas' });
       navigate(`/campanas/${campanaId}/tareas?${params.toString()}`);
