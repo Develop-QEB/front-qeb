@@ -2313,6 +2313,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       </div>
                     </>
                   ) : (
+                    <>
                     <div>
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Cat. Inicio</label>
                       <select
@@ -2355,6 +2356,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           ))}
                       </select>
                     </div>
+                    </>
                   )}
 
                   {/* Renta */}
