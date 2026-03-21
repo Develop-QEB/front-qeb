@@ -567,6 +567,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     tipo: '' as 'Tradicional' | 'Digital' | '',
     nse: [] as string[],
     periodo: '',
+    periodoFinCat: '', // Catorcena fin for range mode (e.g., "2026-8")
     // Custom period dates (mensual mode - per cara dates within month)
     periodoInicioCustom: '',
     periodoFinCustom: '',
@@ -1066,15 +1067,23 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       periodoInicioVal = newCara.periodoInicioCustom;
       periodoFinVal = newCara.periodoFinCustom;
     } else {
-      // Catorcena mode
+      // Catorcena mode - supports range (inicio to fin)
       if (!newCara.periodo) return;
       const [yearStr, catStr] = newCara.periodo.split('-');
       catorcenaYear = parseInt(yearStr);
       catorcenaNum = parseInt(catStr);
-      const period = availablePeriods.find(p => p.a_o === catorcenaYear && p.numero_catorcena === catorcenaNum);
-      if (!period) return;
-      periodoInicioVal = period.fecha_inicio;
-      periodoFinVal = period.fecha_fin;
+      const periodInicio = availablePeriods.find(p => p.a_o === catorcenaYear && p.numero_catorcena === catorcenaNum);
+      if (!periodInicio) return;
+      periodoInicioVal = periodInicio.fecha_inicio;
+
+      // If range fin is set, use it; otherwise same as inicio
+      if (newCara.periodoFinCat) {
+        const [yearFinStr, catFinStr] = newCara.periodoFinCat.split('-');
+        const periodFin = availablePeriods.find(p => p.a_o === parseInt(yearFinStr) && p.numero_catorcena === parseInt(catFinStr));
+        periodoFinVal = periodFin ? periodFin.fecha_fin : periodInicio.fecha_fin;
+      } else {
+        periodoFinVal = periodInicio.fecha_fin;
+      }
     }
 
     // Calculate descuento: if renta=100, bonif=10, then descuento is 10/(100+10) = 9.09%
@@ -2305,10 +2314,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     </>
                   ) : (
                     <div>
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Periodo</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Cat. Inicio</label>
                       <select
                         value={newCara.periodo}
-                        onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewCara({ ...newCara, periodo: val, periodoFinCat: val || newCara.periodoFinCat });
+                        }}
                         disabled={availablePeriods.length === 0}
                         className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                       >
@@ -2318,6 +2330,29 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                             Cat {p.numero_catorcena} / {p.a_o}
                           </option>
                         ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Cat. Fin</label>
+                      <select
+                        value={newCara.periodoFinCat}
+                        onChange={(e) => setNewCara({ ...newCara, periodoFinCat: e.target.value })}
+                        disabled={!newCara.periodo || availablePeriods.length === 0}
+                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                      >
+                        <option value="">Seleccionar</option>
+                        {availablePeriods
+                          .filter(p => {
+                            if (!newCara.periodo) return true;
+                            const [yStr, cStr] = newCara.periodo.split('-');
+                            const inicioVal = parseInt(yStr) * 100 + parseInt(cStr);
+                            return p.a_o * 100 + p.numero_catorcena >= inicioVal;
+                          })
+                          .map(p => (
+                            <option key={`fin-${p.a_o}-${p.numero_catorcena}`} value={`${p.a_o}-${p.numero_catorcena}`}>
+                              Cat {p.numero_catorcena} / {p.a_o}
+                            </option>
+                          ))}
                       </select>
                     </div>
                   )}
