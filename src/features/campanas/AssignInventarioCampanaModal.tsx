@@ -1305,14 +1305,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const contraflujoRequerido = cara.caras_contraflujo || 0;
     const bonificacionRequerido = cara.bonificacion || 0;
 
-    // CT (cortesía), BF/CF (bonificación), IN (intercambio): si tiene reservas pero requerido=0, está completo
-    const artCode = (cara.articulo || '').toUpperCase();
-    const esEspecial = artCode.startsWith('CT') || artCode.startsWith('BF') || artCode.startsWith('CF') || artCode.startsWith('IN');
+    // For migrated campaigns: if total reservas >= total required, consider complete
+    // This handles cases where tipo classification doesn't match exactly (CT, BF, IN, etc.)
+    const totalReservadoAll = caraReservas.length;
+    const totalRequeridoAll = flujoRequerido + contraflujoRequerido + bonificacionRequerido;
+    const totalMatch = totalReservadoAll >= totalRequeridoAll && totalRequeridoAll > 0;
 
-    // Complete: exact match, OR special articles with reservas and 0 required
-    const flujoCompleto = flujoReservado === flujoRequerido || (esEspecial && flujoRequerido === 0 && flujoReservado > 0);
-    const contraflujoCompleto = contraflujoReservado === contraflujoRequerido || (esEspecial && contraflujoRequerido === 0 && contraflujoReservado > 0);
-    const bonificacionCompleto = bonificacionReservado === bonificacionRequerido || (esEspecial && bonificacionRequerido === 0 && bonificacionReservado > 0);
+    // Complete: exact match per type, OR total match (covers migrated/special articles)
+    const flujoCompleto = flujoReservado === flujoRequerido || totalMatch;
+    const contraflujoCompleto = contraflujoReservado === contraflujoRequerido || totalMatch;
+    const bonificacionCompleto = bonificacionReservado === bonificacionRequerido || totalMatch;
 
     const totalRequerido = flujoRequerido + contraflujoRequerido + bonificacionRequerido;
     const totalReservado = flujoReservado + contraflujoReservado + bonificacionReservado;
