@@ -766,17 +766,7 @@ export function CampanasPage() {
   const filteredData = useMemo(() => {
     let items = data?.data || [];
 
-    // Filter by search
-    if (debouncedSearch && items.length > 0) {
-      const searchLower = debouncedSearch.toLowerCase();
-      items = items.filter(c =>
-        c.nombre?.toLowerCase().includes(searchLower) ||
-        c.articulo?.toLowerCase().includes(searchLower) ||
-        c.cliente_nombre?.toLowerCase().includes(searchLower) ||
-        c.cliente_razon_social?.toLowerCase().includes(searchLower) ||
-        String(c.id).includes(searchLower)
-      );
-    }
+    // Search is already handled by the backend API — no local filtering needed
 
     // Filter by catorcena inicio
     if (selectedCatorcenaInicio && items.length > 0) {
