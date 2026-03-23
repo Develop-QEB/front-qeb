@@ -576,6 +576,11 @@ export const campanasService = {
     return response.data;
   },
 
+  async getBatchInversiones(ids: number[]): Promise<Record<number, Record<string, { inversion: number; circuitos: number; bonificadas: number; carasNetas: number }>>> {
+    const response = await api.post<ApiResponse<Record<number, Record<string, { inversion: number; circuitos: number; bonificadas: number; carasNetas: number }>>>>('/campanas/batch-inversiones', { ids });
+    return response.data.data || {};
+  },
+
   async getById(id: number): Promise<CampanaWithComments> {
     const response = await api.get<ApiResponse<CampanaWithComments>>(`/campanas/${id}`);
     if (!response.data.success || !response.data.data) {
