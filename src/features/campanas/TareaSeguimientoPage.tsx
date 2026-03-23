@@ -13601,6 +13601,7 @@ export function TareaSeguimientoPage() {
       queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
       // Invalidar tareas porque limpiar arte puede eliminar/actualizar tareas
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campanas'] });
       if (isUploadArtModalOpen) {
         setIsUploadArtModalOpen(false);
         setSelectedInventoryIds(new Set());

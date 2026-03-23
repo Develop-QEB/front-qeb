@@ -2528,6 +2528,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
         queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] }); // Refresh map
+        queryClient.invalidateQueries({ queryKey: ['campanas'] });
         // Also refresh disponibles
         handleRefetchDisponibles();
 
@@ -2621,6 +2622,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
         queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
+        queryClient.invalidateQueries({ queryKey: ['campanas'] });
         handleRefetchDisponibles();
 
         showToast(`Se guardaron ${result.reservasCreadas} bonificaciones exitosamente`, 'success');
@@ -2989,6 +2991,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             await campanasService.deleteReservas(campana!.id, backendIds);
             queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
             queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
+            queryClient.invalidateQueries({ queryKey: ['campanas'] });
             handleRefetchDisponibles();
 
             setReservas(prev => prev.filter(r => r.grupo_completo_id !== grupoId));
@@ -3023,6 +3026,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           await campanasService.deleteReservas(campana!.id, [reserva.reservaId!]);
           queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
           queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
+          queryClient.invalidateQueries({ queryKey: ['campanas'] });
           handleRefetchDisponibles();
 
           setReservas(prev => prev.filter(r => r.id !== reservaId));
@@ -3109,6 +3113,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             await campanasService.deleteReservas(campana!.id, backendIds);
             queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
             queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
+            queryClient.invalidateQueries({ queryKey: ['campanas'] });
             handleRefetchDisponibles();
           }
 

@@ -1465,6 +1465,7 @@ export function CampanaDetailPage() {
       setSelectedItems(new Set());
       queryClient.invalidateQueries({ queryKey: ['campana-inventario', campanaId] });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-aps', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campanas'] });
       alert(`${data.message}`);
     },
     onError: (error: Error) => {
@@ -1575,6 +1576,7 @@ export function CampanaDetailPage() {
       // Refrescar las tablas
       queryClient.invalidateQueries({ queryKey: ['campana-inventario', campanaId] });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-aps', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campanas'] });
 
       // Limpiar selección y cerrar modal
       setSelectedItemsAPS(new Set());
