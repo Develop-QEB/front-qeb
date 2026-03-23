@@ -718,9 +718,6 @@ export function CampanasPage() {
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
       }),
-    staleTime: 15 * 60 * 1000,
-    gcTime: 60 * 60 * 1000,
-    placeholderData: (previousData) => previousData,
   });
 
   // Stats query — global KPIs with same filters
@@ -736,8 +733,6 @@ export function CampanasPage() {
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
       }),
-    staleTime: 15 * 60 * 1000,
-    gcTime: 60 * 60 * 1000,
   });
 
   // Get current catorcena
