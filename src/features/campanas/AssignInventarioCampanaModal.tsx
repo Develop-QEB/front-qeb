@@ -1305,10 +1305,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const contraflujoRequerido = cara.caras_contraflujo || 0;
     const bonificacionRequerido = cara.bonificacion || 0;
 
-    // Complete means EXACT match - not under, not over
-    const flujoCompleto = flujoReservado === flujoRequerido;
-    const contraflujoCompleto = contraflujoReservado === contraflujoRequerido;
-    const bonificacionCompleto = bonificacionReservado === bonificacionRequerido;
+    // CT (cortesía), BF/CF (bonificación), IN (intercambio): si tiene reservas pero requerido=0, está completo
+    const artCode = (cara.articulo || '').toUpperCase();
+    const esEspecial = artCode.startsWith('CT') || artCode.startsWith('BF') || artCode.startsWith('CF') || artCode.startsWith('IN');
+
+    // Complete: exact match, OR special articles with reservas and 0 required
+    const flujoCompleto = flujoReservado === flujoRequerido || (esEspecial && flujoRequerido === 0 && flujoReservado > 0);
+    const contraflujoCompleto = contraflujoReservado === contraflujoRequerido || (esEspecial && contraflujoRequerido === 0 && contraflujoReservado > 0);
+    const bonificacionCompleto = bonificacionReservado === bonificacionRequerido || (esEspecial && bonificacionRequerido === 0 && bonificacionReservado > 0);
 
     const totalRequerido = flujoRequerido + contraflujoRequerido + bonificacionRequerido;
     const totalReservado = flujoReservado + contraflujoReservado + bonificacionReservado;
