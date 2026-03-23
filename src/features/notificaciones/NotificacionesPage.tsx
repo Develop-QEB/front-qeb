@@ -1293,7 +1293,8 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   }
 
   // Si es tarea de propuesta (ajuste cto, etc.) o tiene id_propuesta, ir al detalle de propuesta
-  if (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId) {
+  const isSeguimientoCampana = tipoTarea?.toLowerCase().includes('seguimiento') && tipoTarea?.toLowerCase().includes('campaña');
+  if (!isSeguimientoCampana && (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId)) {
     return `/propuestas?viewId=${propuestaId || id}`;
   }
 
