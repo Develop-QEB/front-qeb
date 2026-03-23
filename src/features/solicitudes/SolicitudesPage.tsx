@@ -673,13 +673,13 @@ export function SolicitudesPage() {
       return;
     }
 
-    const headers = ['ID', 'Fecha', 'Cliente', 'CUIC', 'Descripcion', 'Marca', 'Presupuesto', 'Asignado', 'Status'];
+    const headers = ['ID', 'Fecha', 'Cliente', 'CUIC', 'Campaña', 'Marca', 'Presupuesto', 'Asignado', 'Status'];
     const rows = dataToExport.map(s => [
       s.id,
       formatDate(s.fecha),
       s.razon_social || '',
       s.cuic || '',
-      s.descripcion || '',
+      (s as any).nombre_campania || '',
       s.marca_nombre || '',
       s.presupuesto,
       s.asignado || '',
@@ -1432,7 +1432,7 @@ export function SolicitudesPage() {
                       <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>ID</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Fecha</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Cliente</th>
-                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Descripcion</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Campaña</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Marca</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Presupuesto</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Tipo</th>
