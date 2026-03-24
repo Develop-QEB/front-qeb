@@ -11188,17 +11188,12 @@ function CreateTaskModal({
     }
   }, [isOpen, tipo, todosUsuarios]);
 
-  // Pre-llenar asignados con TODOS los usuarios de Compras para Impresión
+  // Pre-llenar asignado de Impresión con el usuario actual (creador de la tarea)
   useEffect(() => {
-    if (isOpen && tipo === 'Impresión' && todosUsuarios) {
-      // Filtrar usuarios del área de Compras
-      const comprasUsers = todosUsuarios.filter(u =>
-        u.area?.toLowerCase() === 'compras'
-      );
-      // Pre-seleccionar todos
-      setSelectedAsignadosImpresion(comprasUsers.map(u => ({ id: u.id, nombre: u.nombre })));
+    if (isOpen && tipo === 'Impresión' && user) {
+      setSelectedAsignadosImpresion([{ id: user.id, nombre: user.nombre }]);
     }
-  }, [isOpen, tipo, todosUsuarios]);
+  }, [isOpen, tipo, user]);
 
   const [proveedorId, setProveedorId] = useState<number | null>(null);
   const [fechaFin, setFechaFin] = useState('');
