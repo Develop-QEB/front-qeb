@@ -235,6 +235,8 @@ export interface CampanaUpdateData {
   catorcenaInicioAnio?: number;
   catorcenaFinNum?: number;
   catorcenaFinAnio?: number;
+  asignados?: string;
+  id_asignado?: string;
 }
 
 export interface HistorialItem {

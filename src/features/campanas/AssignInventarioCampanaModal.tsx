@@ -606,16 +606,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Reservas state
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
 
-  // Check if the cara being edited has reservas (to block certain fields)
+  // Track APS posted to SAP
+  const postedAPSGroups = useMemo(() => {
+    const posted = new Set<number>();
+    try {
+      const postedAps = (campanaDetails as any)?.posted_aps;
+      if (Array.isArray(postedAps)) {
+        postedAps.forEach((a: number) => posted.add(a));
+      }
+    } catch { /* ignore */ }
+    return posted;
+  }, [campanaDetails]);
+
+  // Check if the cara being edited has APS posted to SAP (block editing)
   const editingCaraHasReservas = useMemo(() => {
     if (!editingCaraId) return false;
     const editingCara = caras.find(c => c.localId === editingCaraId);
     if (!editingCara) return false;
-    // Check if there are any reservas for this cara
-    return reservas.some(r =>
+    // Only block if this cara has APS that were posted to SAP
+    const caraReservas = reservas.filter(r =>
       r.id.startsWith(editingCaraId) || r.solicitudCaraId === editingCara.id
     );
-  }, [editingCaraId, caras, reservas]);
+    const caraAPS = new Set(caraReservas.map(r => r.aps).filter(Boolean));
+    return [...caraAPS].some(aps => postedAPSGroups.has(aps as number));
+  }, [editingCaraId, caras, reservas, postedAPSGroups]);
 
   // Inventory search state
   const [searchFilters, setSearchFilters] = useState({
@@ -1011,6 +1025,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const handleUpdateCampana = async () => {
     setIsUpdatingCampana(true);
     try {
+      const asignadosStr = asignados.map(u => u.nombre).join(', ');
+      const asignadosIdsStr = asignados.map(u => u.id).join(',');
       await campanasService.update(campana!.id, {
         nombre: nombreCampania,
         notas,
@@ -1019,6 +1035,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         catorcenaInicioAnio: yearInicio,
         catorcenaFinNum: catorcenaFin,
         catorcenaFinAnio: yearFin,
+        asignados: asignadosStr,
+        id_asignado: asignadosIdsStr,
       });
 
       // Update initial values to current values
