@@ -197,7 +197,7 @@ export function InventariosPage() {
     setIsBloqueoSubmitting(true);
     try {
       const realEstatus = bloqueoItem.estatus_real || bloqueoItem.estatus || '';
-      const esLibre = bloqueoItem.estatus !== 'Bloqueado' && !EN_USO_ESTATUS.includes(realEstatus);
+      const esLibre = bloqueoItem.estatus !== 'Bloqueado' && !EN_USO_ESTATUS.includes(realEstatus) && data.campanas.length === 0;
       const fechaBloqueo = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
       // Info del inventario para descripción
@@ -208,10 +208,14 @@ export function InventariosPage() {
       ].filter(Boolean).join('\n');
 
       if (esLibre) {
-        // Disponible → bloquear
+        // Disponible y sin campañas activas → bloquear directo
         await toggleBlockMutation.mutateAsync(bloqueoItem.id);
       } else {
-        // En uso o ya bloqueado → crear una tarea de ajuste por cada campaña
+        // En uso, ya bloqueado, o con campañas activas → crear una tarea de ajuste por cada campaña
+        // Si no está bloqueado aún, bloquearlo
+        if (bloqueoItem.estatus !== 'Bloqueado') {
+          await toggleBlockMutation.mutateAsync(bloqueoItem.id);
+        }
         const asignados = [...data.analistas, ...data.trafico];
         const campanasList = data.campanas.map(c => `  • ${c.campana_nombre} (${c.cliente_nombre})`).join('\n');
 

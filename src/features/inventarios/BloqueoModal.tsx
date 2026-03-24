@@ -155,7 +155,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
   const estatusReal = item.estatus_real || item.estatus || '';
   const yaEstaBloquedo = item.estatus === 'Bloqueado';
   const enUso = ['Reservado', 'Ocupado', 'Vendido'].includes(estatusReal);
-  const esDisponible = !yaEstaBloquedo && !enUso;
+  const esDisponible = !yaEstaBloquedo && !enUso && campanasActivas.length === 0;
 
   const canConfirm = esDisponible
     ? motivo.trim().length > 0
