@@ -194,7 +194,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteProveedores: false,
 
     // Puede cambiar estatus pero solo a estos valores
-    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente'],
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: true,
@@ -564,7 +564,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteProveedores: false,
 
     // Puede cambiar estatus pero solo a estos valores
-    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente'],
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: true,
@@ -602,7 +602,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: true,
     canChangeEstadoSolicitud: true,
 
-    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente'],
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: true,
@@ -641,7 +641,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canChangeEstadoSolicitud: true,
 
     // Propuestas: mismos permisos que Asesor Comercial
-    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente'],
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: false,

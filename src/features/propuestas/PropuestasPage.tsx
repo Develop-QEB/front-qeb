@@ -38,11 +38,12 @@ const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: st
   'Activa': { bg: isDark ? 'bg-green-500/20' : 'bg-green-50', text: isDark ? 'text-green-300' : 'text-green-700', border: 'border-green-500/30' },
   'Aprobada': { bg: isDark ? 'bg-green-500/20' : 'bg-green-50', text: isDark ? 'text-green-300' : 'text-green-700', border: 'border-green-500/30' },
   'Rechazada': { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
+  'Descartada': { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-400' : 'text-zinc-600', border: 'border-zinc-500/30' },
 });
 
 const getDefaultStatusColor = (isDark: boolean) => ({ bg: isDark ? 'bg-violet-500/20' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30' });
 
-const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas'];
+const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas', 'Descartada'];
 
 // Chart colors for dynamic status
 const CHART_COLORS = [

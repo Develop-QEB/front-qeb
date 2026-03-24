@@ -546,8 +546,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   useSocketEquipos();
 
   // Si readOnly es true, sobrescribir permisos para modo visualización
-  const effectiveCanEdit = !readOnly && permissions.canAsignarInventario;
-  const canEditResumen = !readOnly && permissions.canEditResumenPropuesta;
+  const isDescartada = propuesta.status === 'Descartada';
+  const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada;
+  const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada;
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
   const resumenReservasMapRef = useRef<google.maps.Map | null>(null);
