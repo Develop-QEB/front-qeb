@@ -5683,12 +5683,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         </button>
                                       );
                                     })()}
-                                    {effectiveCanEdit && (
+                                    {effectiveCanEdit && (() => {
+                                      const caraAuthPendiente = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
+                                      return (
                                       <>
                                         <button
-                                          onClick={(e) => { e.stopPropagation(); handleEditCara(cara); }}
-                                          className="p-2 rounded-lg border transition-colors bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
-                                          title="Editar"
+                                          onClick={(e) => { e.stopPropagation(); if (!caraAuthPendiente) handleEditCara(cara); }}
+                                          disabled={caraAuthPendiente}
+                                          className={`p-2 rounded-lg border transition-colors ${caraAuthPendiente
+                                            ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                                          }`}
+                                          title={caraAuthPendiente ? 'Autorización pendiente - no se puede editar' : 'Editar'}
                                         >
                                           <Pencil className="h-4 w-4" />
                                         </button>
@@ -5706,7 +5712,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           </button>
                                         )}
                                       </>
-                                    )}
+                                      );
+                                    })()}
                                   </div>
                                 </div>
 

@@ -2617,12 +2617,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           })()}
                                         </td>
                                         <td className="px-2 py-2 text-center">
+                                          {(() => {
+                                            const caraAuthPendiente = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
+                                            return (
                                           <div className="flex items-center justify-center gap-1">
                                             <button
                                               type="button"
-                                              onClick={() => handleEditCara(cara)}
-                                              className={`p-1 rounded text-[10px] ${editingCaraId === cara.id ? 'bg-purple-500/30 text-purple-300' : 'hover:bg-purple-500/20 text-purple-400'}`}
-                                              title="Editar"
+                                              onClick={() => { if (!caraAuthPendiente) handleEditCara(cara); }}
+                                              disabled={caraAuthPendiente}
+                                              className={`p-1 rounded text-[10px] ${caraAuthPendiente ? 'text-zinc-600 cursor-not-allowed' : editingCaraId === cara.id ? 'bg-purple-500/30 text-purple-300' : 'hover:bg-purple-500/20 text-purple-400'}`}
+                                              title={caraAuthPendiente ? 'Autorización pendiente - no se puede editar' : 'Editar'}
                                             >
                                               <Pencil className="h-3.5 w-3.5" />
                                             </button>
@@ -2635,6 +2639,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                               <Trash2 className="h-3.5 w-3.5" />
                                             </button>
                                           </div>
+                                            );
+                                          })()}
                                         </td>
                                       </tr>
                                     );
