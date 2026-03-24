@@ -685,8 +685,6 @@ export function CampanasPage() {
   const [expandedGrupos, setExpandedGrupos] = useState<Set<string>>(new Set()); // key: campanaId-aps-grupoKey
   const [campanaInventarios, setCampanaInventarios] = useState<Record<number, InventarioConAPS[]>>({});
   const [loadingInventarios, setLoadingInventarios] = useState<Set<number>>(new Set());
-  const [batchInversiones, setBatchInversiones] = useState<Record<number, Record<string, { inversion: number; circuitos: number; bonificadas: number; carasNetas: number }>>>({});
-  const [batchInversionesLoaded, setBatchInversionesLoaded] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -1029,37 +1027,21 @@ export function CampanasPage() {
     });
   };
 
-  // Cargar inversiones batch con 1 sola petición (reemplaza 720 requests individuales)
-  useEffect(() => {
-    if (activeView !== 'catorcena' || !filteredData.length || batchInversionesLoaded) return;
-    const ids = filteredData.map(c => c.id);
-    setBatchInversionesLoaded(true);
-    campanasService.getBatchInversiones(ids).then(data => {
-      setBatchInversiones(data);
-    }).catch(err => {
-      console.error('Error cargando inversiones batch:', err);
-    });
-  }, [activeView, filteredData, batchInversionesLoaded]);
-
-  // Reset batch inversiones cuando cambian los filtros
-  useEffect(() => {
-    setBatchInversionesLoaded(false);
-    setBatchInversiones({});
-  }, [status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo]);
-
-  // Cargar inventarios solo cuando el usuario expande una campaña (bajo demanda)
+  // Auto-cargar inventarios de campañas visibles en vista catorcena
   const loadingRef = useRef(new Set<number>());
   useEffect(() => {
     if (activeView !== 'catorcena' || !filteredData.length) return;
-    // Solo cargar inventarios de campañas que el usuario ha expandido
-    const idsToLoad = Array.from(expandedCampanas)
-      .filter(id => !campanaInventarios[id] && !loadingRef.current.has(id));
+    const idsToLoad = filteredData
+      .filter(c => !campanaInventarios[c.id] && !loadingRef.current.has(c.id))
+      .map(c => c.id);
     if (idsToLoad.length === 0) return;
 
-    idsToLoad.forEach(id => loadingRef.current.add(id));
+    const BATCH_SIZE = 10;
+    const batch = idsToLoad.slice(0, BATCH_SIZE);
+    batch.forEach(id => loadingRef.current.add(id));
     setLoadingInventarios(new Set(loadingRef.current));
 
-    Promise.all(idsToLoad.map(async (id) => {
+    Promise.all(batch.map(async (id) => {
       try {
         const [conAPS, sinAPS] = await Promise.all([
           campanasService.getInventarioConAPS(id),
@@ -1076,10 +1058,10 @@ export function CampanasPage() {
         results.forEach(r => { next[r.id] = r.data; });
         return next;
       });
-      idsToLoad.forEach(id => loadingRef.current.delete(id));
+      batch.forEach(id => loadingRef.current.delete(id));
       setLoadingInventarios(new Set(loadingRef.current));
     });
-  }, [activeView, filteredData, campanaInventarios, expandedCampanas]);
+  }, [activeView, filteredData, campanaInventarios]);
 
   // Agrupar campañas por catorcena para la vista alternativa (con soporte para subagrupaciones)
   const campanasPorCatorcena = useMemo(() => {
@@ -2337,32 +2319,49 @@ export function CampanasPage() {
                               <Minus className="h-3 w-3" /> Sin APS
                             </span>
                           )}
-                          {/* Resumen de campaña desde batch (1 sola query): circuitos, bonificación, caras netas, inversión */}
+                          {/* Resumen de campaña: circuitos (grupos), bonificación, inversión */}
+                          {!hasInventarios && isLoadingInv && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/15 text-zinc-400' : 'bg-gray-100 text-gray-400'} border border-zinc-500/25 flex items-center gap-1`}>
+                              <Loader2 className="h-3 w-3 animate-spin" /> Cargando...
+                            </span>
+                          )}
                           {(() => {
-                            const catKey = `${catorcena.num}:${catorcena.anio}`;
-                            const resumen = batchInversiones[campana.id]?.[catKey];
-                            if (!resumen) return null;
+                            // Contar circuitos desde inventarios filtrados por catorcena
+                            const circuitosDesdeGrupos = apsAgrupados.reduce((sum, apsGroup) => sum + apsGroup.grupos.length, 0);
+                            const circuitosCount = hasInventarios ? circuitosDesdeGrupos : null;
+                            return circuitosCount !== null ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`} title="Circuitos (grupos)">
+                                <Layers className="h-3 w-3" /> Circuitos {circuitosCount}
+                              </span>
+                            ) : null;
+                          })()}
+                          {hasInventarios && (() => {
+                            const bonifCatorcena = inventarios.filter(i => Number((i as any).bonificacion_sc) > 0 || (Number((i as any).tarifa_publica_sc) === 0 && Number((i as any).aps) > 0)).length;
+                            return bonifCatorcena > 0 ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25 flex items-center gap-1`} title="Bonificación">
+                                <Gift className="h-3 w-3" /> {bonifCatorcena}
+                              </span>
+                            ) : null;
+                          })()}
+                          {hasInventarios && (() => {
+                            const carasCatorcena = inventarios.length;
+                            const bonifCatorcenaCalc = inventarios.filter(i => Number((i as any).tarifa_publica_sc) === 0 || Number((i as any).bonificacion_sc) > 0).length;
+                            const carasNetas = Math.max(carasCatorcena - bonifCatorcenaCalc, 0);
+                            return carasNetas > 0 ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
+                                <MapPin className="h-3 w-3" /> {carasNetas}
+                              </span>
+                            ) : null;
+                          })()}
+                          {hasInventarios && (() => {
+                            const invCatorcena = inventarios.reduce((sum, inv) => {
+                              const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
+                              return sum + tarifa;
+                            }, 0);
                             return (
-                              <>
-                                {resumen.circuitos > 0 && (
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`} title="Circuitos (grupos)">
-                                    <Layers className="h-3 w-3" /> Circuitos {resumen.circuitos}
-                                  </span>
-                                )}
-                                {resumen.bonificadas > 0 && (
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25 flex items-center gap-1`} title="Bonificación">
-                                    <Gift className="h-3 w-3" /> {resumen.bonificadas}
-                                  </span>
-                                )}
-                                {resumen.carasNetas > 0 && (
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
-                                    <MapPin className="h-3 w-3" /> {resumen.carasNetas}
-                                  </span>
-                                )}
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
-                                  <DollarSign className="h-3 w-3" /> {resumen.inversion > 0 ? `$${resumen.inversion.toLocaleString()}` : 'Sin inversión'}
-                                </span>
-                              </>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
+                                <DollarSign className="h-3 w-3" /> {invCatorcena > 0 ? `$${invCatorcena.toLocaleString()}` : 'Sin inversión'}
+                              </span>
                             );
                           })()}
                           <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
@@ -2681,14 +2680,44 @@ export function CampanasPage() {
                           En curso
                         </span>
                       )}
-                      {/* Inversión total de la catorcena */}
+                      {/* Inversión total de la catorcena + progreso de carga */}
                       {(() => {
-                        const catKey = `${catorcena.num}:${catorcena.anio}`;
+                        const loadedCount = campanas.filter(c => campanaInventarios[c.id]).length;
+                        const totalCount = campanas.length;
+                        const isFullyLoaded = loadedCount === totalCount;
+                        const percentage = totalCount > 0 ? Math.round((loadedCount / totalCount) * 100) : 100;
+
+                        // Sumar inversión solo de inventarios que pertenecen a esta catorcena
                         const totalInversion = campanas.reduce((s, c) => {
-                          const resumen = batchInversiones[c.id]?.[catKey];
-                          if (!resumen) return s;
-                          return s + resumen.inversion;
+                          const allInv = campanaInventarios[c.id] || [];
+                          const invFiltrados = allInv.filter(inv => {
+                            const invCat = (inv as any).numero_catorcena;
+                            const invAnio = (inv as any).anio_catorcena;
+                            if (invCat == null || invAnio == null) return true;
+                            return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
+                          });
+                          return s + invFiltrados.reduce((sum, inv) => {
+                            const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
+                            return sum + tarifa;
+                          }, 0);
                         }, 0);
+
+                        if (!isFullyLoaded) {
+                          return (
+                            <div className="flex items-center gap-2 ml-auto">
+                              <div className={`w-24 h-1.5 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-gray-200'} overflow-hidden`}>
+                                <div
+                                  className="h-full rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-500 transition-all duration-500 ease-out"
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                              <span className={`text-[10px] tabular-nums ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                                {percentage}%
+                              </span>
+                            </div>
+                          );
+                        }
+
                         return totalInversion > 0 ? (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión total">
                             <DollarSign className="h-3 w-3" /> {'$'}{totalInversion.toLocaleString()}
