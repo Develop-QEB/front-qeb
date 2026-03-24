@@ -1107,8 +1107,23 @@ export function CampanaDetailPage() {
         ? inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids)))
         : inventarioConAPS;
 
+      // Fetch artículos SAP para obtener U_IMU_OcrCode (CostingCode)
+      let articulosMap: Record<string, { U_IMU_OcrCode?: string }> = {};
+      try {
+        const { getEndpoints } = await import('../../store/environmentStore');
+        const { useEnvironmentStore } = await import('../../store/environmentStore');
+        const artResponse = await fetch(getEndpoints(useEnvironmentStore.getState().environment).articulos);
+        const artData = await artResponse.json();
+        const items = artData.value || artData || [];
+        items.forEach((a: { ItemCode: string; U_IMU_OcrCode?: string }) => {
+          if (a.ItemCode) articulosMap[a.ItemCode] = { U_IMU_OcrCode: a.U_IMU_OcrCode };
+        });
+      } catch (err) {
+        console.warn('Could not fetch articulos for CostingCode:', err);
+      }
+
       // Construir el payload
-      let deliveryNote = buildDeliveryNote(campana, itemsToPost, campana.sap_database);
+      let deliveryNote = buildDeliveryNote(campana, itemsToPost, campana.sap_database, articulosMap);
 
       // Si es migrada, resolver BaseEntry desde SAP
       if (isMigratedCampaign(campana)) {

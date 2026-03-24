@@ -383,7 +383,8 @@ export function isMigratedCampaign(campana: CampanaWithComments): boolean {
 export function buildDeliveryNote(
   campana: CampanaWithComments,
   inventarioAPS: InventarioConAPS[],
-  sapDatabase?: string | null
+  sapDatabase?: string | null,
+  articulosMap?: Record<string, { U_IMU_OcrCode?: string }>
 ): SAPDeliveryNote | SAPDeliveryNoteMigrated {
   // Obtener valores únicos de APS
   const uniqueAPS = [...new Set(inventarioAPS.map(item => item.aps))];
@@ -408,7 +409,7 @@ export function buildDeliveryNote(
       Quantity: itemsWithThisAPS.length.toString(),
       TaxCode: 'A4',
       UnitPrice: String(totalPrice || 0),
-      CostingCode: '02-03-04',
+      CostingCode: articulosMap?.[firstItem.articulo || '']?.U_IMU_OcrCode || '02-03-04',
       CostingCode2: '1',
       U_Cod_Sitio: 11,
       U_dscSitio: firstItem.estado || '',
@@ -429,7 +430,7 @@ export function buildDeliveryNote(
     NumAtCard: campana.id?.toString() || '',
     Comments: campana.comentario_cambio_status || '',
     DocDueDate: (campana.fecha_fin || new Date().toISOString()).split('T')[0],
-    SalesPersonCode: campana.salesperson_code || campana.T0_U_IDAsesor || '',
+    SalesPersonCode: -1,
     U_CIC: String(campana.cuic || ''),
     U_CRM_Asesor: campana.T0_U_Asesor || '',
     U_CRM_Producto: campana.T2_U_Producto || '',
