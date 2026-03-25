@@ -607,29 +607,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
 
   // Track APS posted to SAP
-  const postedAPSGroups = useMemo(() => {
-    const posted = new Set<number>();
-    try {
-      const postedAps = (campanaDetails as any)?.posted_aps;
-      if (Array.isArray(postedAps)) {
-        postedAps.forEach((a: number) => posted.add(a));
-      }
-    } catch { /* ignore */ }
-    return posted;
-  }, [campanaDetails]);
-
-  // Check if the cara being edited has APS posted to SAP (block editing)
-  const editingCaraHasReservas = useMemo(() => {
-    if (!editingCaraId) return false;
-    const editingCara = caras.find(c => c.localId === editingCaraId);
-    if (!editingCara) return false;
-    // Only block if this cara has APS that were posted to SAP
-    const caraReservas = reservas.filter(r =>
-      r.id.startsWith(editingCaraId) || r.solicitudCaraId === editingCara.id
-    );
-    const caraAPS = new Set(caraReservas.map(r => r.aps).filter(Boolean));
-    return [...caraAPS].some(aps => postedAPSGroups.has(aps as number));
-  }, [editingCaraId, caras, reservas, postedAPSGroups]);
+  // postedAPSGroups and editingCaraHasReservas moved after campanaDetails declaration
 
   // Inventory search state
   const [searchFilters, setSearchFilters] = useState({
@@ -766,6 +744,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     queryFn: () => campanasService.getCaras(campana!.id),
     enabled: isOpen && !!campana?.id,
   });
+
+  // Track APS posted to SAP
+  const postedAPSGroups = useMemo(() => {
+    const posted = new Set<number>();
+    try {
+      const postedAps = (campanaDetails as any)?.posted_aps;
+      if (Array.isArray(postedAps)) {
+        postedAps.forEach((a: number) => posted.add(a));
+      }
+    } catch { /* ignore */ }
+    return posted;
+  }, [campanaDetails]);
+
+  // Check if the cara being edited has APS posted to SAP (block editing)
+  const editingCaraHasReservas = useMemo(() => {
+    if (!editingCaraId) return false;
+    const editingCara = caras.find(c => c.localId === editingCaraId);
+    if (!editingCara) return false;
+    const caraReservas = reservas.filter(r =>
+      r.id.startsWith(editingCaraId) || r.solicitudCaraId === editingCara.id
+    );
+    const caraAPS = new Set(caraReservas.map(r => r.aps).filter(Boolean));
+    return [...caraAPS].some(aps => postedAPSGroups.has(aps as number));
+  }, [editingCaraId, caras, reservas, postedAPSGroups]);
 
   // Fetch users
   const { data: users } = useQuery({
