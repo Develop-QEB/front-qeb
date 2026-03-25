@@ -821,7 +821,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     queryKey: ['clientes-full-for-propuesta'],
     queryFn: async () => {
       const result = await clientesService.getAllFull();
-      return (result || []).map((c: any) => ({
+      return (result?.data || []).map((c: any) => ({
         CUIC: c.CUIC!,
         T0_U_RazonSocial: c.T0_U_RazonSocial || '',
         T0_U_Cliente: c.T0_U_Cliente || '',
