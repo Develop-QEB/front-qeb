@@ -669,6 +669,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
   const [excluirCategoria, setExcluirCategoria] = useState<string>('');
+  const [excluirDistanciaKm, setExcluirDistanciaKm] = useState<number>(1);
 
   // Custom Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -2011,6 +2012,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         fecha_fin: cara.fin_periodo || undefined,
         solicitudCaraId: cara.id,
         excluir_categoria: excluirCategoria || undefined,
+        excluir_distancia_km: excluirCategoria ? excluirDistanciaKm : undefined,
       });
       setInventarioDisponible(response.data || []);
     } catch (error) {
@@ -2027,7 +2029,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       handleSearchInventory(selectedCaraForSearch);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [excluirCategoria]);
+  }, [excluirCategoria, excluirDistanciaKm]);
 
   // Refetch disponibles with current filters
   const handleRefetchDisponibles = async () => {
@@ -3549,6 +3551,20 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
+                  {excluirCategoria && (
+                    <select
+                      value={excluirDistanciaKm}
+                      onChange={(e) => setExcluirDistanciaKm(parseFloat(e.target.value))}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-500/80 text-white shadow border-red-500 transition-all"
+                    >
+                      <option value={0.5}>500m</option>
+                      <option value={1}>1 km</option>
+                      <option value={1.5}>1.5 km</option>
+                      <option value={2}>2 km</option>
+                      <option value={2.5}>2.5 km</option>
+                      <option value={3}>3 km</option>
+                    </select>
+                  )}
 
                   <div className="w-px h-6 bg-zinc-700" />
 
