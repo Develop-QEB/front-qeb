@@ -43,7 +43,7 @@ const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: st
 
 const getDefaultStatusColor = (isDark: boolean) => ({ bg: isDark ? 'bg-violet-500/20' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30' });
 
-const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas', 'Descartada'];
+const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas'];
 
 // Chart colors for dynamic status
 const CHART_COLORS = [

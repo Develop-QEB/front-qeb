@@ -3621,34 +3621,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </div>
                   )}
 
-                  {/* Category Exclusion Filter */}
-                  <select
-                    value={excluirCategoria}
-                    onChange={(e) => setExcluirCategoria(e.target.value)}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${excluirCategoria
-                      ? 'bg-red-500 text-white shadow border-red-500'
-                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
-                    }`}
-                  >
-                    <option value="">Excluir categoría...</option>
-                    {(categoriasCliente || []).map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                  {excluirCategoria && (
-                    <select
-                      value={excluirDistanciaKm}
-                      onChange={(e) => setExcluirDistanciaKm(parseFloat(e.target.value))}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-500/80 text-white shadow border-red-500 transition-all"
-                    >
-                      <option value={0.5}>500m</option>
-                      <option value={1}>1 km</option>
-                      <option value={1.5}>1.5 km</option>
-                      <option value={2}>2 km</option>
-                      <option value={2.5}>2.5 km</option>
-                      <option value={3}>3 km</option>
-                    </select>
-                  )}
+                  {/* Category Exclusion Filter - HIDDEN */}
 
                   <div className="w-px h-6 bg-zinc-700" />
 
