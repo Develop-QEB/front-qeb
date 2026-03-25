@@ -1708,7 +1708,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               caras: newCara.caras,
               bonificacion: newCara.bonificacion,
               costo: costoCalculado,
-              tarifa_publica: newCara.tarifa_publica
+              tarifa_publica: newCara.tarifa_publica,
+              articulo: newCara.articulo || null,
             });
             autorizacion_dg = resultado.autorizacion_dg || 'aprobado';
             autorizacion_dcm = resultado.autorizacion_dcm || 'aprobado';

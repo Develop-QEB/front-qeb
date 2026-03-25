@@ -285,6 +285,7 @@ export const solicitudesService = {
     bonificacion?: number;
     costo: number;
     tarifa_publica?: number;
+    articulo?: string | null;
   }): Promise<{
     estado: 'aprobado' | 'pendiente_dcm' | 'pendiente_dg';
     autorizacion_dg: 'aprobado' | 'pendiente' | 'rechazado';

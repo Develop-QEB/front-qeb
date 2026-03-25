@@ -757,7 +757,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     return posted;
   }, [campanaDetails]);
 
-  // Check if the cara being edited has APS posted to SAP (block editing)
+  // Check if the cara being edited should be blocked
+  // Block if: has APS posted to SAP, OR has any reservas with APS assigned (migrated campaigns)
   const editingCaraHasReservas = useMemo(() => {
     if (!editingCaraId) return false;
     const editingCara = caras.find(c => c.localId === editingCaraId);
@@ -765,8 +766,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const caraReservas = reservas.filter(r =>
       r.id.startsWith(editingCaraId) || r.solicitudCaraId === editingCara.id
     );
-    const caraAPS = new Set(caraReservas.map(r => r.aps).filter(Boolean));
-    return [...caraAPS].some(aps => postedAPSGroups.has(aps as number));
+    if (caraReservas.length === 0) return false;
+    // If posted_aps exists, use it; otherwise block if cara has any APS
+    if (postedAPSGroups.size > 0) {
+      const caraAPS = new Set(caraReservas.map(r => r.aps).filter(Boolean));
+      return [...caraAPS].some(aps => postedAPSGroups.has(aps as number));
+    }
+    // For migrated campaigns (no posted_aps): block if has any reservas with APS
+    const hasAPS = caraReservas.some(r => r.aps && r.aps > 0);
+    return hasAPS;
   }, [editingCaraId, caras, reservas, postedAPSGroups]);
 
   // Fetch users
@@ -1641,7 +1649,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               caras: newCara.caras,
               bonificacion: newCara.bonificacion,
               costo: costoCalculado,
-              tarifa_publica: newCara.tarifa_publica
+              tarifa_publica: newCara.tarifa_publica,
+              articulo: newCara.articulo || null,
             });
             autorizacion_dg = resultado.autorizacion_dg || 'aprobado';
             autorizacion_dcm = resultado.autorizacion_dcm || 'aprobado';
@@ -5570,6 +5579,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               r.id.startsWith(cara.localId) || r.solicitudCaraId === cara.id
                             );
                             const hasReservas = caraReservas.length > 0;
+                            const caraHasAPS = caraReservas.some(r => r.aps && r.aps > 0);
+                            const caraAPSBlocked = postedAPSGroups.size > 0
+                              ? caraReservas.some(r => r.aps && postedAPSGroups.has(r.aps as number))
+                              : caraHasAPS;
                             const status = getCaraCompletionStatus(cara);
                             const totalCaras = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
                             const carasFaltantes = status.totalRequerido - status.totalReservado;
@@ -5687,16 +5700,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     })()}
                                     {effectiveCanEdit && (() => {
                                       const caraAuthPendiente = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
+                                      const editBlocked = caraAuthPendiente || caraAPSBlocked;
+                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendiente ? 'Autorización pendiente - no se puede editar' : 'Editar';
                                       return (
                                       <>
                                         <button
-                                          onClick={(e) => { e.stopPropagation(); if (!caraAuthPendiente) handleEditCara(cara); }}
-                                          disabled={caraAuthPendiente}
-                                          className={`p-2 rounded-lg border transition-colors ${caraAuthPendiente
+                                          onClick={(e) => { e.stopPropagation(); if (!editBlocked) handleEditCara(cara); }}
+                                          disabled={editBlocked}
+                                          className={`p-2 rounded-lg border transition-colors ${editBlocked
                                             ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                             : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
                                           }`}
-                                          title={caraAuthPendiente ? 'Autorización pendiente - no se puede editar' : 'Editar'}
+                                          title={blockReason}
                                         >
                                           <Pencil className="h-4 w-4" />
                                         </button>
