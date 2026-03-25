@@ -645,7 +645,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         T0_U_Cliente: c.T0_U_Cliente || '',
         T1_U_UnidadNegocio: c.T1_U_UnidadNegocio || '',
         T0_U_Agencia: c.T0_U_Agencia || '',
-        ASESOR_U_IDAsesor: c.ASESOR_U_IDAsesor || c.T0_U_IDAsesor || '',
+        ASESOR_U_IDAsesor: c.ASESOR_U_IDAsesor || String(c.T0_U_IDAsesor || ''),
         ASESOR_U_Asesor: c.ASESOR_U_Asesor || c.T0_U_Asesor || '',
         T1_U_IDMarca: c.T1_U_IDMarca || 0,
         T2_U_Marca: c.T2_U_Marca || '',
