@@ -30,6 +30,7 @@ import {
   Check,
   Trash2,
   Download,
+  Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
@@ -1551,7 +1552,7 @@ export function DashboardPage() {
     queryFn: () => dashboardService.getStats(filters),
   });
 
-  const { data: estatusStats } = useQuery({
+  const { data: estatusStats, isLoading: loadingEstatus } = useQuery({
     queryKey: ['dashboard', 'stats', activeEstatus, filters],
     queryFn: () => activeEstatus === 'total' ? Promise.resolve(null) : dashboardService.getStatsByEstatus(activeEstatus, filters),
     enabled: activeEstatus !== 'total',
@@ -1768,6 +1769,12 @@ export function DashboardPage() {
         </div>
 
         {/* Charts Row 1 */}
+        {(loadingEstatus || loadingInventory) && (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
+            <span className="ml-2 text-sm text-zinc-400">Calculando...</span>
+          </div>
+        )}
         <div className="grid gap-4 lg:grid-cols-2">
           <HorizontalBarChart data={graficas?.porMueble || []} color="pink" title="Por Mueble" />
           <TipoPieChart data={graficas?.porTipo || []} title="Por Tipo (Tradicional vs Digital)" />
