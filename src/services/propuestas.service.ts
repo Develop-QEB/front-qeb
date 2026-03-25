@@ -265,6 +265,22 @@ export const propuestasService = {
       catorcena_inicio?: number;
       year_fin?: number;
       catorcena_fin?: number;
+      // Client fields
+      cliente_id?: number;
+      cuic?: number;
+      razon_social?: string;
+      unidad_negocio?: string;
+      marca_id?: number;
+      marca_nombre?: string;
+      asesor?: string;
+      producto_id?: number;
+      producto_nombre?: string;
+      agencia?: string;
+      categoria_id?: number;
+      categoria_nombre?: string;
+      card_code?: string;
+      salesperson_code?: number;
+      sap_database?: string;
     }
   ): Promise<Propuesta> {
     const response = await api.patch<ApiResponse<Propuesta>>(`/propuestas/${id}`, data);

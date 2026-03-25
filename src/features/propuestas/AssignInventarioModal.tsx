@@ -13,6 +13,7 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
 import { propuestasService, ReservaModalItem } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
+import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
@@ -549,6 +550,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const isDescartada = propuesta.status === 'Descartada';
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada;
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada;
+  const canEditCliente = !readOnly && permissions.canEditClienteEnFormularios && !isDescartada;
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
   const resumenReservasMapRef = useRef<google.maps.Map | null>(null);
@@ -575,6 +577,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [archivoPropuesta, setArchivoPropuesta] = useState<string | null>(null);
   const [tipoArchivoPropuesta, setTipoArchivoPropuesta] = useState<string | null>(null);
   const periodInitializedRef = useRef(false);
+
+  // Client editing state
+  interface CuicItem {
+    CUIC: number;
+    T0_U_RazonSocial: string;
+    T0_U_Cliente: string;
+    T1_U_UnidadNegocio: string;
+    T0_U_Agencia: string;
+    ASESOR_U_IDAsesor: string;
+    ASESOR_U_Asesor: string;
+    T1_U_IDMarca: number;
+    T2_U_Marca: string;
+    T2_U_IDProducto: number;
+    T2_U_Producto: string;
+    T2_U_IDCategoria: number;
+    T2_U_Categoria: string;
+    sap_database?: string;
+  }
+  const [selectedClienteCuic, setSelectedClienteCuic] = useState<CuicItem | null>(null);
+  const [clienteSearchTerm, setClienteSearchTerm] = useState('');
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
+  const [clienteChanged, setClienteChanged] = useState(false);
 
   // Initial values for change detection
   const [initialValues, setInitialValues] = useState({
@@ -792,6 +816,45 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch CUIC data for client editing
+  const { data: cuicData, isLoading: cuicLoading } = useQuery({
+    queryKey: ['clientes-full-for-propuesta'],
+    queryFn: async () => {
+      const result = await clientesService.getAllFull();
+      return (result?.data || []).map((c: any) => ({
+        CUIC: c.CUIC!,
+        T0_U_RazonSocial: c.T0_U_RazonSocial || '',
+        T0_U_Cliente: c.T0_U_Cliente || '',
+        T1_U_UnidadNegocio: c.T1_U_UnidadNegocio || '',
+        T0_U_Agencia: c.T0_U_Agencia || '',
+        ASESOR_U_IDAsesor: c.ASESOR_U_IDAsesor || '',
+        ASESOR_U_Asesor: c.ASESOR_U_Asesor || '',
+        T1_U_IDMarca: c.T1_U_IDMarca || 0,
+        T2_U_Marca: c.T2_U_Marca || '',
+        T2_U_IDProducto: c.T2_U_IDProducto || 0,
+        T2_U_Producto: c.T2_U_Producto || '',
+        T2_U_IDCategoria: c.T2_U_IDCategoria || 0,
+        T2_U_Categoria: c.T2_U_Categoria || '',
+        sap_database: c.sap_database || '',
+      })) as CuicItem[];
+    },
+    enabled: isOpen && canEditCliente,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Filtered CUIC options for client search
+  const filteredCuicOptions = useMemo(() => {
+    if (!cuicData) return [];
+    if (!clienteSearchTerm) return cuicData;
+    const term = clienteSearchTerm.toLowerCase();
+    return cuicData.filter((c: CuicItem) =>
+      String(c.CUIC).includes(term) ||
+      c.T2_U_Marca?.toLowerCase().includes(term) ||
+      c.T0_U_RazonSocial?.toLowerCase().includes(term) ||
+      c.T2_U_Producto?.toLowerCase().includes(term)
+    );
+  }, [cuicData, clienteSearchTerm]);
+
   // Load existing reservas into state when data arrives
   useEffect(() => {
     if (existingReservas && existingReservas.length > 0 && caras.length > 0) {
@@ -1006,6 +1069,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setNewCara(EMPTY_CARA);
       setSelectedArticulo(null);
       periodInitializedRef.current = false;
+      setSelectedClienteCuic(null);
+      setClienteChanged(false);
+      setClienteSearchTerm('');
+      setShowClienteDropdown(false);
     }
   }, [isOpen]);
 
@@ -1028,15 +1095,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       yearFin !== initialValues.yearFin ||
       catorcenaInicio !== initialValues.catorcenaInicio ||
       catorcenaFin !== initialValues.catorcenaFin ||
-      currentAsignadosIds !== initialValues.asignadosIds
+      currentAsignadosIds !== initialValues.asignadosIds ||
+      clienteChanged
     );
-  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, initialValues]);
+  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, initialValues, clienteChanged]);
 
   // Handle update propuesta
   const handleUpdatePropuesta = async () => {
     setIsUpdatingPropuesta(true);
     try {
-      // Update propuesta data
+      // Update propuesta data (include client fields if changed)
       await propuestasService.updatePropuesta(propuesta.id, {
         nombre_campania: nombreCampania,
         notas,
@@ -1045,6 +1113,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         catorcena_inicio: catorcenaInicio,
         year_fin: yearFin,
         catorcena_fin: catorcenaFin,
+        ...(clienteChanged && selectedClienteCuic ? {
+          cliente_id: selectedClienteCuic.CUIC,
+          cuic: selectedClienteCuic.CUIC,
+          razon_social: selectedClienteCuic.T0_U_RazonSocial,
+          unidad_negocio: selectedClienteCuic.T1_U_UnidadNegocio,
+          marca_id: selectedClienteCuic.T1_U_IDMarca,
+          marca_nombre: selectedClienteCuic.T2_U_Marca,
+          asesor: selectedClienteCuic.ASESOR_U_Asesor,
+          producto_id: selectedClienteCuic.T2_U_IDProducto,
+          producto_nombre: selectedClienteCuic.T2_U_Producto,
+          agencia: selectedClienteCuic.T0_U_Agencia,
+          categoria_id: selectedClienteCuic.T2_U_IDCategoria,
+          categoria_nombre: selectedClienteCuic.T2_U_Categoria,
+          sap_database: selectedClienteCuic.sap_database,
+        } : {}),
       });
 
       // Update asignados if changed
@@ -1065,6 +1148,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         catorcenaFin,
         asignadosIds: newAsignadosIds,
       });
+      setClienteChanged(false);
 
       queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
       queryClient.invalidateQueries({ queryKey: ['propuestas'] });
@@ -4868,33 +4952,142 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </h3>
                 </div>
                 <div className="p-5 space-y-4">
-                  {/* Client info - read only */}
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">CUIC</label>
-                      <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
-                        {solicitudDetails?.solicitud.cuic || '-'}
+                  {/* Client info */}
+                  {canEditCliente ? (
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <label className="text-xs text-zinc-500 mb-1 block">Seleccionar Cliente (CUIC)</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowClienteDropdown(!showClienteDropdown)}
+                          className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${
+                            selectedClienteCuic
+                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                              : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600'
+                          }`}
+                        >
+                          <span className="truncate text-left flex-1">
+                            {selectedClienteCuic ? (
+                              <span>
+                                <span className="font-medium">{selectedClienteCuic.T2_U_Marca || 'Sin marca'}</span>
+                                <span className="text-[10px] text-zinc-500 ml-2">{selectedClienteCuic.CUIC} | {selectedClienteCuic.T2_U_Producto || ''}</span>
+                              </span>
+                            ) : (
+                              <span>{solicitudDetails?.solicitud.cuic ? `${solicitudDetails.solicitud.marca_nombre || ''} (CUIC: ${solicitudDetails.solicitud.cuic})` : 'Seleccionar CUIC'}</span>
+                            )}
+                          </span>
+                          {selectedClienteCuic ? (
+                            <X className="h-4 w-4 hover:text-white flex-shrink-0" onClick={(e) => { e.stopPropagation(); setSelectedClienteCuic(null); setClienteChanged(false); }} />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                          )}
+                        </button>
+                        {showClienteDropdown && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => { setShowClienteDropdown(false); setClienteSearchTerm(''); }} />
+                            <div className="absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
+                              <div className="p-2 border-b border-zinc-800">
+                                <div className="relative">
+                                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                                  <input
+                                    type="text"
+                                    placeholder="Buscar por marca, CUIC, razón social..."
+                                    value={clienteSearchTerm}
+                                    onChange={(e) => setClienteSearchTerm(e.target.value)}
+                                    className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500 border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                                    autoFocus
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </div>
+                              </div>
+                              <div className="max-h-72 overflow-auto">
+                                {cuicLoading ? (
+                                  <div className="px-3 py-4 text-center text-zinc-500 text-sm">Cargando...</div>
+                                ) : filteredCuicOptions.length === 0 ? (
+                                  <div className="px-3 py-4 text-center text-zinc-500 text-sm">No se encontraron resultados</div>
+                                ) : (
+                                  filteredCuicOptions.slice(0, 100).map((item: CuicItem, idx: number) => (
+                                    <button
+                                      key={`${item.CUIC}-${idx}`}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedClienteCuic(item);
+                                        setClienteChanged(true);
+                                        setShowClienteDropdown(false);
+                                        setClienteSearchTerm('');
+                                      }}
+                                      className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b border-zinc-800/50 last:border-0 ${
+                                        selectedClienteCuic?.CUIC === item.CUIC
+                                          ? 'bg-purple-500/20 text-purple-300'
+                                          : 'text-zinc-300 hover:bg-zinc-800'
+                                      }`}
+                                    >
+                                      <div className="font-medium text-white">{item.T2_U_Marca || 'Sin marca'}</div>
+                                      <div className="text-xs text-zinc-500">{item.CUIC} | {item.T2_U_Producto || 'Sin producto'} | {item.T0_U_RazonSocial || ''}</div>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      {/* Show selected or current client details */}
+                      <div className="grid grid-cols-4 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-xs text-zinc-500">CUIC</label>
+                          <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                            {selectedClienteCuic ? selectedClienteCuic.CUIC : (solicitudDetails?.solicitud.cuic || '-')}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-zinc-500">Razón Social</label>
+                          <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30 truncate">
+                            {selectedClienteCuic ? selectedClienteCuic.T0_U_RazonSocial : (solicitudDetails?.solicitud.razon_social || '-')}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-zinc-500">Marca</label>
+                          <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                            {selectedClienteCuic ? selectedClienteCuic.T2_U_Marca : (solicitudDetails?.solicitud.marca_nombre || '-')}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-zinc-500">Asesor</label>
+                          <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                            {selectedClienteCuic ? selectedClienteCuic.ASESOR_U_Asesor : (solicitudDetails?.solicitud.asesor || '-')}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Razón Social</label>
-                      <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30 truncate">
-                        {solicitudDetails?.solicitud.razon_social || '-'}
+                  ) : (
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">CUIC</label>
+                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                          {solicitudDetails?.solicitud.cuic || '-'}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Razón Social</label>
+                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30 truncate">
+                          {solicitudDetails?.solicitud.razon_social || '-'}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Marca</label>
+                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                          {solicitudDetails?.solicitud.marca_nombre || '-'}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-500">Asesor</label>
+                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                          {solicitudDetails?.solicitud.asesor || '-'}
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Marca</label>
-                      <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
-                        {solicitudDetails?.solicitud.marca_nombre || '-'}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Asesor</label>
-                      <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
-                        {solicitudDetails?.solicitud.asesor || '-'}
-                      </div>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Editable fields */}
                   <div className="grid grid-cols-2 gap-4">

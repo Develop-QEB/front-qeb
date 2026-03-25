@@ -14,6 +14,7 @@ import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import type { SapDatabase } from '../../store/environmentStore';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
 import { useThemeStore } from '../../store/themeStore';
 import { useFormPersist } from '../../hooks/useFormPersist';
 import { uploadsService } from '../../services/uploads.service';
@@ -271,6 +272,7 @@ function SearchableSelect({
   renderOption,
   renderSelected,
   loading,
+  disabled,
 }: {
   label: string;
   options: any[];
@@ -283,6 +285,7 @@ function SearchableSelect({
   renderOption?: (item: any) => React.ReactNode;
   renderSelected?: (item: any) => React.ReactNode;
   loading?: boolean;
+  disabled?: boolean;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(false);
@@ -308,8 +311,8 @@ function SearchableSelect({
     <div className="relative flex-1">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${value
+        onClick={() => !disabled && setOpen(!open)}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${disabled ? 'opacity-60 cursor-not-allowed' : ''} ${value
           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
           : isDark ? 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
           }`}
@@ -510,6 +513,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Current user for default asignado
   const currentUser = useAuthStore((state) => state.user);
+  const permissions = getPermissions(currentUser?.rol);
+  const canEditCliente = permissions.canEditClienteEnFormularios;
 
   // Toast notification state
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'warning' }>({
@@ -1741,6 +1746,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   valueKey="CUIC"
                   searchKeys={['T2_U_Marca', 'T2_U_Producto', 'T0_U_RazonSocial', 'CUIC']}
                   loading={cuicLoading}
+                  disabled={isEditMode && !canEditCliente}
                   renderOption={(item) => (
                     <div className="flex items-center gap-2">
                       <div className="flex-1">

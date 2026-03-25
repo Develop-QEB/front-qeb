@@ -68,6 +68,7 @@ export interface RolePermissions {
   canEditResumenPropuesta: boolean; // Editar campos en Resumen de Propuesta del modal
   canCompartirPropuesta: boolean;
   canBuscarInventarioEnModal: boolean;
+  canEditClienteEnFormularios: boolean; // Editar campo cliente (CUIC) en solicitudes y propuestas
 
   // Campañas
   canEditCampanas: boolean;
@@ -142,6 +143,7 @@ const defaultPermissions: RolePermissions = {
   canEditResumenPropuesta: true,
   canCompartirPropuesta: true,
   canBuscarInventarioEnModal: true,
+  canEditClienteEnFormularios: false, // Solo asesores pueden editar el campo cliente en formularios
 
   canEditCampanas: true,
   canEditCampanaStatus: true,
@@ -196,6 +198,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Puede cambiar estatus pero solo a estos valores
     allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
     canBuscarInventarioEnModal: false,
+    canEditClienteEnFormularios: true, // Puede editar campo cliente en solicitudes y propuestas
 
     canEditCampanas: true,
     canEditDetalleCampana: false,
@@ -643,6 +646,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Propuestas: mismos permisos que Asesor Comercial
     allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
     canBuscarInventarioEnModal: false,
+    canEditClienteEnFormularios: true, // Puede editar campo cliente en solicitudes y propuestas
 
     canEditCampanas: false,
     canEditDetalleCampana: false,
@@ -947,6 +951,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   },
   'Administrador': {
     // Admin tiene todos los permisos por defecto
+    canEditClienteEnFormularios: true,
   },
   'Gerente de Tráfico': {
     // Secciones visibles
