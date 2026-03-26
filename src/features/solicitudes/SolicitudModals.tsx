@@ -569,7 +569,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
     // === LEYENDA IVA ===
     yPos += 2;
-    if (yPos > pageHeight - 20) { doc.addPage(); yPos = marginY; }
+    if (yPos > pageHeight - 20) { doc.addPage(); yPos = marginX; }
     doc.setFontSize(7);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(100, 100, 100);
