@@ -1463,11 +1463,26 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     if (isEditMode && editSolicitudData && cuicDataRaw && articulosData && catorcenasData?.data) {
       const sol = editSolicitudData.solicitud;
 
-      // Find the CUIC item from local DB data - cuic is stored as string, CUIC is number
+      // Find the CUIC item from local DB data
+      // Match by card_code + sap_database first (most precise), then fall back to CUIC + additional fields
       const solCuic = sol.cuic ? parseInt(sol.cuic, 10) : null;
-      const cuicItem = cuicDataRaw.find(c => c.CUIC === solCuic);
+      const solSapDb = sol.sap_database || null;
+      const solCardCode = sol.card_code || null;
+      const solRazonSocial = sol.razon_social || null;
+      const cuicItem =
+        // Best match: card_code + sap_database
+        (solCardCode && solSapDb ? cuicDataRaw.find(c => c.ACA_U_SAPCode === solCardCode && c.sap_database === solSapDb) : null)
+        // Fallback: card_code only
+        || (solCardCode ? cuicDataRaw.find(c => c.ACA_U_SAPCode === solCardCode) : null)
+        // Fallback: CUIC + razon_social (razon_social is always saved and distinguishes clients with same CUIC)
+        || (solRazonSocial ? cuicDataRaw.find(c => c.CUIC === solCuic && c.T0_U_RazonSocial === solRazonSocial) : null)
+        // Last resort: CUIC only
+        || cuicDataRaw.find(c => c.CUIC === solCuic);
       if (cuicItem) {
         setSelectedCuic(cuicItem);
+        if (cuicItem.sap_database) {
+          setSapDbFilter(cuicItem.sap_database as SapDatabase);
+        }
       }
 
       // Set campaign data - nombre_campania might come from cotizacion
