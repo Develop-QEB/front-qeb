@@ -1741,7 +1741,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   label="Seleccionar CUIC"
                   options={cuicData || []}
                   value={selectedCuic}
-                  onChange={setSelectedCuic}
+                  onChange={(cuic: SAPCuicItem) => {
+                    setSelectedCuic(cuic);
+                    // Auto-asignar asesor si hay match por sap_asesor_id
+                    const asesorId = cuic.ASESOR_U_IDAsesor ? parseInt(String(cuic.ASESOR_U_IDAsesor)) : null;
+                    if (asesorId && users) {
+                      const asesorUser = users.find((u: any) => u.sap_asesor_id === asesorId);
+                      if (asesorUser && !selectedAsignados.some(a => a.id === asesorUser.id)) {
+                        setSelectedAsignados(prev => [...prev, { id: asesorUser.id, nombre: asesorUser.nombre, area: asesorUser.area || '', puesto: asesorUser.puesto || '' }]);
+                      }
+                    }
+                  }}
                   onClear={() => setSelectedCuic(null)}
                   displayKey="T2_U_Marca"
                   valueKey="CUIC"
