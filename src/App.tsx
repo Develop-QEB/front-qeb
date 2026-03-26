@@ -23,6 +23,7 @@ import { PerfilPage } from './features/perfil/PerfilPage';
 import { UsuariosAdminPage } from './features/admin/UsuariosAdminPage';
 import { ChatbotHistorialPage } from './features/admin/ChatbotHistorialPage';
 import { DevTicketsPage } from './features/tickets/DevTicketsPage';
+import { TicketsPage } from './features/tickets/TicketsPage';
 import { useAuthStore } from './store/authStore';
 import { getPermissions } from './lib/permissions';
 
@@ -138,6 +139,7 @@ function App() {
             <Route path="/perfil" element={<PerfilPage />} />
             <Route path="/admin/usuarios" element={<AdminUsuariosRoute />} />
             <Route path="/admin/chatbot" element={<AdminChatbotRoute />} />
+            <Route path="/tickets" element={<TicketsPage />} />
             <Route path="/dev/tickets" element={<DevTicketsRoute />} />
           </Route>
 

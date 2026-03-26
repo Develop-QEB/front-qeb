@@ -10,7 +10,7 @@ import { useSocketEquipos } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 import { uploadsService } from '../../services/uploads.service';
 
-type TabType = 'usuarios' | 'equipos' | 'tickets';
+type TabType = 'usuarios' | 'equipos';
 
 const getInputClasses = (isDark: boolean) =>
   `w-full px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-800/80' : 'bg-gray-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'text-white' : 'text-gray-900'} ${isDark ? 'placeholder:text-zinc-500' : 'placeholder:text-gray-400'} focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all hover:border-purple-500/40`;
@@ -37,6 +37,7 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   'Comercial': [
     'Director Comercial',
     'Asesor Comercial',
+    'Asesor Analista',
     'Analista de Servicio al Cliente',
     'Jefe Digital Comercial',
     'Especialista de BI',
@@ -1953,7 +1954,6 @@ export function UsuariosAdminPage() {
   const tabs = [
     { key: 'usuarios' as TabType, label: 'Usuarios', icon: Users },
     { key: 'equipos' as TabType, label: 'Red de Trabajo', icon: Network },
-    { key: 'tickets' as TabType, label: 'Tickets', icon: Ticket, alignRight: true },
   ];
 
   return (
@@ -1963,27 +1963,7 @@ export function UsuariosAdminPage() {
       <div className="p-6">
         {/* Tabs */}
         <div className="flex gap-2 mb-6">
-          {tabs.filter(t => !t.alignRight).map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  activeTab === tab.key
-                    ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-lg shadow-purple-500/25'
-                    : isDark
-                      ? 'bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-purple-500/10'
-                      : 'bg-gray-100 text-gray-500 hover:text-gray-900 hover:bg-gray-200 border border-purple-200'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-          <div className="flex-1" />
-          {tabs.filter(t => t.alignRight).map((tab) => {
+          {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
               <button
@@ -2007,7 +1987,6 @@ export function UsuariosAdminPage() {
         {/* Tab Content */}
         {activeTab === 'usuarios' && <UsuariosTab />}
         {activeTab === 'equipos' && <RedDeTrabajoTab />}
-        {activeTab === 'tickets' && <TicketsTab />}
       </div>
     </div>
   );

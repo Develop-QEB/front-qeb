@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { X, BookOpen } from 'lucide-react';
+import { X, BookOpen, Ticket } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { useThemeStore } from '../../store/themeStore';
 
@@ -86,6 +87,7 @@ interface Props {
 
 export function AyudaModal({ isOpen, onClose, tutorialId, onSelect }: Props) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const navigate = useNavigate();
   const scriptLoaded = useRef(false);
   const selected = tutorials.find((t) => t.id === tutorialId) ?? tutorials[0];
 
@@ -150,6 +152,20 @@ export function AyudaModal({ isOpen, onClose, tutorialId, onSelect }: Props) {
               </div>
             ))}
           </nav>
+          <div className={`p-3 border-t ${isDark ? 'border-purple-900/30' : 'border-gray-200'}`}>
+            <button
+              onClick={() => { onClose(); navigate('/tickets'); }}
+              className={cn(
+                'w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium transition-all',
+                isDark
+                  ? 'bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 border border-purple-500/30'
+                  : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+              )}
+            >
+              <Ticket className="h-4 w-4" />
+              Mis Tickets de Soporte
+            </button>
+          </div>
         </div>
 
         {/* Panel derecho */}
