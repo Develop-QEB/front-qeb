@@ -567,6 +567,14 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
       }); // End catorcenas forEach
     }
 
+    // === LEYENDA IVA ===
+    yPos += 2;
+    if (yPos > pageHeight - 20) { doc.addPage(); yPos = marginX; }
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 100, 100);
+    doc.text('*Precios más IVA', marginX, yPos);
+
     // === FOOTER ===
     const totalPages = doc.internal.pages.length - 1;
     for (let i = 1; i <= totalPages; i++) {
