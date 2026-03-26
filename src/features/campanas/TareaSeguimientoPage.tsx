@@ -15379,6 +15379,8 @@ export function TareaSeguimientoPage() {
       allItems = inventoryArteData;
     } else if (activeMainTab === 'programacion') {
       allItems = inventoryProgramacionData;
+    } else if (activeMainTab === 'impresiones') {
+      allItems = inventoryImpresionesData;
     } else {
       allItems = inventoryTestigosData;
     }
@@ -15392,7 +15394,7 @@ export function TareaSeguimientoPage() {
       tareasActivas: tasks.filter(t => t.estatus?.toLowerCase() === 'pendiente' || t.estatus?.toLowerCase() === 'en_progreso' || t.estatus?.toLowerCase() === 'en progreso').length,
       tareasCompletadas: completedTasks.length,
     };
-  }, [inventorySinArteData, inventoryArteData, inventoryProgramacionData, inventoryTestigosData, activeMainTab, tasks, completedTasks]);
+  }, [inventorySinArteData, inventoryArteData, inventoryProgramacionData, inventoryImpresionesData, inventoryTestigosData, activeMainTab, tasks, completedTasks]);
 
   // ---- Handlers ----
   const toggleInventorySelection = useCallback((id: string) => {
