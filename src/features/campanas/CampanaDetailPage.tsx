@@ -1473,8 +1473,8 @@ export function CampanaDetailPage() {
   });
 
   const assignAPSMutation = useMutation({
-    mutationFn: (params: { inventarioIds: number[]; solicitudCarasIds: number[] }) =>
-      campanasService.assignAPS(campanaId, params.inventarioIds, params.solicitudCarasIds),
+    mutationFn: (params: { inventarioIds: number[]; solicitudCarasIds: number[]; rsvIds: number[] }) =>
+      campanasService.assignAPS(campanaId, params.inventarioIds, params.solicitudCarasIds, params.rsvIds),
     onSuccess: (data) => {
       // Limpiar selección y refrescar datos
       setSelectedItems(new Set());
@@ -1501,8 +1501,13 @@ export function CampanaDetailPage() {
     const inventarioIds = normalItems.map(item => item.id);
     const solicitudCarasIds = imItems.map(item => item.solicitud_caras_id).filter((id): id is number => id !== null);
 
+    // Extraer IDs reales de reservas desde rsv_ids (ej: "123,456" → [123, 456])
+    const rsvIds = normalItems.flatMap(item =>
+      String(item.rsv_ids).split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+    );
+
     if (inventarioIds.length > 0 || solicitudCarasIds.length > 0) {
-      assignAPSMutation.mutate({ inventarioIds, solicitudCarasIds });
+      assignAPSMutation.mutate({ inventarioIds, solicitudCarasIds, rsvIds });
     }
   };
 
