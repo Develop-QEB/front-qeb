@@ -1022,14 +1022,6 @@ export function ClientesPage() {
                   loading={activeTab === 'CIMU' && cimuLoading}
                 />
                 <TabButton
-                  active={activeTab === 'TEST'}
-                  onClick={() => { setActiveTab('TEST'); setSapPage(1); clearAllFilters(); }}
-                  icon={Cloud}
-                  label="TEST"
-                  count={testTotal}
-                  loading={activeTab === 'TEST' && testLoading}
-                />
-                <TabButton
                   active={activeTab === 'TRADE'}
                   onClick={() => { setActiveTab('TRADE'); setSapPage(1); clearAllFilters(); }}
                   icon={Cloud}

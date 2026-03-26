@@ -59,11 +59,10 @@ export function Header({ title }: HeaderProps) {
         {/* Indicador de ambiente */}
         <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
           isDark
-            ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-            : 'bg-amber-50 text-amber-600 border-amber-200'
+            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+            : 'bg-emerald-50 text-emerald-600 border-emerald-200'
         }`}>
-          <FlaskConical className="h-3 w-3" />
-          BETA
+          Activo
         </span>
 
         {/* Theme Toggle */}
