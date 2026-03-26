@@ -2623,24 +2623,31 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           })()}
                                         </td>
                                         <td className="px-2 py-2 text-center">
+                                          {(() => {
+                                            const authBlocked = isEditMode && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
+                                            return (
                                           <div className="flex items-center justify-center gap-1">
                                             <button
                                               type="button"
-                                              onClick={() => handleEditCara(cara)}
-                                              className={`p-1 rounded text-[10px] ${editingCaraId === cara.id ? 'bg-purple-500/30 text-purple-300' : 'hover:bg-purple-500/20 text-purple-400'}`}
-                                              title="Editar"
+                                              onClick={() => { if (!authBlocked) handleEditCara(cara); }}
+                                              disabled={authBlocked}
+                                              className={`p-1 rounded text-[10px] ${authBlocked ? 'text-zinc-600 cursor-not-allowed' : editingCaraId === cara.id ? 'bg-purple-500/30 text-purple-300' : 'hover:bg-purple-500/20 text-purple-400'}`}
+                                              title={authBlocked ? 'Autorización pendiente - no se puede editar' : 'Editar'}
                                             >
                                               <Pencil className="h-3.5 w-3.5" />
                                             </button>
                                             <button
                                               type="button"
-                                              onClick={() => handleRemoveCara(cara.id)}
-                                              className="p-1 hover:bg-red-500/20 rounded text-red-400 text-[10px]"
-                                              title="Eliminar"
+                                              onClick={() => { if (!authBlocked) handleRemoveCara(cara.id); }}
+                                              disabled={authBlocked}
+                                              className={`p-1 rounded text-[10px] ${authBlocked ? 'text-zinc-600 cursor-not-allowed' : 'hover:bg-red-500/20 text-red-400'}`}
+                                              title={authBlocked ? 'Autorización pendiente' : 'Eliminar'}
                                             >
                                               <Trash2 className="h-3.5 w-3.5" />
                                             </button>
                                           </div>
+                                            );
+                                          })()}
                                         </td>
                                       </tr>
                                     );

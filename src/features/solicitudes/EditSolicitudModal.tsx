@@ -92,6 +92,8 @@ interface ExistingCaraEntry {
   inicio_periodo: string;
   fin_periodo: string;
   articulo?: string;
+  autorizacion_dg?: string;
+  autorizacion_dcm?: string;
 }
 
 interface NewCaraEntry {
@@ -537,6 +539,8 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
           inicio_periodo: c.inicio_periodo || '',
           fin_periodo: c.fin_periodo || '',
           articulo: c.articulo,
+          autorizacion_dg: c.autorizacion_dg || 'aprobado',
+          autorizacion_dcm: c.autorizacion_dcm || 'aprobado',
         })));
       }
     }
@@ -1201,8 +1205,9 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                           <tbody className="divide-y divide-violet-500/10">
                             {existingCaras.map((cara) => {
                               const inversion = cara.tarifa_publica * cara.caras;
+                              const authPendiente = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
                               return (
-                                <tr key={cara.id} className="hover:bg-violet-600/10 transition-colors">
+                                <tr key={cara.id} className={`transition-colors ${authPendiente ? 'opacity-60' : 'hover:bg-violet-600/10'}`} title={authPendiente ? 'Autorización pendiente - no se puede editar' : ''}>
                                   <td className="px-3 py-2.5 text-zinc-400">{cara.ciudad || '-'}</td>
                                   <td className="px-3 py-2.5 text-zinc-400">{cara.estado || '-'}</td>
                                   <td className="px-3 py-2.5 text-zinc-400">{cara.formato || '-'}</td>
@@ -1210,23 +1215,30 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                                   <td className="px-3 py-2.5">
                                     <input type="number" min={0} value={cara.caras}
                                       onChange={(e) => updateExistingCara(cara.id, 'caras', parseInt(e.target.value) || 0)}
-                                      className="w-16 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
+                                      disabled={authPendiente}
+                                      className={`w-16 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${authPendiente ? 'opacity-50 cursor-not-allowed' : ''}`} />
                                   </td>
                                   <td className="px-3 py-2.5">
                                     <input type="number" min={0} value={cara.bonificacion}
                                       onChange={(e) => updateExistingCara(cara.id, 'bonificacion', parseInt(e.target.value) || 0)}
-                                      className="w-16 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-emerald-400 text-xs text-center focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
+                                      disabled={authPendiente}
+                                      className={`w-16 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-emerald-400 text-xs text-center focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${authPendiente ? 'opacity-50 cursor-not-allowed' : ''}`} />
                                   </td>
                                   <td className="px-3 py-2.5 text-right">
                                     <input type="number" min={0} value={cara.tarifa_publica}
                                       onChange={(e) => updateExistingCara(cara.id, 'tarifa_publica', parseFloat(e.target.value) || 0)}
-                                      className="w-24 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-amber-300 text-xs text-right focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
+                                      disabled={authPendiente}
+                                      className={`w-24 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-amber-300 text-xs text-right focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${authPendiente ? 'opacity-50 cursor-not-allowed' : ''}`} />
                                   </td>
                                   <td className="px-3 py-2.5 text-right text-emerald-300 font-medium">{formatCurrency(inversion)}</td>
                                   <td className="px-3 py-2.5 text-center">
+                                    {authPendiente ? (
+                                      <span className="text-[9px] text-amber-400">Pendiente</span>
+                                    ) : (
                                     <button onClick={() => removeExistingCara(cara.id)} className="p-1 hover:bg-red-500/20 rounded text-red-400">
                                       <Trash2 className="h-3.5 w-3.5" />
                                     </button>
+                                    )}
                                   </td>
                                 </tr>
                               );
