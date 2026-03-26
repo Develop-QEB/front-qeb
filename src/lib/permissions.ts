@@ -75,6 +75,7 @@ export interface RolePermissions {
   canEditCampanaStatus: boolean; // Cambiar estatus en modal de campaña
   allowedCampanaStatuses: string[] | null; // null = todos los estatus permitidos, array = solo esos
   canEditDetalleCampana: boolean;
+  canEditCaraFiltersOnEdit: boolean; // Editar estados, ciudades y formatos al editar una cara existente en propuestas
   canDeleteDetalleCampana: boolean;
   canSeeGestionArtes: boolean; // Ver página de Gestión de Artes
   canEditGestionArtes: boolean;
@@ -149,6 +150,7 @@ const defaultPermissions: RolePermissions = {
   canEditCampanaStatus: true,
   allowedCampanaStatuses: null, // null = todos
   canEditDetalleCampana: true,
+  canEditCaraFiltersOnEdit: false,
   canDeleteDetalleCampana: true,
   canSeeGestionArtes: true,
   canEditGestionArtes: true,
@@ -952,6 +954,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   'Administrador': {
     // Admin tiene todos los permisos por defecto
     canEditClienteEnFormularios: true,
+    canEditCaraFiltersOnEdit: true,
   },
   'Gerente de Tráfico': {
     // Secciones visibles
@@ -994,6 +997,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
@@ -1059,6 +1063,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
@@ -1127,6 +1132,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,
@@ -1195,6 +1201,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir'],
     canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
     canEditGestionArtes: false,

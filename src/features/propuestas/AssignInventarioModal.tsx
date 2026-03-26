@@ -5616,8 +5616,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Estados {newCara.estados && !editingCaraId && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Estados {newCara.estados && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={solicitudFilters?.estados || []}
                             selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
@@ -5631,8 +5631,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {newCara.ciudad && !editingCaraId && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {newCara.ciudad && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={
                               solicitudFilters?.ciudades
@@ -5654,8 +5654,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Formatos {newCara.formato && !editingCaraId && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Formatos {newCara.formato && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={solicitudFilters?.formatos || []}
                             selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}

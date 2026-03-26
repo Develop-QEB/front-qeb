@@ -32,8 +32,21 @@ const tutorials: Tutorial[] = [
       'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_6c04e8be-d673-40bf-a4eb-f4344fc91ebf/page/1771447559402.png',
     paddingBottom: 'calc(55.66% + 25px)',
   },
+  {
+    id: 'Tutorial-Tickets',
+    type: 'demo' as const,
+    category: 'Tickets',
+    title: 'Gestion de Tickets',
+    demoUrl: 'https://app.storylane.io/demo/kwvumr3w4uc5?embed=inline_overlay',
+    width: 2560,
+    height: 1425,
+    previewImage:
+      'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_17ead260-3777-4e8f-a218-8fe2e9f98afb/page/1774554935634.png',
+    paddingBottom: 'calc(55.66% + 25px)',
+  },
   { 
     id: 'manual-asesores', 
+    
     type: 'pdf' as const, 
     category: 'Asesores', 
     title: 'Manual-Asesor-Comercial-QEB', 
