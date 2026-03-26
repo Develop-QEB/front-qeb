@@ -4269,6 +4269,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </button>
                     )}
 
+                    {/* Download CSV Reservados */}
+                    <button
+                      onClick={() => {
+                        if (filteredReservados.length === 0) return;
+                        const headers = ['Código', 'Tipo', 'Plaza', 'Formato', 'Ubicación', 'Isla'];
+                        const rows = filteredReservados.map(r => [
+                          r.codigo_unico || '', r.tipo || '', r.plaza || '', r.formato || '', r.ubicacion || '', r.isla || ''
+                        ].map(v => `"${String(v).replace(/"/g, '""')}"`));
+                        const csv = '\ufeff' + headers.join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
+                        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `reservados_${selectedCaraForSearch?.articulo || 'cara'}.csv`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                      }}
+                      disabled={filteredReservados.length === 0}
+                      className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+                      title="Descargar CSV"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+
                     {/* Results count */}
                     <span className="text-xs text-zinc-500 ml-auto">
                       {filteredReservados.length} de {currentCaraReservas.length}
