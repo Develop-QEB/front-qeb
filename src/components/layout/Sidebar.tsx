@@ -12,14 +12,23 @@ import {
   ChevronLeft,
   HelpCircle,
   Bot,
+  Ticket,
 } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { usePrefetch } from '../../hooks/usePrefetch';
 import { getPermissions } from '../../lib/permissions';
 import { AyudaModal } from './AyudaModal';
+import { ticketsService } from '../../services/tickets.service';
+
+const HISTORIAL_TICKETS_EMAILS = [
+  'akary.lopez@datistic.mx',
+  'bladimir@qeb.mx',
+  'contacto@qeb.mx',
+  'mario.salcido@deepia.dev',
+];
 
 interface SidebarProps {
   collapsed: boolean;
@@ -62,6 +71,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   };
 
   const permissions = getPermissions(user?.rol);
+  const canSeeHistorialTickets = user?.email && HISTORIAL_TICKETS_EMAILS.includes(user.email.toLowerCase());
+
+  const { data: ticketsUnreadCount = 0 } = useQuery({
+    queryKey: ['tickets-unread-count'],
+    queryFn: () => ticketsService.getUnreadCount(),
+    enabled: !!canSeeHistorialTickets,
+    refetchInterval: 30000,
+  });
 
   const filteredNavigation = navigation.filter(item => {
     if (!permissions[item.permissionKey]) {
@@ -165,11 +182,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </nav>
 
         {/* Admin section */}
-        {permissions.canSeeAdminUsuarios && (
+        {(permissions.canSeeAdminUsuarios || canSeeHistorialTickets) && (
           <div className={`border-t ${borderColor} px-2 py-3 space-y-1`}>
-            {[
+            {permissions.canSeeAdminUsuarios && [
               { name: 'Usuarios', href: '/admin/usuarios', icon: Users },
-              { name: 'Historial QEBooh', href: '/admin/chatbot', icon: Bot },
             ].map(item => (
               <NavLink
                 key={item.href}
@@ -193,6 +209,64 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 {!collapsed && <span>{item.name}</span>}
               </NavLink>
             ))}
+            {canSeeHistorialTickets && (
+              <NavLink
+                to="/admin/tickets-historial"
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-light transition-all duration-200 relative',
+                    isActive
+                      ? isDark
+                        ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/10 text-purple-300 border border-purple-500/30'
+                        : 'bg-gradient-to-r from-purple-100 to-pink-50 text-purple-700 border border-purple-200'
+                      : isDark
+                        ? 'text-zinc-400 hover:bg-purple-900/30 hover:text-purple-300'
+                        : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700',
+                    collapsed && 'justify-center px-2'
+                  )
+                }
+                title={collapsed ? 'Historial de Tickets' : undefined}
+              >
+                <div className="relative">
+                  <Ticket className="h-5 w-5 flex-shrink-0" />
+                  {ticketsUnreadCount > 0 && (
+                    <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-[#1a1025]" />
+                  )}
+                </div>
+                {!collapsed && (
+                  <span className="flex-1 flex items-center justify-between">
+                    Historial de Tickets
+                    {ticketsUnreadCount > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-500 text-white min-w-[18px] text-center">
+                        {ticketsUnreadCount}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </NavLink>
+            )}
+            {permissions.canSeeAdminUsuarios && (
+              <NavLink
+                to="/admin/chatbot"
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-light transition-all duration-200',
+                    isActive
+                      ? isDark
+                        ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/10 text-purple-300 border border-purple-500/30'
+                        : 'bg-gradient-to-r from-purple-100 to-pink-50 text-purple-700 border border-purple-200'
+                      : isDark
+                        ? 'text-zinc-400 hover:bg-purple-900/30 hover:text-purple-300'
+                        : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700',
+                    collapsed && 'justify-center px-2'
+                  )
+                }
+                title={collapsed ? 'Historial QEBooh' : undefined}
+              >
+                <Bot className="h-5 w-5 flex-shrink-0" />
+                {!collapsed && <span>Historial QEBooh</span>}
+              </NavLink>
+            )}
           </div>
         )}
 
