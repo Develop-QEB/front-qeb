@@ -1069,6 +1069,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setNewCara(EMPTY_CARA);
       setSelectedArticulo(null);
       periodInitializedRef.current = false;
+      setCsvFile(null);
+      setCsvData([]);
+      setShowCsvSection(false);
       setSelectedClienteCuic(null);
       setClienteChanged(false);
       setClienteSearchTerm('');
@@ -2071,6 +2074,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setSortColumn('codigo_unico');
     setSortDirection('asc');
     setExcluirCategoria('');
+    setCsvFile(null);
+    setCsvData([]);
+    setShowCsvSection(false);
 
     // Fetch disponibles based on cara characteristics (gets all, filter in frontend)
     setIsSearching(true);
@@ -2539,8 +2545,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const handleReservar = () => {
     if (!selectedCaraForSearch || selectedInventory.size === 0) return;
 
-    // Get all selected items
-    const selectedItems = processedInventory.filter(i => isInventorySelected(i));
+    // Get all selected items - try processedInventory first, fallback to inventarioDisponible
+    let selectedItems = processedInventory.filter(i => isInventorySelected(i));
+    if (selectedItems.length === 0) {
+      selectedItems = inventarioDisponible.filter(i => selectedInventory.has(getInventoryKey(i)));
+    }
     if (selectedItems.length === 0) return;
     const potentialPairs = new Set<string>();
 
