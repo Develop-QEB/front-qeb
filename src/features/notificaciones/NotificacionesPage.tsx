@@ -1506,8 +1506,23 @@ function TaskDrawer({
       onNavigate(`/campanas/${tarea.campania_id}/tareas?taskId=${tarea.id}`);
       return;
     }
-    // Si es tarea de autorización/rechazo con id_solicitud, navegar a solicitud
+    // Si es tarea de autorización/rechazo, navegar al contexto correcto
     if (tarea.id_solicitud && (tarea.tipo?.includes('Autorización') || tarea.tipo?.includes('Rechazo'))) {
+      // Si tiene id_propuesta, navegar a propuesta
+      if (tarea.id_propuesta) {
+        const propId = parseInt(tarea.id_propuesta);
+        if (!isNaN(propId)) {
+          const path = getDirectNavigationPath('propuesta', propId, tarea.titulo || '', tarea.tipo || undefined, null, propId);
+          onNavigate(path);
+          return;
+        }
+      }
+      // Si tiene campania_id, navegar a campaña
+      if (tarea.campania_id) {
+        onNavigate(`/campanas/${tarea.campania_id}`);
+        return;
+      }
+      // Fallback: navegar a solicitud
       const solicitudId = parseInt(tarea.id_solicitud);
       if (!isNaN(solicitudId)) {
         const path = getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '');
@@ -2970,12 +2985,22 @@ export function NotificacionesPage() {
                                   navigate(`/campanas/${tarea.campania_id}/tareas?taskId=${tarea.id}`);
                                   return;
                                 }
-                                // Si es tarea de autorización/rechazo con id_solicitud, navegar a solicitud
+                                // Si es tarea de autorización/rechazo, navegar al contexto correcto
                                 if (tarea.id_solicitud && (tarea.tipo?.includes('Autorización') || tarea.tipo?.includes('Rechazo'))) {
+                                  if (tarea.id_propuesta) {
+                                    const propId = parseInt(tarea.id_propuesta);
+                                    if (!isNaN(propId)) {
+                                      navigate(getDirectNavigationPath('propuesta', propId, tarea.titulo || '', tarea.tipo || undefined, null, propId));
+                                      return;
+                                    }
+                                  }
+                                  if (tarea.campania_id) {
+                                    navigate(`/campanas/${tarea.campania_id}`);
+                                    return;
+                                  }
                                   const solicitudId = parseInt(tarea.id_solicitud);
                                   if (!isNaN(solicitudId)) {
-                                    const path = getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '');
-                                    navigate(path);
+                                    navigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || ''));
                                   }
                                 }
                               }}
