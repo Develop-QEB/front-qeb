@@ -2356,7 +2356,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           || getValueByColumnName(row, 'código_único')
           || getValueByColumnName(row, 'codigo_unico');
         const code = codigoUnico?.trim() || '';
-        const exists = code !== '' && inventarioDisponible.some(inv => inv.codigo_unico === code);
+        const exists = code !== '' && processedInventory.some(inv => inv.codigo_unico === code);
         return {
           codigo_unico: code || 'N/A',
           disponibilidad: exists ? 'Disponible' as const : 'No Disponible' as const,
@@ -2368,7 +2368,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     };
 
     reader.readAsText(file);
-  }, [inventarioDisponible]);
+  }, [processedInventory]);
 
   const handleSelectFromCsv = useCallback(() => {
     const availableCodes = new Set(
@@ -2377,26 +2377,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         .map(row => row.codigo_unico)
     );
 
-    // Reset filters
-    setFlujoFilter('Todos');
-    setShowOnlyUnicos(false);
-    setShowOnlyCompletos(false);
-    setShowOnlyUnicosDigitales(false);
-    setShowSpotUnico(false);
-    setShowOnlyIsla(false);
-    setGroupByDistance(false);
-    setDisponiblesSearchTerm('');
     setShowCsvSection(false);
 
-    // Directly select matching items by their keys
+    // Select directly from processedInventory (what the table shows RIGHT NOW)
     const newKeys = new Set<string>();
-    inventarioDisponible.forEach(inv => {
+    processedInventory.forEach(inv => {
       if (inv.codigo_unico && availableCodes.has(inv.codigo_unico)) {
         newKeys.add(getInventoryKey(inv));
       }
     });
     setSelectedInventory(newKeys);
-  }, [csvData, inventarioDisponible, getInventoryKey]);
+  }, [csvData, processedInventory, getInventoryKey]);
 
   const handleClearCsv = useCallback(() => {
     setCsvFile(null);
@@ -2545,11 +2536,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const handleReservar = () => {
     if (!selectedCaraForSearch || selectedInventory.size === 0) return;
 
-    // Get all selected items - try processedInventory first, fallback to inventarioDisponible
-    let selectedItems = processedInventory.filter(i => isInventorySelected(i));
-    if (selectedItems.length === 0) {
-      selectedItems = inventarioDisponible.filter(i => selectedInventory.has(getInventoryKey(i)));
-    }
+    // Get all selected items from processedInventory
+    const selectedItems = processedInventory.filter(i => isInventorySelected(i));
     if (selectedItems.length === 0) return;
     const potentialPairs = new Set<string>();
 
