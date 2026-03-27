@@ -2256,6 +2256,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     return data;
   }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, showOnlyIsla, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
 
+  // Check if an inventory item is selected
+  const isInventorySelected = useCallback((inv: InventarioDisponible | ProcessedInventoryItem): boolean => {
+    return selectedInventory.has(getInventoryKey(inv));
+  }, [selectedInventory, getInventoryKey]);
+
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
     setPoiFilterIds(new Set(idsToKeep));
@@ -2360,15 +2365,31 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   }, [inventarioDisponible]);
 
   const handleSelectFromCsv = useCallback(() => {
-    const availableCodes = csvData
-      .filter(row => row.disponibilidad === 'Disponible')
-      .map(row => row.codigo_unico);
+    const availableCodes = new Set(
+      csvData
+        .filter(row => row.disponibilidad === 'Disponible')
+        .map(row => row.codigo_unico)
+    );
 
-    const matchingInventory = inventarioDisponible
-      .filter(inv => inv.codigo_unico && availableCodes.includes(inv.codigo_unico));
-
-    setSelectedInventory(new Set(matchingInventory.map(inv => getInventoryKey(inv))));
+    // Reset filters
+    setFlujoFilter('Todos');
+    setShowOnlyUnicos(false);
+    setShowOnlyCompletos(false);
+    setShowOnlyUnicosDigitales(false);
+    setShowSpotUnico(false);
+    setShowOnlyIsla(false);
+    setGroupByDistance(false);
+    setDisponiblesSearchTerm('');
     setShowCsvSection(false);
+
+    // Directly select matching items by their keys
+    const newKeys = new Set<string>();
+    inventarioDisponible.forEach(inv => {
+      if (inv.codigo_unico && availableCodes.has(inv.codigo_unico)) {
+        newKeys.add(getInventoryKey(inv));
+      }
+    });
+    setSelectedInventory(newKeys);
   }, [csvData, inventarioDisponible, getInventoryKey]);
 
   const handleClearCsv = useCallback(() => {
@@ -2490,7 +2511,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Select all in group
   // Toggle all items in a group - if all selected, deselect all; otherwise select all
   const toggleAllInGroup = (items: ProcessedInventoryItem[]) => {
-    const allSelected = items.every(inv => selectedInventory.has(getInventoryKey(inv)));
+    const allSelected = items.every(inv => isInventorySelected(inv));
     setSelectedInventory(prev => {
       const next = new Set(prev);
       if (allSelected) {
@@ -2518,8 +2539,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const handleReservar = () => {
     if (!selectedCaraForSearch || selectedInventory.size === 0) return;
 
-    // Check for pairs that could be grouped
-    const selectedItems = processedInventory.filter(i => selectedInventory.has(getInventoryKey(i)));
+    // Get all selected items
+    const selectedItems = processedInventory.filter(i => isInventorySelected(i));
+    if (selectedItems.length === 0) return;
     const potentialPairs = new Set<string>();
 
     selectedItems.forEach(item => {
@@ -3902,7 +3924,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         }}
                                         className="ml-auto text-xs text-purple-400 hover:text-purple-300"
                                       >
-                                        {items.every(inv => selectedInventory.has(getInventoryKey(inv))) ? 'Deseleccionar' : 'Seleccionar todos'}
+                                        {items.every(inv => isInventorySelected(inv)) ? 'Deseleccionar' : 'Seleccionar todos'}
                                       </button>
                                     </div>
                                   </td>
@@ -3912,7 +3934,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   <tr
                                     key={getInventoryKey(inv)}
                                     onClick={() => toggleInventorySelection(getInventoryKey(inv))}
-                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(getInventoryKey(inv))
+                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${isInventorySelected(inv)
                                       ? 'bg-purple-500/10'
                                       : inv.ya_reservado_para_cara
                                         ? 'bg-green-500/5'
@@ -3922,7 +3944,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     <td className="px-3 py-2 pl-8">
                                       <input
                                         type="checkbox"
-                                        checked={selectedInventory.has(getInventoryKey(inv))}
+                                        checked={isInventorySelected(inv)}
                                         onChange={() => toggleInventorySelection(getInventoryKey(inv))}
                                         onClick={(e) => e.stopPropagation()}
                                         className="checkbox-purple"
@@ -3966,7 +3988,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               <tr
                                 key={getInventoryKey(inv)}
                                 onClick={() => toggleInventorySelection(getInventoryKey(inv))}
-                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedInventory.has(getInventoryKey(inv))
+                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${isInventorySelected(inv)
                                   ? 'bg-purple-500/10'
                                   : inv.ya_reservado_para_cara
                                     ? 'bg-green-500/5'
@@ -3976,7 +3998,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 <td className="px-3 py-2">
                                   <input
                                     type="checkbox"
-                                    checked={selectedInventory.has(getInventoryKey(inv))}
+                                    checked={isInventorySelected(inv)}
                                     onChange={() => toggleInventorySelection(getInventoryKey(inv))}
                                     onClick={(e) => e.stopPropagation()}
                                     className="checkbox-purple"
