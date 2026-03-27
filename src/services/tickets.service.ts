@@ -47,6 +47,37 @@ export interface TicketsResponse {
   };
 }
 
+// Historial types
+export interface TicketHistorial {
+  id: number;
+  titulo: string;
+  descripcion: string;
+  imagen?: string | null;
+  status: string;
+  prioridad: string;
+  usuario_id: number;
+  usuario_nombre: string;
+  usuario_email: string;
+  status_cambiado_por?: string | null;
+  total_mensajes: number;
+  has_unread: boolean;
+  is_opened: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TicketMensaje {
+  id: number;
+  ticket_id: number;
+  usuario_id: number;
+  usuario_nombre: string;
+  mensaje?: string | null;
+  archivo_url?: string | null;
+  archivo_nombre?: string | null;
+  archivo_tipo?: string | null;
+  created_at: string;
+}
+
 export const ticketsService = {
   // Obtener todos los tickets (para programadores)
   getAll: async (params?: {
@@ -95,5 +126,38 @@ export const ticketsService = {
   getStats: async (): Promise<TicketStats> => {
     const response = await api.get('/tickets/stats');
     return response.data;
+  },
+
+  // ---- Historial ----
+  getHistorial: async (params?: { status?: string; prioridad?: string; search?: string }): Promise<TicketHistorial[]> => {
+    const qp = new URLSearchParams();
+    if (params?.status) qp.append('status', params.status);
+    if (params?.prioridad) qp.append('prioridad', params.prioridad);
+    if (params?.search) qp.append('search', params.search);
+    const response = await api.get(`/tickets/historial?${qp.toString()}`);
+    return response.data.data;
+  },
+
+  getUnreadCount: async (): Promise<number> => {
+    const response = await api.get('/tickets/unread-count');
+    return response.data.data.unreadCount;
+  },
+
+  markOpened: async (ticketId: number): Promise<void> => {
+    await api.post(`/tickets/${ticketId}/opened`);
+  },
+
+  getMensajes: async (ticketId: number): Promise<TicketMensaje[]> => {
+    const response = await api.get(`/tickets/${ticketId}/mensajes`);
+    return response.data.data;
+  },
+
+  createMensaje: async (ticketId: number, data: { mensaje?: string; archivo_url?: string; archivo_nombre?: string; archivo_tipo?: string }): Promise<TicketMensaje> => {
+    const response = await api.post(`/tickets/${ticketId}/mensajes`, data);
+    return response.data.data;
+  },
+
+  markMensajesRead: async (ticketId: number, ultimoMensajeId: number): Promise<void> => {
+    await api.post(`/tickets/${ticketId}/mensajes/read`, { ultimo_mensaje_id: ultimoMensajeId });
   },
 };
