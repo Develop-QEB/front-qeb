@@ -58,13 +58,18 @@ export const usuariosService = {
   },
 
   async create(data: CreateUsuarioInput): Promise<UsuarioAdmin> {
-    const response = await api.post<ApiResponse<UsuarioAdmin>>('/usuarios', data);
+    try {
+      const response = await api.post<ApiResponse<UsuarioAdmin>>('/usuarios', data);
 
-    if (!response.data.success || !response.data.data) {
-      throw new Error(response.data.error || 'Error al crear usuario');
+      if (!response.data.success || !response.data.data) {
+        throw new Error(response.data.error || 'Error al crear usuario');
+      }
+
+      return response.data.data;
+    } catch (error: any) {
+      const message = error?.response?.data?.error || error.message || 'Error al crear usuario';
+      throw new Error(message);
     }
-
-    return response.data.data;
   },
 
   async update(id: number, data: UpdateUsuarioInput): Promise<UsuarioAdmin> {
