@@ -1691,6 +1691,7 @@ function CreateTicketModal({
   });
 
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1700,6 +1701,7 @@ function CreateTicketModal({
         return;
       }
       setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
       setForm({ ...form, imagen: file.name });
     }
   };
@@ -1790,16 +1792,16 @@ function CreateTicketModal({
               onChange={handleImageChange}
               className="hidden"
             />
-            {form.imagen ? (
+            {imagePreview ? (
               <div className="relative">
                 <img
-                  src={form.imagen}
+                  src={imagePreview}
                   alt="Preview"
-                  className={`w-full h-40 object-cover rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}
+                  className={`w-full max-h-48 object-contain rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50' : 'border-purple-200 bg-gray-50'}`}
                 />
                 <button
                   type="button"
-                  onClick={() => setForm({ ...form, imagen: null })}
+                  onClick={() => { setForm({ ...form, imagen: null }); setImageFile(null); setImagePreview(null); }}
                   className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-500/80 text-white hover:bg-red-500 transition-colors"
                 >
                   <X className="h-4 w-4" />
