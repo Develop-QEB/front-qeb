@@ -8,9 +8,16 @@ import { ticketsService, Ticket as TicketType, CreateTicketInput } from '../../s
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
 import { uploadsService } from '../../services/uploads.service';
 
 type TabType = 'usuarios' | 'equipos';
+
+const EMAILS_CON_PERMISO_ELIMINAR = [
+  'contacto@qeb.mx',
+  'mario.salcido@deepia.dev',
+  'akary.lopez@datistic.mx',
+];
 
 const getInputClasses = (isDark: boolean) =>
   `w-full px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-800/80' : 'bg-gray-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'text-white' : 'text-gray-900'} ${isDark ? 'placeholder:text-zinc-500' : 'placeholder:text-gray-400'} focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all hover:border-purple-500/40`;
@@ -488,6 +495,76 @@ function DeleteConfirmModal({
                 no se puede deshacer.
               </>
             )}
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className={`px-6 py-3 rounded-xl text-sm font-medium ${isDark ? 'text-purple-300' : 'text-gray-700'} ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'hover:bg-purple-500/10' : 'hover:bg-purple-50'} hover:border-purple-500/40 transition-all disabled:opacity-50`}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className="px-6 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-red-500/25 transition-all flex items-center gap-2"
+            >
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {loading ? 'Eliminando...' : 'Eliminar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal de confirmacion para eliminar un usuario individual
+function DeleteSingleUserModal({
+  usuario,
+  onClose,
+  onConfirm,
+  loading,
+}: {
+  usuario: UsuarioAdmin;
+  onClose: () => void;
+  onConfirm: () => void;
+  loading: boolean;
+}) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <div className={`relative z-50 w-full max-w-md ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border border-red-500/30 rounded-2xl shadow-2xl shadow-red-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
+        <div className="p-6 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/20 mb-4">
+            <Trash2 className="h-8 w-8 text-red-400" />
+          </div>
+          <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>Eliminar Usuario</h3>
+          <div className={`p-4 rounded-xl ${isDark ? 'bg-zinc-800/80' : 'bg-gray-50'} border ${isDark ? 'border-red-500/20' : 'border-red-200'} mb-4 text-left space-y-2`}>
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-red-400/70" />
+              <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{usuario.nombre}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-red-400/70" />
+              <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>{usuario.email}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Building className="h-4 w-4 text-red-400/70" />
+              <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{usuario.area || '-'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4 text-red-400/70" />
+              <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{usuario.puesto || '-'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-red-400/70" />
+              <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{usuario.rol}</span>
+            </div>
+          </div>
+          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm mb-6`}>
+            Esta seguro de eliminar este usuario? Esta accion no se puede deshacer.
           </p>
           <div className="flex gap-3 justify-center">
             <button
@@ -1150,6 +1227,9 @@ function UsuariosTab() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [resetPasswordUsuario, setResetPasswordUsuario] = useState<UsuarioAdmin | null>(null);
+  const [deletingUsuario, setDeletingUsuario] = useState<UsuarioAdmin | null>(null);
+  const currentUser = useAuthStore((s) => s.user);
+  const canDelete = currentUser?.email && EMAILS_CON_PERMISO_ELIMINAR.includes(currentUser.email);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1189,6 +1269,14 @@ function UsuariosTab() {
       queryClient.invalidateQueries({ queryKey: ['usuarios-admin'] });
       setSelectedIds(new Set());
       setShowDeleteConfirm(false);
+    },
+  });
+
+  const deleteSingleMutation = useMutation({
+    mutationFn: (id: number) => usuariosService.deleteMany([id]),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['usuarios-admin'] });
+      setDeletingUsuario(null);
     },
   });
 
@@ -1445,6 +1533,15 @@ function UsuariosTab() {
                           >
                             <KeyRound className="h-4 w-4" />
                           </button>
+                          {canDelete && (
+                            <button
+                              onClick={() => setDeletingUsuario(usuario)}
+                              className={`p-2 rounded-lg ${isDark ? 'bg-red-500/10' : 'bg-red-50'} text-red-400 ${isDark ? 'hover:bg-red-500/20' : 'hover:bg-red-100'} border ${isDark ? 'border-red-500/20' : 'border-red-200'} transition-all`}
+                              title="Eliminar usuario"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1506,6 +1603,16 @@ function UsuariosTab() {
           onClose={() => setShowDeleteConfirm(false)}
           onConfirm={handleDeleteSelected}
           loading={deleteMutation.isPending}
+        />
+      )}
+
+      {/* Delete Single User Modal */}
+      {deletingUsuario && (
+        <DeleteSingleUserModal
+          usuario={deletingUsuario}
+          onClose={() => setDeletingUsuario(null)}
+          onConfirm={() => deleteSingleMutation.mutate(deletingUsuario.id)}
+          loading={deleteSingleMutation.isPending}
         />
       )}
     </>
