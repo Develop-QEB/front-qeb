@@ -74,6 +74,10 @@ export const SOCKET_EVENTS = {
 
   // Chatbot
   CHATBOT_LOG_NUEVO: 'chatbot:log:nuevo',
+
+  // Tickets Historial
+  TICKET_MENSAJE_NUEVO: 'ticket:mensaje:nuevo',
+  TICKET_STATUS_CHANGED: 'ticket:status:changed',
 };
 
 let socketInstance: Socket | null = null;
@@ -981,6 +985,71 @@ export function useSocketChatbotAdmin(onNuevoLog: () => void) {
       joinedRef.current = false;
     };
   }, [onNuevoLog]);
+}
+
+/**
+ * Hook para escuchar eventos del historial de tickets (lista general)
+ */
+export function useSocketTicketsHistorial() {
+  const queryClient = useQueryClient();
+  const joinedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    if (!joinedRef.current) {
+      joinRoom(socket, 'join-tickets-historial');
+      joinedRef.current = true;
+    }
+
+    const handleMensajeNuevo = () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets-historial'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['tickets-unread-count'], refetchType: 'active' });
+    };
+
+    const handleStatusChanged = () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets-historial'], refetchType: 'active' });
+    };
+
+    socket.on(SOCKET_EVENTS.TICKET_MENSAJE_NUEVO, handleMensajeNuevo);
+    socket.on(SOCKET_EVENTS.TICKET_STATUS_CHANGED, handleStatusChanged);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.TICKET_MENSAJE_NUEVO, handleMensajeNuevo);
+      socket.off(SOCKET_EVENTS.TICKET_STATUS_CHANGED, handleStatusChanged);
+      leaveRoom(socket, 'join-tickets-historial');
+      joinedRef.current = false;
+    };
+  }, [queryClient]);
+}
+
+/**
+ * Hook para escuchar mensajes nuevos en un ticket específico (chat)
+ */
+export function useSocketTicketChat(ticketId: number | null, onNuevoMensaje: () => void) {
+  const joinedRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!ticketId) return;
+
+    const socket = getSocket();
+
+    if (joinedRef.current !== ticketId) {
+      if (joinedRef.current) socket.emit('leave-ticket', joinedRef.current);
+      socket.emit('join-ticket', ticketId);
+      joinedRef.current = ticketId;
+    }
+
+    socket.on(SOCKET_EVENTS.TICKET_MENSAJE_NUEVO, onNuevoMensaje);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.TICKET_MENSAJE_NUEVO, onNuevoMensaje);
+      if (joinedRef.current) {
+        socket.emit('leave-ticket', joinedRef.current);
+        joinedRef.current = null;
+      }
+    };
+  }, [ticketId, onNuevoMensaje]);
 }
 
 /**

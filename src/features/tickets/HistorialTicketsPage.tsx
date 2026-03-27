@@ -1,0 +1,592 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Ticket, Search, Filter, Loader2, MessageSquare, Clock, CheckCircle2,
+  X, AlertTriangle, Image, FileText, Send, Paperclip, Eye, User,
+  ChevronDown, Circle, Info,
+} from 'lucide-react';
+import { Header } from '../../components/layout/Header';
+import { ticketsService, TicketHistorial, TicketMensaje } from '../../services/tickets.service';
+import { uploadsService } from '../../services/uploads.service';
+import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
+import { useSocketTicketsHistorial, useSocketTicketChat } from '../../hooks/useSocket';
+
+const STATUS_OPTIONS = ['Nuevo', 'En Progreso', 'Resuelto', 'Cerrado'];
+const PRIORIDAD_OPTIONS = ['Baja', 'Normal', 'Alta', 'Urgente'];
+
+const statusStyles: Record<string, { text: string; bg: string; border: string }> = {
+  'Nuevo': { text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
+  'En Progreso': { text: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' },
+  'Resuelto': { text: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
+  'Cerrado': { text: 'text-zinc-400', bg: 'bg-zinc-500/10', border: 'border-zinc-500/30' },
+};
+
+const prioridadStyles: Record<string, { text: string; bg: string; border: string }> = {
+  'Baja': { text: 'text-zinc-400', bg: 'bg-zinc-500/10', border: 'border-zinc-500/30' },
+  'Normal': { text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
+  'Alta': { text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30' },
+  'Urgente': { text: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30' },
+};
+
+function getTimeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Ahora';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d`;
+}
+
+// ===================== TICKET DETAIL MODAL =====================
+function TicketDetailModal({
+  ticket,
+  onClose,
+  onStatusChange,
+}: {
+  ticket: TicketHistorial;
+  onClose: () => void;
+  onStatusChange: (status: string) => void;
+}) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const user = useAuthStore((s) => s.user);
+  const queryClient = useQueryClient();
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [mensaje, setMensaje] = useState('');
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  // Mark as opened
+  useEffect(() => {
+    ticketsService.markOpened(ticket.id);
+  }, [ticket.id]);
+
+  // Fetch messages
+  const { data: mensajes = [], refetch: refetchMensajes } = useQuery({
+    queryKey: ['ticket-mensajes', ticket.id],
+    queryFn: () => ticketsService.getMensajes(ticket.id),
+    refetchInterval: 10000,
+  });
+
+  // Socket for real-time chat
+  const handleNuevoMensaje = useCallback(() => {
+    refetchMensajes();
+    queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
+    queryClient.invalidateQueries({ queryKey: ['tickets-unread-count'] });
+  }, [refetchMensajes, queryClient]);
+  useSocketTicketChat(ticket.id, handleNuevoMensaje);
+
+  // Mark messages as read when they load
+  useEffect(() => {
+    if (mensajes.length > 0) {
+      const lastId = mensajes[mensajes.length - 1].id;
+      ticketsService.markMensajesRead(ticket.id, lastId);
+      queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
+      queryClient.invalidateQueries({ queryKey: ['tickets-unread-count'] });
+    }
+  }, [mensajes, ticket.id, queryClient]);
+
+  // Auto scroll to bottom
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [mensajes]);
+
+  // Send message mutation
+  const sendMutation = useMutation({
+    mutationFn: (data: { mensaje?: string; archivo_url?: string; archivo_nombre?: string; archivo_tipo?: string }) =>
+      ticketsService.createMensaje(ticket.id, data),
+    onSuccess: () => {
+      setMensaje('');
+      refetchMensajes();
+    },
+  });
+
+  const handleSend = () => {
+    if (!mensaje.trim()) return;
+    sendMutation.mutate({ mensaje: mensaje.trim() });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) return;
+
+    setUploading(true);
+    try {
+      const uploaded = await uploadsService.uploadFile(file, 'ticket-chat');
+      sendMutation.mutate({
+        archivo_url: uploaded.url,
+        archivo_nombre: uploaded.originalName,
+        archivo_tipo: file.type.startsWith('image/') ? 'image' : 'file',
+      });
+    } catch {
+      // silently fail
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const ss = statusStyles[ticket.status] || statusStyles['Nuevo'];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <div className={`relative z-50 w-full max-w-3xl max-h-[90vh] flex flex-col ${isDark ? 'bg-gradient-to-br from-zinc-900 via-purple-950/20 to-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
+        {/* Header */}
+        <div className={`flex items-center justify-between p-5 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40' : 'bg-purple-50'} flex-shrink-0`}>
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'}`}>
+              <Ticket className={`h-5 w-5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
+            </div>
+            <div className="min-w-0">
+              <h2 className={`text-lg font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                #{ticket.id} — {ticket.titulo}
+              </h2>
+              <p className={`text-xs ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>
+                {ticket.usuario_nombre} · {new Date(ticket.created_at).toLocaleString('es-MX')}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-50'} rounded-xl transition-colors`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-purple-300' : 'text-gray-500'}`} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Ticket info */}
+          <div className={`p-5 border-b ${isDark ? 'border-purple-500/10' : 'border-gray-100'}`}>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {/* Status with dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${ss.text} ${ss.bg} ${ss.border} hover:opacity-80 transition-opacity`}
+                >
+                  {ticket.status}
+                  <ChevronDown className="h-3 w-3" />
+                </button>
+                {showStatusDropdown && (
+                  <div className={`absolute top-full left-0 mt-1 z-10 rounded-xl border ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-gray-200'} shadow-xl py-1 min-w-[140px]`}>
+                    {STATUS_OPTIONS.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => { onStatusChange(s); setShowStatusDropdown(false); }}
+                        className={`w-full text-left px-3 py-2 text-xs font-medium ${isDark ? 'hover:bg-purple-500/10 text-zinc-300' : 'hover:bg-gray-50 text-gray-700'} transition-colors ${s === ticket.status ? (isDark ? 'bg-purple-500/20' : 'bg-purple-50') : ''}`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {ticket.status_cambiado_por && (
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-zinc-800 text-zinc-400 border border-zinc-700' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                  <User className="h-3 w-3" /> {ticket.status_cambiado_por}
+                </span>
+              )}
+              {!ticket.status_cambiado_por && (
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>
+                  Sin atender
+                </span>
+              )}
+              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${prioridadStyles[ticket.prioridad]?.text} ${prioridadStyles[ticket.prioridad]?.bg} ${prioridadStyles[ticket.prioridad]?.border}`}>
+                {ticket.prioridad}
+              </span>
+            </div>
+
+            <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>
+              {ticket.descripcion}
+            </p>
+
+            {ticket.imagen && (
+              <div className="mt-3">
+                <a href={ticket.imagen} target="_blank" rel="noopener noreferrer">
+                  <img
+                    src={ticket.imagen}
+                    alt="Captura"
+                    className={`max-h-48 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-gray-200'} object-contain`}
+                  />
+                </a>
+              </div>
+            )}
+
+            <div className={`mt-3 flex items-center gap-4 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+              <span className="flex items-center gap-1"><User className="h-3 w-3" />{ticket.usuario_email}</span>
+              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(ticket.created_at).toLocaleString('es-MX')}</span>
+              <span className="flex items-center gap-1"><MessageSquare className="h-3 w-3" />{ticket.total_mensajes} mensajes</span>
+            </div>
+          </div>
+
+          {/* Chat */}
+          <div className={`p-5`}>
+            <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+              <MessageSquare className="h-4 w-4" /> Notas y conversacion
+            </h3>
+
+            <div className={`rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/50' : 'border-gray-200 bg-gray-50'} p-3 min-h-[200px] max-h-[300px] overflow-y-auto space-y-3`}>
+              {mensajes.length === 0 && (
+                <p className={`text-center text-sm py-8 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                  No hay mensajes aun. Inicia la conversacion.
+                </p>
+              )}
+              {mensajes.map((msg) => {
+                const isMe = msg.usuario_id === user?.id;
+                return (
+                  <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-xl px-3 py-2 ${isMe
+                      ? isDark ? 'bg-purple-600/30 border border-purple-500/30' : 'bg-purple-100 border border-purple-200'
+                      : isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-white border border-gray-200'
+                    }`}>
+                      <p className={`text-xs font-medium mb-1 ${isMe ? (isDark ? 'text-purple-300' : 'text-purple-700') : (isDark ? 'text-zinc-400' : 'text-gray-500')}`}>
+                        {msg.usuario_nombre}
+                      </p>
+                      {msg.mensaje && (
+                        <p className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{msg.mensaje}</p>
+                      )}
+                      {msg.archivo_url && msg.archivo_tipo === 'image' && (
+                        <a href={msg.archivo_url} target="_blank" rel="noopener noreferrer">
+                          <img src={msg.archivo_url} alt={msg.archivo_nombre || 'Imagen'} className="max-h-40 rounded-lg mt-1 object-contain" />
+                        </a>
+                      )}
+                      {msg.archivo_url && msg.archivo_tipo === 'file' && (
+                        <a
+                          href={msg.archivo_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`flex items-center gap-2 mt-1 px-2 py-1.5 rounded-lg text-xs ${isDark ? 'bg-zinc-700/50 text-purple-300 hover:bg-zinc-700' : 'bg-gray-100 text-purple-600 hover:bg-gray-200'} transition-colors`}
+                        >
+                          <FileText className="h-4 w-4" />
+                          {msg.archivo_nombre || 'Archivo'}
+                        </a>
+                      )}
+                      <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
+                        {new Date(msg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className={`mt-3 flex items-end gap-2`}>
+              <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className={`p-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800 text-purple-400 hover:bg-purple-500/10' : 'border-purple-200 bg-gray-50 text-purple-600 hover:bg-purple-50'} transition-colors flex-shrink-0`}
+                title="Adjuntar archivo"
+              >
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+              </button>
+              <textarea
+                value={mensaje}
+                onChange={(e) => setMensaje(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={1}
+                placeholder="Escribe un mensaje..."
+                className={`flex-1 px-3 py-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/80 text-white placeholder:text-zinc-500' : 'border-purple-200 bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 resize-none`}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!mensaje.trim() || sendMutation.isPending}
+                className="p-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 transition-all flex-shrink-0"
+              >
+                {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== MAIN PAGE =====================
+export function HistorialTicketsPage() {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('Todos');
+  const [filterPrioridad, setFilterPrioridad] = useState('Todos');
+  const [selectedTicket, setSelectedTicket] = useState<TicketHistorial | null>(null);
+  const [activeTab, setActiveTab] = useState<'activos' | 'cerrados'>('activos');
+
+  useSocketTicketsHistorial();
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const { data: tickets = [], isLoading } = useQuery({
+    queryKey: ['tickets-historial', filterStatus, filterPrioridad, debouncedSearch],
+    queryFn: () => ticketsService.getHistorial({
+      status: filterStatus !== 'Todos' ? filterStatus : undefined,
+      prioridad: filterPrioridad !== 'Todos' ? filterPrioridad : undefined,
+      search: debouncedSearch || undefined,
+    }),
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      ticketsService.updateStatus(id, { status: status as any }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
+      if (selectedTicket) {
+        // Refresh the selected ticket data
+        ticketsService.getHistorial().then((all) => {
+          const updated = all.find((t) => t.id === selectedTicket.id);
+          if (updated) setSelectedTicket(updated);
+        });
+      }
+    },
+  });
+
+  const activosTickets = tickets.filter((t) => t.status !== 'Cerrado' && t.status !== 'Resuelto');
+  const cerradosTickets = tickets.filter((t) => t.status === 'Cerrado' || t.status === 'Resuelto');
+  const displayTickets = activeTab === 'activos' ? activosTickets : cerradosTickets;
+
+  const stats = {
+    total: tickets.length,
+    nuevo: tickets.filter((t) => t.status === 'Nuevo').length,
+    enProgreso: tickets.filter((t) => t.status === 'En Progreso').length,
+    resuelto: tickets.filter((t) => t.status === 'Resuelto').length,
+    cerrado: tickets.filter((t) => t.status === 'Cerrado').length,
+    unread: tickets.filter((t) => t.has_unread).length,
+  };
+
+  return (
+    <div className={`min-h-screen ${isDark ? 'bg-[#0f0a1a]' : 'bg-gray-50'}`}>
+      <Header title="Historial de Tickets" />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+        {/* Title */}
+        <div>
+          <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            Historial de Tickets
+          </h1>
+          <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+            Gestion y seguimiento de todos los tickets de soporte
+          </p>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+          {[
+            { label: 'Total', value: stats.total, tooltip: 'Cantidad total de tickets registrados en el sistema', dark: 'border-purple-500/20 bg-purple-500/5', light: 'border-purple-200 bg-purple-50' },
+            { label: 'Nuevos', value: stats.nuevo, tooltip: 'Tickets recien creados que aun no han sido atendidos por nadie', dark: 'border-blue-500/20 bg-blue-500/5', light: 'border-blue-200 bg-blue-50' },
+            { label: 'En Progreso', value: stats.enProgreso, tooltip: 'Tickets que alguien ya esta revisando o trabajando en ellos', dark: 'border-yellow-500/20 bg-yellow-500/5', light: 'border-yellow-200 bg-yellow-50' },
+            { label: 'Resueltos', value: stats.resuelto, tooltip: 'Tickets cuyo problema fue solucionado y estan listos para cerrarse', dark: 'border-green-500/20 bg-green-500/5', light: 'border-green-200 bg-green-50' },
+            { label: 'Cerrados', value: stats.cerrado, tooltip: 'Tickets finalizados que ya no requieren atencion', dark: 'border-zinc-500/20 bg-zinc-500/5', light: 'border-gray-200 bg-gray-50' },
+            { label: 'No leidos', value: stats.unread, tooltip: 'Tickets con mensajes nuevos en el chat que aun no has leido', dark: 'border-red-500/20 bg-red-500/5', light: 'border-red-200 bg-red-50' },
+          ].map((s) => (
+            <div key={s.label} className={`rounded-xl border p-4 relative group ${isDark ? s.dark : s.light}`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{s.value}</p>
+                  <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{s.label}</p>
+                </div>
+                <div className="relative">
+                  <Info className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-600 hover:text-zinc-400' : 'text-gray-300 hover:text-gray-500'} transition-colors cursor-help`} />
+                  <div className={`absolute right-0 top-full mt-1 w-48 p-2 rounded-lg text-xs leading-relaxed shadow-xl z-20 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none ${isDark ? 'bg-zinc-800 text-zinc-300 border border-zinc-700' : 'bg-gray-900 text-gray-100'}`}>
+                    {s.tooltip}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Filters */}
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} backdrop-blur-xl p-4`}>
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-purple-400' : 'text-gray-400'}`} />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por titulo, descripcion o usuario..."
+                className={`w-full pl-10 pr-4 py-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'border-purple-200 bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30`}
+              />
+            </div>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className={`px-3 py-2.5 rounded-xl border text-sm ${isDark ? 'border-purple-500/20 bg-zinc-900/80 text-white' : 'border-purple-200 bg-gray-50 text-gray-900'} focus:outline-none focus:ring-2 focus:ring-purple-500/30`}
+            >
+              <option value="Todos">Status: Todos</option>
+              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select
+              value={filterPrioridad}
+              onChange={(e) => setFilterPrioridad(e.target.value)}
+              className={`px-3 py-2.5 rounded-xl border text-sm ${isDark ? 'border-purple-500/20 bg-zinc-900/80 text-white' : 'border-purple-200 bg-gray-50 text-gray-900'} focus:outline-none focus:ring-2 focus:ring-purple-500/30`}
+            >
+              <option value="Todos">Prioridad: Todos</option>
+              {PRIORIDAD_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1">
+          {([
+            { key: 'activos' as const, label: 'Activos', count: activosTickets.length },
+            { key: 'cerrados' as const, label: 'Cerrados', count: cerradosTickets.length },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
+                activeTab === tab.key
+                  ? isDark
+                    ? 'bg-gradient-to-r from-purple-500/20 to-fuchsia-500/10 text-purple-300 border border-purple-500/30'
+                    : 'bg-gradient-to-r from-purple-100 to-fuchsia-50 text-purple-700 border border-purple-200'
+                  : isDark
+                    ? 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800/50'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              {tab.label}
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === tab.key
+                  ? isDark ? 'bg-purple-500/30 text-purple-200' : 'bg-purple-200 text-purple-700'
+                  : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500'
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Tickets List */}
+        {isLoading ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className={`h-10 w-10 ${isDark ? 'text-purple-400' : 'text-purple-600'} animate-spin`} />
+          </div>
+        ) : displayTickets.length === 0 ? (
+          <div className="text-center py-16">
+            <Ticket className={`h-16 w-16 mx-auto mb-4 ${isDark ? 'text-purple-400/50' : 'text-purple-300'}`} />
+            <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+              {activeTab === 'cerrados' ? 'No hay tickets cerrados' : 'No se encontraron tickets'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {displayTickets.map((t) => {
+              const ss = statusStyles[t.status] || statusStyles['Nuevo'];
+              const ps = prioridadStyles[t.prioridad] || prioridadStyles['Normal'];
+              const isNew = !t.is_opened;
+
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setSelectedTicket(t)}
+                  className={`w-full text-left rounded-xl border p-4 transition-all duration-200 ${
+                    isNew
+                      ? isDark
+                        ? 'border-purple-500/40 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30 hover:border-purple-400/60 shadow-lg shadow-purple-500/10'
+                        : 'border-purple-300 bg-gradient-to-r from-purple-50 to-fuchsia-50 hover:border-purple-400 shadow-md shadow-purple-100'
+                      : isDark
+                        ? 'border-purple-500/10 bg-zinc-900/50 hover:border-purple-500/30 hover:bg-zinc-900/80'
+                        : 'border-gray-200 bg-white hover:border-purple-200 hover:shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Unread / new indicators */}
+                    <div className="flex flex-col items-center gap-1 pt-1 flex-shrink-0">
+                      {isNew && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse" title="No abierto" />
+                      )}
+                      {!isNew && t.has_unread && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-500" title="Mensajes no leidos" />
+                      )}
+                      {!isNew && !t.has_unread && (
+                        <div className={`w-2.5 h-2.5 rounded-full ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`} />
+                      )}
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-xs font-mono ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>#{t.id}</span>
+                        <h3 className={`text-sm font-semibold truncate ${isNew ? (isDark ? 'text-white' : 'text-gray-900') : (isDark ? 'text-zinc-200' : 'text-gray-700')}`}>
+                          {t.titulo}
+                        </h3>
+                      </div>
+                      <p className={`text-xs truncate mb-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        {t.descripcion}
+                      </p>
+                      <div className="flex items-center flex-wrap gap-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${ss.text} ${ss.bg} ${ss.border}`}>
+                          {t.status}
+                        </span>
+                        {t.status_cambiado_por && (
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-500 border border-zinc-700' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                            <User className="h-2.5 w-2.5" /> {t.status_cambiado_por}
+                          </span>
+                        )}
+                        {!t.status_cambiado_por && (
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>
+                            Sin atender
+                          </span>
+                        )}
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${ps.text} ${ps.bg} ${ps.border}`}>
+                          {t.prioridad}
+                        </span>
+                        {t.imagen && <Image className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />}
+                        {t.total_mensajes > 0 && (
+                          <span className={`inline-flex items-center gap-1 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                            <MessageSquare className="h-3 w-3" /> {t.total_mensajes}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right side */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        {getTimeAgo(t.created_at)}
+                      </span>
+                      <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
+                        {t.usuario_nombre}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </main>
+
+      {/* Detail Modal */}
+      {selectedTicket && (
+        <TicketDetailModal
+          ticket={selectedTicket}
+          onClose={() => {
+            setSelectedTicket(null);
+            queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
+            queryClient.invalidateQueries({ queryKey: ['tickets-unread-count'] });
+          }}
+          onStatusChange={(status) => statusMutation.mutate({ id: selectedTicket.id, status })}
+        />
+      )}
+    </div>
+  );
+}

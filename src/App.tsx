@@ -24,11 +24,19 @@ import { UsuariosAdminPage } from './features/admin/UsuariosAdminPage';
 import { ChatbotHistorialPage } from './features/admin/ChatbotHistorialPage';
 import { DevTicketsPage } from './features/tickets/DevTicketsPage';
 import { TicketsPage } from './features/tickets/TicketsPage';
+import { HistorialTicketsPage } from './features/tickets/HistorialTicketsPage';
 import { useAuthStore } from './store/authStore';
 import { getPermissions } from './lib/permissions';
 
 // IDs de usuarios programadores con acceso a /dev/tickets
 const DEV_USERS_IDS = [1057460, 1057462]; // Mario, Jos
+
+const HISTORIAL_TICKETS_EMAILS = [
+  'akary.lopez@datistic.mx',
+  'bladimir@qeb.mx',
+  'contacto@qeb.mx',
+  'mario.salcido@deepia.dev',
+];
 
 // Obtener la primera ruta disponible según permisos del usuario
 function getFirstAvailableRoute(permissions: ReturnType<typeof getPermissions>): string {
@@ -98,6 +106,15 @@ function GestionArtesRoute() {
   return <TareaSeguimientoPage />;
 }
 
+// Componente para proteger ruta de Historial Tickets
+function HistorialTicketsRoute() {
+  const user = useAuthStore((state) => state.user);
+  if (!user || !HISTORIAL_TICKETS_EMAILS.includes(user.email.toLowerCase())) {
+    return <Navigate to="/" replace />;
+  }
+  return <HistorialTicketsPage />;
+}
+
 // Componente para proteger ruta de Dev Tickets (solo programadores)
 function DevTicketsRoute() {
   const user = useAuthStore((state) => state.user);
@@ -140,6 +157,7 @@ function App() {
             <Route path="/admin/usuarios" element={<AdminUsuariosRoute />} />
             <Route path="/admin/chatbot" element={<AdminChatbotRoute />} />
             <Route path="/tickets" element={<TicketsPage />} />
+            <Route path="/admin/tickets-historial" element={<HistorialTicketsRoute />} />
             <Route path="/dev/tickets" element={<DevTicketsRoute />} />
           </Route>
 
