@@ -1240,10 +1240,17 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
 }
 
 // Función para obtener la etiqueta del botón
-function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: string | null): string {
+function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: string | null, idSolicitud?: string | null, titulo?: string): string {
   // Tareas de Gestión de Artes → Ver Gestión de Artes
   if (isGestionArtesTarea(tipoTarea)) {
     return 'Ver Gestión de Artes';
+  }
+  // Tareas de Autorización/Rechazo: determinar destino por el título
+  if (tipoTarea?.includes('Autorización') || tipoTarea?.includes('Rechazo')) {
+    if (campaniaId) return 'Ver Campaña';
+    if (titulo?.toLowerCase().includes('solicitud')) return 'Ver Solicitud';
+    if (propuestaId) return 'Ver Propuesta';
+    return 'Ver Solicitud';
   }
   if (tipoTarea?.toLowerCase().includes('solicitud')) {
     return 'Ver Solicitud';
@@ -1624,7 +1631,7 @@ function TaskDrawer({
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
             >
               <ExternalLink className="h-4 w-4" />
-              {getNavigationLabel(tarea.referencia_tipo || '', tarea.tipo || undefined, tarea.campania_id, tarea.id_propuesta)}
+              {getNavigationLabel(tarea.referencia_tipo || '', tarea.tipo || undefined, tarea.campania_id, tarea.id_propuesta, tarea.id_solicitud, tarea.titulo || '')}
             </button>
           )}
 
