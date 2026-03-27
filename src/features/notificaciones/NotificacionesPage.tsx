@@ -1245,8 +1245,12 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   if (isGestionArtesTarea(tipoTarea)) {
     return 'Ver Gestión de Artes';
   }
-  // Tareas de Autorización/Rechazo: determinar destino por el título
+  // Tareas de Autorización/Rechazo: usar referencia_tipo (tipo) del backend
   if (tipoTarea?.includes('Autorización') || tipoTarea?.includes('Rechazo')) {
+    if (tipo === 'campana') return 'Ver Campaña';
+    if (tipo === 'propuesta') return 'Ver Propuesta';
+    if (tipo === 'solicitud') return 'Ver Solicitud';
+    // Fallback para tareas viejas sin referencia_tipo correcto
     if (campaniaId) return 'Ver Campaña';
     if (titulo?.toLowerCase().includes('solicitud')) return 'Ver Solicitud';
     if (propuestaId) return 'Ver Propuesta';
@@ -1300,8 +1304,10 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   }
 
   // Si es tarea de propuesta (ajuste cto, etc.) o tiene id_propuesta, ir al detalle de propuesta
+  // Excluir tareas de Autorización/Rechazo — esas usan referencia_tipo del backend
   const isSeguimientoCampana = tipoTarea?.toLowerCase().includes('seguimiento') && tipoTarea?.toLowerCase().includes('campaña');
-  if (!isSeguimientoCampana && (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId)) {
+  const isAutorizacionOrRechazo = tipoTarea?.includes('Autorización') || tipoTarea?.includes('Rechazo');
+  if (!isSeguimientoCampana && !isAutorizacionOrRechazo && (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId)) {
     return `/propuestas?viewId=${propuestaId || id}`;
   }
 
