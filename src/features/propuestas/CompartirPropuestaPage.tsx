@@ -708,14 +708,22 @@ export function CompartirPropuestaPage() {
     const kpiWidth = (pageWidth - marginX * 2 - 15) / 4;
     kpiData.forEach((kpi, idx) => {
       const x = marginX + idx * (kpiWidth + 5);
+      const isLast = idx === kpiData.length - 1;
+      const boxHeight = isLast ? 19 : 15;
       doc.setFillColor(...kpi.color);
-      doc.roundedRect(x, y, kpiWidth, 15, 2, 2, 'F');
+      doc.roundedRect(x, y, kpiWidth, boxHeight, 2, 2, 'F');
       doc.setFontSize(8);
       doc.setTextColor(...WHITE);
       doc.text(kpi.label, x + kpiWidth / 2, y + 5, { align: 'center' });
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text(kpi.value, x + kpiWidth / 2, y + 12, { align: 'center' });
+      if (isLast) {
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(255, 255, 255, 150);
+        doc.text('*Precios más IVA', x + kpiWidth / 2, y + 17, { align: 'center' });
+      }
     });
     y += 25;
 
@@ -1002,11 +1010,12 @@ export function CompartirPropuestaPage() {
             { label: 'Total Caras', value: kpis.total, color: 'text-purple-500', bg: 'from-purple-500/20 to-purple-600/10' },
             { label: 'En Renta', value: kpis.renta, color: 'text-violet-400', bg: 'from-pink-400/20 to-violet-400/10' },
             { label: 'Bonificadas', value: kpis.bonificadas, color: 'text-pink-400', bg: 'from-pink-400/20 to-violet-400/10' },
-            { label: 'Inversión Total', value: formatCurrency(kpis.inversion), color: 'text-amber-400', bg: 'from-amber-500/20 to-amber-600/10' },
-          ].map(({ label, value, color, bg }) => (
+            { label: 'Inversión Total', value: formatCurrency(kpis.inversion), color: 'text-amber-400', bg: 'from-amber-500/20 to-amber-600/10', iva: true },
+          ].map(({ label, value, color, bg, iva }: any) => (
             <div key={label} className={`bg-gradient-to-br ${bg} rounded-xl p-4 border border-purple-500/20 text-center`}>
               <p className={`text-2xl font-bold ${color}`}>{value}</p>
               <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{label}</p>
+              {iva && <p className={`text-[9px] mt-0.5 italic ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>*Precios más IVA</p>}
             </div>
           ))}
         </div>
