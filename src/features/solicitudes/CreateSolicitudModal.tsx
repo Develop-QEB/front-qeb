@@ -2610,7 +2610,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
                                             // DG contamina: si alguna cara tiene DG, todas son DG
                                             const hayDGEnPropuesta = caras.some(c => c.autorizacion_dg === 'pendiente');
-                                            const dgEfectivo = esImpar || hayDGEnPropuesta ? 'pendiente' : cara.autorizacion_dg;
+                                            // Solo contamina si esta cara tiene algún pendiente (no tocar las ya aprobadas)
+                                            const tienePendiente = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
+                                            const dgEfectivo = esImpar || (hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg;
                                             const dcmEfectivo = dgEfectivo === 'pendiente' ? 'aprobado' : cara.autorizacion_dcm;
                                             return (
                                               <div className="flex flex-col gap-0.5">
