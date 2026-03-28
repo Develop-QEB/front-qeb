@@ -2625,7 +2625,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                                   </span>
                                                 )}
                                                 {dgEfectivo === 'pendiente' && dcmEfectivo !== 'rechazado' && (
-                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title={totals.totalCarasImpar ? 'Total de caras impar - Requiere autorización DG' : 'Requiere autorización DG'}>
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title={esImpar ? 'Caras impar en este grupo - Requiere autorización DG' : 'Requiere autorización DG'}>
                                                     Pend. DG
                                                   </span>
                                                 )}
@@ -2691,10 +2691,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           <span className="text-amber-400 font-bold">{formatCurrency(totals.totalPrecio)}</span>
                         </div>
                       </div>
-                      {totals.totalCarasImpar && (
+                      {caras.some(c => (c.renta + c.bonificacion) > 0 && (c.renta + c.bonificacion) % 2 !== 0) && (
                         <div className="mt-2 flex items-center gap-2 text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded px-3 py-1.5">
                           <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                          <span>Total de caras impar ({totals.totalRenta + totals.totalBonificacion}) — Todas las caras requieren autorización DG</span>
+                          <span>Hay grupos con caras impar — Requiere autorización DG</span>
                         </div>
                       )}
                     </div>
