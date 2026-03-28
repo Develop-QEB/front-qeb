@@ -944,8 +944,8 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <MapPin className="h-5 w-5 text-violet-400" />
-                      <span className="text-base font-semibold text-white">Detalle de Caras</span>
-                      <span className="text-xs text-zinc-400">({existingCaras.length + newCaras.length} caras)</span>
+                      <span className="text-base font-semibold text-white">Detalle de Circuitos</span>
+                      <span className="text-xs text-zinc-400">({existingCaras.length + newCaras.length} circuitos)</span>
                     </div>
                     <div className="flex items-center gap-4 text-sm">
                       <span className="text-zinc-400">{grandTotals.renta} renta</span>
@@ -961,7 +961,7 @@ export function EditSolicitudModal({ isOpen, onClose, solicitudId }: Props) {
                   <div className="pb-4 border-b border-violet-500/20">
                     <div className="flex items-center gap-2 mb-4">
                       <Plus className="h-4 w-4 text-emerald-400" />
-                      <span className="text-sm font-medium text-white">Agregar Nueva Cara</span>
+                      <span className="text-sm font-medium text-white">Agregar Nuevo Circuito</span>
                     </div>
 
                     <div className="grid grid-cols-4 gap-3 mb-4">

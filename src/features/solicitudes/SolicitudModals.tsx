@@ -445,7 +445,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
       doc.setTextColor(...imuDarkBlue);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
-      doc.text('DETALLE DE CARAS', marginX, yPos);
+      doc.text('DETALLE DE CIRCUITOS', marginX, yPos);
 
       doc.setFillColor(...imuBlue);
       doc.rect(marginX, yPos + 2, 28, 0.5, 'F');
@@ -825,7 +825,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                   <div className="px-5 py-4 border-b border-violet-500/20 bg-violet-600/10">
                     <h3 className="text-sm font-semibold text-violet-300 flex items-center gap-2">
                       <MapPin className="h-4 w-4" />
-                      Detalle de Caras
+                      Detalle de Circuitos
                     </h3>
                   </div>
                   <div className="divide-y divide-violet-500/10">
