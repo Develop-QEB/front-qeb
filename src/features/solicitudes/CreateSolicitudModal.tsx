@@ -251,6 +251,9 @@ interface CaraEntry {
   precioTotal: number;
   autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado';
   autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado';
+  // Valores originales del backend (antes de contaminación)
+  _originalDg?: 'aprobado' | 'pendiente' | 'rechazado';
+  _originalDcm?: 'aprobado' | 'pendiente' | 'rechazado';
 }
 
 interface Props {
@@ -1154,16 +1157,41 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       precioTotal,
       autorizacion_dg,
       autorizacion_dcm,
+      _originalDg: autorizacion_dg,
+      _originalDcm: autorizacion_dcm,
     };
 
-    if (editingCaraId) {
-      // Update existing cara
-      setCaras(caras.map(c => c.id === editingCaraId ? cara : c));
-      setEditingCaraId(null);
-    } else {
-      // Add new cara
-      setCaras([...caras, cara]);
-    }
+    // Add or update cara, then recalculate impar + DG contamination from originals
+    setCaras(prev => {
+      let updated: CaraEntry[];
+      if (editingCaraId) {
+        updated = prev.map(c => c.id === editingCaraId ? cara : c);
+      } else {
+        updated = [...prev, cara];
+      }
+      // Paso 0: Reset todas las caras a sus valores originales del backend
+      updated = updated.map(c => ({
+        ...c,
+        autorizacion_dg: c._originalDg,
+        autorizacion_dcm: c._originalDcm,
+      }));
+      // Paso 1: Impar por grupo — si renta+bonificacion de un grupo es impar, esa cara es DG
+      updated = updated.map(c => {
+        const carasGrupo = c.renta + c.bonificacion;
+        const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
+        if (esImpar && c.autorizacion_dg !== 'pendiente') {
+          return { ...c, autorizacion_dg: 'pendiente' as const, autorizacion_dcm: 'aprobado' as const };
+        }
+        return c;
+      });
+      // Paso 2: DG contamina — si hay al menos 1 DG pendiente, las que tengan DCM pendiente pasan a DG
+      const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
+      if (hayDG) {
+        return updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+      }
+      return updated;
+    });
+    if (editingCaraId) setEditingCaraId(null);
 
     // Auto expand the catorcena
     setExpandedCatorcenas(prev => new Set(prev).add(`${catorcenaYear}-${catorcenaNum}`));
@@ -1618,6 +1646,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             precioTotal: Number(cara.costo) || 0,
             autorizacion_dg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
             autorizacion_dcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
+            _originalDg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
+            _originalDcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
           };
         });
         setCaras(loadedCaras);
@@ -2588,9 +2618,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
                                           {(() => {
-                                            // Si total global es impar, todas requieren DG
-                                            const dgEfectivo = totals.totalCarasImpar ? 'pendiente' : cara.autorizacion_dg;
-                                            const dcmEfectivo = cara.autorizacion_dcm;
+                                            // Impar por grupo: si las caras de ESTE grupo son impar, requiere DG
+                                            const carasGrupo = cara.renta + cara.bonificacion;
+                                            const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
+                                            // DG contamina: si alguna cara tiene DG, todas son DG
+                                            const hayDGEnPropuesta = caras.some(c => c.autorizacion_dg === 'pendiente');
+                                            // Solo contamina si esta cara tiene algún pendiente (no tocar las ya aprobadas)
+                                            const tienePendiente = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
+                                            const dgEfectivo = esImpar || (hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg;
+                                            const dcmEfectivo = dgEfectivo === 'pendiente' ? 'aprobado' : cara.autorizacion_dcm;
                                             return (
                                               <div className="flex flex-col gap-0.5">
                                                 {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (
@@ -2604,7 +2640,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                                   </span>
                                                 )}
                                                 {dgEfectivo === 'pendiente' && dcmEfectivo !== 'rechazado' && (
-                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title={totals.totalCarasImpar ? 'Total de caras impar - Requiere autorización DG' : 'Requiere autorización DG'}>
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title={esImpar ? 'Caras impar en este grupo - Requiere autorización DG' : 'Requiere autorización DG'}>
                                                     Pend. DG
                                                   </span>
                                                 )}
@@ -2670,10 +2706,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           <span className="text-amber-400 font-bold">{formatCurrency(totals.totalPrecio)}</span>
                         </div>
                       </div>
-                      {totals.totalCarasImpar && (
+                      {caras.some(c => (c.renta + c.bonificacion) > 0 && (c.renta + c.bonificacion) % 2 !== 0) && (
                         <div className="mt-2 flex items-center gap-2 text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded px-3 py-1.5">
                           <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                          <span>Total de caras impar ({totals.totalRenta + totals.totalBonificacion}) — Todas las caras requieren autorización DG</span>
+                          <span>Hay grupos con caras impar — Requiere autorización DG</span>
                         </div>
                       )}
                     </div>
