@@ -585,10 +585,17 @@ export function SolicitudesPage() {
     queryFn: () => solicitudesService.getCatorcenas(),
   });
 
-  // Fetch stats with year range
+  // Fetch stats with all active filters
   const { data: stats } = useQuery({
-    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin],
-    queryFn: () => solicitudesService.getStats({ yearInicio, yearFin, catorcenaInicio, catorcenaFin }),
+    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status, debouncedSearch],
+    queryFn: () => solicitudesService.getStats({
+      yearInicio,
+      yearFin,
+      catorcenaInicio,
+      catorcenaFin,
+      status: status || undefined,
+      search: debouncedSearch || undefined,
+    }),
   });
 
   // When grouping or advanced filters are active, fetch ALL data
@@ -629,20 +636,6 @@ export function SolicitudesPage() {
   const allStatuses = useMemo(() => {
     if (!stats?.byStatus) return [];
     return Object.keys(stats.byStatus).sort();
-  }, [stats]);
-
-  // Chart data from dynamic stats
-  const chartData = useMemo(() => {
-    if (!stats?.byStatus) return null;
-    const entries = Object.entries(stats.byStatus);
-    if (entries.length === 0) return null;
-
-    return entries.map(([statusName, count], index) => ({
-      label: statusName,
-      value: count,
-      color: CHART_COLORS[index % CHART_COLORS.length],
-      percent: stats.total > 0 ? ((count / stats.total) * 100).toFixed(1) : '0',
-    }));
   }, [stats]);
 
   // Mini Donut Chart Component - compact version
@@ -770,6 +763,32 @@ export function SolicitudesPage() {
     if (!data?.data) return [];
     return applyAdvancedFilters(data.data, advancedFilters);
   }, [data?.data, advancedFilters]);
+
+  // Compute effective stats: when advanced filters are active, recalculate from filteredData
+  const effectiveStats = useMemo(() => {
+    if (advancedFilters.length > 0 && data?.data) {
+      const byStatus: Record<string, number> = {};
+      filteredData.forEach(s => {
+        byStatus[s.status] = (byStatus[s.status] || 0) + 1;
+      });
+      return { total: filteredData.length, byStatus };
+    }
+    return stats || null;
+  }, [advancedFilters, filteredData, data?.data, stats]);
+
+  // Chart data from effective stats (after all filters)
+  const chartData = useMemo(() => {
+    if (!effectiveStats?.byStatus) return null;
+    const entries = Object.entries(effectiveStats.byStatus);
+    if (entries.length === 0) return null;
+
+    return entries.map(([statusName, count], index) => ({
+      label: statusName,
+      value: count,
+      color: CHART_COLORS[index % CHART_COLORS.length],
+      percent: effectiveStats.total > 0 ? ((count / effectiveStats.total) * 100).toFixed(1) : '0',
+    }));
+  }, [effectiveStats]);
 
   // Advanced filter functions
   const addAdvancedFilter = () => {
@@ -1014,12 +1033,12 @@ export function SolicitudesPage() {
             <div>
               <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Total Solicitudes</p>
               <h3 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
-                {(data?.pagination?.total ?? stats?.total ?? 0).toLocaleString()}
+                {(effectiveStats?.total ?? data?.pagination?.total ?? 0).toLocaleString()}
               </h3>
             </div>
             <div className="mt-4 flex items-center gap-2">
               <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-zinc-800/80 text-zinc-300 border-zinc-700/50' : 'bg-gray-100 text-gray-700 border-gray-200'} border`}>
-                {(status || debouncedSearch) ? 'Filtrado' : 'Todas las catorcenas'}
+                {(status || debouncedSearch || advancedFilters.length > 0) ? 'Filtrado' : 'Todas las catorcenas'}
               </span>
             </div>
           </div>
@@ -1078,7 +1097,7 @@ export function SolicitudesPage() {
               <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Pendientes / En Proceso</p>
               <div className="flex items-baseline gap-2">
                 <h3 className={`text-3xl font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-                  {((stats?.byStatus['Pendiente'] || 0) + (stats?.byStatus['En Proceso'] || 0)).toLocaleString()}
+                  {((effectiveStats?.byStatus['Pendiente'] || 0) + (effectiveStats?.byStatus['En Proceso'] || 0)).toLocaleString()}
                 </h3>
                 <span className={`text-xs font-medium ${isDark ? 'text-amber-500/80' : 'text-amber-600/80'}`}>Atención requerida</span>
               </div>
@@ -1088,7 +1107,7 @@ export function SolicitudesPage() {
             <div className={`mt-4 w-full h-1.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} rounded-full overflow-hidden`}>
               <div
                 className="h-full bg-gradient-to-r from-amber-500 to-orange-500"
-                style={{ width: `${Math.min(100, (((stats?.byStatus['Pendiente'] || 0) + (stats?.byStatus['En Proceso'] || 0)) / (stats?.total || 1)) * 100)}%` }}
+                style={{ width: `${Math.min(100, (((effectiveStats?.byStatus['Pendiente'] || 0) + (effectiveStats?.byStatus['En Proceso'] || 0)) / (effectiveStats?.total || 1)) * 100)}%` }}
               />
             </div>
           </div>
