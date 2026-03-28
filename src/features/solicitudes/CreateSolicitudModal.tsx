@@ -1156,7 +1156,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       autorizacion_dcm,
     };
 
-    // Add or update cara, then apply DG contamination
+    // Add or update cara, then apply impar per group + DG contamination
     setCaras(prev => {
       let updated: CaraEntry[];
       if (editingCaraId) {
@@ -1164,7 +1164,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       } else {
         updated = [...prev, cara];
       }
-      // DG contamina: si hay al menos 1 DG pendiente, todas las DCM pasan a DG
+      // Paso 1: Impar por grupo — si renta+bonificacion de un grupo es impar, esa cara es DG
+      updated = updated.map(c => {
+        const carasGrupo = c.renta + c.bonificacion;
+        const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
+        if (esImpar && c.autorizacion_dg !== 'pendiente') {
+          return { ...c, autorizacion_dg: 'pendiente' as const, autorizacion_dcm: 'aprobado' as const };
+        }
+        return c;
+      });
+      // Paso 2: DG contamina — si hay al menos 1 DG pendiente, todas las DCM pasan a DG
       const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
       if (hayDG) {
         return updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
@@ -2596,9 +2605,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
                                           {(() => {
-                                            // Si total global es impar, todas requieren DG
-                                            const dgEfectivo = totals.totalCarasImpar ? 'pendiente' : cara.autorizacion_dg;
-                                            const dcmEfectivo = cara.autorizacion_dcm;
+                                            // Impar por grupo: si las caras de ESTE grupo son impar, requiere DG
+                                            const carasGrupo = cara.renta + cara.bonificacion;
+                                            const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
+                                            // DG contamina: si alguna cara tiene DG, todas son DG
+                                            const hayDGEnPropuesta = caras.some(c => c.autorizacion_dg === 'pendiente');
+                                            const dgEfectivo = esImpar || hayDGEnPropuesta ? 'pendiente' : cara.autorizacion_dg;
+                                            const dcmEfectivo = dgEfectivo === 'pendiente' ? 'aprobado' : cara.autorizacion_dcm;
                                             return (
                                               <div className="flex flex-col gap-0.5">
                                                 {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (
