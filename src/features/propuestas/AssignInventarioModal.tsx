@@ -2160,9 +2160,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const processedInventory = useMemo((): ProcessedInventoryItem[] => {
     let data: ProcessedInventoryItem[] = [...inventarioDisponible];
 
-    // Filter out items that are already reserved (in ANY group/context)
-    const reservedIds = new Set(reservas.map(r => r.inventario_id));
-    data = data.filter(inv => !reservedIds.has(inv.id));
+    // Filter out items that are already reserved for the CURRENT cara only
+    const currentCaraReservedIds = new Set(
+      reservas
+        .filter(r => selectedCaraForSearch && (r.solicitudCaraId === selectedCaraForSearch.id))
+        .map(r => r.inventario_id)
+    );
+    data = data.filter(inv => !currentCaraReservedIds.has(inv.id));
 
     // Apply text search filter
     if (disponiblesSearchTerm.trim()) {

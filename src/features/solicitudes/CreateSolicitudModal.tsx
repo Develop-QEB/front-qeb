@@ -1156,14 +1156,22 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       autorizacion_dcm,
     };
 
-    if (editingCaraId) {
-      // Update existing cara
-      setCaras(caras.map(c => c.id === editingCaraId ? cara : c));
-      setEditingCaraId(null);
-    } else {
-      // Add new cara
-      setCaras([...caras, cara]);
-    }
+    // Add or update cara, then apply DG contamination
+    setCaras(prev => {
+      let updated: CaraEntry[];
+      if (editingCaraId) {
+        updated = prev.map(c => c.id === editingCaraId ? cara : c);
+      } else {
+        updated = [...prev, cara];
+      }
+      // DG contamina: si hay al menos 1 DG pendiente, todas las DCM pasan a DG
+      const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
+      if (hayDG) {
+        return updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+      }
+      return updated;
+    });
+    if (editingCaraId) setEditingCaraId(null);
 
     // Auto expand the catorcena
     setExpandedCatorcenas(prev => new Set(prev).add(`${catorcenaYear}-${catorcenaNum}`));
