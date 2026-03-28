@@ -251,6 +251,9 @@ interface CaraEntry {
   precioTotal: number;
   autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado';
   autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado';
+  // Valores originales del backend (antes de contaminación)
+  _originalDg?: 'aprobado' | 'pendiente' | 'rechazado';
+  _originalDcm?: 'aprobado' | 'pendiente' | 'rechazado';
 }
 
 interface Props {
@@ -1154,9 +1157,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       precioTotal,
       autorizacion_dg,
       autorizacion_dcm,
+      _originalDg: autorizacion_dg,
+      _originalDcm: autorizacion_dcm,
     };
 
-    // Add or update cara, then apply impar per group + DG contamination
+    // Add or update cara, then recalculate impar + DG contamination from originals
     setCaras(prev => {
       let updated: CaraEntry[];
       if (editingCaraId) {
@@ -1164,6 +1169,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       } else {
         updated = [...prev, cara];
       }
+      // Paso 0: Reset todas las caras a sus valores originales del backend
+      updated = updated.map(c => ({
+        ...c,
+        autorizacion_dg: c._originalDg,
+        autorizacion_dcm: c._originalDcm,
+      }));
       // Paso 1: Impar por grupo — si renta+bonificacion de un grupo es impar, esa cara es DG
       updated = updated.map(c => {
         const carasGrupo = c.renta + c.bonificacion;
@@ -1173,7 +1184,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         }
         return c;
       });
-      // Paso 2: DG contamina — si hay al menos 1 DG pendiente, todas las DCM pasan a DG
+      // Paso 2: DG contamina — si hay al menos 1 DG pendiente, las que tengan DCM pendiente pasan a DG
       const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
       if (hayDG) {
         return updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
@@ -1635,6 +1646,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             precioTotal: Number(cara.costo) || 0,
             autorizacion_dg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
             autorizacion_dcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
+            _originalDg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
+            _originalDcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
           };
         });
         setCaras(loadedCaras);
