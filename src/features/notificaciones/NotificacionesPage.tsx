@@ -1943,7 +1943,7 @@ function TaskDrawer({
           <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
             <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-4 flex items-center gap-2`}>
               <AlertCircle className="h-3.5 w-3.5" />
-              Caras Pendientes de Autorización ({carasPendientes.length})
+              Circuitos Pendientes de Autorización ({carasPendientes.length})
             </h3>
 
             {/* Resumen */}
@@ -2050,7 +2050,7 @@ function TaskDrawer({
                   ) : (
                     <CheckCircle className="h-4 w-4" />
                   )}
-                  {aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} cara${carasPendientes.length !== 1 ? 's' : ''}`}
+                  {aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`}
                 </button>
                 <button
                   onClick={() => setShowRechazoInput(true)}

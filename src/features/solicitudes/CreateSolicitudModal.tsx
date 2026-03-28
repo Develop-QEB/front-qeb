@@ -1712,7 +1712,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             {[
               { num: 1, label: 'Cliente', icon: Building2 },
               { num: 2, label: 'Campaña', icon: FileText },
-              { num: 3, label: 'Asignar Caras', icon: MapPin },
+              { num: 3, label: 'Asignar Circuitos', icon: MapPin },
               { num: 4, label: 'Resumen', icon: Layers },
             ].map((s, i) => (
               <React.Fragment key={s.num}>
@@ -2202,7 +2202,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
                 <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4 flex items-center gap-2`}>
                   <Plus className="h-4 w-4 text-purple-400" />
-                  Agregar Cara
+                  Agregar Circuito
                 </h3>
 
                 {/* Row 1: Articulo SAP */}
@@ -2511,7 +2511,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg text-sm font-medium transition-colors`}
                   >
                     {editingCaraId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                    {editingCaraId ? 'Actualizar Cara' : 'Agregar Cara'}
+                    {editingCaraId ? 'Actualizar Circuito' : 'Agregar Circuito'}
                   </button>
                   {editingCaraId ? (
                     <button
@@ -2539,7 +2539,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
                 {groupedCaras.length === 0 ? (
                   <div className={`px-4 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
-                    No hay caras agregadas
+                    No hay circuitos agregados
                   </div>
                 ) : (
                   <div>
