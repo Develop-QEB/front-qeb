@@ -5408,7 +5408,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
                       >
                         <Plus className="h-3.5 w-3.5" />
-                        Agregar Cara
+                        Agregar Circuito
                       </button>
                     )}
                   </div>

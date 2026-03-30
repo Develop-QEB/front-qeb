@@ -12,10 +12,10 @@ export type UserRole =
   | 'Gerente Comercial Aeropuerto'
   | 'Asesor Comercial Aeropuerto'
   | 'Analista de Aeropuerto'
-  | 'Gerente de Tráfico'
-  | 'Coordinador de tráfico'
-  | 'Especialista de tráfico'
-  | 'Auxiliar de tráfico'
+  | 'Gerente de Trafico'
+  | 'Coordinador de trafico'
+  | 'Especialista de trafico'
+  | 'Auxiliar de trafico'
   | 'Coordinador de Diseño'
   | 'Diseñadores'
   | 'Compradores'
@@ -961,7 +961,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCaraFiltersOnEdit: true,
     canEditArticuloOnEdit: true,
   },
-  'Gerente de Tráfico': {
+  'Gerente de Trafico': {
     // Secciones visibles
     canSeeDashboard: true,
     canSeeClientes: false,
@@ -1027,7 +1027,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
   },
-  'Coordinador de tráfico': {
+  'Coordinador de trafico': {
     // Secciones visibles
     canSeeDashboard: true,
     canSeeClientes: false,
@@ -1096,7 +1096,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Órdenes de Montaje - solo visualización
     canExportOrdenesMontaje: false,
   },
-  'Especialista de tráfico': {
+  'Especialista de trafico': {
     // Secciones visibles
     canSeeDashboard: true,
     canSeeClientes: false,
@@ -1165,7 +1165,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Órdenes de Montaje - solo visualización
     canExportOrdenesMontaje: false,
   },
-  'Auxiliar de tráfico': {
+  'Auxiliar de trafico': {
     // Secciones visibles
     canSeeDashboard: true,
     canSeeClientes: false,
