@@ -1986,6 +1986,7 @@ function TaskDrawer({
                     <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Bonif.</th>
                     <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Total</th>
                     <th className={`px-2 py-2 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Tarifa Efect.</th>
+                    <th className={`px-2 py-2 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Tarifa</th>
                     <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Estado</th>
                   </tr>
                 </thead>
@@ -2010,6 +2011,9 @@ function TaskDrawer({
                       <td className="px-2 py-2 text-xs text-center text-cyan-300 font-semibold">{cara.total_caras}</td>
                       <td className="px-2 py-2 text-xs text-right text-purple-300 font-mono">
                         ${cara.tarifa_efectiva?.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                      </td>
+                      <td className="px-2 py-2 text-xs text-right text-amber-300 font-mono">
+                        ${cara.tarifa_publica?.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
                       </td>
                       <td className="px-2 py-2 text-center">
                         <div className="flex flex-col gap-0.5 items-center">
