@@ -989,9 +989,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
+    // Propuestas - pueden cambiar a Abierto, Atendido, Ajuste Comercial y Compartir
     canEditPropuestaStatus: true,
-    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    allowedPropuestaStatuses: ['Abierto', 'Atendido', 'Ajuste Comercial'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
     canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
@@ -1055,9 +1055,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
+    // Propuestas - pueden cambiar a Abierto, Atendido, Ajuste Comercial y Compartir
     canEditPropuestaStatus: true,
-    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    allowedPropuestaStatuses: ['Abierto', 'Atendido', 'Ajuste Comercial'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
     canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
@@ -1124,9 +1124,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
+    // Propuestas - pueden cambiar a Abierto, Atendido, Ajuste Comercial y Compartir
     canEditPropuestaStatus: true,
-    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    allowedPropuestaStatuses: ['Abierto', 'Atendido', 'Ajuste Comercial'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
     canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
@@ -1193,9 +1193,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
+    // Propuestas - pueden cambiar a Abierto, Atendido, Ajuste Comercial y Compartir
     canEditPropuestaStatus: true,
-    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    allowedPropuestaStatuses: ['Abierto', 'Atendido', 'Ajuste Comercial'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
     canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta

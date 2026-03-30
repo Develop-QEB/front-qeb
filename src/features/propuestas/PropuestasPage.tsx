@@ -30,6 +30,7 @@ function getMonthShort(dateStr: string): string {
 const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
   'Abierto': { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
   'Ajuste Cto-Cliente': { bg: isDark ? 'bg-orange-500/20' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: 'border-orange-500/30' },
+  'Ajuste Comercial': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
   'Pase a ventas': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
   'Atendido': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
   // Legacy (datos históricos)
@@ -43,7 +44,7 @@ const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: st
 
 const getDefaultStatusColor = (isDark: boolean) => ({ bg: isDark ? 'bg-violet-500/20' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30' });
 
-const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Pase a ventas'];
+const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Pase a ventas'];
 
 // Chart colors for dynamic status
 const CHART_COLORS = [
