@@ -37,9 +37,9 @@ export interface Catorcena {
 
 export interface FilterOptions {
   estados: string[];
-  ciudades: string[];
-  formatos: string[];
-  nses: string[];
+  ciudades: Array<{ ciudad: string; estado: string }>;
+  formatos: Array<{ formato: string; estado: string; ciudad: string }>;
+  nses: Array<{ nse: string; estado: string; ciudad: string }>;
   catorcenas: Catorcena[];
   catorcenaActual: Catorcena | null;
 }

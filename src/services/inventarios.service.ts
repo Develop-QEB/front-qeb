@@ -15,6 +15,7 @@ export interface BulkCheckItem {
   estatus: string | null;
   estatus_real: string | null;
   id: number | null;
+  campana?: string;
 }
 
 export interface BulkCheckResult {
