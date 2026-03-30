@@ -5380,7 +5380,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50 flex items-center justify-between">
                   <h3 className="text-sm font-medium text-white flex items-center gap-2">
                     <Layers className="h-4 w-4 text-purple-400" />
-                    Formatos / Caras
+                    Formatos / Circuitos
                   </h3>
                   <div className="flex items-center gap-4 text-xs">
                     <span className="text-zinc-400">
@@ -5418,13 +5418,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 {showAddCaraForm && (
                   <div className="px-5 py-4 bg-zinc-800/50 border-b border-zinc-700/50">
                     <h4 className="text-sm font-medium text-white mb-4">
-                      {editingCaraId ? 'Editar Cara' : 'Nueva Cara'}
+                      {editingCaraId ? 'Editar Circuito' : 'Nuevo Circuito'}
                     </h4>
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
-                      {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditArticuloOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
+                      {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditArticuloOnEdit) ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
                           options={articulosData || []}
@@ -6716,7 +6716,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <span className="text-emerald-400">Todas las caras completas</span>
                     ) : (
                       <span className="text-amber-400">
-                        {caras.filter(c => !getCaraCompletionStatus(c).isComplete).length} cara(s) incompleta(s)
+                        {caras.filter(c => !getCaraCompletionStatus(c).isComplete).length} Circuito(s) incompleto(s)
                       </span>
                     )}
                   </span>
