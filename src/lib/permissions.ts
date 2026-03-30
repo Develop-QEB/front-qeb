@@ -76,6 +76,7 @@ export interface RolePermissions {
   allowedCampanaStatuses: string[] | null; // null = todos los estatus permitidos, array = solo esos
   canEditDetalleCampana: boolean;
   canEditCaraFiltersOnEdit: boolean; // Editar estados, ciudades y formatos al editar una cara existente en propuestas
+  canEditArticuloOnEdit: boolean; // Editar artículo SAP al editar una cara existente (solo si no hay reservas)
   canDeleteDetalleCampana: boolean;
   canSeeGestionArtes: boolean; // Ver página de Gestión de Artes
   canEditGestionArtes: boolean;
@@ -151,6 +152,7 @@ const defaultPermissions: RolePermissions = {
   allowedCampanaStatuses: null, // null = todos
   canEditDetalleCampana: true,
   canEditCaraFiltersOnEdit: false,
+  canEditArticuloOnEdit: false,
   canDeleteDetalleCampana: true,
   canSeeGestionArtes: true,
   canEditGestionArtes: true,
@@ -201,6 +203,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
     canBuscarInventarioEnModal: false,
     canEditClienteEnFormularios: true, // Puede editar campo cliente en solicitudes y propuestas
+    canEditArticuloOnEdit: true, // Puede editar artículo SAP al editar circuito (si no hay reservas)
 
     canEditCampanas: true,
     canEditDetalleCampana: false,
@@ -649,6 +652,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
     canBuscarInventarioEnModal: false,
     canEditClienteEnFormularios: true, // Puede editar campo cliente en solicitudes y propuestas
+    canEditArticuloOnEdit: true, // Puede editar artículo SAP al editar circuito (si no hay reservas)
 
     canEditCampanas: false,
     canEditDetalleCampana: false,
@@ -955,6 +959,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Admin tiene todos los permisos por defecto
     canEditClienteEnFormularios: true,
     canEditCaraFiltersOnEdit: true,
+    canEditArticuloOnEdit: true,
   },
   'Gerente de Tráfico': {
     // Secciones visibles
