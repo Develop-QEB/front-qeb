@@ -13,6 +13,7 @@ export interface Ticket {
   respuesta?: string | null;
   respondido_por?: string | null;
   respondido_at?: string | null;
+  has_chat_unread?: boolean;
   created_at: string;
   updated_at: string;
 }

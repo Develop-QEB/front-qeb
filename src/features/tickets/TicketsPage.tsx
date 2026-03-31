@@ -249,9 +249,12 @@ function ViewTicketModal({
   useEffect(() => {
     if (chatMessages.length > 0) {
       const lastId = chatMessages[chatMessages.length - 1].id;
-      ticketsService.markChatRead(ticket.id, lastId);
+      ticketsService.markChatRead(ticket.id, lastId).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['my-tickets'] });
+        queryClient.invalidateQueries({ queryKey: ['tickets-chat-unread-count'] });
+      });
     }
-  }, [chatMessages, ticket.id]);
+  }, [chatMessages, ticket.id, queryClient]);
 
   // Auto scroll
   useEffect(() => {
@@ -508,9 +511,12 @@ export function TicketsPage() {
               return (
                 <div
                   key={ticket.id}
-                  className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-5 ${isDark ? 'hover:border-purple-500/40' : 'hover:border-purple-300'} transition-all cursor-pointer`}
+                  className={`relative rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-5 ${isDark ? 'hover:border-purple-500/40' : 'hover:border-purple-300'} transition-all cursor-pointer`}
                   onClick={() => setSelectedTicket(ticket)}
                 >
+                  {ticket.has_chat_unread && (
+                    <span className="absolute top-3 right-3 h-3 w-3 rounded-full bg-red-500 animate-pulse ring-2 ring-red-500/30" />
+                  )}
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">

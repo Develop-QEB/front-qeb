@@ -1110,6 +1110,7 @@ export function useSocketChatNotifications(userId: number | null) {
 
     const handleChatNuevo = () => {
       queryClient.invalidateQueries({ queryKey: ['tickets-chat-unread-count'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['my-tickets'], refetchType: 'active' });
     };
 
     socket.on(SOCKET_EVENTS.TICKET_CHAT_NUEVO, handleChatNuevo);
