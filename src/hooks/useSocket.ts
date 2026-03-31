@@ -1008,15 +1008,22 @@ export function useSocketTicketsHistorial() {
       queryClient.invalidateQueries({ queryKey: ['tickets-unread-count'], refetchType: 'active' });
     };
 
+    const handleChatNuevo = () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets-historial'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['tickets-unread-count'], refetchType: 'active' });
+    };
+
     const handleStatusChanged = () => {
       queryClient.invalidateQueries({ queryKey: ['tickets-historial'], refetchType: 'active' });
     };
 
     socket.on(SOCKET_EVENTS.TICKET_MENSAJE_NUEVO, handleMensajeNuevo);
+    socket.on(SOCKET_EVENTS.TICKET_CHAT_NUEVO, handleChatNuevo);
     socket.on(SOCKET_EVENTS.TICKET_STATUS_CHANGED, handleStatusChanged);
 
     return () => {
       socket.off(SOCKET_EVENTS.TICKET_MENSAJE_NUEVO, handleMensajeNuevo);
+      socket.off(SOCKET_EVENTS.TICKET_CHAT_NUEVO, handleChatNuevo);
       socket.off(SOCKET_EVENTS.TICKET_STATUS_CHANGED, handleStatusChanged);
       leaveRoom(socket, 'join-tickets-historial');
       joinedRef.current = false;
@@ -1080,6 +1087,41 @@ export function useSocketTicketChatSoporte(ticketId: number | null, onNuevoMensa
       }
     };
   }, [ticketId, onNuevoMensaje]);
+}
+
+/**
+ * Hook global: escucha notificaciones de chat de soporte para el usuario actual.
+ * Se une al room user-notifications-{userId} y invalida el query de unread count.
+ */
+export function useSocketChatNotifications(userId: number | null) {
+  const queryClient = useQueryClient();
+  const joinedRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const socket = getSocket();
+
+    if (joinedRef.current !== userId) {
+      if (joinedRef.current) socket.emit('leave-user-notifications', joinedRef.current);
+      socket.emit('join-user-notifications', userId);
+      joinedRef.current = userId;
+    }
+
+    const handleChatNuevo = () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets-chat-unread-count'], refetchType: 'active' });
+    };
+
+    socket.on(SOCKET_EVENTS.TICKET_CHAT_NUEVO, handleChatNuevo);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.TICKET_CHAT_NUEVO, handleChatNuevo);
+      if (joinedRef.current) {
+        socket.emit('leave-user-notifications', joinedRef.current);
+        joinedRef.current = null;
+      }
+    };
+  }, [userId, queryClient]);
 }
 
 /**

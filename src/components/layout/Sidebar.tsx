@@ -22,6 +22,7 @@ import { usePrefetch } from '../../hooks/usePrefetch';
 import { getPermissions } from '../../lib/permissions';
 import { AyudaModal } from './AyudaModal';
 import { ticketsService } from '../../services/tickets.service';
+import { useSocketChatNotifications } from '../../hooks/useSocket';
 
 const HISTORIAL_TICKETS_EMAILS = [
   'akary.lopez@datistic.mx',
@@ -85,6 +86,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     queryFn: () => ticketsService.getChatUnreadCount(),
     refetchInterval: 30000,
   });
+
+  // Real-time: invalidar unread count cuando llega un mensaje de chat
+  useSocketChatNotifications(user?.id ?? null);
 
   const filteredNavigation = navigation.filter(item => {
     if (!permissions[item.permissionKey]) {
