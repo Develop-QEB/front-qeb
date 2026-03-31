@@ -1109,8 +1109,16 @@ export function PropuestasPage() {
   });
 
   const { data: stats } = useQuery({
-    queryKey: ['propuestas-stats'],
-    queryFn: () => propuestasService.getStats(),
+    queryKey: ['propuestas-stats', status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
+    queryFn: () => propuestasService.getStats({
+      status: status || undefined,
+      search: debouncedSearch || undefined,
+      yearInicio,
+      yearFin,
+      catorcenaInicio,
+      catorcenaFin,
+      tipoPeriodo: tipoPeriodo || undefined,
+    }),
   });
 
   // When grouping or advanced filters are active, fetch ALL data
