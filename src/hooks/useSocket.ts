@@ -1011,6 +1011,8 @@ export function useSocketTicketsHistorial() {
     const handleChatNuevo = () => {
       queryClient.invalidateQueries({ queryKey: ['tickets-historial'], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ['tickets-unread-count'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['tickets-chat-unread-count'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['my-tickets'], refetchType: 'active' });
     };
 
     const handleStatusChanged = () => {

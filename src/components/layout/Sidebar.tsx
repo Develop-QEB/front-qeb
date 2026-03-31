@@ -22,7 +22,7 @@ import { usePrefetch } from '../../hooks/usePrefetch';
 import { getPermissions } from '../../lib/permissions';
 import { AyudaModal } from './AyudaModal';
 import { ticketsService } from '../../services/tickets.service';
-import { useSocketChatNotifications, useSocketTicketsHistorial } from '../../hooks/useSocket';
+import { useSocketTicketsHistorial } from '../../hooks/useSocket';
 
 const HISTORIAL_TICKETS_EMAILS = [
   'akary.lopez@datistic.mx',
@@ -87,9 +87,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     refetchInterval: 30000,
   });
 
-  // Real-time: invalidar unread count cuando llega un mensaje de chat (para usuario)
-  useSocketChatNotifications(user?.id ?? null);
-  // Real-time: invalidar unread count cuando llega un mensaje/chat nuevo (para admin en Historial de Tickets)
+  // Real-time: invalidar todos los unread counts cuando llega un mensaje/chat nuevo
   useSocketTicketsHistorial();
 
   const filteredNavigation = navigation.filter(item => {
