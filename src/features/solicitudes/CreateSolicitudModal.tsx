@@ -2759,7 +2759,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{nombreCampania || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Caras:</span>
+                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Circuitos:</span>
                       <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{caras.length}</span>
                     </div>
                     <div className="flex justify-between">
