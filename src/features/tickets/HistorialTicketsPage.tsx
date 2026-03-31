@@ -494,7 +494,7 @@ export function HistorialTicketsPage() {
     enProgreso: tickets.filter((t) => t.status === 'En Progreso').length,
     resuelto: tickets.filter((t) => t.status === 'Resuelto').length,
     cerrado: tickets.filter((t) => t.status === 'Cerrado').length,
-    unread: tickets.filter((t) => t.has_unread).length,
+    unread: tickets.filter((t) => t.has_unread || t.has_chat_unread).length,
   };
 
   return (
@@ -640,10 +640,10 @@ export function HistorialTicketsPage() {
                       {isNew && (
                         <div className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse" title="No abierto" />
                       )}
-                      {!isNew && t.has_unread && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-red-500" title="Mensajes no leidos" />
+                      {!isNew && (t.has_unread || t.has_chat_unread) && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" title="Mensajes no leidos" />
                       )}
-                      {!isNew && !t.has_unread && (
+                      {!isNew && !t.has_unread && !t.has_chat_unread && (
                         <div className={`w-2.5 h-2.5 rounded-full ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`} />
                       )}
                     </div>
