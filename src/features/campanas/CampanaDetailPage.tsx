@@ -44,6 +44,25 @@ const getChipStyles = (isDark: boolean): Record<InfoItemType, string> => ({
   default: isDark ? 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30' : 'bg-gray-100 text-gray-700 border border-gray-200',
 });
 
+const DARK_MAP_STYLES: google.maps.MapTypeStyle[] = [
+  { elementType: 'geometry', stylers: [{ color: '#212121' }] },
+  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#c084fc' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#757575' }] },
+  { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#e879f9' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#383838' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#4a4a4a' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#a78bfa' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#181818' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#22d3ee' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#c084fc' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1e1e1e' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
+  { featureType: 'transit', elementType: 'labels.text.fill', stylers: [{ color: '#f472b6' }] },
+];
+
 // Formatear fecha como "Cat X / YYYY"
 function formatAsCatorcena(dateStr: string): string {
   try {
@@ -95,7 +114,9 @@ function getCatorcenaDisplay(dateStr: string, catorcenas: Catorcena[], tipoPerio
   return dateStr;
 }
 
-function InfoItem({ label, value, type = 'default', isDark = true }: InfoItemProps) {
+function InfoItem({ label, value, type = 'default', isDark: isDarkProp }: InfoItemProps) {
+  const isDarkStore = useThemeStore((s) => s.theme) === 'dark';
+  const isDark = isDarkProp ?? isDarkStore;
   if (value === null || value === undefined || value === '') return null;
 
   // Formatear valor según tipo
@@ -127,7 +148,8 @@ function InfoItem({ label, value, type = 'default', isDark = true }: InfoItemPro
 }
 
 // Skeleton Components
-function InfoCardSkeleton({ isDark = true }: { isDark?: boolean }) {
+function InfoCardSkeleton({ isDark: isDarkProp }: { isDark?: boolean }) {
+  const isDark = isDarkProp ?? (useThemeStore((s) => s.theme) === 'dark');
   return (
     <div className="bg-card rounded-xl border border-border p-4 animate-pulse">
       <div className="h-4 bg-purple-500/20 rounded w-24 mb-4"></div>
@@ -143,7 +165,8 @@ function InfoCardSkeleton({ isDark = true }: { isDark?: boolean }) {
   );
 }
 
-function TableSkeleton({ isDark = true }: { isDark?: boolean }) {
+function TableSkeleton({ isDark: isDarkProp }: { isDark?: boolean }) {
+  const isDark = isDarkProp ?? (useThemeStore((s) => s.theme) === 'dark');
   return (
     <div className="animate-pulse">
       <div className="space-y-2">
@@ -155,7 +178,7 @@ function TableSkeleton({ isDark = true }: { isDark?: boolean }) {
         </div>
         {/* Table rows skeleton */}
         <div className="border border-border rounded-lg overflow-hidden">
-          <div className="bg-purple-900/20 px-3 py-2 flex gap-4">
+          <div className={`${isDark ? 'bg-purple-900/20' : 'bg-purple-50'} px-3 py-2 flex gap-4`}>
             {[...Array(6)].map((_, i) => (
               <div key={i} className="h-3 bg-purple-500/30 rounded w-16"></div>
             ))}
@@ -173,9 +196,10 @@ function TableSkeleton({ isDark = true }: { isDark?: boolean }) {
   );
 }
 
-function MapSkeleton({ isDark = true }: { isDark?: boolean }) {
+function MapSkeleton({ isDark: isDarkProp }: { isDark?: boolean }) {
+  const isDark = isDarkProp ?? (useThemeStore((s) => s.theme) === 'dark');
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-purple-900/20 animate-pulse">
+    <div className={`w-full h-full flex flex-col items-center justify-center ${isDark ? 'bg-purple-900/20' : 'bg-purple-50'} animate-pulse`}>
       <div className="w-12 h-12 rounded-full bg-purple-500/30 mb-3 flex items-center justify-center">
         <Loader2 className="h-6 w-6 text-purple-400 animate-spin" />
       </div>
@@ -185,7 +209,8 @@ function MapSkeleton({ isDark = true }: { isDark?: boolean }) {
   );
 }
 
-function CommentsSkeleton({ isDark = true }: { isDark?: boolean }) {
+function CommentsSkeleton({ isDark: isDarkProp }: { isDark?: boolean }) {
+  const isDark = isDarkProp ?? (useThemeStore((s) => s.theme) === 'dark');
   return (
     <div className="flex-1 overflow-hidden p-3 space-y-3 animate-pulse">
       {[...Array(4)].map((_, i) => (
@@ -220,7 +245,8 @@ interface EmptyStateProps {
   isDark?: boolean;
 }
 
-function EmptyState({ icon, title, description, action, className = '', isDark = true }: EmptyStateProps) {
+function EmptyState({ icon, title, description, action, className = '', isDark: isDarkProp }: EmptyStateProps) {
+  const isDark = isDarkProp ?? (useThemeStore((s) => s.theme) === 'dark');
   return (
     <div className={`flex flex-col items-center justify-center py-8 px-4 ${className}`}>
       <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-3">
@@ -317,9 +343,10 @@ function ErrorState({
 }
 
 // Map Empty State Component
-function MapEmptyState({ isDark = true }: { isDark?: boolean }) {
+function MapEmptyState({ isDark: isDarkProp }: { isDark?: boolean }) {
+  const isDark = isDarkProp ?? (useThemeStore((s) => s.theme) === 'dark');
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-purple-900/10">
+    <div className={`w-full h-full flex flex-col items-center justify-center ${isDark ? 'bg-purple-900/10' : 'bg-purple-50/50'}`}>
       <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-3">
         <MapPinOff className="h-6 w-6 text-purple-400" />
       </div>
@@ -506,7 +533,8 @@ function fmtMoney(n: number): string {
   return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-function GroupSummaryInline({ items, groupField, isDark = true }: { items: InventarioReservado[]; groupField: string; isDark?: boolean }) {
+function GroupSummaryInline({ items, groupField, isDark: isDarkProp }: { items: InventarioReservado[]; groupField: string; isDark?: boolean }) {
+  const isDark = isDarkProp ?? (useThemeStore((s) => s.theme) === 'dark');
   if (groupField === 'aps') return null;
   const carasTotal = items.reduce((s, i) => s + (Number(i.caras_totales) || 0), 0);
   const getTarifa = (i: InventarioReservado) => Number(i.tarifa_publica_sc) || Number(i.tarifa_publica) || 0;
@@ -523,7 +551,8 @@ function GroupSummaryInline({ items, groupField, isDark = true }: { items: Inven
   );
 }
 
-function GroupMetaBadges({ items, skipFields, isDark = true }: { items: InventarioReservado[]; skipFields: string[]; isDark?: boolean }) {
+function GroupMetaBadges({ items, skipFields, isDark: isDarkProp }: { items: InventarioReservado[]; skipFields: string[]; isDark?: boolean }) {
+  const isDark = isDarkProp ?? (useThemeStore((s) => s.theme) === 'dark');
   const plazas = [...new Set(items.map(i => i.plaza).filter(Boolean))] as string[];
   const formatos = [...new Set(items.map(i => i.formato ?? i.tipo_de_cara).filter(Boolean))] as string[];
   const articulos = [...new Set(items.map(i => i.articulo).filter(Boolean))] as string[];
@@ -532,7 +561,7 @@ function GroupMetaBadges({ items, skipFields, isDark = true }: { items: Inventar
   const showFormatos = !skipFields.includes('formato') && formatos.length > 0;
   if (!showPlazas && !showArticulos && !showFormatos) return null;
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 px-2 py-1.5 mb-1 border-b border-purple-900/10">
+    <div className={`flex flex-wrap gap-x-3 gap-y-1 px-2 py-1.5 mb-1 border-b ${isDark ? 'border-purple-900/10' : 'border-purple-100'}`}>
       {showPlazas && (
         <div className="flex items-center gap-1">
           <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plaza:</span>
@@ -1643,7 +1672,7 @@ export function CampanaDetailPage() {
         <div className="p-6">
           <button
             onClick={() => navigate('/campanas')}
-            className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors mb-6"
+            className={`flex items-center gap-2 text-purple-400 hover:${isDark ? 'text-purple-300' : 'text-purple-700'} transition-colors mb-6`}
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Volver a campañas</span>
@@ -1671,7 +1700,7 @@ export function CampanaDetailPage() {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <button
             onClick={() => navigate('/campanas')}
-            className="flex items-center gap-1.5 sm:gap-2 text-purple-400 hover:text-purple-300 transition-colors"
+            className={`flex items-center gap-1.5 sm:gap-2 text-purple-400 hover:${isDark ? 'text-purple-300' : 'text-purple-700'} transition-colors`}
           >
             <ArrowLeft className="h-4 w-4" />
             <span className="text-sm sm:text-base">Volver</span>
@@ -1683,7 +1712,7 @@ export function CampanaDetailPage() {
               title="Comentarios"
             >
               <MessageSquare className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-purple-400" />
-              <span className="text-xs text-purple-300">{comentarios.length}</span>
+              <span className={`text-xs ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{comentarios.length}</span>
             </button>
             <Badge variant={statusVariants[campana.status] || 'secondary'} className="text-xs sm:text-sm">
               {campana.status}
@@ -1738,13 +1767,13 @@ export function CampanaDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
           {/* Columna 1: Info Campana */}
           <div className="bg-card rounded-xl border border-border p-3 md:p-4">
-            <h3 className="text-xs md:text-sm font-semibold mb-2 md:mb-3 text-purple-300 uppercase tracking-wide">Campaña</h3>
+            <h3 className={`text-xs md:text-sm font-semibold mb-2 md:mb-3 ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wide`}>Campaña</h3>
             <div className="space-y-0">
               <InfoItem label="Plaza" value={[...new Set([...inventarioReservado, ...inventarioConAPS].map(i => i.plaza).filter(Boolean))].join(', ') || (campana as any).plazas || null} type="category" isDark={isDark} />
               {campana.fecha_inicio && (
                 <div className="flex justify-between items-center py-1.5 border-b border-border/50">
                   <span className="text-xs text-muted-foreground">Inicio</span>
-                  <span className="text-xs px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                  <span className={`text-xs px-2 py-0.5 rounded-md ${isDark ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'bg-violet-50 text-violet-700 border border-violet-200'}`}>
                     {getCatorcenaDisplay(campana.fecha_inicio, catorcenas, tipoPeriodo)}
                   </span>
                 </div>
@@ -1752,7 +1781,7 @@ export function CampanaDetailPage() {
               {campana.fecha_fin && (
                 <div className="flex justify-between items-center py-1.5 border-b border-border/50">
                   <span className="text-xs text-muted-foreground">Fin</span>
-                  <span className="text-xs px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                  <span className={`text-xs px-2 py-0.5 rounded-md ${isDark ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'bg-violet-50 text-violet-700 border border-violet-200'}`}>
                     {getCatorcenaDisplay(campana.fecha_fin, catorcenas, tipoPeriodo)}
                   </span>
                 </div>
@@ -1775,7 +1804,7 @@ export function CampanaDetailPage() {
 
           {/* Columna 2: Cliente */}
           <div className="bg-card rounded-xl border border-border p-3 md:p-4">
-            <h3 className="text-xs md:text-sm font-semibold mb-2 md:mb-3 text-purple-300 uppercase tracking-wide">Cliente</h3>
+            <h3 className={`text-xs md:text-sm font-semibold mb-2 md:mb-3 ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wide`}>Cliente</h3>
             <div className="space-y-0">
               <InfoItem label="Cliente" value={campana.T0_U_Cliente} type="user" />
               {campana.sap_database && (
@@ -1802,7 +1831,7 @@ export function CampanaDetailPage() {
 
           {/* Columna 3: Asignacion y Notas - span full width on md */}
           <div className="bg-card rounded-xl border border-border p-3 md:p-4 md:col-span-2 xl:col-span-1">
-            <h3 className="text-xs md:text-sm font-semibold mb-2 md:mb-3 text-purple-300 uppercase tracking-wide">Asignacion</h3>
+            <h3 className={`text-xs md:text-sm font-semibold mb-2 md:mb-3 ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wide`}>Asignacion</h3>
             <div className="space-y-0">
               <InfoItem label="Asignado" value={campana.asignado} type="user" />
               <InfoItem label="Contacto" value={campana.contacto} type="user" />
@@ -1812,7 +1841,7 @@ export function CampanaDetailPage() {
 
             {(campana.descripcion || campana.observaciones) && (
               <>
-                <h3 className="text-sm font-semibold mb-2 mt-4 text-purple-300 uppercase tracking-wide">Descripción Tráfico</h3>
+                <h3 className={`text-sm font-semibold mb-2 mt-4 ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wide`}>Descripción Tráfico</h3>
                 {campana.descripcion && (
                   <p className="text-sm text-muted-foreground mb-2">{campana.descripcion}</p>
                 )}
@@ -1823,7 +1852,7 @@ export function CampanaDetailPage() {
             )}
             {campana.notas && (
               <>
-                <h3 className="text-sm font-semibold mb-2 mt-4 text-purple-300 uppercase tracking-wide">Notas Dirección</h3>
+                <h3 className={`text-sm font-semibold mb-2 mt-4 ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wide`}>Notas Dirección</h3>
                 <p className="text-sm text-muted-foreground">{campana.notas}</p>
               </>
             )}
@@ -1832,7 +1861,7 @@ export function CampanaDetailPage() {
 
         {/* Historial de Acciones */}
         <div className="bg-card rounded-xl border border-border p-3 md:p-4">
-          <h3 className="text-xs md:text-sm font-semibold mb-3 text-purple-300 uppercase tracking-wide flex items-center gap-2">
+          <h3 className={`text-xs md:text-sm font-semibold mb-3 ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wide flex items-center gap-2`}>
             <History className="h-4 w-4" />
             Historial de Acciones
           </h3>
@@ -1855,7 +1884,7 @@ export function CampanaDetailPage() {
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg bg-purple-900/20 border border-purple-900/30"
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg ${isDark ? 'bg-purple-900/20' : 'bg-purple-50'} border ${isDark ? 'border-purple-900/30' : 'border-purple-200'}`}
                   >
                     <div className="flex-shrink-0 w-2 h-2 rounded-full bg-purple-400" />
                     <div className="flex-1 min-w-0">
@@ -1870,7 +1899,7 @@ export function CampanaDetailPage() {
                     </div>
                     <div className="text-right flex-shrink-0">
                       <span className={`text-xs block ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{fecha}</span>
-                      <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-300'}`}>{hora}</span>
+                      <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-500'}`}>{hora}</span>
                     </div>
                   </div>
                 );
@@ -1882,7 +1911,7 @@ export function CampanaDetailPage() {
         {/* Lista de inventario reservado */}
         <div className="bg-card rounded-xl border border-border">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 md:p-4 border-b border-border">
-            <h3 className="text-xs md:text-sm font-semibold text-purple-300 uppercase tracking-wide">
+            <h3 className={`text-xs md:text-sm font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wide`}>
               Lista Inventarios Sin APS
             </h3>
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -1898,7 +1927,7 @@ export function CampanaDetailPage() {
                   title={selectedAreCortesias ? 'Las cortesías pueden tener APS opcional' : undefined}
                   className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-lg transition-colors ${
                     selectedItems.size === 0
-                      ? 'bg-purple-900/30 text-purple-400/50 cursor-not-allowed'
+                      ? isDark ? 'bg-purple-900/30 text-purple-400/50 cursor-not-allowed' : 'bg-purple-100 text-purple-300 cursor-not-allowed'
                       : 'bg-purple-600 hover:bg-purple-700 text-white'
                   }`}
                 >
@@ -1947,24 +1976,7 @@ export function CampanaDetailPage() {
                   zoom={12}
                   onLoad={onMapLoad}
                   options={{
-                    styles: [
-                      { elementType: 'geometry', stylers: [{ color: '#212121' }] },
-                      { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-                      { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
-                      { elementType: 'labels.text.fill', stylers: [{ color: '#c084fc' }] },
-                      { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#757575' }] },
-                      { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#e879f9' }] },
-                      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#383838' }] },
-                      { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#4a4a4a' }] },
-                      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#a78bfa' }] },
-                      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#181818' }] },
-                      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#22d3ee' }] },
-                      { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
-                      { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#c084fc' }] },
-                      { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1e1e1e' }] },
-                      { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
-                      { featureType: 'transit', elementType: 'labels.text.fill', stylers: [{ color: '#f472b6' }] },
-                    ],
+                    styles: isDark ? DARK_MAP_STYLES : [],
                     disableDefaultUI: true,
                     zoomControl: true,
                   }}
@@ -2005,7 +2017,7 @@ export function CampanaDetailPage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 flex-shrink-0">
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   {selectedItems.size > 0 && (
-                    <span className="text-[10px] sm:text-xs text-purple-300">
+                    <span className={`text-[10px] sm:text-xs ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                       {selectedItems.size} sel.
                     </span>
                   )}
@@ -2022,7 +2034,7 @@ export function CampanaDetailPage() {
                       }`}
                       title="Filtrar"
                     >
-                      <Filter className="h-3.5 w-3.5" />
+                      <Filter className={`h-3.5 w-3.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
                       {filtersReservado.length > 0 && (
                         <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">
                           {filtersReservado.length}
@@ -2032,7 +2044,7 @@ export function CampanaDetailPage() {
                     {showFiltersReservado && (
                       <div className={`absolute right-0 top-full mt-1 z-50 w-[520px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-4`}>
                         <div className="flex items-center justify-between mb-3">
-                          <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+                          <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros de búsqueda</span>
                           <button
                             onClick={() => setShowFiltersReservado(false)}
                             className="text-muted-foreground hover:text-foreground"
@@ -2092,7 +2104,7 @@ export function CampanaDetailPage() {
                             </p>
                           )}
                         </div>
-                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-purple-900/30">
+                        <div className={`flex items-center justify-between mt-2 pt-2 border-t ${isDark ? 'border-purple-900/30' : 'border-purple-200'}`}>
                           <button
                             onClick={addFilterReservado}
                             className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded"
@@ -2109,7 +2121,7 @@ export function CampanaDetailPage() {
                           </button>
                         </div>
                         {filtersReservado.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-purple-900/30">
+                          <div className={`mt-2 pt-2 border-t ${isDark ? 'border-purple-900/30' : 'border-purple-200'}`}>
                             <span className="text-[10px] text-muted-foreground">
                               {filteredInventarioReservado.length} de {inventarioReservado.length} registros
                             </span>
@@ -2125,7 +2137,7 @@ export function CampanaDetailPage() {
                       className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium ${isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border-purple-300'} border rounded-lg transition-colors`}
                       title="Agrupar"
                     >
-                      <Layers className="h-3.5 w-3.5" />
+                      <Layers className={`h-3.5 w-3.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
                       {activeGroupings.length > 0 && (
                         <span className="px-1 py-0.5 rounded bg-purple-600 text-[10px]">
                           {activeGroupings.length}
@@ -2142,8 +2154,8 @@ export function CampanaDetailPage() {
                           <button
                             key={field}
                             onClick={() => toggleGrouping(field)}
-                            className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
-                              activeGroupings.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded ${isDark ? 'hover:bg-purple-900/30' : 'hover:bg-purple-100'} transition-colors ${
+                              activeGroupings.includes(field) ? 'text-purple-300' : isDark ? 'text-zinc-400' : 'text-gray-500'
                             }`}
                           >
                             <div className={`w-4 h-4 rounded border flex items-center justify-center ${
@@ -2164,10 +2176,10 @@ export function CampanaDetailPage() {
                             )}
                           </button>
                         ))}
-                        <div className="border-t border-purple-900/30 mt-2 pt-2">
+                        <div className={`border-t ${isDark ? 'border-purple-900/30' : 'border-purple-200'} mt-2 pt-2`}>
                           <button
                             onClick={() => setActiveGroupings([])}
-                            className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1"
+                            className={`w-full text-xs ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-700'} py-1`}
                           >
                             Quitar agrupación
                           </button>
@@ -2186,12 +2198,12 @@ export function CampanaDetailPage() {
                       }`}
                       title="Ordenar"
                     >
-                      <ArrowUpDown className="h-3.5 w-3.5" />
+                      <ArrowUpDown className={`h-3.5 w-3.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
                     </button>
                     {showSortReservado && (
                       <div className={`absolute right-0 top-full mt-1 z-50 w-[280px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-3`}>
                         <div className="flex items-center justify-between mb-3">
-                          <span className="text-sm font-medium text-purple-300">Ordenar por</span>
+                          <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Ordenar por</span>
                           <button
                             onClick={() => setShowSortReservado(false)}
                             className="text-muted-foreground hover:text-foreground"
@@ -2216,7 +2228,7 @@ export function CampanaDetailPage() {
                               className={`w-full flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
                                 sortFieldReservado === field.field
                                   ? 'bg-purple-600 text-white'
-                                  : 'text-zinc-300 hover:bg-purple-900/30'
+                                  : isDark ? 'text-zinc-300 hover:bg-purple-900/30' : 'text-gray-700 hover:bg-purple-100'
                               }`}
                             >
                               <span>{field.label}</span>
@@ -2229,7 +2241,7 @@ export function CampanaDetailPage() {
                           ))}
                         </div>
                         {sortFieldReservado && (
-                          <div className="mt-3 pt-3 border-t border-purple-900/30">
+                          <div className={`mt-3 pt-3 border-t ${isDark ? 'border-purple-900/30' : 'border-purple-200'}`}>
                             <button
                               onClick={() => {
                                 setSortFieldReservado(null);
@@ -2295,7 +2307,7 @@ export function CampanaDetailPage() {
                               </button>
                             </th>
                             {visibleColumnsReservado.map(col => (
-                              <th key={col.field} className="p-2 font-medium text-purple-300">{col.label}</th>
+                              <th key={col.field} className={`p-2 font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
                             ))}
                           </tr>
                         </thead>
@@ -2322,7 +2334,7 @@ export function CampanaDetailPage() {
                                   )}
                                 </button>
                               </td>
-                              {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-2'))}
+                              {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-2', isDark))}
                             </tr>
                           ))}
                         </tbody>
@@ -2384,7 +2396,7 @@ export function CampanaDetailPage() {
                                     )}
                                   </button>
                                 </td>
-                                {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col, 'p-2'))}
+                                {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col, 'p-2', isDark))}
                               </tr>
                             ))}
                           </tbody>
@@ -2413,9 +2425,9 @@ export function CampanaDetailPage() {
                       const someGroupSelected = !allGroupSelected && allGroupIds.some(id => selectedItems.has(id));
 
                       return (
-                        <div key={groupKey} className="border border-purple-900/30 rounded-lg overflow-hidden">
+                        <div key={groupKey} className={`border ${isDark ? 'border-purple-900/30' : 'border-purple-200'} rounded-lg overflow-hidden`}>
                           {/* Cabecera del grupo */}
-                          <div className="flex items-center gap-2 px-3 py-2 bg-purple-900/20 hover:bg-purple-900/30 transition-colors">
+                          <div className={`flex items-center gap-2 px-3 py-2 ${isDark ? 'bg-purple-900/20 hover:bg-purple-900/30' : 'bg-purple-50 hover:bg-purple-100'} transition-colors`}>
                             <button
                               onClick={(e) => { e.stopPropagation(); toggleGroupSelection(allGroupItems); }}
                               className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
@@ -2438,10 +2450,10 @@ export function CampanaDetailPage() {
                               ) : (
                                 <ChevronRight className="h-4 w-4 text-purple-400" />
                               )}
-                              <span className="text-xs font-medium text-purple-300">
+                              <span className={`text-xs font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                                 {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[0])?.label}:
                               </span>
-                              <span className="text-xs text-white">{groupKey}</span>
+                              <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupKey}</span>
                               <GroupSummaryInline items={allGroupItems} groupField={activeGroupings[0]} />
                               <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                 {totalItems} items
@@ -2464,8 +2476,8 @@ export function CampanaDetailPage() {
                                     const someSubSelected = !allSubSelected && subGroupIds.some(id => selectedItems.has(id));
 
                                     return (
-                                      <div key={subGroupKey} className="border border-purple-900/20 rounded-lg overflow-hidden ml-2">
-                                        <div className="flex items-center gap-2 px-2 py-1.5 bg-purple-900/10 hover:bg-purple-900/20 transition-colors">
+                                      <div key={subGroupKey} className={`border ${isDark ? 'border-purple-900/20' : 'border-purple-100'} rounded-lg overflow-hidden ml-2`}>
+                                        <div className={`flex items-center gap-2 px-2 py-1.5 ${isDark ? 'bg-purple-900/10 hover:bg-purple-900/20' : 'bg-purple-50/50 hover:bg-purple-50'} transition-colors`}>
                                           <button
                                             onClick={(e) => { e.stopPropagation(); toggleGroupSelection(subItems); }}
                                             className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
@@ -2491,7 +2503,7 @@ export function CampanaDetailPage() {
                                             <span className="text-[10px] font-medium text-pink-300">
                                               {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}:
                                             </span>
-                                            <span className="text-[10px] text-white">{subGroupKey}</span>
+                                            <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{subGroupKey}</span>
                                             <GroupSummaryInline items={subItems} groupField={activeGroupings[1]} />
                                             <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                               {subItems.length}
@@ -2507,7 +2519,7 @@ export function CampanaDetailPage() {
                                                   <tr className="border-b border-border/30 text-left">
                                                     <th className="p-1.5 w-8"></th>
                                                     {visibleColumnsReservado.map(col => (
-                                                      <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                                      <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
                                                     ))}
                                                   </tr>
                                                 </thead>
@@ -2534,7 +2546,7 @@ export function CampanaDetailPage() {
                                                           )}
                                                         </button>
                                                       </td>
-                                                      {visibleColumnsReservado.map(col => renderReservadoCell(item, col))}
+                                                      {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark))}
                                                     </tr>
                                                   ))}
                                                 </tbody>
@@ -2579,7 +2591,7 @@ export function CampanaDetailPage() {
                                                             )}
                                                           </button>
                                                         </td>
-                                                        {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col))}
+                                                        {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col, 'p-1.5', isDark))}
                                                       </tr>
                                                     ))}
                                                   </tbody>
@@ -2601,7 +2613,7 @@ export function CampanaDetailPage() {
                                         <tr className="border-b border-border/30 text-left">
                                           <th className="p-1.5 w-8"></th>
                                           {visibleColumnsReservado.map(col => (
-                                            <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                            <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
                                           ))}
                                         </tr>
                                       </thead>
@@ -2628,7 +2640,7 @@ export function CampanaDetailPage() {
                                                 )}
                                               </button>
                                             </td>
-                                            {visibleColumnsReservado.map(col => renderReservadoCell(item, col))}
+                                            {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark))}
                                           </tr>
                                         ))}
                                       </tbody>
@@ -2673,7 +2685,7 @@ export function CampanaDetailPage() {
                                                   )}
                                                 </button>
                                               </td>
-                                              {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col))}
+                                              {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col, 'p-1.5', isDark))}
                                             </tr>
                                           ))}
                                         </tbody>
@@ -2697,7 +2709,7 @@ export function CampanaDetailPage() {
         {/* Lista de inventario por APS */}
         <div className="bg-card rounded-xl border border-border">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 md:p-4 border-b border-border">
-            <h3 className="text-xs md:text-sm font-semibold text-purple-300 uppercase tracking-wide">
+            <h3 className={`text-xs md:text-sm font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wide`}>
               Lista de Inventario por APS
             </h3>
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -2710,12 +2722,12 @@ export function CampanaDetailPage() {
                   disabled={selectedItemsAPS.size === 0}
                   className={`flex items-center justify-center w-6 sm:w-7 h-6 sm:h-7 rounded-lg border transition-colors ${
                     selectedItemsAPS.size === 0
-                      ? 'bg-red-900/20 border-red-500/20 cursor-not-allowed'
-                      : 'bg-red-900/50 hover:bg-red-900/70 border-red-500/30'
+                      ? isDark ? 'bg-red-900/20 border-red-500/20 cursor-not-allowed' : 'bg-red-50 border-red-200 cursor-not-allowed'
+                      : isDark ? 'bg-red-900/50 hover:bg-red-900/70 border-red-500/30' : 'bg-red-100 hover:bg-red-200 border-red-300'
                   }`}
                   title="Quitar APS"
                 >
-                  <Minus className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${selectedItemsAPS.size === 0 ? 'text-red-400/40' : 'text-red-400'}`} />
+                  <Minus className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${selectedItemsAPS.size === 0 ? (isDark ? 'text-red-400/40' : 'text-red-300') : (isDark ? 'text-red-400' : 'text-red-600')}`} />
                 </button>
               )}
               {permissions.canEditDetalleCampana && inventarioConAPS.length > 0 && (() => {
@@ -2735,11 +2747,11 @@ export function CampanaDetailPage() {
                       setShowPostSAPModal(true);
                     }}
                     disabled={isPostDisabled}
-                    className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${isPostDisabled ? 'bg-zinc-800/50 border-zinc-700 cursor-not-allowed opacity-50' : 'bg-cyan-900/30 border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40'}`}
+                    className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${isPostDisabled ? (isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-gray-100 border-gray-200') + ' cursor-not-allowed opacity-50' : (isDark ? 'bg-cyan-900/30' : 'bg-cyan-50') + ' border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40'}`}
                     title={alreadyPosted ? 'Ya se envió a SAP' : selectedHavePostedAPS ? 'Este APS ya fue enviado a SAP' : 'Enviar a SAP'}
                   >
-                    <Upload className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isPostDisabled ? 'text-zinc-500' : 'text-cyan-400'}`} />
-                    <span className={`text-[10px] sm:text-xs font-medium ${isPostDisabled ? 'text-zinc-500' : 'text-cyan-300'}`}>{alreadyPosted ? 'ENVIADO' : 'POST'}</span>
+                    <Upload className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isPostDisabled ? (isDark ? 'text-zinc-500' : 'text-gray-400') : (isDark ? 'text-cyan-400' : 'text-cyan-600')}`} />
+                    <span className={`text-[10px] sm:text-xs font-medium ${isPostDisabled ? (isDark ? 'text-zinc-500' : 'text-gray-400') : (isDark ? 'text-cyan-300' : 'text-cyan-700')}`}>{alreadyPosted ? 'ENVIADO' : 'POST'}</span>
                   </button>
                 );
               })()}
@@ -2777,24 +2789,7 @@ export function CampanaDetailPage() {
                     }
                   }}
                   options={{
-                    styles: [
-                      { elementType: 'geometry', stylers: [{ color: '#212121' }] },
-                      { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-                      { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
-                      { elementType: 'labels.text.fill', stylers: [{ color: '#c084fc' }] },
-                      { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#757575' }] },
-                      { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#e879f9' }] },
-                      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#383838' }] },
-                      { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#4a4a4a' }] },
-                      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#a78bfa' }] },
-                      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#181818' }] },
-                      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#22d3ee' }] },
-                      { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
-                      { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#c084fc' }] },
-                      { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1e1e1e' }] },
-                      { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
-                      { featureType: 'transit', elementType: 'labels.text.fill', stylers: [{ color: '#f472b6' }] },
-                    ],
+                    styles: isDark ? DARK_MAP_STYLES : [],
                     disableDefaultUI: true,
                     zoomControl: true,
                   }}
@@ -2852,7 +2847,7 @@ export function CampanaDetailPage() {
                       }`}
                       title="Filtrar"
                     >
-                      <Filter className="h-3.5 w-3.5" />
+                      <Filter className={`h-3.5 w-3.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
                       {filtersAPS.length > 0 && (
                         <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">
                           {filtersAPS.length}
@@ -2862,7 +2857,7 @@ export function CampanaDetailPage() {
                     {showFiltersAPS && (
                       <div className={`absolute right-0 top-full mt-1 z-50 w-[520px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-4`}>
                         <div className="flex items-center justify-between mb-3">
-                          <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
+                          <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros de búsqueda</span>
                           <button
                             onClick={() => setShowFiltersAPS(false)}
                             className="text-muted-foreground hover:text-foreground"
@@ -2922,7 +2917,7 @@ export function CampanaDetailPage() {
                             </p>
                           )}
                         </div>
-                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-purple-900/30">
+                        <div className={`flex items-center justify-between mt-2 pt-2 border-t ${isDark ? 'border-purple-900/30' : 'border-purple-200'}`}>
                           <button
                             onClick={addFilterAPS}
                             className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded"
@@ -2939,7 +2934,7 @@ export function CampanaDetailPage() {
                           </button>
                         </div>
                         {filtersAPS.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-purple-900/30">
+                          <div className={`mt-2 pt-2 border-t ${isDark ? 'border-purple-900/30' : 'border-purple-200'}`}>
                             <span className="text-[10px] text-muted-foreground">
                               {filteredInventarioAPS.length} de {inventarioConAPS.length} registros
                             </span>
@@ -2955,7 +2950,7 @@ export function CampanaDetailPage() {
                       className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium ${isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border-purple-300'} border rounded-lg transition-colors`}
                       title="Agrupar"
                     >
-                      <Layers className="h-3.5 w-3.5" />
+                      <Layers className={`h-3.5 w-3.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
                       {activeGroupingsAPS.length > 0 && (
                         <span className="px-1 py-0.5 rounded bg-purple-600 text-[10px]">
                           {activeGroupingsAPS.length}
@@ -2972,8 +2967,8 @@ export function CampanaDetailPage() {
                           <button
                             key={field}
                             onClick={() => toggleGroupingAPS(field)}
-                            className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
-                              activeGroupingsAPS.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded ${isDark ? 'hover:bg-purple-900/30' : 'hover:bg-purple-100'} transition-colors ${
+                              activeGroupingsAPS.includes(field) ? 'text-purple-300' : isDark ? 'text-zinc-400' : 'text-gray-500'
                             }`}
                           >
                             <div className={`w-4 h-4 rounded border flex items-center justify-center ${
@@ -2997,10 +2992,10 @@ export function CampanaDetailPage() {
                             )}
                           </button>
                         ))}
-                        <div className="border-t border-purple-900/30 mt-2 pt-2">
+                        <div className={`border-t ${isDark ? 'border-purple-900/30' : 'border-purple-200'} mt-2 pt-2`}>
                           <button
                             onClick={() => setActiveGroupingsAPS([])}
-                            className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1"
+                            className={`w-full text-xs ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-700'} py-1`}
                           >
                             Quitar agrupación
                           </button>
@@ -3019,12 +3014,12 @@ export function CampanaDetailPage() {
                       }`}
                       title="Ordenar"
                     >
-                      <ArrowUpDown className="h-3.5 w-3.5" />
+                      <ArrowUpDown className={`h-3.5 w-3.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
                     </button>
                     {showSortAPS && (
                       <div className={`absolute right-0 top-full mt-1 z-50 w-[280px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-3`}>
                         <div className="flex items-center justify-between mb-3">
-                          <span className="text-sm font-medium text-purple-300">Ordenar por</span>
+                          <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Ordenar por</span>
                           <button
                             onClick={() => setShowSortAPS(false)}
                             className="text-muted-foreground hover:text-foreground"
@@ -3049,7 +3044,7 @@ export function CampanaDetailPage() {
                               className={`w-full flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
                                 sortFieldAPS === field.field
                                   ? 'bg-purple-600 text-white'
-                                  : 'text-zinc-300 hover:bg-purple-900/30'
+                                  : isDark ? 'text-zinc-300 hover:bg-purple-900/30' : 'text-gray-700 hover:bg-purple-100'
                               }`}
                             >
                               <span>{field.label}</span>
@@ -3062,7 +3057,7 @@ export function CampanaDetailPage() {
                           ))}
                         </div>
                         {sortFieldAPS && (
-                          <div className="mt-3 pt-3 border-t border-purple-900/30">
+                          <div className={`mt-3 pt-3 border-t ${isDark ? 'border-purple-900/30' : 'border-purple-200'}`}>
                             <button
                               onClick={() => {
                                 setSortFieldAPS(null);
@@ -3128,7 +3123,7 @@ export function CampanaDetailPage() {
                             </button>
                           </th>
                           {visibleColumnsAPS.map(col => (
-                            <th key={col.field} className="p-2 font-medium text-purple-300">{col.label}</th>
+                            <th key={col.field} className={`p-2 font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
                           ))}
                         </tr>
                       </thead>
@@ -3155,7 +3150,7 @@ export function CampanaDetailPage() {
                                 )}
                               </button>
                             </td>
-                            {visibleColumnsAPS.map(col => renderAPSCell(item, col, 'p-2'))}
+                            {visibleColumnsAPS.map(col => renderAPSCell(item, col, 'p-2', isDark))}
                           </tr>
                         ))}
                       </tbody>
@@ -3217,7 +3212,7 @@ export function CampanaDetailPage() {
                                   )}
                                 </button>
                               </td>
-                              {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col, 'p-2'))}
+                              {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col, 'p-2', isDark))}
                             </tr>
                           ))}
                         </tbody>
@@ -3256,9 +3251,9 @@ export function CampanaDetailPage() {
                     const someGroupSelectedAPS = !allGroupSelectedAPS && allGroupIdsAPS.some(id => selectedItemsAPS.has(id));
 
                     return (
-                      <div key={groupKey} className="border border-purple-900/30 rounded-lg overflow-hidden">
+                      <div key={groupKey} className={`border ${isDark ? 'border-purple-900/30' : 'border-purple-200'} rounded-lg overflow-hidden`}>
                         {/* Cabecera del grupo nivel 1 */}
-                        <div className="flex items-center gap-2 px-3 py-2 bg-purple-900/20 hover:bg-purple-900/30 transition-colors">
+                        <div className={`flex items-center gap-2 px-3 py-2 ${isDark ? 'bg-purple-900/20 hover:bg-purple-900/30' : 'bg-purple-50 hover:bg-purple-100'} transition-colors`}>
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleGroupSelectionAPS(allGroupItemsAPS); }}
                             className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
@@ -3281,10 +3276,10 @@ export function CampanaDetailPage() {
                             ) : (
                               <ChevronRight className="h-4 w-4 text-purple-400" />
                             )}
-                            <span className="text-xs font-medium text-purple-300">
+                            <span className={`text-xs font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                               {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[0])?.label}:
                             </span>
-                            <span className="text-xs text-white">{groupKey}</span>
+                            <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupKey}</span>
                             {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && (postedAPSGroups.has(allGroupItemsAPS[0].aps) || alreadyPosted) && (
                               <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
                             )}
@@ -3308,7 +3303,7 @@ export function CampanaDetailPage() {
                                       <tr className="border-b border-border/30 text-left">
                                         <th className="p-1.5 w-8"></th>
                                         {visibleColumnsAPS.map(col => (
-                                          <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                          <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
                                         ))}
                                       </tr>
                                     </thead>
@@ -3335,7 +3330,7 @@ export function CampanaDetailPage() {
                                               )}
                                             </button>
                                           </td>
-                                          {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
+                                          {visibleColumnsAPS.map(col => renderAPSCell(item, col, 'p-1.5', isDark))}
                                         </tr>
                                       ))}
                                     </tbody>
@@ -3380,7 +3375,7 @@ export function CampanaDetailPage() {
                                                 )}
                                               </button>
                                             </td>
-                                            {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col))}
+                                            {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col, 'p-1.5', isDark))}
                                           </tr>
                                         ))}
                                       </tbody>
@@ -3403,8 +3398,8 @@ export function CampanaDetailPage() {
                                   const someSubSelectedAPS = !allSubSelectedAPS && allSubIdsAPS.some(id => selectedItemsAPS.has(id));
 
                                   return (
-                                    <div key={subGroupKey} className="border border-purple-900/20 rounded-lg overflow-hidden ml-2">
-                                      <div className="flex items-center gap-2 px-2 py-1.5 bg-purple-900/10 hover:bg-purple-900/20 transition-colors">
+                                    <div key={subGroupKey} className={`border ${isDark ? 'border-purple-900/20' : 'border-purple-100'} rounded-lg overflow-hidden ml-2`}>
+                                      <div className={`flex items-center gap-2 px-2 py-1.5 ${isDark ? 'bg-purple-900/10 hover:bg-purple-900/20' : 'bg-purple-50/50 hover:bg-purple-50'} transition-colors`}>
                                         <button
                                           onClick={(e) => { e.stopPropagation(); toggleGroupSelectionAPS(allSubItemsAPS); }}
                                           className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
@@ -3430,7 +3425,7 @@ export function CampanaDetailPage() {
                                           <span className="text-[10px] font-medium text-pink-300">
                                             {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[1])?.label}:
                                           </span>
-                                          <span className="text-[10px] text-white">{subGroupKey}</span>
+                                          <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{subGroupKey}</span>
                                           {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && postedAPSGroups.has(allSubItemsAPS[0].aps) && (
                                             <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
                                           )}
@@ -3452,7 +3447,7 @@ export function CampanaDetailPage() {
                                                     <tr className="border-b border-border/30 text-left">
                                                       <th className="p-1.5 w-8"></th>
                                                       {visibleColumnsAPS.map(col => (
-                                                        <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                                        <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
                                                       ))}
                                                     </tr>
                                                   </thead>
@@ -3479,7 +3474,7 @@ export function CampanaDetailPage() {
                                                             )}
                                                           </button>
                                                         </td>
-                                                        {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
+                                                        {visibleColumnsAPS.map(col => renderAPSCell(item, col, 'p-1.5', isDark))}
                                                       </tr>
                                                     ))}
                                                   </tbody>
@@ -3524,7 +3519,7 @@ export function CampanaDetailPage() {
                                                               )}
                                                             </button>
                                                           </td>
-                                                          {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col))}
+                                                          {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col, 'p-1.5', isDark))}
                                                         </tr>
                                                       ))}
                                                     </tbody>
@@ -3544,8 +3539,8 @@ export function CampanaDetailPage() {
                                                 const someThirdSelectedAPS = !allThirdSelectedAPS && thirdIdsAPS.some(id => selectedItemsAPS.has(id));
 
                                                 return (
-                                                  <div key={thirdGroupKey} className="border border-cyan-900/20 rounded-lg overflow-hidden ml-2">
-                                                    <div className="flex items-center gap-2 px-2 py-1.5 bg-cyan-900/10 hover:bg-cyan-900/20 transition-colors">
+                                                  <div key={thirdGroupKey} className={`border ${isDark ? 'border-cyan-900/20' : 'border-cyan-100'} rounded-lg overflow-hidden ml-2`}>
+                                                    <div className={`flex items-center gap-2 px-2 py-1.5 ${isDark ? 'bg-cyan-900/10 hover:bg-cyan-900/20' : 'bg-cyan-50/50 hover:bg-cyan-50'} transition-colors`}>
                                                       <button
                                                         onClick={(e) => { e.stopPropagation(); toggleGroupSelectionAPS(thirdItems); }}
                                                         className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
@@ -3571,7 +3566,7 @@ export function CampanaDetailPage() {
                                                         <span className="text-[10px] font-medium text-cyan-300">
                                                           {AVAILABLE_GROUPINGS_APS.find(g => g.field === activeGroupingsAPS[2])?.label}:
                                                         </span>
-                                                        <span className="text-[10px] text-white">{thirdGroupKey}</span>
+                                                        <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{thirdGroupKey}</span>
                                                         {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && postedAPSGroups.has(thirdItems[0].aps) && (
                                                           <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
                                                         )}
@@ -3590,7 +3585,7 @@ export function CampanaDetailPage() {
                                                               <tr className="border-b border-border/30 text-left">
                                                                 <th className="p-1.5 w-8"></th>
                                                                 {visibleColumnsAPS.map(col => (
-                                                                  <th key={col.field} className="p-1.5 text-[10px] font-medium text-purple-300">{col.label}</th>
+                                                                  <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
                                                                 ))}
                                                               </tr>
                                                             </thead>
@@ -3617,7 +3612,7 @@ export function CampanaDetailPage() {
                                                                       )}
                                                                     </button>
                                                                   </td>
-                                                                  {visibleColumnsAPS.map(col => renderAPSCell(item, col))}
+                                                                  {visibleColumnsAPS.map(col => renderAPSCell(item, col, 'p-1.5', isDark))}
                                                                 </tr>
                                                               ))}
                                                             </tbody>
@@ -3662,7 +3657,7 @@ export function CampanaDetailPage() {
                                                                         )}
                                                                       </button>
                                                                     </td>
-                                                                    {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col))}
+                                                                    {TABLE_COLUMNS_IM_APS.map(col => renderIMAPSCell(item, col, 'p-1.5', isDark))}
                                                                   </tr>
                                                                 ))}
                                                               </tbody>
@@ -3864,7 +3859,7 @@ export function CampanaDetailPage() {
                         onKeyDown={(e) => e.key === 'Enter' && handleVerificarPIN()}
                         placeholder="Ingresa el NIP"
                         maxLength={6}
-                        className="flex-1 px-3 py-2 text-sm text-center tracking-widest font-mono rounded-lg bg-purple-900/20 border border-purple-900/30 focus:border-purple-500 focus:outline-none placeholder:text-muted-foreground"
+                        className={`flex-1 px-3 py-2 text-sm text-center tracking-widest font-mono rounded-lg ${isDark ? 'bg-purple-900/20 border-purple-900/30' : 'bg-purple-50 border-purple-200'} border focus:border-purple-500 focus:outline-none placeholder:text-muted-foreground`}
                       />
                       <button
                         onClick={handleVerificarPIN}
@@ -3877,7 +3872,7 @@ export function CampanaDetailPage() {
                     <button
                       onClick={handleSolicitarCodigo}
                       disabled={enviandoCodigo || botonDeshabilitado}
-                      className="w-full text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className={`w-full text-xs ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                     >
                       {botonDeshabilitado ? 'Espera para reenviar...' : 'Reenviar código'}
                     </button>
@@ -3922,93 +3917,93 @@ export function CampanaDetailPage() {
                             <span className="text-cyan-300 text-[10px] font-medium">POST IMU (Migración INVIAN)</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Campaña:</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Camp || campana.nombre}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Campaña:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{previewDeliveryNote.U_CRM_Camp || campana.nombre}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">CardCode:</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.CardCode}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CardCode:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{previewDeliveryNote.CardCode}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Razón Social:</span>
-                            <span className="text-zinc-300 text-right max-w-[200px]">{previewDeliveryNote.U_CRM_R_S || '-'}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Razón Social:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-right max-w-[200px]`}>{previewDeliveryNote.U_CRM_R_S || '-'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">BaseType (en líneas):</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.DocumentLines?.[0]?.BaseType}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>BaseType (en líneas):</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{previewDeliveryNote.DocumentLines?.[0]?.BaseType}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">BaseEntry (en líneas):</span>
-                            <span className="text-zinc-300">(se resuelve al enviar)</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>BaseEntry (en líneas):</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>(se resuelve al enviar)</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Base SAP:</span>
-                            <span className="text-zinc-300">{campana.sap_database || 'TEST'}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Base SAP:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{campana.sap_database || 'TEST'}</span>
                           </div>
                         </>
                       ) : (
                         <>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Campaña:</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Camp}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Campaña:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{previewDeliveryNote.U_CRM_Camp}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">CardCode:</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.CardCode}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CardCode:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{previewDeliveryNote.CardCode}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Razón Social:</span>
-                            <span className="text-zinc-300 text-right max-w-[200px]">{previewDeliveryNote.U_CRM_R_S || '-'}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Razón Social:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-right max-w-[200px]`}>{previewDeliveryNote.U_CRM_R_S || '-'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Marca:</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Marca || '-'}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Marca:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{previewDeliveryNote.U_CRM_Marca || '-'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Series:</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.Series}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Series:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{previewDeliveryNote.Series}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">APS:</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.U_IMU_ART_APS}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>APS:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{previewDeliveryNote.U_IMU_ART_APS}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Asesor:</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Asesor || '-'}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Asesor:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{previewDeliveryNote.U_CRM_Asesor || '-'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Agencia:</span>
-                            <span className="text-zinc-300">{previewDeliveryNote.U_CRM_Agencia || '-'}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Agencia:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{previewDeliveryNote.U_CRM_Agencia || '-'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Base SAP:</span>
-                            <span className="text-zinc-300">{campana?.sap_database || 'TEST'}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Base SAP:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{campana?.sap_database || 'TEST'}</span>
                           </div>
                         </>
                       )}
-                      <hr className="border-purple-800/40" />
-                      <p className="text-zinc-500 font-medium">Líneas ({previewDeliveryNote.DocumentLines.length}):</p>
+                      <hr className={`${isDark ? 'border-purple-800/40' : 'border-purple-200'}`} />
+                      <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Líneas ({previewDeliveryNote.DocumentLines.length}):</p>
                       {previewDeliveryNote.DocumentLines.map((line: any, i: number) => (
-                        <div key={i} className="bg-purple-950/30 rounded p-2 space-y-1">
+                        <div key={i} className={`${isDark ? 'bg-purple-950/30' : 'bg-purple-50'} rounded p-2 space-y-1`}>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Artículo:</span>
-                            <span className="text-zinc-300">{line.ItemCode}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Artículo:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{line.ItemCode}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Cantidad:</span>
-                            <span className="text-zinc-300">{line.Quantity}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cantidad:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{line.Quantity}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Tarifa:</span>
-                            <span className="text-zinc-300">${Number(line.UnitPrice).toLocaleString()}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Tarifa:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>${Number(line.UnitPrice).toLocaleString()}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Periodo:</span>
-                            <span className="text-zinc-300">{line.U_dscPeriod}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Periodo:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{line.U_dscPeriod}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-zinc-500">Estatus:</span>
-                            <span className="text-zinc-300">{line.U_dscTAsig}</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Estatus:</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{line.U_dscTAsig}</span>
                           </div>
                         </div>
                       ))}
@@ -4020,7 +4015,7 @@ export function CampanaDetailPage() {
                   <button
                     onClick={() => setShowPostSAPModal(false)}
                     disabled={postingToSAP}
-                    className="px-4 py-2 text-sm font-medium rounded-lg border border-zinc-700 hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    className={`px-4 py-2 text-sm font-medium rounded-lg border ${isDark ? 'border-zinc-700 hover:bg-zinc-800' : 'border-gray-200 hover:bg-gray-100'} transition-colors disabled:opacity-30 disabled:cursor-not-allowed`}
                   >
                     Cancelar
                   </button>
@@ -4049,13 +4044,13 @@ export function CampanaDetailPage() {
                   <>
                     <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
                     <p className="text-lg font-medium text-green-400 mb-2">¡Éxito!</p>
-                    <p className="text-sm text-zinc-400 mb-4">{postSAPResult.message}</p>
+                    <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-4`}>{postSAPResult.message}</p>
                   </>
                 ) : (
                   <>
                     <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
                     <p className="text-lg font-medium text-red-400 mb-2">Error</p>
-                    <p className="text-sm text-zinc-400 mb-4">{postSAPResult.message}</p>
+                    <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-4`}>{postSAPResult.message}</p>
                   </>
                 )}
                 <button
