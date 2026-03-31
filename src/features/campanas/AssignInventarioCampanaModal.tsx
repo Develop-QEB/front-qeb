@@ -5675,7 +5675,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     {effectiveCanEdit && permissions.canBuscarInventarioEnModal && !esImpresion && (() => {
                                       const tienePendientes = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
                                       const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
-                                      const bloqueado = tienePendientes || tieneRechazado;
+                                      const bloqueado = tienePendientes || tieneRechazado || caraAPSBlocked;
 
                                       return (
                                         <button
@@ -5689,6 +5689,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                 : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
                                           }`}
                                           title={
+                                            caraAPSBlocked ? 'Grupo con APS asignado - no se puede modificar inventario' :
                                             tieneRechazado ? 'Cara rechazada - no se puede asignar inventario' :
                                             tienePendientes ? 'Esta cara necesita autorización antes de asignar inventario' :
                                             status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'
