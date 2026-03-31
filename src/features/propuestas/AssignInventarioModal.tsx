@@ -5985,7 +5985,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           disabled={bloqueado}
                                           className={`p-2 rounded-lg border transition-colors ${
                                             bloqueado
-                                              ? 'bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed'
+                                              ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                               : status.isComplete
                                                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
                                                 : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
@@ -6008,7 +6008,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           onClick={(e) => { e.stopPropagation(); if (!caraAuthPendiente) handleEditCara(cara); }}
                                           disabled={caraAuthPendiente}
                                           className={`p-2 rounded-lg border transition-colors ${caraAuthPendiente
-                                            ? 'bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed'
+                                            ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                             : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
                                           }`}
                                           title={caraAuthPendiente ? 'Autorización pendiente - no se puede editar' : 'Editar'}
@@ -6020,7 +6020,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
                                             disabled={hasReservas}
                                             className={`p-2 rounded-lg border transition-colors ${hasReservas
-                                              ? 'bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed'
+                                              ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
                                             title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
@@ -6207,8 +6207,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             onClick={() => { setShowFiltersReservas(!showFiltersReservas); setShowGroupingConfigReservas(false); setShowSortReservas(false); }}
                             className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
                               filtersReservas.length > 0
-                                ? 'bg-purple-600 ${isDark ? 'text-white' : 'text-gray-900'} border border-purple-500'
-                                : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+                                ? `bg-purple-600 ${isDark ? 'text-white' : 'text-gray-900'} border border-purple-500`
+                                : isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border border-purple-300'
                             }`}
                             title="Filtrar"
                           >
