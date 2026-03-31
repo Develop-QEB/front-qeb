@@ -1153,7 +1153,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
     const newCaras: CaraEntry[] = periodsToCreate.map((period, idx) => ({
       id: editingCaraId || `${Date.now()}-${Math.random()}-${idx}`,
-      articulo: newCara.articulo,
+      articulo: newCara.articulo!,
       estado: newCara.estado,
       ciudades: newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades,
       formato: newCara.formato,
