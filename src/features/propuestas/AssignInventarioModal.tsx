@@ -318,6 +318,7 @@ interface MultiSelectProps {
 }
 
 function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Seleccionar...' }: MultiSelectProps) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -344,19 +345,19 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Selec
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex items-center justify-between"
+        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex items-center justify-between`}
       >
-        <span className={selected.length === 0 ? 'text-zinc-500' : ''}>
+        <span className={selected.length === 0 ? (isDark ? 'text-zinc-500' : 'text-gray-400') : ''}>
           {selected.length === 0 ? placeholder : selected.length === 1 ? selected[0] : `${selected.length} seleccionados`}
         </span>
-        <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'} transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+        <div className={`absolute z-50 mt-1 w-full ${isDark ? 'bg-zinc-800' : 'bg-white'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg shadow-xl max-h-48 overflow-y-auto`}>
           {options.map(option => (
             <label
               key={option}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 cursor-pointer text-sm text-white"
+              className={`flex items-center gap-2 px-3 py-2 ${isDark ? 'hover:bg-zinc-700' : 'hover:bg-gray-100'} cursor-pointer text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}
             >
               <input
                 type="checkbox"
@@ -368,7 +369,7 @@ function MultiSelectDropdown({ options, selected, onChange, placeholder = 'Selec
             </label>
           ))}
           {options.length === 0 && (
-            <div className="px-3 py-2 text-zinc-500 text-sm">Sin opciones</div>
+            <div className={`px-3 py-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Sin opciones</div>
           )}
         </div>
       )}
@@ -437,6 +438,7 @@ function SearchableSelect({
   renderSelected?: (item: any) => React.ReactNode;
   loading?: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -462,14 +464,14 @@ function SearchableSelect({
         onClick={() => setOpen(!open)}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all ${value
           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-          : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600'
+          : `${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} ${isDark ? 'hover:border-zinc-600' : 'hover:border-gray-300'}`
           }`}
       >
         <span className="truncate text-left flex-1">
           {value && renderSelected ? renderSelected(value) : (displayValue || label)}
         </span>
         {value ? (
-          <X className="h-4 w-4 hover:text-white flex-shrink-0" onClick={(e) => { e.stopPropagation(); onClear(); }} />
+          <X className={`h-4 w-4 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} flex-shrink-0`} onClick={(e) => { e.stopPropagation(); onClear(); }} />
         ) : (
           <ChevronDown className="h-4 w-4 flex-shrink-0" />
         )}
@@ -478,16 +480,16 @@ function SearchableSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="p-2 border-b border-zinc-800">
+          <div className={`absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                 <input
                   type="text"
                   placeholder={`Buscar ${label.toLowerCase()}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  className={`w-full pl-9 pr-3 py-2 text-sm ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg ${isDark ? 'text-white' : 'text-gray-900'} ${isDark ? 'placeholder:text-zinc-500' : 'placeholder:text-gray-400'} focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                   autoFocus
                   onClick={(e) => e.stopPropagation()}
                 />
@@ -495,9 +497,9 @@ function SearchableSelect({
             </div>
             <div className="max-h-72 overflow-auto">
               {loading ? (
-                <div className="px-3 py-4 text-center text-zinc-500 text-sm">Cargando...</div>
+                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</div>
               ) : filteredOptions.length === 0 ? (
-                <div className="px-3 py-4 text-center text-zinc-500 text-sm">
+                <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                   {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
                 </div>
               ) : (
@@ -506,9 +508,9 @@ function SearchableSelect({
                     key={`${option[valueKey]}-${idx}`}
                     type="button"
                     onClick={() => { onChange(option); handleClose(); }}
-                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b border-zinc-800/50 last:border-0 ${value && value[valueKey] === option[valueKey]
+                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-100'} last:border-0 ${value && value[valueKey] === option[valueKey]
                       ? 'bg-purple-500/20 text-purple-300'
-                      : 'text-zinc-300 hover:bg-zinc-800'
+                      : `${isDark ? 'text-zinc-300' : 'text-gray-700'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'}`
                       }`}
                   >
                     {renderOption ? renderOption(option) : (
@@ -518,7 +520,7 @@ function SearchableSelect({
                 ))
               )}
             </div>
-            <div className="px-3 py-1.5 border-t border-zinc-800 text-[10px] text-zinc-500">
+            <div className={`px-3 py-1.5 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
               Mostrando {filteredOptions.length} de {options.length} opciones
             </div>
           </div>
@@ -3261,9 +3263,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const confirmModalJSX = confirmModal.isOpen && (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !isSaving && setConfirmModal(prev => ({ ...prev, isOpen: false }))} />
-      <div className="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-6 w-[400px] animate-in fade-in zoom-in duration-200">
-        <h3 className="text-lg font-bold text-white mb-2">{confirmModal.title}</h3>
-        <p className="text-zinc-400 mb-6">{confirmModal.message}</p>
+      <div className={`relative ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-xl shadow-2xl p-6 w-[400px] animate-in fade-in zoom-in duration-200`}>
+        <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>{confirmModal.title}</h3>
+        <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>{confirmModal.message}</p>
         {isSaving && (
           <div className="flex items-center gap-3 mb-4 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
             <div className="h-5 w-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
@@ -3277,14 +3279,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               else setConfirmModal(prev => ({ ...prev, isOpen: false }));
             }}
             disabled={isSaving}
-            className="px-4 py-2 rounded-lg text-zinc-400 hover:bg-zinc-800 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`px-4 py-2 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             {confirmModal.cancelText || 'Cancelar'}
           </button>
           <button
             onClick={confirmModal.onConfirm}
             disabled={isSaving}
-            className={`px-4 py-2 rounded-lg text-white transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${confirmModal.isDestructive
+            className={`px-4 py-2 rounded-lg ${isDark ? 'text-white' : 'text-gray-900'} transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${confirmModal.isDestructive
               ? 'bg-red-500 hover:bg-red-600'
               : 'bg-purple-500 hover:bg-purple-600'
               }`}
@@ -3333,35 +3335,35 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         {toastJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
 
-        <div className="relative w-[95vw] max-w-[1600px] h-[90vh] bg-zinc-900 rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden">
+        <div className={`relative w-[95vw] max-w-[1600px] h-[90vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+          <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <div className="flex items-center gap-4">
               <button
                 onClick={handleBackToMain}
-                className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                className={`p-2 rounded-lg ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
               >
                 <ArrowLeft className="h-5 w-5" />
               </button>
               <div>
-                <h2 className="text-lg font-semibold text-white">Buscar Inventario</h2>
-                <p className="text-sm text-zinc-400">
+                <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Buscar Inventario</h2>
+                <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                   {selectedCaraForSearch?.formato} - {selectedCaraForSearch?.ciudad || selectedCaraForSearch?.estados}
                 </p>
               </div>
             </div>
-            <button onClick={handleBackToMain} className="p-2 rounded-lg text-zinc-400 hover:text-white">
+            <button onClick={handleBackToMain} className={`p-2 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>
               <X className="h-5 w-5" />
             </button>
           </div>
 
           {/* Compact KPIs with progress bars */}
-          <div className="px-6 py-3 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 via-zinc-900/95 to-zinc-900/90">
+          <div className={`px-6 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-gradient-to-r from-zinc-900 via-zinc-900/95 to-zinc-900/90' : 'bg-gradient-to-r from-gray-50 via-gray-50/95 to-gray-50/90'}`}>
             <div className="flex items-center gap-4">
               {/* Flujo KPI */}
-              <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
+              <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} flex items-center gap-1.5`}>
                     <div className={`w-2 h-2 rounded-full ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('IM') ? 'bg-amber-500' : 'bg-blue-500'}`} />
                     {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('IM') ? 'Impresiones' : 'Flujo'}
                   </span>
@@ -3369,21 +3371,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     {(selectedCaraForSearch?.caras_flujo || 0) - remainingToAssign.flujo} / {selectedCaraForSearch?.caras_flujo || 0}
                   </span>
                 </div>
-                <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
+                <div className={`w-full h-2 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} rounded-full overflow-hidden`}>
                   <div
                     className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
                     style={{ width: `${Math.min(100, ((selectedCaraForSearch?.caras_flujo || 0) - remainingToAssign.flujo) / (selectedCaraForSearch?.caras_flujo || 1) * 100)}%` }}
                   />
                 </div>
-                <div className="mt-1 text-xs text-zinc-500">
+                <div className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                   <span className="text-blue-400 font-medium">{remainingToAssign.flujo}</span> restantes
                 </div>
               </div>
 
               {/* Contraflujo KPI */}
-              <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
+              <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} flex items-center gap-1.5`}>
                     <div className="w-2 h-2 rounded-full bg-blue-500" />
                     Contraflujo
                   </span>
@@ -3391,21 +3393,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     {(selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo} / {selectedCaraForSearch?.caras_contraflujo || 0}
                   </span>
                 </div>
-                <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
+                <div className={`w-full h-2 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} rounded-full overflow-hidden`}>
                   <div
                     className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
                     style={{ width: `${Math.min(100, ((selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo) / (selectedCaraForSearch?.caras_contraflujo || 1) * 100)}%` }}
                   />
                 </div>
-                <div className="mt-1 text-xs text-zinc-500">
+                <div className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                   <span className="text-blue-400 font-medium">{remainingToAssign.contraflujo}</span> restantes
                 </div>
               </div>
 
               {/* Bonificacion/Cortesia KPI */}
-              <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
+              <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} flex items-center gap-1.5`}>
                     <div className={`w-2 h-2 rounded-full ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500' : 'bg-emerald-500'}`} />
                     {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                   </span>
@@ -3413,13 +3415,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     {(selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion} / {selectedCaraForSearch?.bonificacion || 0}
                   </span>
                 </div>
-                <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
+                <div className={`w-full h-2 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} rounded-full overflow-hidden`}>
                   <div
                     className={`h-full bg-gradient-to-r ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'from-cyan-500 to-cyan-400' : 'from-emerald-500 to-emerald-400'} rounded-full transition-all`}
                     style={{ width: `${Math.min(100, ((selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion) / (selectedCaraForSearch?.bonificacion || 1) * 100)}%` }}
                   />
                 </div>
-                <div className="mt-1 text-xs text-zinc-500">
+                <div className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                   <span className={`${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'} font-medium`}>{remainingToAssign.bonificacion}</span> restantes
                 </div>
               </div>
@@ -3430,19 +3432,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   <Package className="h-4 w-4 text-purple-400" />
                   <span className="text-xl font-bold text-purple-300">{searchViewTab === 'buscar' ? selectedInventory.size : currentCaraReservas.length}</span>
                 </div>
-                <span className="text-xs text-zinc-500">{searchViewTab === 'buscar' ? 'seleccionados' : 'reservados'}</span>
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{searchViewTab === 'buscar' ? 'seleccionados' : 'reservados'}</span>
               </div>
             </div>
           </div>
 
           {/* Tabs: Buscar / Reservados */}
-          <div className="px-6 py-2 border-b border-zinc-800 bg-zinc-900/70">
+          <div className={`px-6 py-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900/70' : 'bg-gray-50/70'}`}>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setSearchViewTab('buscar')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${searchViewTab === 'buscar'
                   ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'}`
                   }`}
               >
                 <Search className="h-4 w-4" />
@@ -3452,7 +3454,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 onClick={() => setSearchViewTab('reservados')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${searchViewTab === 'reservados'
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'}`
                   }`}
               >
                 <Layers className="h-4 w-4" />
@@ -3470,17 +3472,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           {searchViewTab === 'buscar' ? (
             <>
               {/* Filters */}
-              <div className="px-6 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+              <div className={`px-6 py-2.5 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50/50'}`}>
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Flujo Toggle */}
-                  <div className="flex bg-zinc-800/80 rounded-lg p-0.5 border border-zinc-700/50">
+                  <div className={`flex ${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} rounded-lg p-0.5 border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'}`}>
                     {(['Todos', 'Flujo', 'Contraflujo'] as const).map(opt => (
                       <button
                         key={opt}
                         onClick={() => setFlujoFilter(opt)}
                         className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${flujoFilter === opt
                           ? 'bg-blue-500 text-white shadow'
-                          : 'text-zinc-400 hover:text-white'
+                          : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
                           }`}
                       >
                         {opt}
@@ -3488,14 +3490,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     ))}
                   </div>
 
-                  <div className="w-px h-6 bg-zinc-700" />
+                  <div className={`w-px h-6 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'}`} />
 
                   {/* Complete filter */}
                   <button
                     onClick={() => { setShowOnlyCompletos(!showOnlyCompletos); if (!showOnlyCompletos) setShowOnlyUnicos(false); }}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyCompletos
                       ? 'bg-pink-500 text-white shadow'
-                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                      : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
                       }`}
                   >
                     <LayoutGrid className="h-3.5 w-3.5" />
@@ -3511,7 +3513,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       onClick={() => { setShowOnlyUnicos(!showOnlyUnicos); if (!showOnlyUnicos) setShowOnlyCompletos(false); }}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicos
                         ? 'bg-cyan-500 text-white shadow'
-                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
                         }`}
                     >
                       <Layers className="h-3.5 w-3.5" />
@@ -3528,7 +3530,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       onClick={() => setShowOnlyUnicosDigitales(!showOnlyUnicosDigitales)}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyUnicosDigitales
                         ? 'bg-orange-500 text-white shadow'
-                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
                         }`}
                     >
                       <Monitor className="h-3.5 w-3.5" />
@@ -3545,7 +3547,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       onClick={() => setShowSpotUnico(!showSpotUnico)}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showSpotUnico
                         ? 'bg-violet-500 text-white shadow'
-                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
                         }`}
                       title="Mostrar inventarios digitales una sola vez con indicador de spots disponibles"
                     >
@@ -3569,7 +3571,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     }}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyIsla
                       ? 'bg-teal-500 text-white shadow'
-                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                      : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
                       }`}
                   >
                     <MapPin className="h-3.5 w-3.5" />
@@ -3584,7 +3586,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     onClick={() => setGroupByDistance(!groupByDistance)}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${groupByDistance
                       ? 'bg-green-500 text-white shadow'
-                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                      : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
                       }`}
                   >
                     <Ruler className="h-3.5 w-3.5" />
@@ -3595,16 +3597,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </button>
                   {groupByDistance && (
                     <>
-                      <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                      <div className={`flex items-center gap-0.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg p-0.5`}>
                         <button
                           onClick={() => setGroupMode('distancia')}
-                          className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupMode === 'distancia' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                          className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupMode === 'distancia' ? 'bg-green-500/30 text-green-300' : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}`}
                         >
                           Distancia
                         </button>
                         <button
                           onClick={() => setGroupMode('listado')}
-                          className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupMode === 'listado' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                          className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupMode === 'listado' ? 'bg-green-500/30 text-green-300' : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}`}
                         >
                           Listado
                         </button>
@@ -3613,7 +3615,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <select
                           value={distanciaGrupos}
                           onChange={(e) => setDistanciaGrupos(parseInt(e.target.value))}
-                          className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                          className={`px-2 py-1 text-xs ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg ${isDark ? 'text-white' : 'text-gray-900'}`}
                         >
                           <option value={100}>100m</option>
                           <option value={200}>200m</option>
@@ -3628,7 +3630,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         type="number"
                         value={tamanoGrupo}
                         onChange={(e) => setTamanoGrupo(parseInt(e.target.value) || 10)}
-                        className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        className={`w-14 px-2 py-1 text-xs ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg ${isDark ? 'text-white' : 'text-gray-900'}`}
                         min={2}
                         max={50}
                         title="Tamaño de grupo"
@@ -3647,7 +3649,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                   {/* Category Exclusion Filter - HIDDEN */}
 
-                  <div className="w-px h-6 bg-zinc-700" />
+                  <div className={`w-px h-6 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'}`} />
 
                   {/* CSV Upload Button */}
                   <input
@@ -3662,7 +3664,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     onClick={() => csvInputRef.current?.click()}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${csvFile
                       ? 'bg-orange-500 text-white shadow'
-                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white hover:bg-zinc-700'
+                      : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} ${isDark ? 'hover:bg-zinc-700' : 'hover:bg-gray-100'}`
                       }`}
                   >
                     <FileText className="h-3.5 w-3.5" />
@@ -3678,22 +3680,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </button>
                   )}
 
-                  <div className="w-px h-6 bg-zinc-700" />
+                  <div className={`w-px h-6 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'}`} />
 
                   {/* Text search */}
                   <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                    <Search className={`absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                     <input
                       type="text"
                       value={disponiblesSearchTerm}
                       onChange={(e) => setDisponiblesSearchTerm(e.target.value)}
                       placeholder="Buscar código, plaza, ubicación..."
-                      className="w-56 pl-8 pr-8 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                      className={`w-56 pl-8 pr-8 py-1.5 text-xs ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-white placeholder:${isDark ? 'text-zinc-500' : 'text-gray-400'} focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                     />
                     {disponiblesSearchTerm && (
                       <button
                         onClick={() => setDisponiblesSearchTerm('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                        className={`absolute right-2 top-1/2 -translate-y-1/2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'}`}
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -3704,7 +3706,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                   {/* Stats & Actions */}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-500 px-2">
+                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} px-2`}>
                       <span className="text-purple-300 font-bold">{processedInventory.length}</span> resultados
                     </span>
 
@@ -3723,7 +3725,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <button
                       onClick={downloadDisponiblesCSV}
                       disabled={processedInventory.length === 0}
-                      className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+                      className={`p-1.5 rounded-lg ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50`}
                       title="Descargar CSV"
                     >
                       <Download className="h-4 w-4" />
@@ -3733,7 +3735,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <button
                       onClick={handleRefetchDisponibles}
                       disabled={isSearching}
-                      className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-purple-400 hover:bg-purple-500/10 transition-colors disabled:opacity-50"
+                      className={`p-1.5 rounded-lg ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-purple-400 hover:bg-purple-500/10 transition-colors disabled:opacity-50`}
                       title="Recargar datos"
                     >
                       <Search className={`h-4 w-4 ${isSearching ? 'animate-spin' : ''}`} />
@@ -3744,12 +3746,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
               {/* CSV Results Panel */}
               {showCsvSection && csvData.length > 0 && (
-                <div className="px-6 py-3 border-b border-zinc-800 bg-orange-500/5">
+                <div className={`px-6 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} bg-orange-500/5`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4 text-orange-400" />
                       <span className="text-sm font-medium text-orange-300">Resultados del CSV</span>
-                      <span className="text-xs text-zinc-500">
+                      <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                         ({csvData.filter(d => d.disponibilidad === 'Disponible').length} disponibles de {csvData.length})
                       </span>
                     </div>
@@ -3763,7 +3765,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </button>
                       <button
                         onClick={() => setShowCsvSection(false)}
-                        className="p-1.5 text-zinc-400 hover:text-white"
+                        className={`p-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'}`}
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -3788,23 +3790,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               {/* Content - Map and Table */}
               <div className="flex-1 flex overflow-hidden">
                 {/* Table */}
-                <div className="w-1/2 border-r border-zinc-800 flex flex-col">
+                <div className={`w-1/2 border-r ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex flex-col`}>
                   <div className="flex-1 overflow-auto">
                     {isSearching ? (
                       <div className="flex items-center justify-center h-full">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
                       </div>
                     ) : processedInventory.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full text-zinc-500">
+                      <div className={`flex flex-col items-center justify-center h-full ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                         <MapPin className="h-12 w-12 mb-4 opacity-30" />
                         <p className="text-lg">No hay inventario disponible</p>
                         <p className="text-sm">Intenta cambiar los filtros o la cara seleccionada</p>
                       </div>
                     ) : (
                       <table className="w-full text-sm">
-                        <thead className="bg-zinc-800/50 sticky top-0">
+                        <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} sticky top-0`}>
                           <tr>
-                            <th className="px-3 py-2 text-left text-xs text-zinc-400 font-medium w-10">
+                            <th className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium w-10`}>
                               <input
                                 type="checkbox"
                                 checked={processedInventory.length > 0 && selectedInventory.size === processedInventory.length}
@@ -3819,7 +3821,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               />
                             </th>
                             <th
-                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
                               onClick={() => handleSort('codigo_unico')}
                             >
                               <div className="flex items-center gap-1">
@@ -3831,12 +3833,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </div>
                             </th>
                             {hasDigitalInventory && (
-                              <th className="px-3 py-2 text-left text-xs text-zinc-400 font-medium">
+                              <th className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>
                                 Espacio
                               </th>
                             )}
                             <th
-                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
                               onClick={() => handleSort('tipo_de_cara')}
                             >
                               <div className="flex items-center gap-1">
@@ -3848,7 +3850,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </div>
                             </th>
                             <th
-                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
                               onClick={() => handleSort('plaza')}
                             >
                               <div className="flex items-center gap-1">
@@ -3860,7 +3862,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </div>
                             </th>
                             <th
-                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
                               onClick={() => handleSort('isla')}
                             >
                               <div className="flex items-center gap-1">
@@ -3872,7 +3874,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </div>
                             </th>
                             <th
-                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
                               onClick={() => handleSort('nivel_socioeconomico')}
                             >
                               <div className="flex items-center gap-1">
@@ -3884,7 +3886,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </div>
                             </th>
                             <th
-                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
                               onClick={() => handleSort('ubicacion')}
                             >
                               <div className="flex items-center gap-1">
@@ -3904,7 +3906,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               <React.Fragment key={groupName}>
                                 {/* Group Header */}
                                 <tr
-                                  className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
+                                  className={`${isDark ? 'bg-zinc-800/70' : 'bg-gray-50/70'} cursor-pointer hover:${isDark ? 'bg-zinc-800' : 'bg-gray-50'}`}
                                   onClick={() => toggleGroupExpansion(groupName)}
                                 >
                                   <td colSpan={hasDigitalInventory ? 8 : 7} className="px-3 py-2">
@@ -3914,7 +3916,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       ) : (
                                         <ChevronRight className="h-4 w-4 text-purple-400" />
                                       )}
-                                      <span className="text-sm font-medium text-white">{groupName}</span>
+                                      <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupName}</span>
                                       <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
                                         {items.length} sitios
                                       </span>
@@ -3935,11 +3937,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   <tr
                                     key={getInventoryKey(inv)}
                                     onClick={() => toggleInventorySelection(getInventoryKey(inv))}
-                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${isInventorySelected(inv)
+                                    className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} cursor-pointer transition-colors ${isInventorySelected(inv)
                                       ? 'bg-purple-500/10'
                                       : inv.ya_reservado_para_cara
                                         ? 'bg-green-500/5'
-                                        : 'hover:bg-zinc-800/30'
+                                        : isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50/30'
                                       }`}
                                   >
                                     <td className="px-3 py-2 pl-8">
@@ -3951,9 +3953,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         className="checkbox-purple"
                                       />
                                     </td>
-                                    <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono text-xs`}>{inv.codigo_unico}</td>
                                     {hasDigitalInventory && (
-                                      <td className="px-3 py-2 text-zinc-400 text-xs">
+                                      <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>
                                         {inv.isCollapsedSpot ? (
                                           <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
                                             {inv.spots_disponibles}/{inv.total_espacios}
@@ -3973,10 +3975,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         {inv.tipo_de_cara || '-'}
                                       </span>
                                     </td>
-                                    <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
-                                    <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
-                                    <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
-                                    <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
+                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{inv.plaza}</td>
+                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.isla || '-'}</td>
+                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.nivel_socioeconomico || '-'}</td>
+                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`} title={inv.ubicacion || ''}>
                                       {inv.ubicacion}
                                     </td>
                                   </tr>
@@ -3989,11 +3991,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               <tr
                                 key={getInventoryKey(inv)}
                                 onClick={() => toggleInventorySelection(getInventoryKey(inv))}
-                                className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${isInventorySelected(inv)
+                                className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} cursor-pointer transition-colors ${isInventorySelected(inv)
                                   ? 'bg-purple-500/10'
                                   : inv.ya_reservado_para_cara
                                     ? 'bg-green-500/5'
-                                    : 'hover:bg-zinc-800/30'
+                                    : isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50/30'
                                   }`}
                               >
                                 <td className="px-3 py-2">
@@ -4005,9 +4007,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     className="checkbox-purple"
                                   />
                                 </td>
-                                <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono text-xs`}>{inv.codigo_unico}</td>
                                 {hasDigitalInventory && (
-                                  <td className="px-3 py-2 text-zinc-400 text-xs">
+                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>
                                     {inv.isCollapsedSpot ? (
                                       <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
                                         {inv.spots_disponibles}/{inv.total_espacios}
@@ -4027,10 +4029,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     {inv.tipo_de_cara || '-'}
                                   </span>
                                 </td>
-                                <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
-                                <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
-                                <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
+                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{inv.plaza}</td>
+                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.isla || '-'}</td>
+                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.nivel_socioeconomico || '-'}</td>
+                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`} title={inv.ubicacion || ''}>
                                   {inv.ubicacion}
                                 </td>
                               </tr>
@@ -4042,7 +4044,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
 
                   {/* Action buttons */}
-                  <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 space-y-3">
+                  <div className={`p-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/50 space-y-3`}>
                     <div className="flex items-center gap-3">
                       <button
                         onClick={handleReservar}
@@ -4097,7 +4099,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       hasPOIFilter={poiFilterIds !== null}
                     />
                   ) : (
-                    <div className="flex items-center justify-center h-full bg-zinc-800">
+                    <div className={`flex items-center justify-center h-full ${isDark ? 'bg-zinc-800' : 'bg-gray-50'}`}>
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
                     </div>
                   )}
@@ -4108,19 +4110,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             /* RESERVADOS TAB CONTENT */
             <div className="flex-1 flex overflow-hidden">
               {/* Reservados Table */}
-              <div className="w-1/2 flex flex-col border-r border-zinc-800">
+              <div className={`w-1/2 flex flex-col border-r ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 {/* Search Bar and Tools for Reservados */}
-                <div className="p-3 border-b border-zinc-800 bg-zinc-900/50 space-y-2">
+                <div className={`p-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/50 space-y-2`}>
                   {/* Row 1: Search and Delete */}
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                      <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                       <input
                         type="text"
                         value={reservadosSearchTerm}
                         onChange={(e) => setReservadosSearchTerm(e.target.value)}
                         placeholder="Buscar por código, plaza, ubicación..."
-                        className="w-full pl-9 pr-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        className={`w-full pl-9 pr-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                       />
                     </div>
                     {effectiveCanEdit && selectedReservados.size > 0 && (
@@ -4142,16 +4144,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   {/* Row 2: Filters and Tools */}
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* Type Filter - Toggle Buttons */}
-                    <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                    <div className={`flex items-center gap-0.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg p-0.5`}>
                       {(['Todos', 'Flujo', 'Contraflujo', 'Bonificacion'] as const).map(opt => (
                         <button
                           key={opt}
                           onClick={() => setReservadosTipoFilter(opt)}
                           className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${reservadosTipoFilter === opt
-                            ? opt === 'Todos' ? 'bg-zinc-600 text-white shadow'
+                            ? opt === 'Todos' ? `${isDark ? 'bg-zinc-600' : 'bg-gray-300'} ${isDark ? 'text-white' : 'text-gray-900'} shadow`
                               : opt === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500 text-white shadow' : 'bg-emerald-500 text-white shadow')
                               : 'bg-blue-500 text-white shadow'
-                            : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
+                            : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} ${isDark ? 'hover:bg-zinc-700' : 'hover:bg-gray-100'}`
                           }`}
                         >
                           {opt === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonif.') : opt === 'Flujo' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('IM') ? 'Impresiones' : opt}
@@ -4171,7 +4173,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       }}
                       className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyIslaReservados
                         ? 'bg-teal-500 text-white shadow'
-                        : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white'
+                        : `${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
                         }`}
                     >
                       <MapPin className="h-3 w-3" />
@@ -4186,7 +4188,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       onClick={() => setGroupByDistanceReservados(!groupByDistanceReservados)}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${groupByDistanceReservados
                         ? 'bg-green-500 text-white shadow'
-                        : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white'
+                        : `${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
                         }`}
                     >
                       <Ruler className="h-3.5 w-3.5" />
@@ -4197,16 +4199,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </button>
                     {groupByDistanceReservados && (
                       <>
-                        <div className="flex items-center gap-0.5 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+                        <div className={`flex items-center gap-0.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg p-0.5`}>
                           <button
                             onClick={() => setGroupModeReservados('distancia')}
-                            className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupModeReservados === 'distancia' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                            className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupModeReservados === 'distancia' ? 'bg-green-500/30 text-green-300' : `${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-white`}`}
                           >
                             Distancia
                           </button>
                           <button
                             onClick={() => setGroupModeReservados('listado')}
-                            className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupModeReservados === 'listado' ? 'bg-green-500/30 text-green-300' : 'text-zinc-400 hover:text-white'}`}
+                            className={`px-2 py-1 rounded-md text-xs font-medium transition-all ${groupModeReservados === 'listado' ? 'bg-green-500/30 text-green-300' : `${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-white`}`}
                           >
                             Listado
                           </button>
@@ -4215,7 +4217,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           <select
                             value={distanciaGruposReservados}
                             onChange={(e) => setDistanciaGruposReservados(parseInt(e.target.value))}
-                            className="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                            className={`px-2 py-1 text-xs ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-white`}
                           >
                             <option value={100}>100m</option>
                             <option value={200}>200m</option>
@@ -4227,7 +4229,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           type="number"
                           value={tamanoGrupoReservados}
                           onChange={(e) => setTamanoGrupoReservados(parseInt(e.target.value) || 10)}
-                          className="w-14 px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                          className={`w-14 px-2 py-1 text-xs ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-white`}
                           min={2}
                           max={50}
                           title="Tamaño de grupo"
@@ -4236,23 +4238,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     )}
 
                     {/* Sort */}
-                    <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1">
-                      <span className="text-xs text-zinc-500">Ordenar:</span>
+                    <div className={`flex items-center gap-1 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg px-2 py-1`}>
+                      <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Ordenar:</span>
                       <button
                         onClick={() => toggleReservadosSort('ciudad')}
-                        className={`px-1.5 py-0.5 text-xs rounded ${reservadosSortColumn === 'ciudad' ? 'bg-purple-500/30 text-purple-300' : 'text-zinc-400 hover:text-white'}`}
+                        className={`px-1.5 py-0.5 text-xs rounded ${reservadosSortColumn === 'ciudad' ? 'bg-purple-500/30 text-purple-300' : `${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-white`}`}
                       >
                         Ciudad {reservadosSortColumn === 'ciudad' && (reservadosSortDirection === 'asc' ? '↑' : '↓')}
                       </button>
                       <button
                         onClick={() => toggleReservadosSort('codigo')}
-                        className={`px-1.5 py-0.5 text-xs rounded ${reservadosSortColumn === 'codigo' ? 'bg-purple-500/30 text-purple-300' : 'text-zinc-400 hover:text-white'}`}
+                        className={`px-1.5 py-0.5 text-xs rounded ${reservadosSortColumn === 'codigo' ? 'bg-purple-500/30 text-purple-300' : `${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-white`}`}
                       >
                         Código {reservadosSortColumn === 'codigo' && (reservadosSortDirection === 'asc' ? '↑' : '↓')}
                       </button>
                       <button
                         onClick={() => toggleReservadosSort('tipo')}
-                        className={`px-1.5 py-0.5 text-xs rounded ${reservadosSortColumn === 'tipo' ? 'bg-purple-500/30 text-purple-300' : 'text-zinc-400 hover:text-white'}`}
+                        className={`px-1.5 py-0.5 text-xs rounded ${reservadosSortColumn === 'tipo' ? 'bg-purple-500/30 text-purple-300' : `${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-white`}`}
                       >
                         Tipo {reservadosSortColumn === 'tipo' && (reservadosSortDirection === 'asc' ? '↑' : '↓')}
                       </button>
@@ -4264,7 +4266,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${
                         showReservasFlatList
                           ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                          : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white'
+                          : `${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-white`
                       }`}
                       title={showReservasFlatList ? 'Mostrar agrupado' : 'Mostrar lista plana'}
                     >
@@ -4276,7 +4278,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     {!showReservasFlatList && (
                       <button
                         onClick={toggleAllReservadosHierarchy}
-                        className="flex items-center gap-1 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-400 hover:text-white transition-colors"
+                        className={`flex items-center gap-1 px-2 py-1.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
                       >
                         {expandedReservadosHierarchy.size > 0 ? (
                           <>
@@ -4312,21 +4314,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         URL.revokeObjectURL(url);
                       }}
                       disabled={filteredReservados.length === 0}
-                      className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+                      className={`p-1.5 rounded-lg ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50`}
                       title="Descargar CSV"
                     >
                       <Download className="h-4 w-4" />
                     </button>
 
                     {/* Results count */}
-                    <span className="text-xs text-zinc-500 ml-auto">
+                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} ml-auto`}>
                       {filteredReservados.length} de {currentCaraReservas.length}
                     </span>
                   </div>
                 </div>
 
                 {currentCaraReservas.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center text-zinc-500">
+                  <div className={`flex-1 flex flex-col items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                     <Layers className="h-16 w-16 mb-4 opacity-30" />
                     <p className="text-lg font-medium">No hay reservas</p>
                     <p className="text-sm">Agrega inventarios desde la pestaña "Buscar Disponibles"</p>
@@ -4334,8 +4336,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 ) : (
                   <div className="flex-1 overflow-auto">
                     <table className="w-full">
-                      <thead className="sticky top-0 bg-zinc-900/95 backdrop-blur-sm z-10">
-                        <tr className="border-b border-zinc-800">
+                      <thead className={`sticky top-0 ${isDark ? 'bg-zinc-900' : 'bg-white'}/95 backdrop-blur-sm z-10`}>
+                        <tr className={`border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                           <th className="px-3 py-3 text-center">
                             <input
                               type="checkbox"
@@ -4344,12 +4346,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               className="checkbox-purple"
                             />
                           </th>
-                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Código</th>
-                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Tipo</th>
-                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Formato</th>
-                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Isla</th>
-                          <th className="px-4 py-3 text-left text-xs text-zinc-400 font-medium">Ubicación</th>
-                          {effectiveCanEdit && <th className="px-4 py-3 text-center text-xs text-zinc-400 font-medium">Acciones</th>}
+                          <th className={`px-4 py-3 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>Código</th>
+                          <th className={`px-4 py-3 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>Tipo</th>
+                          <th className={`px-4 py-3 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>Formato</th>
+                          <th className={`px-4 py-3 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>Isla</th>
+                          <th className={`px-4 py-3 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>Ubicación</th>
+                          {effectiveCanEdit && <th className={`px-4 py-3 text-center text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>Acciones</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -4359,7 +4361,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <React.Fragment key={groupName}>
                               {/* Group Header */}
                               <tr
-                                className="bg-zinc-800/70 cursor-pointer hover:bg-zinc-800"
+                                className={`${isDark ? 'bg-zinc-800/70' : 'bg-gray-50/70'} cursor-pointer hover:${isDark ? 'bg-zinc-800' : 'bg-gray-50'}`}
                                 onClick={() => toggleGroupExpansionReservados(groupName)}
                               >
                                 <td colSpan={effectiveCanEdit ? 7 : 6} className="px-3 py-2">
@@ -4369,7 +4371,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     ) : (
                                       <ChevronRight className="h-4 w-4 text-green-400" />
                                     )}
-                                    <span className="text-sm font-medium text-white">{groupName}</span>
+                                    <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupName}</span>
                                     <span className="px-2 py-0.5 bg-green-500/20 text-green-300 rounded-full text-xs">
                                       {items.length} sitios
                                     </span>
@@ -4389,7 +4391,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               {expandedGroupsReservados.has(groupName) && items.map((reserva) => (
                                 <tr
                                   key={reserva.id}
-                                  className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer ${
+                                  className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} hover:${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} cursor-pointer ${
                                     selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : ''
                                   }`}
                                   onClick={() => handleToggleReservadoSelection(reserva.id)}
@@ -4407,7 +4409,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     />
                                   </td>
                                   <td className="px-4 py-2">
-                                    <span className="text-sm text-white font-medium">{reserva.codigo_unico}</span>
+                                    <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{reserva.codigo_unico}</span>
                                   </td>
                                   <td className="px-4 py-2">
                                     <span className={`px-2 py-1 rounded-full text-xs ${
@@ -4416,9 +4418,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       {reserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : reserva.tipo}
                                     </span>
                                   </td>
-                                  <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
-                                  <td className="px-4 py-2 text-sm text-zinc-400">{reserva.isla || '-'}</td>
-                                  <td className="px-4 py-2 text-sm text-zinc-400">{reserva.plaza}</td>
+                                  <td className={`px-4 py-2 text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{reserva.formato}</td>
+                                  <td className={`px-4 py-2 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{reserva.isla || '-'}</td>
+                                  <td className={`px-4 py-2 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{reserva.plaza}</td>
                                   {effectiveCanEdit && (
                                     <td className="px-4 py-2 text-center">
                                       <button
@@ -4439,7 +4441,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           filteredReservados.map((reserva) => (
                             <tr
                               key={reserva.id}
-                              className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer ${
+                              className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} hover:${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} cursor-pointer ${
                                 selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : ''
                               } ${selectedMapReservas.has(reserva.id) ? 'ring-1 ring-purple-500' : ''}`}
                               onClick={() => handleToggleReservadoSelection(reserva.id)}
@@ -4457,7 +4459,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 />
                               </td>
                               <td className="px-4 py-2">
-                                <span className="text-sm text-white font-medium">{reserva.codigo_unico}</span>
+                                <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{reserva.codigo_unico}</span>
                               </td>
                               <td className="px-4 py-2">
                                 <span className={`px-2 py-1 rounded-full text-xs ${
@@ -4466,9 +4468,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   {reserva.tipo === 'Bonificacion' && (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : reserva.tipo}
                                 </span>
                               </td>
-                              <td className="px-4 py-2 text-sm text-zinc-300">{reserva.formato}</td>
-                              <td className="px-4 py-2 text-sm text-zinc-400">{reserva.isla || '-'}</td>
-                              <td className="px-4 py-2 text-sm text-zinc-400">{reserva.plaza}</td>
+                              <td className={`px-4 py-2 text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{reserva.formato}</td>
+                              <td className={`px-4 py-2 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{reserva.isla || '-'}</td>
+                              <td className={`px-4 py-2 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{reserva.plaza}</td>
                               {effectiveCanEdit && (
                                 <td className="px-4 py-2 text-center">
                                   <button
@@ -4493,7 +4495,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               <React.Fragment key={catKey}>
                                 {/* Level 0: Catorcena Header */}
                                 <tr
-                                  className="bg-zinc-800/90 cursor-pointer hover:bg-zinc-800"
+                                  className={`${isDark ? 'bg-zinc-800/90' : 'bg-gray-50/90'} cursor-pointer hover:${isDark ? 'bg-zinc-800' : 'bg-gray-50'}`}
                                   onClick={() => toggleReservadosHierarchy(catKey)}
                                 >
                                   <td colSpan={7} className="px-3 py-2">
@@ -4504,7 +4506,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         <ChevronRight className="h-4 w-4 text-purple-400" />
                                       )}
                                       <Calendar className="h-4 w-4 text-purple-400" />
-                                      <span className="text-sm font-semibold text-white">{catKey}</span>
+                                      <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{catKey}</span>
                                       <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
                                         {catBreakdown.total} caras
                                       </span>
@@ -4539,7 +4541,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 return (
                                   <React.Fragment key={artKeyFull}>
                                     <tr
-                                      className="bg-zinc-800/60 cursor-pointer hover:bg-zinc-800/80"
+                                      className={`${isDark ? 'bg-zinc-800/60' : 'bg-gray-50/60'} cursor-pointer hover:${isDark ? 'bg-zinc-800/80' : 'bg-gray-50/80'}`}
                                       onClick={() => toggleReservadosHierarchy(artKeyFull)}
                                     >
                                       <td colSpan={7} className="px-3 py-2 pl-8">
@@ -4550,7 +4552,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             <ChevronRight className="h-4 w-4 text-indigo-400" />
                                           )}
                                           <Package className="h-4 w-4 text-indigo-400" />
-                                          <span className="text-sm font-medium text-zinc-200">{artKey}</span>
+                                          <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{artKey}</span>
                                           <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-full text-xs">
                                             {artBreakdown.total}
                                           </span>
@@ -4585,7 +4587,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       return (
                                         <React.Fragment key={plzKeyFull}>
                                           <tr
-                                            className="bg-zinc-800/40 cursor-pointer hover:bg-zinc-800/60"
+                                            className={`${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'} cursor-pointer hover:${isDark ? 'bg-zinc-800/60' : 'bg-gray-50/60'}`}
                                             onClick={() => toggleReservadosHierarchy(plzKeyFull)}
                                           >
                                             <td colSpan={7} className="px-3 py-2 pl-14">
@@ -4596,7 +4598,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                   <ChevronRight className="h-4 w-4 text-cyan-400" />
                                                 )}
                                                 <MapPin className="h-4 w-4 text-cyan-400" />
-                                                <span className="text-sm text-zinc-300">{plzKey}</span>
+                                                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{plzKey}</span>
                                                 <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded-full text-xs">
                                                   {plzBreakdown.total}
                                                 </span>
@@ -4630,19 +4632,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             return (
                                               <React.Fragment key={fmtKeyFull}>
                                                 <tr
-                                                  className="bg-zinc-800/20 cursor-pointer hover:bg-zinc-800/40"
+                                                  className={`${isDark ? 'bg-zinc-800/20' : 'bg-gray-50/20'} cursor-pointer hover:${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'}`}
                                                   onClick={() => toggleReservadosHierarchy(fmtKeyFull)}
                                                 >
                                                   <td colSpan={7} className="px-3 py-2 pl-20">
                                                     <div className="flex items-center gap-3">
                                                       {fmtExpanded ? (
-                                                        <ChevronDown className="h-4 w-4 text-zinc-500" />
+                                                        <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                                                       ) : (
-                                                        <ChevronRight className="h-4 w-4 text-zinc-500" />
+                                                        <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                                                       )}
-                                                      <LayoutGrid className="h-4 w-4 text-zinc-500" />
-                                                      <span className="text-sm text-zinc-400">{fmtKey}</span>
-                                                      <span className="px-2 py-0.5 bg-zinc-700 text-zinc-300 rounded-full text-xs">
+                                                      <LayoutGrid className={`h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                                                      <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{fmtKey}</span>
+                                                      <span className={`px-2 py-0.5 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} ${isDark ? 'text-zinc-300' : 'text-gray-700'} rounded-full text-xs`}>
                                                         {fmtBreakdown.total}
                                                       </span>
                                                       <div className="flex gap-1 ml-1">
@@ -4671,7 +4673,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                   <tr
                                                     key={reserva.id}
                                                     onClick={() => handleToggleReservadoSelection(reserva.id)}
-                                                    className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : 'hover:bg-zinc-800/30'}`}
+                                                    className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : 'hover:${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'}'}`}
                                                   >
                                                     <td className="px-3 py-3 pl-24 text-center" onClick={(e) => e.stopPropagation()}>
                                                       <input
@@ -4681,7 +4683,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                         className="checkbox-purple"
                                                       />
                                                     </td>
-                                                    <td className="px-4 py-3 text-zinc-300 font-mono text-sm">{reserva.codigo_unico}</td>
+                                                    <td className={`px-4 py-3 ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono text-sm`}>{reserva.codigo_unico}</td>
                                                     <td className="px-4 py-3">
                                                       {reserva.codigo_unico?.includes('_Completo') ? (
                                                         <span className="px-2 py-1 rounded-full text-xs bg-purple-500/20 text-purple-300">
@@ -4698,15 +4700,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                         </span>
                                                       )}
                                                     </td>
-                                                    <td className="px-4 py-3 text-zinc-300">{reserva.formato || '-'}</td>
-                                                    <td className="px-4 py-3 text-zinc-400 text-sm" title={reserva.ubicacion || ''}>
+                                                    <td className={`px-4 py-3 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{reserva.formato || '-'}</td>
+                                                    <td className={`px-4 py-3 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`} title={reserva.ubicacion || ''}>
                                                       {reserva.ubicacion || '-'}
                                                     </td>
                                                     {effectiveCanEdit && (
                                                       <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                                                         <button
                                                           onClick={() => handleRemoveReserva(reserva.id)}
-                                                          className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                          className={`p-1.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'} hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors`}
                                                           title="Quitar reserva"
                                                         >
                                                           <Trash2 className="h-4 w-4" />
@@ -4735,23 +4737,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                 {/* Lateral Edit Panel */}
                 {editingReserva && (
-                  <div className="absolute right-0 top-0 bottom-0 w-80 bg-zinc-900 border-l border-zinc-700 shadow-2xl z-20 flex flex-col animate-in slide-in-from-right duration-200">
-                    <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-white">Editar Reserva</h3>
+                  <div className={`absolute right-0 top-0 bottom-0 w-80 ${isDark ? 'bg-zinc-900' : 'bg-white'} border-l ${isDark ? 'border-zinc-700' : 'border-gray-200'} shadow-2xl z-20 flex flex-col animate-in slide-in-from-right duration-200`}>
+                    <div className={`px-4 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex items-center justify-between`}>
+                      <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Editar Reserva</h3>
                       <button
                         onClick={handleCancelEdit}
-                        className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                        className={`p-1.5 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} transition-colors`}
                       >
                         <X className="h-4 w-4" />
                       </button>
                     </div>
                     <div className="flex-1 p-4 space-y-4 overflow-auto">
                       <div>
-                        <label className="block text-xs text-zinc-500 mb-1">Código</label>
-                        <p className="text-sm text-zinc-300 font-mono">{editingReserva.codigo_unico}</p>
+                        <label className={`block text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Código</label>
+                        <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono`}>{editingReserva.codigo_unico}</p>
                       </div>
                       <div>
-                        <label className="block text-xs text-zinc-500 mb-1">Tipo</label>
+                        <label className={`block text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Tipo</label>
                         <span className={`px-2 py-1 rounded-full text-xs ${editingReserva.tipo === 'Flujo'
                           ? 'bg-blue-500/20 text-blue-300'
                           : editingReserva.tipo === 'Bonificacion'
@@ -4762,25 +4764,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         </span>
                       </div>
                       <div>
-                        <label className="block text-xs text-zinc-500 mb-1.5">Plaza</label>
+                        <label className={`block text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1.5`}>Plaza</label>
                         <input
                           type="text"
                           value={editingPlaza}
                           onChange={(e) => setEditingPlaza(e.target.value)}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                           placeholder="Ej: CDMX, GDL, MTY..."
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-zinc-500 mb-1">Ubicación</label>
-                        <p className="text-sm text-zinc-300">{editingReserva.ubicacion || '-'}</p>
+                        <label className={`block text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Ubicación</label>
+                        <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{editingReserva.ubicacion || '-'}</p>
                       </div>
                       <div>
-                        <label className="block text-xs text-zinc-500 mb-1.5">Formato</label>
+                        <label className={`block text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1.5`}>Formato</label>
                         <select
                           value={editingFormato}
                           onChange={(e) => setEditingFormato(e.target.value)}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                         >
                           <option value="">-- Seleccionar --</option>
                           <option value="PARABUS">PARABUS</option>
@@ -4795,10 +4797,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         </select>
                       </div>
                     </div>
-                    <div className="p-4 border-t border-zinc-800 flex gap-3">
+                    <div className={`p-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex gap-3`}>
                       <button
                         onClick={handleCancelEdit}
-                        className="flex-1 px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-700 transition-colors"
+                        className={`flex-1 px-4 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-300' : 'text-gray-700'} rounded-lg text-sm font-medium ${isDark ? 'hover:bg-zinc-700' : 'hover:bg-gray-100'} transition-colors`}
                       >
                         Cancelar
                       </button>
@@ -4815,21 +4817,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                 {/* Summary */}
                 {currentCaraReservas.length > 0 && (
-                  <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">
+                  <div className={`p-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/50`}>
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-4">
-                        <span className="text-zinc-500">
+                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           <span className="text-blue-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Flujo').length}</span> Flujo
                         </span>
-                        <span className="text-zinc-500">
+                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           <span className="text-blue-400 font-medium">{currentCaraReservas.filter(r => r.tipo === 'Contraflujo').length}</span> Contraflujo
                         </span>
-                        <span className="text-zinc-500">
+                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           <span className={`${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'} font-medium`}>{currentCaraReservas.filter(r => r.tipo === 'Bonificacion').length}</span> {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
                         </span>
                       </div>
-                      <span className="text-zinc-400">
-                        Total: <span className="text-white font-medium">{currentCaraReservasMerged.length}</span> reservados
+                      <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                        Total: <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{currentCaraReservasMerged.length}</span> reservados
                       </span>
                     </div>
                   </div>
@@ -4887,46 +4889,46 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </GoogleMap>
 
                     {/* Map Legend */}
-                    <div className="absolute bottom-4 right-3 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-3 text-xs max-w-[200px]">
-                      <div className="text-zinc-300 font-semibold mb-2 flex items-center gap-1.5">
+                    <div className={`absolute bottom-4 right-3 z-10 ${isDark ? 'bg-zinc-900' : 'bg-white'}/95 border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg p-3 text-xs max-w-[200px]`}>
+                      <div className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} font-semibold mb-2 flex items-center gap-1.5`}>
                         <MapPin className="h-3.5 w-3.5 text-purple-400" />
                         Leyenda del Mapa
                       </div>
 
                       {/* Dirección del tráfico */}
                       <div className="space-y-1.5 mb-2">
-                        <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Dirección del tráfico</div>
+                        <div className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px] uppercase tracking-wide`}>Dirección del tráfico</div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-blue-400/30" />
-                          <span className="text-zinc-300">Flujo</span>
+                          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Flujo</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-cyan-500 ring-1 ring-cyan-400/30" />
-                          <span className="text-zinc-300">Contraflujo</span>
+                          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Contraflujo</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-purple-500 ring-1 ring-purple-400/30" />
                           <div>
-                            <span className="text-zinc-300">Completo</span>
-                            <span className="text-zinc-500 text-[10px] ml-1">(F+C)</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Completo</span>
+                            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px] ml-1`}>(F+C)</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Estado */}
-                      <div className="border-t border-zinc-700/70 pt-2 space-y-1.5">
-                        <div className="text-zinc-500 text-[10px] uppercase tracking-wide">Estado</div>
+                      <div className={`border-t ${isDark ? 'border-zinc-700/70' : 'border-gray-200/70'} pt-2 space-y-1.5`}>
+                        <div className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px] uppercase tracking-wide`}>Estado</div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-emerald-500 ring-1 ring-emerald-400/30" />
                           <div>
-                            <span className="text-zinc-300">{(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}</span>
+                            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}</span>
                           </div>
                         </div>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <div className="flex items-center justify-center h-full bg-zinc-800">
+                  <div className={`flex items-center justify-center h-full ${isDark ? 'bg-zinc-800' : 'bg-gray-50'}`}>
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
                   </div>
                 )}
@@ -4943,16 +4945,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative w-[95vw] max-w-[1400px] h-[90vh] bg-zinc-900 rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden">
+      <div className={`relative w-[95vw] max-w-[1400px] h-[90vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div>
-            <h2 className="text-lg font-semibold text-white">Asignar Inventario</h2>
-            <p className="text-sm text-zinc-400">Propuesta #{propuesta.id}</p>
+            <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Asignar Inventario</h2>
+            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Propuesta #{propuesta.id}</p>
           </div>
           <div className="flex items-center gap-3">
             
-            <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:text-white">
+            <button onClick={onClose} className={`p-2 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'}`}>
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -4967,9 +4969,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           ) : (
             <>
               {/* Section 1: Propuesta Summary */}
-              <div className="bg-zinc-800/30 rounded-2xl border border-zinc-700/50 overflow-hidden">
-                <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50">
-                  <h3 className="text-sm font-medium text-white flex items-center gap-2">
+              <div className={`${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} rounded-2xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} overflow-hidden`}>
+                <div className={`px-5 py-3 border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'}`}>
+                  <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                     <FileText className="h-4 w-4 text-purple-400" />
                     Resumen de Propuesta
                   </h3>
@@ -4979,28 +4981,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   {canEditCliente ? (
                     <div className="space-y-3">
                       <div className="relative">
-                        <label className="text-xs text-zinc-500 mb-1 block">Seleccionar Cliente (CUIC)</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Seleccionar Cliente (CUIC)</label>
                         <button
                           type="button"
                           onClick={() => setShowClienteDropdown(!showClienteDropdown)}
                           className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${
                             selectedClienteCuic
                               ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                              : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600'
+                              : `${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} hover:${isDark ? 'border-zinc-600' : 'border-gray-300'}`
                           }`}
                         >
                           <span className="truncate text-left flex-1">
                             {selectedClienteCuic ? (
                               <span>
                                 <span className="font-medium">{selectedClienteCuic.T2_U_Marca || 'Sin marca'}</span>
-                                <span className="text-[10px] text-zinc-500 ml-2">{selectedClienteCuic.CUIC} | {selectedClienteCuic.T2_U_Producto || ''}</span>
+                                <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} ml-2`}>{selectedClienteCuic.CUIC} | {selectedClienteCuic.T2_U_Producto || ''}</span>
                               </span>
                             ) : (
                               <span>{solicitudDetails?.solicitud.cuic ? `${solicitudDetails.solicitud.marca_nombre || ''} (CUIC: ${solicitudDetails.solicitud.cuic})` : 'Seleccionar CUIC'}</span>
                             )}
                           </span>
                           {selectedClienteCuic ? (
-                            <X className="h-4 w-4 hover:text-white flex-shrink-0" onClick={(e) => { e.stopPropagation(); setSelectedClienteCuic(null); setClienteChanged(false); }} />
+                            <X className={`h-4 w-4 hover:${isDark ? 'text-white' : 'text-gray-900'} flex-shrink-0`} onClick={(e) => { e.stopPropagation(); setSelectedClienteCuic(null); setClienteChanged(false); }} />
                           ) : (
                             <ChevronDown className="h-4 w-4 flex-shrink-0" />
                           )}
@@ -5008,16 +5010,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         {showClienteDropdown && (
                           <>
                             <div className="fixed inset-0 z-40" onClick={() => { setShowClienteDropdown(false); setClienteSearchTerm(''); }} />
-                            <div className="absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
-                              <div className="p-2 border-b border-zinc-800">
+                            <div className={`absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+                              <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                                 <div className="relative">
-                                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                                  <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                                   <input
                                     type="text"
                                     placeholder="Buscar por marca, CUIC, razón social..."
                                     value={clienteSearchTerm}
                                     onChange={(e) => setClienteSearchTerm(e.target.value)}
-                                    className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500 border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                                    className={`w-full pl-9 pr-3 py-2 text-sm ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'border-zinc-700' : 'border-gray-200'} text-white placeholder:${isDark ? 'text-zinc-500' : 'text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                                     autoFocus
                                     onClick={(e) => e.stopPropagation()}
                                   />
@@ -5025,9 +5027,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </div>
                               <div className="max-h-72 overflow-auto">
                                 {cuicLoading ? (
-                                  <div className="px-3 py-4 text-center text-zinc-500 text-sm">Cargando...</div>
+                                  <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</div>
                                 ) : filteredCuicOptions.length === 0 ? (
-                                  <div className="px-3 py-4 text-center text-zinc-500 text-sm">No se encontraron resultados</div>
+                                  <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>No se encontraron resultados</div>
                                 ) : (
                                   filteredCuicOptions.slice(0, 100).map((item: CuicItem, idx: number) => (
                                     <button
@@ -5039,14 +5041,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         setShowClienteDropdown(false);
                                         setClienteSearchTerm('');
                                       }}
-                                      className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b border-zinc-800/50 last:border-0 ${
+                                      className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} last:border-0 ${
                                         selectedClienteCuic?.CUIC === item.CUIC
                                           ? 'bg-purple-500/20 text-purple-300'
-                                          : 'text-zinc-300 hover:bg-zinc-800'
+                                          : `${isDark ? 'text-zinc-300' : 'text-gray-700'} hover:${isDark ? 'bg-zinc-800' : 'bg-gray-50'}`
                                       }`}
                                     >
-                                      <div className="font-medium text-white">{item.T2_U_Marca || 'Sin marca'}</div>
-                                      <div className="text-xs text-zinc-500">{item.CUIC} | {item.T2_U_Producto || 'Sin producto'} | {item.T0_U_RazonSocial || ''}</div>
+                                      <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.T2_U_Marca || 'Sin marca'}</div>
+                                      <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.CUIC} | {item.T2_U_Producto || 'Sin producto'} | {item.T0_U_RazonSocial || ''}</div>
                                     </button>
                                   ))
                                 )}
@@ -5058,26 +5060,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       {/* Show selected or current client details */}
                       <div className="grid grid-cols-4 gap-4">
                         <div className="space-y-1">
-                          <label className="text-xs text-zinc-500">CUIC</label>
-                          <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CUIC</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                             {selectedClienteCuic ? selectedClienteCuic.CUIC : (solicitudDetails?.solicitud.cuic || '-')}
                           </div>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs text-zinc-500">Razón Social</label>
-                          <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30 truncate">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Razón Social</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} truncate`}>
                             {selectedClienteCuic ? selectedClienteCuic.T0_U_RazonSocial : (solicitudDetails?.solicitud.razon_social || '-')}
                           </div>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs text-zinc-500">Marca</label>
-                          <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Marca</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                             {selectedClienteCuic ? selectedClienteCuic.T2_U_Marca : (solicitudDetails?.solicitud.marca_nombre || '-')}
                           </div>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs text-zinc-500">Asesor</label>
-                          <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Asesor</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                             {selectedClienteCuic ? selectedClienteCuic.ASESOR_U_Asesor : (solicitudDetails?.solicitud.asesor || '-')}
                           </div>
                         </div>
@@ -5086,26 +5088,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   ) : (
                     <div className="grid grid-cols-4 gap-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">CUIC</label>
-                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CUIC</label>
+                        <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                           {solicitudDetails?.solicitud.cuic || '-'}
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Razón Social</label>
-                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30 truncate">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Razón Social</label>
+                        <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} truncate`}>
                           {solicitudDetails?.solicitud.razon_social || '-'}
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Marca</label>
-                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Marca</label>
+                        <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                           {solicitudDetails?.solicitud.marca_nombre || '-'}
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Asesor</label>
-                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300 border border-zinc-700/30">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Asesor</label>
+                        <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                           {solicitudDetails?.solicitud.asesor || '-'}
                         </div>
                       </div>
@@ -5115,18 +5117,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   {/* Editable fields */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Nombre de Campaña</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Nombre de Campaña</label>
                       <input
                         type="text"
                         value={nombreCampania}
                         onChange={(e) => canEditResumen && setNombreCampania(e.target.value)}
                         disabled={!canEditResumen}
-                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} placeholder:${isDark ? 'text-zinc-500' : 'text-gray-400'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Nombre de la campaña"
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs text-zinc-500">Asignados</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Asignados</label>
                       {/* Add user button */}
                       {canEditResumen ? (
                         <select
@@ -5138,7 +5140,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               setAsignados(prev => [...prev, selectedUser]);
                             }
                           }}
-                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                         >
                           <option value="">+ Agregar asignado...</option>
                           {users?.filter((u: UserOption) => !asignados.find(a => a.id === u.id)).map((u: UserOption) => (
@@ -5158,7 +5160,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               {canEditResumen && (
                                 <button
                                   onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
-                                  className="hover:text-white"
+                                  className={`hover:${isDark ? 'text-white' : 'text-gray-900'}`}
                                 >
                                   <X className="h-3 w-3" />
                                 </button>
@@ -5168,7 +5170,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         </div>
                       )}
                       {!canEditResumen && asignados.length === 0 && (
-                        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-400 border border-zinc-700/30">
+                        <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                           Sin asignados
                         </div>
                       )}
@@ -5178,12 +5180,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   {/* Period - Same style as EditSolicitudModal */}
                   <div className="grid grid-cols-4 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Año Inicio</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Año Inicio</label>
                       <select
                         value={yearInicio || ''}
                         onChange={(e) => canEditResumen && (setYearInicio(e.target.value ? parseInt(e.target.value) : undefined), setCatorcenaInicio(undefined))}
                         disabled={!canEditResumen}
-                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
                         {yearInicioOptions.map(y => (
@@ -5192,12 +5194,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Cat. Inicio</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cat. Inicio</label>
                       <select
                         value={catorcenaInicio || ''}
                         onChange={(e) => canEditResumen && setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
                         disabled={!canEditResumen || !yearInicio}
-                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50 ${!canEditResumen ? 'cursor-not-allowed' : ''}`}
+                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50 ${!canEditResumen ? 'cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
                         {catorcenasInicioOptions.map(c => (
@@ -5206,12 +5208,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Año Fin</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Año Fin</label>
                       <select
                         value={yearFin || ''}
                         onChange={(e) => canEditResumen && (setYearFin(e.target.value ? parseInt(e.target.value) : undefined), setCatorcenaFin(undefined))}
                         disabled={!canEditResumen}
-                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
                         {yearFinOptions.map(y => (
@@ -5220,12 +5222,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Cat. Fin</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cat. Fin</label>
                       <select
                         value={catorcenaFin || ''}
                         onChange={(e) => canEditResumen && setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
                         disabled={!canEditResumen || !yearFin}
-                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50 ${!canEditResumen ? 'cursor-not-allowed' : ''}`}
+                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50 ${!canEditResumen ? 'cursor-not-allowed' : ''}`}
                       >
                         <option value="">Seleccionar</option>
                         {catorcenasFinOptions.map(c => (
@@ -5238,22 +5240,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   {/* Notes and Description */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Notas Dirección</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Notas Dirección</label>
                       <textarea
                         value={notas}
                         onChange={(e) => canEditResumen && setNotas(e.target.value)}
                         disabled={!canEditResumen}
-                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} placeholder:${isDark ? 'text-zinc-500' : 'text-gray-400'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Notas adicionales..."
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-zinc-500">Descripción Trafico</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Descripción Trafico</label>
                       <textarea
                         value={descripcion}
                         onChange={(e) => canEditResumen && setDescripcion(e.target.value)}
                         disabled={!canEditResumen}
-                        className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} placeholder:${isDark ? 'text-zinc-500' : 'text-gray-400'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Descripción de la propuesta..."
                       />
                     </div>
@@ -5261,7 +5263,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                   {/* Archivo section - Same style as EditSolicitudModal */}
                   <div className="space-y-2">
-                    <label className="text-xs text-zinc-500">Archivo (opcional)</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Archivo (opcional)</label>
                     <input
                       ref={archivoInputRef}
                       type="file"
@@ -5270,7 +5272,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       onChange={handleArchivoUpload}
                     />
                     {archivoPropuesta ? (
-                      <div className="flex items-center gap-3 p-3 bg-zinc-800 border border-emerald-500/30 rounded-xl">
+                      <div className={`flex items-center gap-3 p-3 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border border-emerald-500/30 rounded-xl`}>
                         {/* Preview - image or file icon */}
                         {tipoArchivoPropuesta?.startsWith('image/') ? (
                           <a
@@ -5290,22 +5292,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             href={archivoPropuesta}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="w-16 h-16 flex items-center justify-center bg-zinc-700 rounded-lg hover:bg-zinc-600 transition-colors"
+                            className={`w-16 h-16 flex items-center justify-center ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} rounded-lg ${isDark ? 'hover:bg-zinc-600' : 'hover:bg-gray-300'} transition-colors`}
                           >
-                            <FileText className="h-6 w-6 text-zinc-400" />
+                            <FileText className={`h-6 w-6 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
                           </a>
                         )}
                         {/* File info */}
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-emerald-400 font-medium">Archivo adjunto</div>
-                          <div className="text-xs text-zinc-500 truncate">{tipoArchivoPropuesta || 'Archivo'}</div>
+                          <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} truncate`}>{tipoArchivoPropuesta || 'Archivo'}</div>
                         </div>
                         {/* Action buttons */}
                         <div className="flex items-center gap-2">
                           <a
                             href={archivoPropuesta}
                             download
-                            className="p-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
+                            className={`p-2 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} ${isDark ? 'hover:bg-zinc-600' : 'hover:bg-gray-300'} ${isDark ? 'text-zinc-300' : 'text-gray-700'} rounded-lg transition-colors`}
                             title="Descargar"
                           >
                             <Download className="h-4 w-4" />
@@ -5315,7 +5317,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               <button
                                 type="button"
                                 onClick={() => archivoInputRef.current?.click()}
-                                className="px-3 py-2 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
+                                className={`px-3 py-2 text-xs ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} ${isDark ? 'hover:bg-zinc-600' : 'hover:bg-gray-300'} ${isDark ? 'text-zinc-300' : 'text-gray-700'} rounded-lg transition-colors`}
                               >
                                 Cambiar
                               </button>
@@ -5335,13 +5337,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <button
                         type="button"
                         onClick={() => archivoInputRef.current?.click()}
-                        className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-zinc-700 hover:border-violet-500/50 rounded-xl text-zinc-400 hover:text-violet-300 transition-colors"
+                        className={`w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed ${isDark ? 'border-zinc-700' : 'border-gray-200'} hover:border-violet-500/50 rounded-xl ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-violet-300 transition-colors`}
                       >
                         <Upload className="h-5 w-5" />
                         <span className="text-sm">Seleccionar archivo</span>
                       </button>
                     ) : (
-                      <div className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-zinc-700/50 rounded-xl text-zinc-500">
+                      <div className={`w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} rounded-xl ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                         <span className="text-sm">Sin archivo adjunto</span>
                       </div>
                     )}
@@ -5349,7 +5351,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                   {/* Update button */}
                   {canEditResumen && (
-                    <div className="flex justify-end pt-2 border-t border-zinc-700/30">
+                    <div className={`flex justify-end pt-2 border-t ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                       {/* Update button - shows when there are changes */}
                       {hasChanges && (
                         <button
@@ -5376,30 +5378,30 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </div>
 
               {/* Section 2: Caras/Formatos */}
-              <div className="bg-zinc-800/30 rounded-2xl border border-zinc-700/50 overflow-hidden">
-                <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50 flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-white flex items-center gap-2">
+              <div className={`${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} rounded-2xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} overflow-hidden`}>
+                <div className={`px-5 py-3 border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} flex items-center justify-between`}>
+                  <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                     <Layers className="h-4 w-4 text-purple-400" />
                     Formatos / Circuitos
                   </h3>
                   <div className="flex items-center gap-4 text-xs">
-                    <span className="text-zinc-400">
+                    <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                       Renta: <span className="text-purple-300 font-medium">{carasKPIs.totalRenta}</span>
                     </span>
                     {carasKPIs.totalImpresiones > 0 && (
-                      <span className="text-zinc-400">
+                      <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                         Impresiones: <span className="text-amber-300 font-medium">{carasKPIs.totalImpresiones}</span>
                       </span>
                     )}
-                    <span className="text-zinc-400">
+                    <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                       Bonificación: <span className="text-emerald-300 font-medium">{carasKPIs.totalBonificacion}</span>
                     </span>
                     {carasKPIs.totalCortesia > 0 && (
-                      <span className="text-zinc-400">
+                      <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                         Cortesía: <span className="text-cyan-300 font-medium">{carasKPIs.totalCortesia}</span>
                       </span>
                     )}
-                    <span className="text-zinc-400">
+                    <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                       Inversión: <span className="text-amber-300 font-medium">{formatCurrency(carasKPIs.totalInversion)}</span>
                     </span>
                     {effectiveCanEdit && canEditResumen && (
@@ -5416,14 +5418,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                 {/* Add/Edit Cara Form */}
                 {showAddCaraForm && (
-                  <div className="px-5 py-4 bg-zinc-800/50 border-b border-zinc-700/50">
-                    <h4 className="text-sm font-medium text-white mb-4">
+                  <div className={`px-5 py-4 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'}`}>
+                    <h4 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
                       {editingCaraId ? 'Editar Circuito' : 'Nuevo Circuito'}
                     </h4>
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditArticuloOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
+                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditArticuloOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Artículo SAP</label>
                       {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditArticuloOnEdit) ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
@@ -5467,19 +5469,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           loading={articulosLoading}
                           renderOption={(item: SAPArticulo) => (
                             <div>
-                              <div className="font-medium text-white">{item.ItemCode}</div>
-                              <div className="text-xs text-zinc-500">{item.ItemName}</div>
+                              <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.ItemCode}</div>
+                              <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.ItemName}</div>
                             </div>
                           )}
                           renderSelected={(item: SAPArticulo) => (
                             <div className="text-left">
                               <div className="font-medium text-sm">{item.ItemCode}</div>
-                              <div className="text-[10px] text-zinc-500 truncate">{item.ItemName}</div>
+                              <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} truncate`}>{item.ItemName}</div>
                             </div>
                           )}
                         />
                       ) : (
-                        <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300">
+                        <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                           {selectedArticulo ? `${selectedArticulo.ItemCode} - ${selectedArticulo.ItemName}` : newCara.articulo || 'Sin artículo'}
                         </div>
                       )}
@@ -5488,10 +5490,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     {/* Periodo - catorcena o mes, filtrada por rango de propuesta */}
                     <div className="mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           Periodo {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
                           {tipoPeriodo !== 'mensual' && catorcenaInicio && yearInicio && catorcenaFin && yearFin && (
-                            <span className="text-zinc-600 ml-1">
+                            <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} ml-1`}>
                               (Rango: {catorcenaInicio}/{yearInicio} - {catorcenaFin}/{yearFin})
                             </span>
                           )}
@@ -5555,7 +5557,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               }
                             }}
                             disabled={!canEditResumen || editingCaraHasReservas}
-                            className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           >
                             <option value="">{tipoPeriodo === 'mensual' ? 'Mes inicio' : 'Cat. inicio'}</option>
                             {tipoPeriodo === 'mensual' ? (
@@ -5620,7 +5622,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               }
                             }}
                             disabled={!canEditResumen || editingCaraHasReservas || !newCara.catorcena_inicio}
-                            className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || !newCara.catorcena_inicio) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || !newCara.catorcena_inicio) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           >
                             <option value="">{tipoPeriodo === 'mensual' ? 'Mes fin' : 'Cat. fin'}</option>
                             {tipoPeriodo === 'mensual' ? (
@@ -5665,7 +5667,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Estados {newCara.estados && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
+                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Estados {newCara.estados && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={solicitudFilters?.estados || []}
@@ -5674,13 +5676,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             placeholder="Seleccionar estados..."
                           />
                         ) : (
-                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} truncate`}>
                             {newCara.estados || '-'}
                           </div>
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {newCara.ciudad && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Ciudades {newCara.ciudad && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={
@@ -5697,13 +5699,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             placeholder="Seleccionar ciudades..."
                           />
                         ) : (
-                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} truncate`}>
                             {newCara.ciudad || '-'}
                           </div>
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Formatos {newCara.formato && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
+                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Formatos {newCara.formato && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={solicitudFilters?.formatos || []}
@@ -5712,18 +5714,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             placeholder="Seleccionar formatos..."
                           />
                         ) : (
-                          <div className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/30 rounded-lg text-sm text-zinc-300 truncate">
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} truncate`}>
                             {newCara.formato || '-'}
                           </div>
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Tipo</label>
+                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Tipo</label>
                         <select
                           value={newCara.tipo}
                           onChange={(e) => canEditResumen && !editingCaraHasReservas && !editingCaraId && setNewCara({ ...newCara, tipo: e.target.value })}
                           disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
@@ -5733,7 +5735,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </div>
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           {newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : 'Caras en Renta'}
                           {newCara.articulo?.toUpperCase().startsWith('CT') && (
                             <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
@@ -5750,35 +5752,35 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
                           disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
-                        <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
+                        <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">{newCara.articulo?.toUpperCase().startsWith('CT') ? 'Cortesía' : 'Caras Bonificadas'}</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{newCara.articulo?.toUpperCase().startsWith('CT') ? 'Cortesía' : 'Caras Bonificadas'}</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
                           onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
                           disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM')}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM')) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM')) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">Tarifa Pública</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Tarifa Pública</label>
                         <input
                           type="number"
                           value={newCara.tarifa_publica || ''}
                           onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
                           disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
-                          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-zinc-500">NSE {newCara.nivel_socioeconomico && <span className="text-purple-400">({newCara.nivel_socioeconomico.split(',').filter(Boolean).length})</span>}</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>NSE {newCara.nivel_socioeconomico && <span className="text-purple-400">({newCara.nivel_socioeconomico.split(',').filter(Boolean).length})</span>}</label>
                         <MultiSelectDropdown
                           options={solicitudFilters?.nse || []}
                           selected={newCara.nivel_socioeconomico ? newCara.nivel_socioeconomico.split(',').map(s => s.trim()).filter(Boolean) : []}
@@ -5790,22 +5792,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                     {/* Preview calculation - Resumen y cálculos */}
                     {(newCara.caras || 0) > 0 && (newCara.tarifa_publica || 0) > 0 && (
-                      <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/30 space-y-2">
+                      <div className={`mt-4 p-3 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} space-y-2`}>
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-zinc-400">Inversión (Tarifa Cliente):</span>
-                          <span className="text-zinc-300">
+                          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Inversión (Tarifa Cliente):</span>
+                          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                             {newCara.caras} caras × {formatCurrency(newCara.tarifa_publica)} = <span className="text-emerald-400 font-medium">{formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))}</span>
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-zinc-400">Caras Totales:</span>
-                          <span className="text-zinc-300">
+                          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Caras Totales:</span>
+                          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                             {newCara.caras || 0} caras + {newCara.bonificacion || 0} bonif. = <span className="text-blue-400 font-medium">{(newCara.caras || 0) + (newCara.bonificacion || 0)} caras totales</span>
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-zinc-400">Tarifa Efectiva:</span>
-                          <span className="text-zinc-300">
+                          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Tarifa Efectiva:</span>
+                          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                             {formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))} ÷ {(newCara.caras || 0) + (newCara.bonificacion || 0)} = <span className="text-purple-400 font-medium">{formatCurrency(((newCara.caras || 0) + (newCara.bonificacion || 0)) > 0 ? ((newCara.caras || 0) * (newCara.tarifa_publica || 0)) / ((newCara.caras || 0) + (newCara.bonificacion || 0)) : 0)}</span>
                           </span>
                         </div>
@@ -5815,7 +5817,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <div className="flex justify-end gap-2 mt-4">
                       <button
                         onClick={handleCancelCaraForm}
-                        className="px-4 py-2 bg-zinc-700 text-zinc-300 rounded-lg text-sm hover:bg-zinc-600 transition-colors"
+                        className={`px-4 py-2 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} ${isDark ? 'text-zinc-300' : 'text-gray-700'} rounded-lg text-sm ${isDark ? 'hover:bg-zinc-600' : 'hover:bg-gray-300'} transition-colors`}
                       >
                         Cancelar
                       </button>
@@ -5831,7 +5833,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                 <div className="divide-y divide-zinc-700/30">
                   {caras.length === 0 ? (
-                    <div className="p-8 text-center text-zinc-500">
+                    <div className={`p-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                       <Layers className="h-10 w-10 mx-auto mb-3 opacity-30" />
                       <p>No hay formatos/caras en esta propuesta</p>
                       {effectiveCanEdit && canEditResumen && (
@@ -5872,7 +5874,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <span className="text-sm font-medium text-purple-300">
                               {catorcenaLabel}
                             </span>
-                            <span className="text-xs text-zinc-500">
+                            <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                               ({groupData.caras.length} {groupData.caras.length === 1 ? 'formato' : 'formatos'})
                             </span>
                           </div>
@@ -5904,7 +5906,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             return (
                               <div key={cara.localId} className={`${statusColor === 'blue' ? 'bg-blue-500/5' : statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
                                 {/* Cara row */}
-                                <div className="flex items-center gap-3 px-5 py-3 hover:bg-zinc-800/30 transition-colors">
+                                <div className={`flex items-center gap-3 px-5 py-3 hover:${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} transition-colors`}>
                                   {/* Completion indicator */}
                                   <div className={`w-2 h-2 rounded-full ${
                                     statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
@@ -5912,38 +5914,38 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                                   <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Formato</span>
-                                      <p className="text-white font-medium">{cara.formato || '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Formato</span>
+                                      <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.formato || '-'}</p>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Tipo</span>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Tipo</span>
                                       <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
                                         {cara.tipo || '-'}
                                       </span>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Ciudad</span>
-                                      <p className="text-zinc-300 text-xs truncate" title={cara.ciudad || cara.estados}>{cara.ciudad || cara.estados || '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Ciudad</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs truncate`} title={cara.ciudad || cara.estados}>{cara.ciudad || cara.estados || '-'}</p>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Artículo</span>
-                                      <p className="text-zinc-300 text-xs">{cara.articulo || '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Artículo</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{cara.articulo || '-'}</p>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">F. Inicio</span>
-                                      <p className="text-zinc-300 text-xs">{cara.inicio_periodo ? new Date(cara.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>F. Inicio</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{cara.inicio_periodo ? new Date(cara.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">F. Fin</span>
-                                      <p className="text-zinc-300 text-xs">{cara.fin_periodo ? new Date(cara.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>F. Fin</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{cara.fin_periodo ? new Date(cara.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Caras</span>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Caras</span>
                                       {esImpresion ? (
                                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-medium">Impresión</span>
                                       ) : (
                                         <div className="flex items-center gap-1">
-                                          <p className="text-white font-medium">{status.totalReservado}/{totalCaras}</p>
+                                          <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{status.totalReservado}/{totalCaras}</p>
                                           {diffDisplay && (
                                             <span className={`text-xs font-medium ${status.totalDiff > 0 ? 'text-red-400' : 'text-amber-400'}`}>
                                               ({diffDisplay})
@@ -5953,7 +5955,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       )}
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Autorización</span>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Autorización</span>
                                       <div className="flex flex-col gap-0.5">
                                         {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Aprobado</span>
@@ -5983,7 +5985,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           disabled={bloqueado}
                                           className={`p-2 rounded-lg border transition-colors ${
                                             bloqueado
-                                              ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                              ? 'bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed'
                                               : status.isComplete
                                                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
                                                 : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
@@ -6006,7 +6008,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           onClick={(e) => { e.stopPropagation(); if (!caraAuthPendiente) handleEditCara(cara); }}
                                           disabled={caraAuthPendiente}
                                           className={`p-2 rounded-lg border transition-colors ${caraAuthPendiente
-                                            ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                            ? 'bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed'
                                             : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
                                           }`}
                                           title={caraAuthPendiente ? 'Autorización pendiente - no se puede editar' : 'Editar'}
@@ -6018,7 +6020,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
                                             disabled={hasReservas}
                                             className={`p-2 rounded-lg border transition-colors ${hasReservas
-                                              ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                              ? 'bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed'
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
                                             title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
@@ -6181,7 +6183,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           B:{breakdown.bonificacion}
                         </span>
                       )}
-                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-zinc-700/50 text-zinc-300">
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                         {breakdown.total}
                       </span>
                     </div>
@@ -6189,9 +6191,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 };
 
                 return (
-                  <div className="bg-zinc-800/30 rounded-2xl border border-zinc-700/50 overflow-hidden">
-                    <div className="px-5 py-3 border-b border-zinc-700/50 bg-zinc-800/50 flex items-center justify-between">
-                      <h3 className="text-sm font-medium text-white flex items-center gap-2">
+                  <div className={`${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} rounded-2xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} overflow-hidden`}>
+                    <div className={`px-5 py-3 border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} flex items-center justify-between`}>
+                      <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                         <MapIcon className="h-4 w-4 text-purple-400" />
                         Resumen de Reservas
                         <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
@@ -6205,7 +6207,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             onClick={() => { setShowFiltersReservas(!showFiltersReservas); setShowGroupingConfigReservas(false); setShowSortReservas(false); }}
                             className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
                               filtersReservas.length > 0
-                                ? 'bg-purple-600 text-white border border-purple-500'
+                                ? 'bg-purple-600 ${isDark ? 'text-white' : 'text-gray-900'} border border-purple-500'
                                 : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
                             }`}
                             title="Filtrar"
@@ -6219,7 +6221,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <div className="absolute right-0 top-full mt-1 z-50 w-[520px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
                               <div className="flex items-center justify-between mb-3">
                                 <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
-                                <button onClick={() => setShowFiltersReservas(false)} className="text-zinc-400 hover:text-white">
+                                <button onClick={() => setShowFiltersReservas(false)} className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'}`}>
                                   <X className="h-4 w-4" />
                                 </button>
                               </div>
@@ -6231,7 +6233,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     <select
                                       value={filter.field}
                                       onChange={(e) => updateFilterReservas(filter.id, { field: e.target.value })}
-                                      className="w-[130px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                                      className={`w-[130px] text-xs ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded px-2 py-1.5 ${isDark ? 'text-white' : 'text-gray-900'}`}
                                     >
                                       {FILTER_FIELDS_RESERVAS.map((f) => (
                                         <option key={f.field} value={f.field}>{f.label}</option>
@@ -6240,7 +6242,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     <select
                                       value={filter.operator}
                                       onChange={(e) => updateFilterReservas(filter.id, { operator: e.target.value as FilterOperator })}
-                                      className="w-[110px] text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                                      className={`w-[110px] text-xs ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded px-2 py-1.5 ${isDark ? 'text-white' : 'text-gray-900'}`}
                                     >
                                       {FILTER_OPERATORS.filter(op => {
                                         const fieldConfig = FILTER_FIELDS_RESERVAS.find(f => f.field === filter.field);
@@ -6252,7 +6254,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     <select
                                       value={filter.value}
                                       onChange={(e) => updateFilterReservas(filter.id, { value: e.target.value })}
-                                      className="flex-1 text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white"
+                                      className={`flex-1 text-xs ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded px-2 py-1.5 ${isDark ? 'text-white' : 'text-gray-900'}`}
                                     >
                                       <option value="">Seleccionar...</option>
                                       {getUniqueValuesReservas[filter.field]?.map((val) => (
@@ -6265,11 +6267,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   </div>
                                 ))}
                                 {filtersReservas.length === 0 && (
-                                  <p className="text-[11px] text-zinc-500 text-center py-3">Sin filtros. Haz clic en "Añadir".</p>
+                                  <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-center py-3`}>Sin filtros. Haz clic en "Añadir".</p>
                                 )}
                               </div>
                               <div className="flex items-center justify-between mt-2 pt-2 border-t border-purple-900/30">
-                                <button onClick={addFilterReservas} className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
+                                <button onClick={addFilterReservas} className={`flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-purple-600 hover:bg-purple-700 ${isDark ? 'text-white' : 'text-gray-900'} rounded`}>
                                   <Plus className="h-3 w-3" /> Añadir
                                 </button>
                                 <button
@@ -6282,7 +6284,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </div>
                               {filtersReservas.length > 0 && (
                                 <div className="mt-2 pt-2 border-t border-purple-900/30">
-                                  <span className="text-[10px] text-zinc-500">{filteredReservas.length} de {reservasMerged.length} registros</span>
+                                  <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{filteredReservas.length} de {reservasMerged.length} registros</span>
                                 </div>
                               )}
                             </div>
@@ -6303,19 +6305,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           </button>
                           {showGroupingConfigReservas && (
                             <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]">
-                              <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 3)</p>
+                              <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide px-2 py-1`}>Agrupar por (max 3)</p>
                               {AVAILABLE_GROUPINGS_RESERVAS.map(({ field, label }) => (
                                 <button
                                   key={field}
                                   onClick={() => toggleGroupingReservas(field)}
                                   className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 transition-colors ${
-                                    activeGroupingsReservas.includes(field) ? 'text-purple-300' : 'text-zinc-400'
+                                    activeGroupingsReservas.includes(field) ? 'text-purple-300' : `${isDark ? 'text-zinc-400' : 'text-gray-500'}`
                                   }`}
                                 >
                                   <div className={`w-4 h-4 rounded border flex items-center justify-center ${
                                     activeGroupingsReservas.includes(field) ? 'bg-purple-600 border-purple-600' : 'border-purple-500/50'
                                   }`}>
-                                    {activeGroupingsReservas.includes(field) && <Check className="h-3 w-3 text-white" />}
+                                    {activeGroupingsReservas.includes(field) && <Check className={`h-3 w-3 ${isDark ? 'text-white' : 'text-gray-900'}`} />}
                                   </div>
                                   {label}
                                   {activeGroupingsReservas.indexOf(field) === 0 && <span className="ml-auto text-[10px] text-purple-400">1°</span>}
@@ -6324,7 +6326,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 </button>
                               ))}
                               <div className="border-t border-purple-900/30 mt-2 pt-2">
-                                <button onClick={() => setActiveGroupingsReservas([])} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                                <button onClick={() => setActiveGroupingsReservas([])} className={`w-full text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} hover:${isDark ? 'text-zinc-300' : 'text-gray-700'} py-1`}>
                                   Quitar agrupación
                                 </button>
                               </div>
@@ -6343,7 +6345,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           </button>
                           {showSortReservas && (
                             <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
-                              <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Ordenar por</p>
+                              <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide px-2 py-1`}>Ordenar por</p>
                               {FILTER_FIELDS_RESERVAS.map(({ field, label }) => (
                                 <button
                                   key={field}
@@ -6356,7 +6358,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     }
                                   }}
                                   className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-purple-900/30 ${
-                                    sortFieldReservas === field ? 'text-purple-300' : 'text-zinc-400'
+                                    sortFieldReservas === field ? 'text-purple-300' : `${isDark ? 'text-zinc-400' : 'text-gray-500'}`
                                   }`}
                                 >
                                   {label}
@@ -6368,7 +6370,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 </button>
                               ))}
                               <div className="border-t border-purple-900/30 mt-2 pt-2">
-                                <button onClick={() => setSortFieldReservas(null)} className="w-full text-xs text-zinc-500 hover:text-zinc-300 py-1">
+                                <button onClick={() => setSortFieldReservas(null)} className={`w-full text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} hover:${isDark ? 'text-zinc-300' : 'text-gray-700'} py-1`}>
                                   Quitar orden
                                 </button>
                               </div>
@@ -6378,7 +6380,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                         {selectedMapReservas.size > 0 && (
                           <>
-                            <span className="text-zinc-400 text-xs">{selectedMapReservas.size} sel.</span>
+                            <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>{selectedMapReservas.size} sel.</span>
                             <button onClick={() => setSelectedMapReservas(new Set())} className="text-purple-400 hover:text-purple-300 text-xs">
                               Limpiar
                             </button>
@@ -6388,9 +6390,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </div>
                     <div className="flex h-[520px]">
                       {/* Selection Panel */}
-                      <div className="w-96 border-r border-zinc-700/50 bg-zinc-900/30 flex flex-col flex-shrink-0">
+                      <div className={`w-96 border-r ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/30 flex flex-col flex-shrink-0`}>
                         {/* Select All Header */}
-                        <div className="px-4 py-2.5 border-b border-zinc-700/50 bg-zinc-800/50">
+                        <div className={`px-4 py-2.5 border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'}`}>
                           <div className="flex items-center justify-between">
                             <label className="flex items-center gap-3 cursor-pointer">
                               <input
@@ -6399,7 +6401,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 onChange={toggleAllMapReservas}
                                 className="checkbox-purple"
                               />
-                              <span className="text-sm font-medium text-white">Seleccionar</span>
+                              <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Seleccionar</span>
                               <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full text-xs">
                                 {filteredReservas.length}
                               </span>
@@ -6407,14 +6409,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => setExpandedReservasGroups(new Set(groupKeys))}
-                                className="p-1.5 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded transition-colors"
+                                className={`p-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-purple-400 hover:bg-purple-900/30 rounded transition-colors`}
                                 title="Expandir todo"
                               >
                                 <ChevronDown className="h-3.5 w-3.5" />
                               </button>
                               <button
                                 onClick={() => setExpandedReservasGroups(new Set())}
-                                className="p-1.5 text-zinc-400 hover:text-purple-400 hover:bg-purple-900/30 rounded transition-colors"
+                                className={`p-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-purple-400 hover:bg-purple-900/30 rounded transition-colors`}
                                 title="Colapsar todo"
                               >
                                 <ChevronUp className="h-3.5 w-3.5" />
@@ -6434,12 +6436,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const isExpanded = expandedReservasGroups.has(groupKey);
 
                             return (
-                              <div key={groupKey} className="border-b border-zinc-700/30">
+                              <div key={groupKey} className={`border-b ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                                 <button
                                   onClick={() => toggleReservasGroup(groupKey)}
                                   className="w-full flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-purple-900/20 to-zinc-800/30 hover:from-purple-900/30 hover:to-zinc-800/50 transition-all"
                                 >
-                                  {isExpanded ? <ChevronDown className="h-4 w-4 text-purple-400" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}
+                                  {isExpanded ? <ChevronDown className="h-4 w-4 text-purple-400" /> : <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />}
                                   <input
                                     type="checkbox"
                                     checked={allSelected}
@@ -6451,24 +6453,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   <span className="text-[10px] text-purple-400 font-medium">
                                     {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[0])?.label}:
                                   </span>
-                                  <span className="text-sm font-medium text-white flex-1 text-left truncate">{groupKey}</span>
+                                  <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} flex-1 text-left truncate`}>{groupKey}</span>
                                   <TypeBreakdownBadges items={level1Items} />
                                 </button>
                                 {isExpanded && (
-                                  <div className="bg-zinc-900/40 border-l-2 border-purple-500/30 ml-3">
+                                  <div className={`${isDark ? 'bg-zinc-900' : 'bg-white'}/40 border-l-2 border-purple-500/30 ml-3`}>
                                     {isLevel1Array ? (
                                       // Direct items
                                       (groupData as ReservaItem[]).map(reserva => (
                                         <label
                                           key={reserva.id}
                                           className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs transition-colors ${
-                                            selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:bg-zinc-800/40'
+                                            selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'}'
                                           }`}
                                         >
                                           <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
-                                          <span className="text-zinc-400 font-mono text-[11px]">{reserva.codigo_unico}</span>
-                                          <span className="text-zinc-500 text-[11px] truncate max-w-[80px]">{reserva.plaza}</span>
-                                          <span className="text-zinc-500 text-[11px]">{reserva.formato}</span>
+                                          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono text-[11px]`}>{reserva.codigo_unico}</span>
+                                          <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[11px] truncate max-w-[80px]`}>{reserva.plaza}</span>
+                                          <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[11px]`}>{reserva.formato}</span>
                                           <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
                                             reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
                                             reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
@@ -6489,9 +6491,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           <div key={subKey} className="border-l border-pink-500/20 ml-2">
                                             <button
                                               onClick={() => toggleReservasGroup(subFullKey)}
-                                              className="w-full flex items-center gap-2 px-2 py-1.5 bg-zinc-800/20 hover:bg-zinc-800/40"
+                                              className={`w-full flex items-center gap-2 px-2 py-1.5 ${isDark ? 'bg-zinc-800/20' : 'bg-gray-50/20'} hover:${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'}`}
                                             >
-                                              {isSubExpanded ? <ChevronDown className="h-3 w-3 text-pink-400" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
+                                              {isSubExpanded ? <ChevronDown className="h-3 w-3 text-pink-400" /> : <ChevronRight className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />}
                                               <input
                                                 type="checkbox"
                                                 checked={allSubSelected}
@@ -6503,7 +6505,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                               <span className="text-[10px] text-pink-400">
                                                 {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[1])?.label}:
                                               </span>
-                                              <span className="text-[11px] text-white flex-1 text-left truncate">{subKey}</span>
+                                              <span className={`text-[11px] ${isDark ? 'text-white' : 'text-gray-900'} flex-1 text-left truncate`}>{subKey}</span>
                                               <TypeBreakdownBadges items={subItems} />
                                             </button>
                                             {isSubExpanded && (
@@ -6513,11 +6515,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                     <label
                                                       key={reserva.id}
                                                       className={`flex items-center gap-2 px-3 py-1 cursor-pointer text-[11px] ${
-                                                        selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:bg-zinc-800/40'
+                                                        selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'}'
                                                       }`}
                                                     >
                                                       <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
-                                                      <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
+                                                      <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono`}>{reserva.codigo_unico}</span>
                                                       <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
                                                         reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
                                                         reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
@@ -6533,24 +6535,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                       <div key={thirdKey}>
                                                         <button
                                                           onClick={() => toggleReservasGroup(thirdFullKey)}
-                                                          className="w-full flex items-center gap-2 px-2 py-1 bg-zinc-800/10 hover:bg-zinc-800/30"
+                                                          className={`w-full flex items-center gap-2 px-2 py-1 ${isDark ? 'bg-zinc-800/10' : 'bg-gray-50/10'} hover:${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'}`}
                                                         >
-                                                          {isThirdExpanded ? <ChevronDown className="h-3 w-3 text-cyan-400" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
+                                                          {isThirdExpanded ? <ChevronDown className="h-3 w-3 text-cyan-400" /> : <ChevronRight className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />}
                                                           <span className="text-[10px] text-cyan-400">
                                                             {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[2])?.label}:
                                                           </span>
-                                                          <span className="text-[11px] text-white flex-1 text-left truncate">{thirdKey}</span>
+                                                          <span className={`text-[11px] ${isDark ? 'text-white' : 'text-gray-900'} flex-1 text-left truncate`}>{thirdKey}</span>
                                                           <TypeBreakdownBadges items={thirdItems} />
                                                         </button>
                                                         {isThirdExpanded && thirdItems.map(reserva => (
                                                           <label
                                                             key={reserva.id}
                                                             className={`flex items-center gap-2 px-4 py-1 cursor-pointer text-[11px] ${
-                                                              selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:bg-zinc-800/40'
+                                                              selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'}'
                                                             }`}
                                                           >
                                                             <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
-                                                            <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
+                                                            <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono`}>{reserva.codigo_unico}</span>
                                                           </label>
                                                         ))}
                                                       </div>
@@ -6570,24 +6572,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           })}
                         </div>
                         {/* KPIs Mini Summary */}
-                        <div className="p-3 border-t border-zinc-700/50 bg-zinc-800/50">
+                        <div className={`p-3 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'}`}>
                           <div className={`grid gap-2 text-center text-xs ${reservasKPIs.completos > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
                             <div>
-                              <p className="text-zinc-500">Flujo</p>
+                              <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Flujo</p>
                               <p className="text-blue-400 font-bold">{reservasKPIs.flujo}</p>
                             </div>
                             <div>
-                              <p className="text-zinc-500">Contra</p>
+                              <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Contra</p>
                               <p className="text-blue-400 font-bold">{reservasKPIs.contraflujo}</p>
                             </div>
                             {reservasKPIs.completos > 0 && (
                               <div>
-                                <p className="text-zinc-500">Completo</p>
+                                <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Completo</p>
                                 <p className="text-purple-400 font-bold">{reservasKPIs.completos}</p>
                               </div>
                             )}
                             <div>
-                              <p className="text-zinc-500">Bonif</p>
+                              <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Bonif</p>
                               <p className="text-emerald-400 font-bold">{reservasKPIs.bonificadas}</p>
                             </div>
                           </div>
@@ -6653,8 +6655,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             </GoogleMap>
 
                             {/* Map Legend */}
-                            <div className="absolute bottom-3 right-3 z-10 bg-zinc-900/95 border border-zinc-700 rounded-lg p-2.5 text-xs max-w-[180px]">
-                              <div className="text-zinc-300 font-semibold mb-1.5 flex items-center gap-1.5">
+                            <div className={`absolute bottom-3 right-3 z-10 ${isDark ? 'bg-zinc-900' : 'bg-white'}/95 border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg p-2.5 text-xs max-w-[180px]`}>
+                              <div className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} font-semibold mb-1.5 flex items-center gap-1.5`}>
                                 <MapPin className="h-3 w-3 text-purple-400" />
                                 Leyenda
                               </div>
@@ -6663,34 +6665,34 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2">
                                   <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                                  <span className="text-zinc-300">Flujo</span>
+                                  <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Flujo</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <div className="w-2.5 h-2.5 rounded-full bg-cyan-500" />
-                                  <span className="text-zinc-300">Contraflujo</span>
+                                  <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Contraflujo</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <div className="w-2.5 h-2.5 rounded-full bg-purple-500" />
-                                  <span className="text-zinc-300">Completo</span>
+                                  <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Completo</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                  <span className="text-zinc-300">{(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}</span>
+                                  <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}</span>
                                 </div>
                               </div>
 
                               {/* Estado de selección */}
-                              <div className="border-t border-zinc-700/70 pt-1.5 mt-1.5 space-y-1">
+                              <div className={`border-t ${isDark ? 'border-zinc-700/70' : 'border-gray-200/70'} pt-1.5 mt-1.5 space-y-1`}>
                                 <div className="flex items-center gap-2">
                                   <div className="w-2.5 h-2.5 rounded-full bg-white ring-2 ring-white/50" />
-                                  <span className="text-zinc-300">Seleccionado</span>
-                                  <span className="text-zinc-500 text-[10px]">({selectedMapReservas.size})</span>
+                                  <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Seleccionado</span>
+                                  <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[10px]`}>({selectedMapReservas.size})</span>
                                 </div>
                               </div>
                             </div>
                           </>
                         ) : (
-                          <div className="flex items-center justify-center h-full bg-zinc-800">
+                          <div className={`flex items-center justify-center h-full ${isDark ? 'bg-zinc-800' : 'bg-gray-50'}`}>
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
                           </div>
                         )}
@@ -6705,13 +6707,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
         {/* Footer with Aprobar button */}
         {caras.length > 0 && (
-          <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-900/80 flex items-center justify-between">
+          <div className={`px-6 py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/80 flex items-center justify-between`}>
             <div className="flex items-center gap-4">
               {/* Status summary */}
               <div className="flex items-center gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <div className={`w-3 h-3 rounded-full ${allCarasComplete ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-                  <span className="text-zinc-400">
+                  <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                     {allCarasComplete ? (
                       <span className="text-emerald-400">Todas las caras completas</span>
                     ) : (
@@ -6732,7 +6734,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                className={`px-4 py-2 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
               >
                 Cerrar
               </button>
@@ -6758,7 +6760,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
                     allCarasComplete && !hasPendingAuthorization && !isSaving
                       ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
-                      : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                      : `${isDark ? 'bg-zinc-700' : 'bg-gray-200'} ${isDark ? 'text-zinc-500' : 'text-gray-400'} cursor-not-allowed`
                   }`}
                 >
                   {isSaving ? (
@@ -6781,9 +6783,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       {/* Loading Overlay */}
       {isSaving && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="flex flex-col items-center gap-4 p-6 bg-zinc-900 rounded-2xl border border-zinc-800 shadow-xl">
-            <div className="animate-spin rounded-full h-10 w-10 border-4 border-zinc-700 border-t-purple-500" />
-            <p className="text-zinc-300 font-medium animate-pulse">Procesando...</p>
+          <div className={`flex flex-col items-center gap-4 p-6 ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border ${isDark ? 'border-zinc-800' : 'border-gray-200'} shadow-xl`}>
+            <div className={`animate-spin rounded-full h-10 w-10 border-4 ${isDark ? 'border-zinc-700' : 'border-gray-200'} border-t-purple-500`} />
+            <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} font-medium animate-pulse`}>Procesando...</p>
           </div>
         </div>
       )}

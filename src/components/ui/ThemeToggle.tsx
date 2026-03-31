@@ -15,6 +15,17 @@ export function ThemeToggle() {
     }
   }, [isDark]);
 
-  // Oculto temporalmente
-  return null;
+  return (
+    <button
+      onClick={toggleTheme}
+      className="p-2 rounded-lg transition-colors hover:bg-zinc-700/50 dark:hover:bg-zinc-700/50 hover:bg-zinc-200/50"
+      title={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+    >
+      {isDark ? (
+        <Sun className="w-5 h-5 text-yellow-400" />
+      ) : (
+        <Moon className="w-5 h-5 text-zinc-600" />
+      )}
+    </button>
+  );
 }

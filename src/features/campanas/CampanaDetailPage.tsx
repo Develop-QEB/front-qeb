@@ -1679,7 +1679,7 @@ export function CampanaDetailPage() {
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => setShowComments(true)}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-purple-900/30 hover:bg-purple-900/50 transition-colors"
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg ${isDark ? 'bg-purple-900/30 hover:bg-purple-900/50' : 'bg-purple-100 hover:bg-purple-200'} transition-colors`}
               title="Comentarios"
             >
               <MessageSquare className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-purple-400" />
@@ -1922,7 +1922,7 @@ export function CampanaDetailPage() {
               {permissions.canSeeGestionArtes && (
                 <button
                   onClick={() => navigate(`/campanas/${campanaId}/tareas`)}
-                  className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
+                  className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium ${isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border-purple-300'} border rounded-lg transition-colors`}
                 >
                   <ListTodo className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
                   <span className="hidden md:inline">Gestor de Tareas</span>
@@ -2018,7 +2018,7 @@ export function CampanaDetailPage() {
                       className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
                         filtersReservado.length > 0
                           ? 'bg-purple-600 text-white'
-                          : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+                          : isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border border-purple-300'
                       }`}
                       title="Filtrar"
                     >
@@ -2030,7 +2030,7 @@ export function CampanaDetailPage() {
                       )}
                     </button>
                     {showFiltersReservado && (
-                      <div className="absolute right-0 top-full mt-1 z-50 w-[520px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                      <div className={`absolute right-0 top-full mt-1 z-50 w-[520px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-4`}>
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
                           <button
@@ -2122,7 +2122,7 @@ export function CampanaDetailPage() {
                   <div className="relative">
                     <button
                       onClick={() => setShowGroupingConfig(!showGroupingConfig)}
-                      className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
+                      className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium ${isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border-purple-300'} border rounded-lg transition-colors`}
                       title="Agrupar"
                     >
                       <Layers className="h-3.5 w-3.5" />
@@ -2134,7 +2134,7 @@ export function CampanaDetailPage() {
                     </button>
                     {/* Dropdown de configuración */}
                     {showGroupingConfig && (
-                      <div className="absolute right-0 top-full mt-1 z-10 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                      <div className={`absolute right-0 top-full mt-1 z-10 ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-2 min-w-[180px]`}>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wide px-2 py-1">
                           Agrupar por (max 2)
                         </p>
@@ -2182,14 +2182,14 @@ export function CampanaDetailPage() {
                       className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
                         sortFieldReservado
                           ? 'bg-purple-600 text-white'
-                          : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+                          : isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border border-purple-300'
                       }`}
                       title="Ordenar"
                     >
                       <ArrowUpDown className="h-3.5 w-3.5" />
                     </button>
                     {showSortReservado && (
-                      <div className="absolute right-0 top-full mt-1 z-50 w-[280px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
+                      <div className={`absolute right-0 top-full mt-1 z-50 w-[280px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-3`}>
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-sm font-medium text-purple-300">Ordenar por</span>
                           <button
@@ -2848,7 +2848,7 @@ export function CampanaDetailPage() {
                       className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
                         filtersAPS.length > 0
                           ? 'bg-purple-600 text-white'
-                          : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+                          : isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border border-purple-300'
                       }`}
                       title="Filtrar"
                     >
@@ -2860,7 +2860,7 @@ export function CampanaDetailPage() {
                       )}
                     </button>
                     {showFiltersAPS && (
-                      <div className="absolute right-0 top-full mt-1 z-50 w-[520px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                      <div className={`absolute right-0 top-full mt-1 z-50 w-[520px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-4`}>
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
                           <button
@@ -2952,7 +2952,7 @@ export function CampanaDetailPage() {
                   <div className="relative">
                     <button
                       onClick={() => setShowGroupingConfigAPS(!showGroupingConfigAPS)}
-                      className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 rounded-lg transition-colors"
+                      className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium ${isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border-purple-300'} border rounded-lg transition-colors`}
                       title="Agrupar"
                     >
                       <Layers className="h-3.5 w-3.5" />
@@ -2964,7 +2964,7 @@ export function CampanaDetailPage() {
                     </button>
                     {/* Dropdown de configuración */}
                     {showGroupingConfigAPS && (
-                      <div className="absolute right-0 top-full mt-1 z-10 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                      <div className={`absolute right-0 top-full mt-1 z-10 ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-2 min-w-[180px]`}>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wide px-2 py-1">
                           Agrupar por (max 3)
                         </p>
@@ -3015,14 +3015,14 @@ export function CampanaDetailPage() {
                       className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
                         sortFieldAPS
                           ? 'bg-purple-600 text-white'
-                          : 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30'
+                          : isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border border-purple-300'
                       }`}
                       title="Ordenar"
                     >
                       <ArrowUpDown className="h-3.5 w-3.5" />
                     </button>
                     {showSortAPS && (
-                      <div className="absolute right-0 top-full mt-1 z-50 w-[280px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3">
+                      <div className={`absolute right-0 top-full mt-1 z-50 w-[280px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-3`}>
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-sm font-medium text-purple-300">Ordenar por</span>
                           <button
@@ -3703,9 +3703,9 @@ export function CampanaDetailPage() {
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setShowComments(false)}
           />
-          <div className="relative bg-[#1a1025] border border-purple-900/30 rounded-xl w-full max-w-xl mx-4 h-[600px] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-purple-900/30">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
+          <div className={`relative ${isDark ? 'bg-[#1a1025] border-purple-900/30' : 'bg-white border-purple-200'} border rounded-xl w-full max-w-xl mx-4 h-[600px] flex flex-col`}>
+            <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200'}`}>
+              <h3 className={`text-lg font-semibold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                 <MessageSquare className="h-5 w-5 text-purple-400" />
                 Comentarios
                 {comentarios.length > 0 && (
@@ -3714,12 +3714,12 @@ export function CampanaDetailPage() {
               </h3>
               <button
                 onClick={() => setShowComments(false)}
-                className="p-1 hover:bg-purple-900/30 rounded-lg transition-colors"
+                className={`p-1 ${isDark ? 'hover:bg-purple-900/30' : 'hover:bg-purple-100'} rounded-lg transition-colors`}
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 divide-y divide-purple-900/20 flex flex-col scrollbar-purple">
+            <div className={`flex-1 overflow-y-auto p-3 divide-y ${isDark ? 'divide-purple-900/20' : 'divide-purple-100'} flex flex-col scrollbar-purple`}>
               {comentarios.length === 0 ? (
                 <EmptyState
                   icon={<MessageSquareOff className="h-6 w-6 text-purple-400" />}
@@ -3733,20 +3733,20 @@ export function CampanaDetailPage() {
                     <UserAvatar nombre={c.autor_nombre} foto_perfil={c.autor_foto} size="md" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-white">{c.autor_nombre || 'Usuario'}</span>
+                        <span className={`text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{c.autor_nombre || 'Usuario'}</span>
                         <span className="text-[10px] text-muted-foreground">{formatDate(c.fecha)}</span>
                       </div>
-                      <p className="text-xs text-zinc-300 mt-0.5">{c.contenido}</p>
+                      <p className={`text-xs ${isDark ? 'text-zinc-300' : 'text-gray-600'} mt-0.5`}>{c.contenido}</p>
                     </div>
                   </div>
                 ))
               )}
               <div ref={commentsEndRef} />
             </div>
-            <div className="p-3 border-t border-purple-900/30">
+            <div className={`p-3 border-t ${isDark ? 'border-purple-900/30' : 'border-purple-200'}`}>
               <div className="flex items-center gap-2">
                 <UserAvatar nombre={user?.nombre} foto_perfil={user?.foto_perfil} size="md" />
-                <div className="flex-1 flex items-center gap-2 px-2 py-1.5 rounded-lg bg-purple-900/20 border border-purple-900/30 focus-within:border-purple-500">
+                <div className={`flex-1 flex items-center gap-2 px-2 py-1.5 rounded-lg ${isDark ? 'bg-purple-900/20 border-purple-900/30' : 'bg-purple-50 border-purple-200'} border focus-within:border-purple-500`}>
                   <input
                     type="text"
                     value={comment}
@@ -3780,15 +3780,15 @@ export function CampanaDetailPage() {
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={handleCloseRemoveAPSModal}
           />
-          <div className="relative bg-[#1a1025] border border-red-900/30 rounded-xl w-full max-w-md mx-4 p-6">
+          <div className={`relative ${isDark ? 'bg-[#1a1025] border-red-900/30' : 'bg-white border-red-200'} border rounded-xl w-full max-w-md mx-4 p-6`}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
+              <h3 className={`text-lg font-semibold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                 <Minus className="h-5 w-5 text-red-400" />
                 Requiere autorización
               </h3>
               <button
                 onClick={handleCloseRemoveAPSModal}
-                className="p-1 hover:bg-red-900/30 rounded-lg transition-colors"
+                className={`p-1 ${isDark ? 'hover:bg-red-900/30' : 'hover:bg-red-100'} rounded-lg transition-colors`}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -3815,7 +3815,7 @@ export function CampanaDetailPage() {
                 <div className="flex justify-end gap-2 pt-4">
                   <button
                     onClick={handleCloseRemoveAPSModal}
-                    className="px-4 py-2 text-sm font-medium rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
+                    className={`px-4 py-2 text-sm font-medium rounded-lg ${isDark ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} transition-colors`}
                   >
                     Cancelar
                   </button>
@@ -3831,7 +3831,7 @@ export function CampanaDetailPage() {
             ) : (
               // Solicitar autorización
               <>
-                <p className="text-sm text-zinc-300 mb-6">
+                <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-600'} mb-6`}>
                   Solicita el código al administrador
                 </p>
 
@@ -3853,7 +3853,7 @@ export function CampanaDetailPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <p className="text-xs text-zinc-400 text-center">
+                    <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-center`}>
                       Se envió el código al administrador. Expira en 2 minutos.
                     </p>
                     <div className="flex items-center gap-2">
@@ -3892,9 +3892,9 @@ export function CampanaDetailPage() {
       {/* Modal POST a SAP */}
       {showPostSAPModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => !postingToSAP && !postSAPResult && setShowPostSAPModal(false)}>
-          <div className="bg-[#1a1025] border border-purple-900/50 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className={`${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-purple-300">Enviar a SAP</h3>
+              <h3 className={`text-lg font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Enviar a SAP</h3>
               <button
                 onClick={() => {
                   setShowPostSAPModal(false);
@@ -3911,11 +3911,11 @@ export function CampanaDetailPage() {
               <>
                 <div className="mb-6">
                   <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-4">
-                    <p className="text-sm text-yellow-300 font-medium">⚠️ Esta acción no se puede deshacer</p>
-                    <p className="text-xs text-yellow-400/70 mt-1">Se creará un Delivery Note en SAP. Verifica que los datos sean correctos antes de enviar.</p>
+                    <p className={`text-sm ${isDark ? 'text-yellow-300' : 'text-yellow-700'} font-medium`}>⚠️ Esta acción no se puede deshacer</p>
+                    <p className={`text-xs ${isDark ? 'text-yellow-400/70' : 'text-yellow-600'} mt-1`}>Se creará un Delivery Note en SAP. Verifica que los datos sean correctos antes de enviar.</p>
                   </div>
                   {previewDeliveryNote && (
-                    <div className="bg-purple-900/20 rounded-lg p-3 space-y-2 text-xs">
+                    <div className={`${isDark ? 'bg-purple-900/20' : 'bg-purple-50'} rounded-lg p-3 space-y-2 text-xs`}>
                       {campana && isMigratedCampaign(campana) ? (
                         <>
                           <div className="bg-cyan-500/10 border border-cyan-500/30 rounded px-2 py-1 mb-1">

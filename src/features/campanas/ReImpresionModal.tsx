@@ -3,6 +3,7 @@ import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, X, Search, User, MapPin, Loader2 } from 'lucide-react';
 import { solicitudesService } from '../../services/solicitudes.service';
+import { useThemeStore } from '../../store/themeStore';
 
 const TIPOS_INCIDENCIA = [
   'Grafiti',
@@ -40,6 +41,7 @@ interface Props {
 
 export function ReImpresionModal({ isOpen, onClose, selectedItems, onSubmit, isSubmitting, error }: Props) {
   useModalTracker('Re-impresión', isOpen);
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [tipoIncidencia, setTipoIncidencia] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [userSearch, setUserSearch] = useState('');
@@ -81,28 +83,28 @@ export function ReImpresionModal({ isOpen, onClose, selectedItems, onSubmit, isS
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-zinc-900 border border-orange-500/30 rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] flex flex-col">
+      <div className={`${isDark ? 'bg-zinc-900 border-orange-500/30' : 'bg-white border-orange-300/50'} border rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] flex flex-col`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-orange-400" />
-            <h2 className="text-sm font-semibold text-white">Re-impresión por Incidencia</h2>
+            <h2 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Re-impresión por Incidencia</h2>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className={`${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600'}`}><X className="h-4 w-4" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Inventarios seleccionados */}
           <div>
-            <p className="text-xs text-zinc-400 mb-2 font-medium">
+            <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2 font-medium`}>
               {selectedItems.length} espacio(s) afectado(s)
             </p>
             <div className="space-y-1 max-h-28 overflow-y-auto">
               {selectedItems.map(item => (
-                <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/60 rounded-lg">
+                <div key={item.id} className={`flex items-center gap-2 px-3 py-1.5 ${isDark ? 'bg-zinc-800/60' : 'bg-orange-50/60'} rounded-lg`}>
                   <MapPin className="h-3 w-3 text-orange-400 flex-shrink-0" />
-                  <span className="text-xs text-zinc-300 truncate">{item.ubicacion || item.id}</span>
-                  {item.plaza && <span className="text-[10px] text-zinc-500 flex-shrink-0">{item.plaza}</span>}
+                  <span className={`text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} truncate`}>{item.ubicacion || item.id}</span>
+                  {item.plaza && <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} flex-shrink-0`}>{item.plaza}</span>}
                 </div>
               ))}
             </div>
@@ -110,11 +112,11 @@ export function ReImpresionModal({ isOpen, onClose, selectedItems, onSubmit, isS
 
           {/* Tipo de incidencia */}
           <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Tipo de incidencia *</label>
+            <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Tipo de incidencia *</label>
             <select
               value={tipoIncidencia}
               onChange={e => setTipoIncidencia(e.target.value)}
-              className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-orange-500/50"
+              className={`w-full ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-orange-500/50`}
             >
               <option value="">Seleccionar...</option>
               {TIPOS_INCIDENCIA.map(t => (
@@ -125,51 +127,51 @@ export function ReImpresionModal({ isOpen, onClose, selectedItems, onSubmit, isS
 
           {/* Descripción */}
           <div>
-            <label className="text-xs text-zinc-400 mb-1 block">¿Qué pasó? *</label>
+            <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>¿Qué pasó? *</label>
             <textarea
               value={descripcion}
               onChange={e => setDescripcion(e.target.value)}
               rows={3}
               placeholder="Describe la incidencia detalladamente..."
-              className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-orange-500/50 placeholder:text-zinc-600"
+              className={`w-full ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600' : 'bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400'} border text-sm rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-orange-500/50`}
             />
           </div>
 
           {/* Asignar analista */}
           <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Asignar analista *</label>
+            <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Asignar analista *</label>
             {selectedUser ? (
-              <div className="flex items-center justify-between px-3 py-2 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+              <div className={`flex items-center justify-between px-3 py-2 ${isDark ? 'bg-orange-500/10 border-orange-500/30' : 'bg-orange-50 border-orange-300/50'} border rounded-lg`}>
                 <div className="flex items-center gap-2">
                   <User className="h-3.5 w-3.5 text-orange-400" />
-                  <span className="text-sm text-white">{selectedUser.nombre}</span>
+                  <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{selectedUser.nombre}</span>
                 </div>
-                <button onClick={() => { setSelectedUser(null); setUserSearch(''); }} className="text-zinc-500 hover:text-zinc-300">
+                <button onClick={() => { setSelectedUser(null); setUserSearch(''); }} className={`${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600'}`}>
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
             ) : (
               <div className="relative">
-                <div className="flex items-center gap-2 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg">
-                  <Search className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
+                <div className={`flex items-center gap-2 px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-50 border-gray-300'} border rounded-lg`}>
+                  <Search className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'} flex-shrink-0`} />
                   <input
                     type="text"
                     value={userSearch}
                     onChange={e => setUserSearch(e.target.value)}
                     placeholder="Buscar usuario..."
-                    className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
+                    className={`flex-1 bg-transparent text-sm ${isDark ? 'text-white placeholder:text-zinc-600' : 'text-gray-900 placeholder:text-gray-400'} focus:outline-none`}
                   />
-                  {isLoadingUsers && <Loader2 className="h-3.5 w-3.5 text-zinc-500 animate-spin" />}
+                  {isLoadingUsers && <Loader2 className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'} animate-spin`} />}
                 </div>
                 {filteredUsers.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                  <div className={`absolute z-10 w-full mt-1 ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-200'} border rounded-lg shadow-xl max-h-40 overflow-y-auto`}>
                     {filteredUsers.map(u => (
                       <button
                         key={u.id}
                         onClick={() => { setSelectedUser(u); setUserSearch(''); }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm ${isDark ? 'text-zinc-300 hover:bg-zinc-700' : 'text-gray-700 hover:bg-gray-100'} transition-colors`}
                       >
-                        <User className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
+                        <User className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'} flex-shrink-0`} />
                         <span>{u.nombre}</span>
                       </button>
                     ))}
@@ -185,18 +187,18 @@ export function ReImpresionModal({ isOpen, onClose, selectedItems, onSubmit, isS
         </div>
 
         {/* Footer */}
-        <div className="flex gap-2 px-5 py-4 border-t border-border">
+        <div className={`flex gap-2 px-5 py-4 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
           <button
             onClick={onClose}
             disabled={isSubmitting}
-            className="flex-1 px-3 py-2 text-sm text-zinc-400 border border-zinc-700 rounded-lg hover:bg-zinc-800 transition-colors disabled:opacity-50"
+            className={`flex-1 px-3 py-2 text-sm ${isDark ? 'text-zinc-400 border-zinc-700 hover:bg-zinc-800' : 'text-gray-500 border-gray-300 hover:bg-gray-100'} border rounded-lg transition-colors disabled:opacity-50`}
           >
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
             disabled={!tipoIncidencia || !descripcion.trim() || !selectedUser || isSubmitting}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-500 ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg transition-colors`}
           >
             {isSubmitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
