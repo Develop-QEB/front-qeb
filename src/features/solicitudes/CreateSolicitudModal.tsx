@@ -1084,15 +1084,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       const periodInicio = availablePeriods.find(p => p.a_o === catorcenaYear && p.numero_catorcena === catorcenaNum);
       if (!periodInicio) return;
       periodoInicioVal = periodInicio.fecha_inicio;
-
-      // If range fin is set, use it; otherwise same as inicio
-      if (newCara.periodoFinCat) {
-        const [yearFinStr, catFinStr] = newCara.periodoFinCat.split('-');
-        const periodFin = availablePeriods.find(p => p.a_o === parseInt(yearFinStr) && p.numero_catorcena === parseInt(catFinStr));
-        periodoFinVal = periodFin ? periodFin.fecha_fin : periodInicio.fecha_fin;
-      } else {
-        periodoFinVal = periodInicio.fecha_fin;
-      }
+      periodoFinVal = periodInicio.fecha_fin;
     }
 
     // Calculate descuento: if renta=100, bonif=10, then descuento is 10/(100+10) = 9.09%
@@ -1138,36 +1130,57 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // Si falla, dejamos sin estado (se evaluará al guardar)
     }
 
-    const cara: CaraEntry = {
-      id: editingCaraId || `${Date.now()}-${Math.random()}`,
+    // Build list of periods to create caras for (range support)
+    const periodsToCreate: Array<{ catorcenaNum: number; catorcenaYear: number; periodoInicio: string; periodoFin: string }> = [];
+
+    if (tipoPeriodo === 'catorcena' && !editingCaraId && newCara.periodoFinCat && newCara.periodoFinCat !== newCara.periodo) {
+      // Range mode: create one cara per catorcena
+      const [yearFinStr, catFinStr] = newCara.periodoFinCat.split('-');
+      const yearFin = parseInt(yearFinStr);
+      const catFin = parseInt(catFinStr);
+      const rangePeriods = availablePeriods.filter(p => {
+        const key = p.a_o * 100 + p.numero_catorcena;
+        return key >= catorcenaYear * 100 + catorcenaNum && key <= yearFin * 100 + catFin;
+      }).sort((a, b) => (a.a_o * 100 + a.numero_catorcena) - (b.a_o * 100 + b.numero_catorcena));
+
+      for (const p of rangePeriods) {
+        periodsToCreate.push({ catorcenaNum: p.numero_catorcena, catorcenaYear: p.a_o, periodoInicio: p.fecha_inicio, periodoFin: p.fecha_fin });
+      }
+    } else {
+      // Single period
+      periodsToCreate.push({ catorcenaNum, catorcenaYear, periodoInicio: periodoInicioVal, periodoFin: periodoFinVal });
+    }
+
+    const newCaras: CaraEntry[] = periodsToCreate.map((period, idx) => ({
+      id: editingCaraId || `${Date.now()}-${Math.random()}-${idx}`,
       articulo: newCara.articulo,
       estado: newCara.estado,
       ciudades: newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades,
       formato: newCara.formato,
       tipo: newCara.tipo,
       nse: newCara.nse,
-      catorcenaNum,
-      catorcenaYear,
-      periodoInicio: periodoInicioVal,
-      periodoFin: periodoFinVal,
+      catorcenaNum: period.catorcenaNum,
+      catorcenaYear: period.catorcenaYear,
+      periodoInicio: period.periodoInicio,
+      periodoFin: period.periodoFin,
       renta: newCara.renta,
       bonificacion: newCara.bonificacion,
       tarifaPublica: newCara.tarifaPublica,
-      descuento: descuento * 100, // Store as percentage
+      descuento: descuento * 100,
       precioTotal,
       autorizacion_dg,
       autorizacion_dcm,
       _originalDg: autorizacion_dg,
       _originalDcm: autorizacion_dcm,
-    };
+    }));
 
-    // Add or update cara, then recalculate impar + DG contamination from originals
+    // Add or update caras, then recalculate impar + DG contamination from originals
     setCaras(prev => {
       let updated: CaraEntry[];
       if (editingCaraId) {
-        updated = prev.map(c => c.id === editingCaraId ? cara : c);
+        updated = prev.map(c => c.id === editingCaraId ? newCaras[0] : c);
       } else {
-        updated = [...prev, cara];
+        updated = [...prev, ...newCaras];
       }
       // Paso 0: Reset todas las caras a sus valores originales del backend
       updated = updated.map(c => ({
@@ -1193,13 +1206,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     });
     if (editingCaraId) setEditingCaraId(null);
 
-    // Auto expand the catorcena
-    setExpandedCatorcenas(prev => new Set(prev).add(`${catorcenaYear}-${catorcenaNum}`));
+    // Auto expand all catorcenas created
+    setExpandedCatorcenas(prev => {
+      const next = new Set(prev);
+      for (const c of newCaras) next.add(`${c.catorcenaYear}-${c.catorcenaNum}`);
+      return next;
+    });
 
     // Keep filter values intact, only reset quantities and period
     setNewCara({
       ...newCara,
       periodo: '',
+      periodoFinCat: '',
       periodoInicioCustom: '',
       periodoFinCustom: '',
       renta: 0,

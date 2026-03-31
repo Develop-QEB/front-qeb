@@ -1486,7 +1486,7 @@ export function InventariosPage() {
                               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'} transition-colors`}
                             >
                               <Download className="h-3.5 w-3.5" />
-                              CSV Plantilla
+                              CSV
                             </button>
                             {checkTab === 'ocupados' && bulkCheckResult.ocupados.length > 0 && (
                               <button
