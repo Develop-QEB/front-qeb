@@ -3695,7 +3695,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     {disponiblesSearchTerm && (
                       <button
                         onClick={() => setDisponiblesSearchTerm('')}
-                        className={`absolute right-2 top-1/2 -translate-y-1/2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'}`}
+                        className={`absolute right-2 top-1/2 -translate-y-1/2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -3765,7 +3765,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </button>
                       <button
                         onClick={() => setShowCsvSection(false)}
-                        className={`p-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'}`}
+                        className={`p-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -3821,7 +3821,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               />
                             </th>
                             <th
-                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
                               onClick={() => handleSort('codigo_unico')}
                             >
                               <div className="flex items-center gap-1">
@@ -3838,7 +3838,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </th>
                             )}
                             <th
-                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
                               onClick={() => handleSort('tipo_de_cara')}
                             >
                               <div className="flex items-center gap-1">
@@ -3850,7 +3850,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </div>
                             </th>
                             <th
-                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
                               onClick={() => handleSort('plaza')}
                             >
                               <div className="flex items-center gap-1">
@@ -3862,7 +3862,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </div>
                             </th>
                             <th
-                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
                               onClick={() => handleSort('isla')}
                             >
                               <div className="flex items-center gap-1">
@@ -3874,7 +3874,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </div>
                             </th>
                             <th
-                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
                               onClick={() => handleSort('nivel_socioeconomico')}
                             >
                               <div className="flex items-center gap-1">
@@ -3886,7 +3886,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               </div>
                             </th>
                             <th
-                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
                               onClick={() => handleSort('ubicacion')}
                             >
                               <div className="flex items-center gap-1">
@@ -3906,7 +3906,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               <React.Fragment key={groupName}>
                                 {/* Group Header */}
                                 <tr
-                                  className={`${isDark ? 'bg-zinc-800/70' : 'bg-gray-50/70'} cursor-pointer hover:${isDark ? 'bg-zinc-800' : 'bg-gray-50'}`}
+                                  className={`${isDark ? 'bg-zinc-800/70' : 'bg-gray-50/70'} cursor-pointer ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-50'}`}
                                   onClick={() => toggleGroupExpansion(groupName)}
                                 >
                                   <td colSpan={hasDigitalInventory ? 8 : 7} className="px-3 py-2">
@@ -4278,7 +4278,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     {!showReservasFlatList && (
                       <button
                         onClick={toggleAllReservadosHierarchy}
-                        className={`flex items-center gap-1 px-2 py-1.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
+                        className={`flex items-center gap-1 px-2 py-1.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
                       >
                         {expandedReservadosHierarchy.size > 0 ? (
                           <>
@@ -4361,7 +4361,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <React.Fragment key={groupName}>
                               {/* Group Header */}
                               <tr
-                                className={`${isDark ? 'bg-zinc-800/70' : 'bg-gray-50/70'} cursor-pointer hover:${isDark ? 'bg-zinc-800' : 'bg-gray-50'}`}
+                                className={`${isDark ? 'bg-zinc-800/70' : 'bg-gray-50/70'} cursor-pointer ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-50'}`}
                                 onClick={() => toggleGroupExpansionReservados(groupName)}
                               >
                                 <td colSpan={effectiveCanEdit ? 7 : 6} className="px-3 py-2">
@@ -4391,7 +4391,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               {expandedGroupsReservados.has(groupName) && items.map((reserva) => (
                                 <tr
                                   key={reserva.id}
-                                  className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} hover:${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} cursor-pointer ${
+                                  className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50/30'} cursor-pointer ${
                                     selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : ''
                                   }`}
                                   onClick={() => handleToggleReservadoSelection(reserva.id)}
@@ -4441,7 +4441,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           filteredReservados.map((reserva) => (
                             <tr
                               key={reserva.id}
-                              className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} hover:${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} cursor-pointer ${
+                              className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50/30'} cursor-pointer ${
                                 selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : ''
                               } ${selectedMapReservas.has(reserva.id) ? 'ring-1 ring-purple-500' : ''}`}
                               onClick={() => handleToggleReservadoSelection(reserva.id)}
@@ -4495,7 +4495,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               <React.Fragment key={catKey}>
                                 {/* Level 0: Catorcena Header */}
                                 <tr
-                                  className={`${isDark ? 'bg-zinc-800/90' : 'bg-gray-50/90'} cursor-pointer hover:${isDark ? 'bg-zinc-800' : 'bg-gray-50'}`}
+                                  className={`${isDark ? 'bg-zinc-800/90' : 'bg-gray-50/90'} cursor-pointer ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-50'}`}
                                   onClick={() => toggleReservadosHierarchy(catKey)}
                                 >
                                   <td colSpan={7} className="px-3 py-2">
@@ -4541,7 +4541,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 return (
                                   <React.Fragment key={artKeyFull}>
                                     <tr
-                                      className={`${isDark ? 'bg-zinc-800/60' : 'bg-gray-50/60'} cursor-pointer hover:${isDark ? 'bg-zinc-800/80' : 'bg-gray-50/80'}`}
+                                      className={`${isDark ? 'bg-zinc-800/60' : 'bg-gray-50/60'} cursor-pointer ${isDark ? 'hover:bg-zinc-800/80' : 'hover:bg-gray-50/80'}`}
                                       onClick={() => toggleReservadosHierarchy(artKeyFull)}
                                     >
                                       <td colSpan={7} className="px-3 py-2 pl-8">
@@ -4587,7 +4587,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       return (
                                         <React.Fragment key={plzKeyFull}>
                                           <tr
-                                            className={`${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'} cursor-pointer hover:${isDark ? 'bg-zinc-800/60' : 'bg-gray-50/60'}`}
+                                            className={`${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'} cursor-pointer ${isDark ? 'hover:bg-zinc-800/60' : 'hover:bg-gray-50/60'}`}
                                             onClick={() => toggleReservadosHierarchy(plzKeyFull)}
                                           >
                                             <td colSpan={7} className="px-3 py-2 pl-14">
@@ -4632,7 +4632,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             return (
                                               <React.Fragment key={fmtKeyFull}>
                                                 <tr
-                                                  className={`${isDark ? 'bg-zinc-800/20' : 'bg-gray-50/20'} cursor-pointer hover:${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'}`}
+                                                  className={`${isDark ? 'bg-zinc-800/20' : 'bg-gray-50/20'} cursor-pointer ${isDark ? 'hover:bg-zinc-800/40' : 'hover:bg-gray-50/40'}`}
                                                   onClick={() => toggleReservadosHierarchy(fmtKeyFull)}
                                                 >
                                                   <td colSpan={7} className="px-3 py-2 pl-20">
@@ -4673,7 +4673,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                   <tr
                                                     key={reserva.id}
                                                     onClick={() => handleToggleReservadoSelection(reserva.id)}
-                                                    className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : 'hover:${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'}'}`}
+                                                    className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} cursor-pointer transition-colors ${selectedReservados.has(reserva.id) ? 'bg-purple-500/10' : `${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50/30'}`}`}
                                                   >
                                                     <td className="px-3 py-3 pl-24 text-center" onClick={(e) => e.stopPropagation()}>
                                                       <input
@@ -4954,7 +4954,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           </div>
           <div className="flex items-center gap-3">
             
-            <button onClick={onClose} className={`p-2 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'}`}>
+            <button onClick={onClose} className={`p-2 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -4988,7 +4988,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${
                             selectedClienteCuic
                               ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                              : `${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} hover:${isDark ? 'border-zinc-600' : 'border-gray-300'}`
+                              : `${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} ${isDark ? 'hover:border-zinc-600' : 'hover:border-gray-300'}`
                           }`}
                         >
                           <span className="truncate text-left flex-1">
@@ -5002,7 +5002,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             )}
                           </span>
                           {selectedClienteCuic ? (
-                            <X className={`h-4 w-4 hover:${isDark ? 'text-white' : 'text-gray-900'} flex-shrink-0`} onClick={(e) => { e.stopPropagation(); setSelectedClienteCuic(null); setClienteChanged(false); }} />
+                            <X className={`h-4 w-4 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} flex-shrink-0`} onClick={(e) => { e.stopPropagation(); setSelectedClienteCuic(null); setClienteChanged(false); }} />
                           ) : (
                             <ChevronDown className="h-4 w-4 flex-shrink-0" />
                           )}
@@ -5044,7 +5044,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} last:border-0 ${
                                         selectedClienteCuic?.CUIC === item.CUIC
                                           ? 'bg-purple-500/20 text-purple-300'
-                                          : `${isDark ? 'text-zinc-300' : 'text-gray-700'} hover:${isDark ? 'bg-zinc-800' : 'bg-gray-50'}`
+                                          : `${isDark ? 'text-zinc-300' : 'text-gray-700'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-50'}`
                                       }`}
                                     >
                                       <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.T2_U_Marca || 'Sin marca'}</div>
@@ -5160,7 +5160,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               {canEditResumen && (
                                 <button
                                   onClick={() => setAsignados(prev => prev.filter(u => u.id !== user.id))}
-                                  className={`hover:${isDark ? 'text-white' : 'text-gray-900'}`}
+                                  className={`${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}
                                 >
                                   <X className="h-3 w-3" />
                                 </button>
@@ -5906,7 +5906,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             return (
                               <div key={cara.localId} className={`${statusColor === 'blue' ? 'bg-blue-500/5' : statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
                                 {/* Cara row */}
-                                <div className={`flex items-center gap-3 px-5 py-3 hover:${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} transition-colors`}>
+                                <div className={`flex items-center gap-3 px-5 py-3 ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50/30'} transition-colors`}>
                                   {/* Completion indicator */}
                                   <div className={`w-2 h-2 rounded-full ${
                                     statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
@@ -6221,7 +6221,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <div className="absolute right-0 top-full mt-1 z-50 w-[520px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
                               <div className="flex items-center justify-between mb-3">
                                 <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
-                                <button onClick={() => setShowFiltersReservas(false)} className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                <button onClick={() => setShowFiltersReservas(false)} className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>
                                   <X className="h-4 w-4" />
                                 </button>
                               </div>
@@ -6326,7 +6326,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 </button>
                               ))}
                               <div className="border-t border-purple-900/30 mt-2 pt-2">
-                                <button onClick={() => setActiveGroupingsReservas([])} className={`w-full text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} hover:${isDark ? 'text-zinc-300' : 'text-gray-700'} py-1`}>
+                                <button onClick={() => setActiveGroupingsReservas([])} className={`w-full text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} ${isDark ? 'hover:text-zinc-300' : 'hover:text-gray-700'} py-1`}>
                                   Quitar agrupación
                                 </button>
                               </div>
@@ -6370,7 +6370,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 </button>
                               ))}
                               <div className="border-t border-purple-900/30 mt-2 pt-2">
-                                <button onClick={() => setSortFieldReservas(null)} className={`w-full text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} hover:${isDark ? 'text-zinc-300' : 'text-gray-700'} py-1`}>
+                                <button onClick={() => setSortFieldReservas(null)} className={`w-full text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} ${isDark ? 'hover:text-zinc-300' : 'hover:text-gray-700'} py-1`}>
                                   Quitar orden
                                 </button>
                               </div>
@@ -6464,7 +6464,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         <label
                                           key={reserva.id}
                                           className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs transition-colors ${
-                                            selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'}'
+                                            selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : `${isDark ? 'hover:bg-zinc-800/40' : 'hover:bg-gray-50/40'}`
                                           }`}
                                         >
                                           <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
@@ -6491,7 +6491,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           <div key={subKey} className="border-l border-pink-500/20 ml-2">
                                             <button
                                               onClick={() => toggleReservasGroup(subFullKey)}
-                                              className={`w-full flex items-center gap-2 px-2 py-1.5 ${isDark ? 'bg-zinc-800/20' : 'bg-gray-50/20'} hover:${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'}`}
+                                              className={`w-full flex items-center gap-2 px-2 py-1.5 ${isDark ? 'bg-zinc-800/20' : 'bg-gray-50/20'} ${isDark ? 'hover:bg-zinc-800/40' : 'hover:bg-gray-50/40'}`}
                                             >
                                               {isSubExpanded ? <ChevronDown className="h-3 w-3 text-pink-400" /> : <ChevronRight className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />}
                                               <input
@@ -6515,7 +6515,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                     <label
                                                       key={reserva.id}
                                                       className={`flex items-center gap-2 px-3 py-1 cursor-pointer text-[11px] ${
-                                                        selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'}'
+                                                        selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : `${isDark ? 'hover:bg-zinc-800/40' : 'hover:bg-gray-50/40'}`
                                                       }`}
                                                     >
                                                       <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
@@ -6535,7 +6535,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                       <div key={thirdKey}>
                                                         <button
                                                           onClick={() => toggleReservasGroup(thirdFullKey)}
-                                                          className={`w-full flex items-center gap-2 px-2 py-1 ${isDark ? 'bg-zinc-800/10' : 'bg-gray-50/10'} hover:${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'}`}
+                                                          className={`w-full flex items-center gap-2 px-2 py-1 ${isDark ? 'bg-zinc-800/10' : 'bg-gray-50/10'} ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50/30'}`}
                                                         >
                                                           {isThirdExpanded ? <ChevronDown className="h-3 w-3 text-cyan-400" /> : <ChevronRight className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />}
                                                           <span className="text-[10px] text-cyan-400">
@@ -6548,7 +6548,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                           <label
                                                             key={reserva.id}
                                                             className={`flex items-center gap-2 px-4 py-1 cursor-pointer text-[11px] ${
-                                                              selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : 'hover:${isDark ? 'bg-zinc-800/40' : 'bg-gray-50/40'}'
+                                                              selectedMapReservas.has(reserva.id) ? 'bg-purple-500/15' : `${isDark ? 'hover:bg-zinc-800/40' : 'hover:bg-gray-50/40'}`
                                                             }`}
                                                           >
                                                             <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
@@ -6734,7 +6734,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className={`px-4 py-2 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:${isDark ? 'text-white' : 'text-gray-900'} transition-colors`}
+                className={`px-4 py-2 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
               >
                 Cerrar
               </button>
