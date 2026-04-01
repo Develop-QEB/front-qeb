@@ -1363,7 +1363,7 @@ function TaskDrawer({
   );
   const user = useAuthStore((state) => state.user);
   const canNavigate = hasNavigationRoute(tarea);
-  const isAdmin = user?.rol === 'Administrador';
+  const isAdmin = ['Administrador', 'DEV'].includes(user?.rol || '');
 
   const queryClient = useQueryClient();
 

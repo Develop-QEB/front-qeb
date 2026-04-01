@@ -23,6 +23,7 @@ const AREAS = [
   'Facturación',
   'Mejora Continua',
   'TI',
+  'Desarrollo',
 ] as const;
 
 // Mapeo de puestos por área (sincronizado con UsuariosAdminPage)
@@ -75,6 +76,13 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   ],
   'TI': [
     'TI',
+  ],
+  'Desarrollo': [
+    'Líder de Desarrollo',
+    'Desarrollador Full Stack',
+    'Desarrollador Frontend',
+    'Desarrollador Backend',
+    'Ingeniero DevOps',
   ],
 };
 

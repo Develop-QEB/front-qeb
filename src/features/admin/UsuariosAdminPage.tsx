@@ -34,6 +34,7 @@ const AREAS_DISPONIBLES = [
   'Facturacion',
   'Mejora Continua',
   'TI',
+  'Desarrollo',
 ];
 
 // Mapeo de puestos por area
@@ -88,6 +89,13 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   'TI': [
     'TI',
   ],
+  'Desarrollo': [
+    'Lider de Desarrollo',
+    'Desarrollador Full Stack',
+    'Desarrollador Frontend',
+    'Desarrollador Backend',
+    'Ingeniero DevOps',
+  ],
 };
 
 // Funcion para obtener puestos segun area
@@ -98,6 +106,9 @@ const getPuestosPorArea = (area: string): string[] => {
 // Funcion para obtener roles segun area (puestos del area + Administrador)
 const getRolesPorArea = (area: string): string[] => {
   const puestos = PUESTOS_POR_AREA[area] || [];
+  if (area === 'Desarrollo') {
+    return ['DEV'];
+  }
   return [...puestos, 'Administrador'];
 };
 

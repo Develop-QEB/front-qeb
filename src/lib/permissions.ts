@@ -30,7 +30,8 @@ export type UserRole =
   | 'Coordinador de Facturación y Cobranza'
   | 'Mesa de Control'
   | 'Analista de Facturación y Cobranza'
-  | 'Administrador';
+  | 'Administrador'
+  | 'DEV';
 
 export interface RolePermissions {
   // Secciones visibles
@@ -957,6 +958,12 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   },
   'Administrador': {
     // Admin tiene todos los permisos por defecto
+    canEditClienteEnFormularios: true,
+    canEditCaraFiltersOnEdit: true,
+    canEditArticuloOnEdit: true,
+  },
+  'DEV': {
+    // DEV tiene acceso total a todo
     canEditClienteEnFormularios: true,
     canEditCaraFiltersOnEdit: true,
     canEditArticuloOnEdit: true,
