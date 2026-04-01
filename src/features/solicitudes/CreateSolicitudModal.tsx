@@ -235,7 +235,7 @@ interface SAPArticulo {
 interface CaraEntry {
   id: string;
   articulo: SAPArticulo;
-  estado: string;
+  estados: string[];
   ciudades: string[];
   formato: string;
   tipo: string;
@@ -505,10 +505,14 @@ function MultiSelectTags({
   );
 }
 
+// ============================================================
+// CreateSolicitudModal — también funciona como EDITAR SOLICITUD
+// Si recibe editSolicitudId, entra en modo edición (isEditMode)
+// ============================================================
 export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props) {
   const queryClient = useQueryClient();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
-  const isEditMode = !!editSolicitudId;
+  const isEditMode = !!editSolicitudId; // <-- MODO EDITAR si tiene ID
   useModalTracker(isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud', isOpen);
 
   // Socket para actualizar usuarios en tiempo real cuando cambian miembros de equipos
@@ -569,7 +573,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // New cara form
   const [newCara, setNewCara] = useState({
     articulo: null as SAPArticulo | null,
-    estado: '',
+    estados: [] as string[],
     ciudades: [] as string[],
     formato: '',
     tipo: '' as 'Tradicional' | 'Digital' | '',
@@ -723,11 +727,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     queryClient.invalidateQueries({ queryKey: ['clientes-full-for-solicitud'] });
   };
 
-  // Fetch cascade-filtered options (formatos, tipos, NSE) by estado/ciudades
+  // Fetch cascade-filtered options (formatos, tipos, NSE) by estados/ciudades
   const { data: inventarioOptions } = useQuery({
-    queryKey: ['inventario-options', newCara.estado, newCara.ciudades],
-    queryFn: () => solicitudesService.getInventarioOptions(newCara.estado, newCara.ciudades),
-    enabled: isOpen && (!!newCara.estado || newCara.ciudades.length > 0),
+    queryKey: ['inventario-options', newCara.estados, newCara.ciudades],
+    queryFn: () => solicitudesService.getInventarioOptions(newCara.estados, newCara.ciudades),
+    enabled: isOpen && (newCara.estados.length > 0 || newCara.ciudades.length > 0),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -847,7 +851,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setExpandedCatorcenas(new Set());
       setNewCara({
         articulo: null,
-        estado: '',
+        estados: [],
         ciudades: [],
         formato: '',
         tipo: '',
@@ -881,14 +885,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     }
   }, [editSolicitudId]);
 
-  // Filter cities by estado
+  // Filter cities by estados (multi-select)
   const filteredCiudades = useMemo(() => {
-    if (!inventarioFilters?.ciudades || !newCara.estado) return [];
+    if (!inventarioFilters?.ciudades || newCara.estados.length === 0) return [];
     return inventarioFilters.ciudades
-      .filter(c => c.estado === newCara.estado)
+      .filter(c => newCara.estados.includes(c.estado as string))
       .map(c => c.ciudad)
       .filter((c): c is string => !!c);
-  }, [inventarioFilters, newCara.estado]);
+  }, [inventarioFilters, newCara.estados]);
 
   // Cascade-filtered formatos/tipos/NSE from inventario-options API
   const filteredFormatos = useMemo(() => {
@@ -1051,7 +1055,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Add cara entry
   const handleAddCara = async () => {
-    if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0) return;
+    if (!newCara.articulo || newCara.estados.length === 0 || !newCara.formato || !newCara.tipo || newCara.nse.length === 0) return;
 
     // Validar tarifa pública: si es 0, solo CT y BF/CF pueden avanzar
     const artCode = newCara.articulo.ItemCode?.toUpperCase() || '';
@@ -1093,41 +1097,48 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const precioTotal = newCara.tarifaPublica * newCara.renta;
 
     // Evaluar estado de autorización con el backend
+    // En modo edición, si solo cambiaron NSE o ciudad, mantener autorización original
     let autorizacion_dg: CaraEntry['autorizacion_dg'] = undefined;
     let autorizacion_dcm: CaraEntry['autorizacion_dcm'] = undefined;
-    try {
-      const ciudadesStr = newCara.ciudades.length > 0
-        ? newCara.ciudades.join(', ')
-        : filteredCiudades.join(', ');
+    const editingOriginal = editingCaraId ? caras.find(c => c.id === editingCaraId) : null;
+    const skipAuthEval = isEditMode && editingOriginal && (
+      newCara.renta === editingOriginal.renta
+      && newCara.bonificacion === editingOriginal.bonificacion
+      && newCara.tarifaPublica === editingOriginal.tarifaPublica
+      && newCara.formato === editingOriginal.formato
+      && newCara.tipo === editingOriginal.tipo
+      && newCara.articulo?.ItemCode === editingOriginal.articulo?.ItemCode
+    );
 
-      console.log('[handleAddCara] Evaluando autorización:', {
-        ciudad: ciudadesStr,
-        estado: newCara.estado,
-        formato: newCara.formato,
-        tipo: newCara.tipo,
-        caras: newCara.renta,
-        bonificacion: newCara.bonificacion,
-        costo: precioTotal,
-        tarifa_publica: newCara.tarifaPublica
-      });
+    // Cortesías no requieren autorización — se aprueban automáticamente
+    if (esCortesia) {
+      autorizacion_dg = 'aprobado';
+      autorizacion_dcm = 'aprobado';
+    } else if (skipAuthEval && editingOriginal) {
+      autorizacion_dg = editingOriginal._originalDg;
+      autorizacion_dcm = editingOriginal._originalDcm;
+    } else {
+      try {
+        const ciudadesStr = newCara.ciudades.length > 0
+          ? newCara.ciudades.join(', ')
+          : filteredCiudades.join(', ');
 
-      const resultado = await solicitudesService.evaluarAutorizacion({
-        ciudad: ciudadesStr,
-        estado: newCara.estado,
-        formato: newCara.formato,
-        tipo: newCara.tipo,
-        caras: newCara.renta,
-        bonificacion: newCara.bonificacion,
-        costo: precioTotal,
-        tarifa_publica: newCara.tarifaPublica,
-        articulo: newCara.articulo?.ItemCode || null,
-      });
-      console.log('[handleAddCara] Resultado autorización:', resultado);
-      autorizacion_dg = resultado.autorizacion_dg;
-      autorizacion_dcm = resultado.autorizacion_dcm;
-    } catch (error: any) {
-      console.error('[handleAddCara] Error evaluando autorización:', error?.response?.data || error?.message || error);
-      // Si falla, dejamos sin estado (se evaluará al guardar)
+        const resultado = await solicitudesService.evaluarAutorizacion({
+          ciudad: ciudadesStr,
+          estado: newCara.estados.join(', '),
+          formato: newCara.formato,
+          tipo: newCara.tipo,
+          caras: newCara.renta,
+          bonificacion: newCara.bonificacion,
+          costo: precioTotal,
+          tarifa_publica: newCara.tarifaPublica,
+          articulo: newCara.articulo?.ItemCode || null,
+        });
+        autorizacion_dg = resultado.autorizacion_dg;
+        autorizacion_dcm = resultado.autorizacion_dcm;
+      } catch (error: any) {
+        console.error('[handleAddCara] Error evaluando autorización:', error?.response?.data || error?.message || error);
+      }
     }
 
     // Build list of periods to create caras for (range support)
@@ -1154,7 +1165,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const newCaras: CaraEntry[] = periodsToCreate.map((period, idx) => ({
       id: editingCaraId || `${Date.now()}-${Math.random()}-${idx}`,
       articulo: newCara.articulo!,
-      estado: newCara.estado,
+      estados: newCara.estados,
       ciudades: newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades,
       formato: newCara.formato,
       tipo: newCara.tipo,
@@ -1189,7 +1200,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         autorizacion_dcm: c._originalDcm,
       }));
       // Paso 1: Impar por grupo — si renta+bonificacion de un grupo es impar, esa cara es DG
+      // Cortesías quedan excluidas: no requieren autorización
       updated = updated.map(c => {
+        const esCaraCortesia = c.articulo?.ItemCode?.toUpperCase().startsWith('CT');
+        if (esCaraCortesia) return c;
         const carasGrupo = c.renta + c.bonificacion;
         const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
         if (esImpar && c.autorizacion_dg !== 'pendiente') {
@@ -1198,9 +1212,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         return c;
       });
       // Paso 2: DG contamina — si hay al menos 1 DG pendiente, las que tengan DCM pendiente pasan a DG
+      // Cortesías quedan excluidas de la contaminación
       const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
       if (hayDG) {
-        return updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+        return updated.map(c => {
+          const esCaraCortesia = c.articulo?.ItemCode?.toUpperCase().startsWith('CT');
+          if (esCaraCortesia) return c;
+          return c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c;
+        });
       }
       return updated;
     });
@@ -1230,7 +1249,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const handleClearNewCara = () => {
     setNewCara({
       articulo: null,
-      estado: '',
+      estados: [],
       ciudades: [],
       formato: '',
       tipo: '',
@@ -1259,7 +1278,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setEditingCaraId(cara.id);
     setNewCara({
       articulo: cara.articulo,
-      estado: cara.estado,
+      estados: cara.estados,
       ciudades: cara.ciudades,
       formato: cara.formato,
       tipo: cara.tipo as 'Tradicional' | 'Digital' | '',
@@ -1279,7 +1298,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setEditingCaraId(null);
     setNewCara({
       articulo: null,
-      estado: '',
+      estados: [],
       ciudades: [],
       formato: '',
       tipo: '',
@@ -1479,7 +1498,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       IMU: imu,
       caras: caras.map(c => ({
         ciudad: c.ciudades.join(', '),
-        estado: c.estado,
+        estado: c.estados.join(', '),
         tipo: c.tipo,
         flujo: 'Ambos',
         bonificacion: c.bonificacion,
@@ -1648,7 +1667,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           return {
             id: `edit-${idx}-${Date.now()}-${Math.random()}`,
             articulo,
-            estado: cara.estados || '',
+            estados: cara.estados ? cara.estados.split(', ').map((e: string) => e.trim()).filter(Boolean) : [],
             ciudades: cara.ciudad ? cara.ciudad.split(', ').map(c => c.trim()) : [],
             formato: cara.formato || '',
             tipo: cara.tipo || '',
@@ -1990,7 +2009,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setCaras([]);
                         // Clear articulo/formato if incompatible with new period type
                         if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'catorcena') {
-                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estados: [], ciudades: [], tarifaPublica: 0 }));
                         } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'catorcena') {
                           setNewCara(prev => ({ ...prev, formato: '' }));
                         }
@@ -2008,7 +2027,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setCaras([]);
                         // Clear articulo/formato if incompatible with new period type
                         if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'mensual') {
-                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estados: [], ciudades: [], tarifaPublica: 0 }));
                         } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'mensual') {
                           setNewCara(prev => ({ ...prev, formato: '' }));
                         }
@@ -2254,13 +2273,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         tarifaPublica: isTarifaCero ? 0 : tarifa.tarifa_publica,
                         renta: isCortesia ? 0 : newCara.renta,
                         bonificacion: isImpresion ? 0 : newCara.bonificacion,
-                        estado: ciudadEstado?.estado || newCara.estado,
+                        estados: ciudadEstado?.estado ? [ciudadEstado.estado] : newCara.estados,
                         ciudades: ciudadEstado?.ciudades && ciudadEstado.ciudades.length > 0 ? ciudadEstado.ciudades : newCara.ciudades,
                         formato: formato || newCara.formato,
                         tipo: tipo || newCara.tipo,
                       });
                     }}
-                    onClear={() => setNewCara({ ...newCara, articulo: null, tarifaPublica: 0, estado: '', ciudades: [], formato: '', tipo: '' })}
+                    onClear={() => setNewCara({ ...newCara, articulo: null, tarifaPublica: 0, estados: [], ciudades: [], formato: '', tipo: '' })}
                     displayKey="ItemName"
                     valueKey="ItemCode"
                     searchKeys={['ItemCode', 'ItemName']}
@@ -2282,19 +2301,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                 {/* Row 2: Estado, Ciudad (opcional), Formato, Tipo */}
                 <div className="grid grid-cols-4 gap-3 mb-4">
-                  {/* Estado */}
+                  {/* Estado (multi-select) */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Estado</label>
-                    <select
-                      value={newCara.estado}
-                      onChange={(e) => setNewCara({ ...newCara, estado: e.target.value, ciudades: [] })}
-                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
-                    >
-                      <option value="">Seleccionar</option>
-                      {inventarioFilters?.estados.map(e => (
-                        <option key={e} value={e}>{e}</option>
-                      ))}
-                    </select>
+                    <MultiSelectTags
+                      label="estado"
+                      options={(inventarioFilters?.estados || []).map(e => ({ estado: e }))}
+                      selected={newCara.estados.map(e => ({ estado: e }))}
+                      onChange={(items) => setNewCara({ ...newCara, estados: items.map(i => i.estado), ciudades: [] })}
+                      displayKey="estado"
+                      valueKey="estado"
+                      searchKey="estado"
+                    />
                   </div>
 
                   {/* Ciudad (opcional) */}
@@ -2525,7 +2543,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <button
                     type="button"
                     onClick={handleAddCara}
-                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom))}
+                    disabled={!newCara.articulo || newCara.estados.length === 0 || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom)) || ((newCara.renta + newCara.bonificacion) > 0 && (newCara.renta + newCara.bonificacion) % 2 !== 0)}
                     className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg text-sm font-medium transition-colors`}
                   >
                     {editingCaraId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -2619,8 +2637,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           <div className="truncate font-medium">{cara.articulo.ItemCode}</div>
                                           <div className={`truncate text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{cara.articulo.ItemName}</div>
                                         </td>
-                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={`${cara.estado} - ${cara.ciudades.join(', ')}`}>
-                                          {cara.ciudades.join(', ')}
+                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={`${cara.estados.join(', ')} - ${cara.ciudades.join(', ')}`}>
+                                          {cara.estados.join(', ')}
                                         </td>
                                         <td className="px-2 py-2">
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
@@ -2636,15 +2654,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
                                           {(() => {
+                                            // Cortesías siempre aprobadas, no requieren autorización
+                                            const esCaraCortesia = cara.articulo?.ItemCode?.toUpperCase().startsWith('CT');
                                             // Impar por grupo: si las caras de ESTE grupo son impar, requiere DG
                                             const carasGrupo = cara.renta + cara.bonificacion;
-                                            const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
-                                            // DG contamina: si alguna cara tiene DG, todas son DG
+                                            const esImpar = !esCaraCortesia && carasGrupo > 0 && carasGrupo % 2 !== 0;
+                                            // DG contamina: si alguna cara tiene DG, todas son DG (excepto cortesías)
                                             const hayDGEnPropuesta = caras.some(c => c.autorizacion_dg === 'pendiente');
-                                            // Solo contamina si esta cara tiene algún pendiente (no tocar las ya aprobadas)
-                                            const tienePendiente = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
-                                            const dgEfectivo = esImpar || (hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg;
-                                            const dcmEfectivo = dgEfectivo === 'pendiente' ? 'aprobado' : cara.autorizacion_dcm;
+                                            // Solo contamina si esta cara tiene algún pendiente (no tocar las ya aprobadas ni cortesías)
+                                            const tienePendiente = !esCaraCortesia && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
+                                            const dgEfectivo = esCaraCortesia ? 'aprobado' : (esImpar || (hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg);
+                                            const dcmEfectivo = esCaraCortesia ? 'aprobado' : (dgEfectivo === 'pendiente' ? 'aprobado' : cara.autorizacion_dcm);
                                             return (
                                               <div className="flex flex-col gap-0.5">
                                                 {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (
@@ -2678,7 +2698,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         </td>
                                         <td className="px-2 py-2 text-center">
                                           {(() => {
-                                            const authBlocked = isEditMode && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
+                                            const anyPending = caras.some(c => c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente');
+                                            const authBlocked = isEditMode && anyPending;
                                             return (
                                           <div className="flex items-center justify-center gap-1">
                                             <button
@@ -2972,9 +2993,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0 || invalidCaras.length > 0}
+              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0 || invalidCaras.length > 0 || caras.some(c => { const t = c.renta + c.bonificacion; return t > 0 && t % 2 !== 0; })}
               className={`px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} transition-colors flex items-center gap-2`}
-              title={selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
+              title={caras.some(c => { const t = c.renta + c.bonificacion; return t > 0 && t % 2 !== 0; }) ? 'Hay grupos con caras impar — corrige antes de guardar' : selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
             >
               {(isEditMode ? updateMutation.isPending : createMutation.isPending) ? (
                 <>

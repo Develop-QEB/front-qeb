@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check, Crown, Ticket, Send, Image, AlertTriangle, Clock, CheckCircle2, KeyRound } from 'lucide-react';
+import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check, Crown, Ticket, Send, Image, AlertTriangle, Clock, CheckCircle2, KeyRound, DoorOpen } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Header } from '../../components/layout/Header';
-import { usuariosService, UsuarioAdmin, UpdateUsuarioInput, CreateUsuarioInput } from '../../services/usuarios.service';
+import { usuariosService, UsuarioAdmin, UpdateUsuarioInput, CreateUsuarioInput, AssignmentsData, Reassignment } from '../../services/usuarios.service';
 import { equiposService, Equipo, CreateEquipoInput, MiembroEquipo } from '../../services/equipos.service';
 import { ticketsService, Ticket as TicketType, CreateTicketInput } from '../../services/tickets.service';
 import { UserAvatar } from '../../components/ui/user-avatar';
@@ -34,6 +34,7 @@ const AREAS_DISPONIBLES = [
   'Facturacion',
   'Mejora Continua',
   'TI',
+  'Desarrollo',
 ];
 
 // Mapeo de puestos por area
@@ -88,6 +89,13 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   'TI': [
     'TI',
   ],
+  'Desarrollo': [
+    'Lider de Desarrollo',
+    'Desarrollador Full Stack',
+    'Desarrollador Frontend',
+    'Desarrollador Backend',
+    'Ingeniero DevOps',
+  ],
 };
 
 // Funcion para obtener puestos segun area
@@ -98,6 +106,9 @@ const getPuestosPorArea = (area: string): string[] => {
 // Funcion para obtener roles segun area (puestos del area + Administrador)
 const getRolesPorArea = (area: string): string[] => {
   const puestos = PUESTOS_POR_AREA[area] || [];
+  if (area === 'Desarrollo') {
+    return ['DEV'];
+  }
   return [...puestos, 'Administrador'];
 };
 
@@ -581,6 +592,213 @@ function DeleteSingleUserModal({
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               {loading ? 'Eliminando...' : 'Eliminar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal de reasignación
+function ReassignmentModal({
+  userId,
+  userName,
+  userRol,
+  assignments,
+  allUsuarios,
+  onComplete,
+  onClose,
+}: {
+  userId: number;
+  userName: string;
+  userRol: string;
+  assignments: AssignmentsData;
+  allUsuarios: UsuarioAdmin[];
+  onComplete: (reassignments: Reassignment[]) => void;
+  onClose: () => void;
+}) {
+  const isDark = useThemeStore((s) => s.theme === 'dark');
+  const [selections, setSelections] = useState<Record<string, number | null>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const eligibleUsers = allUsuarios.filter(u =>
+    u.id !== userId &&
+    (u.rol === userRol || u.rol === 'Administrador' || u.rol === 'DEV')
+  );
+
+  type AssignmentItem = { key: string; type: 'solicitud' | 'propuesta' | 'tarea'; id: number; label: string; status: string };
+
+  const allItems: AssignmentItem[] = [
+    ...assignments.solicitudes.map(s => ({
+      key: `solicitud-${s.id}`,
+      type: 'solicitud' as const,
+      id: s.id,
+      label: `#${s.id} · ${s.razon_social || s.marca_nombre || 'Sin cliente'}`,
+      status: s.status,
+    })),
+    ...assignments.propuestas.map(p => ({
+      key: `propuesta-${p.id}`,
+      type: 'propuesta' as const,
+      id: p.id,
+      label: `#${p.id} · Sol. #${p.solicitud_id}${p.articulo ? ` · ${p.articulo}` : ''}`,
+      status: p.status,
+    })),
+    ...assignments.tareas.map(t => ({
+      key: `tarea-${t.id}`,
+      type: 'tarea' as const,
+      id: t.id,
+      label: t.titulo || `Tarea #${t.id}`,
+      status: t.estatus || 'Sin estatus',
+    })),
+  ];
+
+  const selectedCount = allItems.filter(item => selections[item.key]).length;
+  const allSelected = allItems.length > 0 && selectedCount === allItems.length;
+
+  const handleGlobalAssign = (newUserId: number) => {
+    const newSelections: Record<string, number> = {};
+    allItems.forEach(item => { newSelections[item.key] = newUserId; });
+    setSelections(newSelections);
+  };
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const reassignments: Reassignment[] = allItems.map(item => ({
+        type: item.type,
+        id: item.id,
+        newUserId: selections[item.key]!,
+      }));
+      await usuariosService.reassign(userId, reassignments);
+      onComplete(reassignments);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al reasignar');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const renderSection = (title: string, items: AssignmentItem[], icon: React.ReactNode) => {
+    if (items.length === 0) return null;
+    return (
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          {icon}
+          <h4 className={`text-sm font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+            {title} ({items.length})
+          </h4>
+        </div>
+        <div className={`rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} overflow-hidden`}>
+          {items.map((item, idx) => (
+            <div
+              key={item.key}
+              className={`flex items-center justify-between gap-3 px-4 py-3 ${idx > 0 ? `border-t ${isDark ? 'border-purple-500/10' : 'border-purple-100'}` : ''} ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}`}
+            >
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.label}</p>
+                <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{item.status}</p>
+              </div>
+              <select
+                value={selections[item.key] || ''}
+                onChange={(e) => setSelections(prev => ({ ...prev, [item.key]: Number(e.target.value) || null }))}
+                className={`w-48 px-3 py-2 rounded-lg text-sm ${isDark ? 'bg-zinc-700 border-purple-500/20 text-white' : 'bg-white border-purple-200 text-gray-900'} border focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
+              >
+                <option value="">Seleccionar...</option>
+                {eligibleUsers.map(u => (
+                  <option key={u.id} value={u.id}>{u.nombre}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className={`w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl ${isDark ? 'bg-zinc-900 border-purple-500/20' : 'bg-white border-purple-200'} border shadow-2xl`}>
+        {/* Header */}
+        <div className={`flex items-center justify-between p-6 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-xl ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
+              <AlertTriangle className="h-5 w-5 text-amber-400" />
+            </div>
+            <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Reasignacion de responsabilidades
+            </h2>
+          </div>
+          <button onClick={onClose} className={`p-2 rounded-lg ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} transition-colors`}>
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <p className={`text-sm mb-4 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+            El usuario <strong className={isDark ? 'text-white' : 'text-gray-900'}>{userName}</strong> tiene{' '}
+            <strong>{allItems.length}</strong> asignacion(es) activa(s).
+            Selecciona un sustituto para cada elemento antes de continuar.
+          </p>
+
+          {/* Global assign */}
+          <div className={`flex items-center gap-3 p-4 rounded-xl mb-6 ${isDark ? 'bg-purple-500/10 border-purple-500/20' : 'bg-purple-50 border-purple-200'} border`}>
+            <label className={`text-sm font-medium whitespace-nowrap ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+              Asignar todos a:
+            </label>
+            <select
+              onChange={(e) => { if (e.target.value) handleGlobalAssign(Number(e.target.value)); }}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm ${isDark ? 'bg-zinc-800 border-purple-500/20 text-white' : 'bg-white border-purple-200 text-gray-900'} border focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
+              defaultValue=""
+            >
+              <option value="">Seleccionar usuario...</option>
+              {eligibleUsers.map(u => (
+                <option key={u.id} value={u.id}>{u.nombre} ({u.rol})</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sections */}
+          {renderSection('Solicitudes', allItems.filter(i => i.type === 'solicitud'), <Briefcase className="h-4 w-4 text-purple-400" />)}
+          {renderSection('Propuestas', allItems.filter(i => i.type === 'propuesta'), <Send className="h-4 w-4 text-blue-400" />)}
+          {renderSection('Tareas', allItems.filter(i => i.type === 'tarea'), <CheckCircle2 className="h-4 w-4 text-green-400" />)}
+        </div>
+
+        {/* Footer */}
+        <div className={`p-6 border-t ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
+          {error && (
+            <p className="text-sm text-red-400 mb-3">{error}</p>
+          )}
+          {!allSelected && (
+            <p className={`text-sm mb-3 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+              <AlertTriangle className="h-4 w-4 inline mr-1" />
+              Faltan {allItems.length - selectedCount} reasignacion(es) por completar
+            </p>
+          )}
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={onClose}
+              className={`px-4 py-2 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} transition-colors`}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={!allSelected || submitting}
+              className={`px-4 py-2 rounded-xl text-sm font-medium text-white transition-colors ${
+                allSelected && !submitting
+                  ? 'bg-purple-600 hover:bg-purple-700'
+                  : 'bg-purple-600/50 cursor-not-allowed'
+              }`}
+            >
+              {submitting ? (
+                <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Reasignando...</span>
+              ) : (
+                'Confirmar reasignaciones'
+              )}
             </button>
           </div>
         </div>
@@ -1228,6 +1446,14 @@ function UsuariosTab() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [resetPasswordUsuario, setResetPasswordUsuario] = useState<UsuarioAdmin | null>(null);
   const [deletingUsuario, setDeletingUsuario] = useState<UsuarioAdmin | null>(null);
+  const [reassignmentConfig, setReassignmentConfig] = useState<{
+    userId: number;
+    userName: string;
+    userRol: string;
+    assignments: AssignmentsData;
+    pendingAction: () => void;
+  } | null>(null);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
   const currentUser = useAuthStore((s) => s.user);
   const canDelete = currentUser?.email && EMAILS_CON_PERMISO_ELIMINAR.includes(currentUser.email);
 
@@ -1257,7 +1483,14 @@ function UsuariosTab() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateUsuarioInput }) => usuariosService.update(id, data),
-    onSuccess: () => {
+    onSuccess: (result: any) => {
+      // Si el backend devuelve nuevos tokens (usuario editó su propio perfil), actualizar sesión
+      if (result?.newTokens) {
+        const { accessToken, refreshToken, user } = result.newTokens;
+        useAuthStore.getState().setAuth(user, accessToken, refreshToken);
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+      }
       queryClient.invalidateQueries({ queryKey: ['usuarios-admin'] });
       setEditingUsuario(null);
     },
@@ -1290,9 +1523,59 @@ function UsuariosTab() {
     createMutation.mutate(data);
   };
 
-  const handleUpdate = (data: UpdateUsuarioInput) => {
-    if (editingUsuario) {
-      updateMutation.mutate({ id: editingUsuario.id, data });
+  const handleUpdate = async (data: UpdateUsuarioInput) => {
+    if (!editingUsuario) return;
+
+    // Si el rol cambia, verificar asignaciones primero
+    if (data.rol && data.rol !== editingUsuario.rol) {
+      setLoadingAssignments(true);
+      try {
+        const assignments = await usuariosService.getAssignments(editingUsuario.id);
+        const hasAny = assignments.solicitudes.length > 0 || assignments.propuestas.length > 0 || assignments.tareas.length > 0;
+
+        if (hasAny) {
+          const capturedUser = editingUsuario;
+          setEditingUsuario(null);
+          setReassignmentConfig({
+            userId: capturedUser.id,
+            userName: capturedUser.nombre,
+            userRol: capturedUser.rol,
+            assignments,
+            pendingAction: () => updateMutation.mutate({ id: capturedUser.id, data }),
+          });
+          return;
+        }
+      } catch {
+        // Si falla la consulta, continuar con el update normal
+      } finally {
+        setLoadingAssignments(false);
+      }
+    }
+
+    updateMutation.mutate({ id: editingUsuario.id, data });
+  };
+
+  const handleDeleteWithCheck = async (usuario: UsuarioAdmin) => {
+    setLoadingAssignments(true);
+    try {
+      const assignments = await usuariosService.getAssignments(usuario.id);
+      const hasAny = assignments.solicitudes.length > 0 || assignments.propuestas.length > 0 || assignments.tareas.length > 0;
+
+      if (hasAny) {
+        setReassignmentConfig({
+          userId: usuario.id,
+          userName: usuario.nombre,
+          userRol: usuario.rol,
+          assignments,
+          pendingAction: () => deleteSingleMutation.mutate(usuario.id),
+        });
+      } else {
+        setDeletingUsuario(usuario);
+      }
+    } catch {
+      setDeletingUsuario(usuario);
+    } finally {
+      setLoadingAssignments(false);
     }
   };
 
@@ -1533,9 +1816,30 @@ function UsuariosTab() {
                           >
                             <KeyRound className="h-4 w-4" />
                           </button>
+                          {currentUser?.rol === 'DEV' && usuario.id !== currentUser.id && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`¿Iniciar sesión como ${usuario.nombre}?`)) return;
+                                try {
+                                  const result = await usuariosService.impersonate(usuario.id);
+                                  useAuthStore.getState().setAuth(result.user, result.accessToken, result.refreshToken);
+                                  localStorage.setItem('accessToken', result.accessToken);
+                                  localStorage.setItem('refreshToken', result.refreshToken);
+                                  window.location.href = '/';
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : 'Error al impersonar usuario');
+                                }
+                              }}
+                              className={`p-2 rounded-lg ${isDark ? 'bg-cyan-500/10' : 'bg-cyan-50'} text-cyan-400 ${isDark ? 'hover:bg-cyan-500/20' : 'hover:bg-cyan-100'} border ${isDark ? 'border-cyan-500/20' : 'border-cyan-200'} transition-all`}
+                              title="Iniciar sesión como este usuario"
+                            >
+                              <DoorOpen className="h-4 w-4" />
+                            </button>
+                          )}
                           {canDelete && (
                             <button
-                              onClick={() => setDeletingUsuario(usuario)}
+                              onClick={() => handleDeleteWithCheck(usuario)}
+                              disabled={loadingAssignments}
                               className={`p-2 rounded-lg ${isDark ? 'bg-red-500/10' : 'bg-red-50'} text-red-400 ${isDark ? 'hover:bg-red-500/20' : 'hover:bg-red-100'} border ${isDark ? 'border-red-500/20' : 'border-red-200'} transition-all`}
                               title="Eliminar usuario"
                             >
@@ -1582,7 +1886,23 @@ function UsuariosTab() {
           usuario={editingUsuario}
           onClose={() => setEditingUsuario(null)}
           onSubmit={handleUpdate}
-          loading={updateMutation.isPending}
+          loading={updateMutation.isPending || loadingAssignments}
+        />
+      )}
+
+      {/* Reassignment Modal */}
+      {reassignmentConfig && (
+        <ReassignmentModal
+          userId={reassignmentConfig.userId}
+          userName={reassignmentConfig.userName}
+          userRol={reassignmentConfig.userRol}
+          assignments={reassignmentConfig.assignments}
+          allUsuarios={usuarios || []}
+          onComplete={() => {
+            reassignmentConfig.pendingAction();
+            setReassignmentConfig(null);
+          }}
+          onClose={() => setReassignmentConfig(null)}
         />
       )}
 

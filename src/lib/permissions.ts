@@ -2,6 +2,7 @@
 
 export type UserRole =
   | 'Asesor Comercial'
+  | 'Asesor Analista'
   | 'Analista de Servicio al Cliente'
   | 'Director General'
   | 'Director Comercial'
@@ -30,7 +31,8 @@ export type UserRole =
   | 'Coordinador de Facturación y Cobranza'
   | 'Mesa de Control'
   | 'Analista de Facturación y Cobranza'
-  | 'Administrador';
+  | 'Administrador'
+  | 'DEV';
 
 export interface RolePermissions {
   // Secciones visibles
@@ -210,6 +212,51 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteDetalleCampana: false,
     canEditGestionArtes: false,
     canOpenTasks: false, // No puede abrir tareas en Gestión de Artes
+
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+  },
+  'Asesor Analista': {
+    // Combinación de permisos de Asesor Comercial + Analista de Servicio al Cliente
+    canSeeDashboard: false,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    // Clientes: puede crear/editar (Asesor) pero no borrar
+    canDeleteClientes: false,
+
+    // Proveedores: sin acceso
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes: acceso total (Asesor)
+    // canCreateSolicitudes: true (default)
+    // canEditSolicitudes: true (default)
+    // canDeleteSolicitudes: true (default)
+    // canAtenderSolicitudes: true (default)
+    // canChangeEstadoSolicitud: true (default)
+
+    // Propuestas: permisos de Asesor
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
+    canBuscarInventarioEnModal: false,
+    canEditClienteEnFormularios: true, // Asesor: puede editar campo cliente
+    canEditArticuloOnEdit: true, // Asesor: puede editar artículo SAP
+
+    // Campañas: puede editar (Asesor) + detalle campaña acceso total (Analista)
+    canEditCampanas: true,
+    // canEditDetalleCampana: true (default — Analista)
+    // canDeleteDetalleCampana: true (default — Analista)
+
+    // Gestión de Artes: permisos de Analista
+    // canEditGestionArtes: true (default — Analista)
+    canResolveProduccionTasks: false,
+    canResolveCorreccionTasks: true,
+    canOnlyOpenCorreccionTasks: true,
+    canOpenTasks: true,
+    canCreateTareasGestionArtes: true,
+    canCompartirPropuesta: true,
 
     canCreateInventarios: false,
     canEditInventarios: false,
@@ -961,6 +1008,12 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCaraFiltersOnEdit: true,
     canEditArticuloOnEdit: true,
   },
+  'DEV': {
+    // DEV tiene acceso total a todo
+    canEditClienteEnFormularios: true,
+    canEditCaraFiltersOnEdit: true,
+    canEditArticuloOnEdit: true,
+  },
   'Gerente de Trafico': {
     // Secciones visibles
     canSeeDashboard: true,
@@ -970,7 +1023,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeePropuestas: true,
     canSeeCampanas: true,
     canSeeInventarios: true,
-    canSeeAdminUsuarios: true,
+    canSeeAdminUsuarios: false,
 
     // Clientes - oculto
     canCreateClientes: false,
@@ -1923,7 +1976,22 @@ export function getPermissions(role: string | undefined | null): RolePermissions
     };
   }
 
-  const specificPermissions = rolePermissions[role as UserRole] || {};
+  const specificPermissions = rolePermissions[role as UserRole];
+
+  // Si el rol no existe en el mapa, dar permisos mínimos (no defaults de admin)
+  if (!specificPermissions) {
+    return {
+      ...defaultPermissions,
+      canSeeDashboard: true,
+      canSeeClientes: false,
+      canSeeProveedores: false,
+      canSeeSolicitudes: false,
+      canSeePropuestas: false,
+      canSeeCampanas: false,
+      canSeeInventarios: false,
+      canSeeAdminUsuarios: false,
+    };
+  }
 
   return {
     ...defaultPermissions,

@@ -15,7 +15,7 @@ export function PerfilPage() {
   const { user: storeUser, setUser } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isDark = useThemeStore((s) => s.theme === 'dark');
-  const isAdmin = storeUser?.rol === 'Administrador';
+  const isAdmin = ['Administrador', 'DEV'].includes(storeUser?.rol || '');
 
   // Estados del formulario de perfil
   const [profileForm, setProfileForm] = useState({

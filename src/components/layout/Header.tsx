@@ -69,7 +69,7 @@ export function Header({ title }: HeaderProps) {
         <ThemeToggle />
 
         {/* Admin - Configuración de usuarios (solo Administrador) */}
-        {user?.rol === 'Administrador' && (
+        {['Administrador', 'DEV'].includes(user?.rol || '') && (
           <Link
             to="/admin/usuarios"
             className={`relative p-2 rounded-full transition-colors ${isDark ? 'hover:bg-purple-900/30' : 'hover:bg-purple-50'}`}

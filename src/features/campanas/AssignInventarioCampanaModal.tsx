@@ -78,6 +78,8 @@ interface CaraItem {
   anio_fin?: number;
   autorizacion_dg?: string;
   autorizacion_dcm?: string;
+  _originalDg?: string;
+  _originalDcm?: string;
 }
 
 // SAP Articulo interface
@@ -989,6 +991,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           anio_inicio: anioInicioCara,
           autorizacion_dg: cara.autorizacion_dg || 'aprobado',
           autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
+          _originalDg: cara.autorizacion_dg || 'aprobado',
+          _originalDcm: cara.autorizacion_dcm || 'aprobado',
         };
       });
       setCaras(carasWithIds);
@@ -1637,48 +1641,56 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         // Find the cara being edited to get its database ID
         const caraToEdit = caras.find(c => c.localId === editingCaraId);
         if (caraToEdit?.id) {
-          // Evaluar autorización antes de actualizar
-          let autorizacion_dg = 'aprobado';
-          let autorizacion_dcm = 'aprobado';
-          try {
-            const resultado = await solicitudesService.evaluarAutorizacion({
-              ciudad: ciudadToSave,
-              estado: newCara.estados,
-              formato: newCara.formato,
-              tipo: newCara.tipo,
-              caras: newCara.caras,
-              bonificacion: newCara.bonificacion,
-              costo: costoCalculado,
-              tarifa_publica: newCara.tarifa_publica,
-              articulo: newCara.articulo || null,
-            });
-            autorizacion_dg = resultado.autorizacion_dg || 'aprobado';
-            autorizacion_dcm = resultado.autorizacion_dcm || 'aprobado';
-          } catch (error) {
-            console.error('Error evaluando autorización:', error);
+          // Only re-evaluate authorization if fields that affect it changed (not NSE/ciudad)
+          let autorizacion_dg = caraToEdit.autorizacion_dg || 'aprobado';
+          let autorizacion_dcm = caraToEdit.autorizacion_dcm || 'aprobado';
+          const authFieldsChanged = newCara.caras !== caraToEdit.caras_flujo + caraToEdit.caras_contraflujo
+            || newCara.bonificacion !== (caraToEdit.bonificacion || 0)
+            || newCara.tarifa_publica !== (caraToEdit.tarifa_publica || 0)
+            || newCara.formato !== (caraToEdit.formato || '')
+            || newCara.tipo !== (caraToEdit.tipo || '')
+            || newCara.articulo !== (caraToEdit.articulo || '');
+          if (authFieldsChanged) {
+            try {
+              const resultado = await solicitudesService.evaluarAutorizacion({
+                ciudad: ciudadToSave,
+                estado: newCara.estados,
+                formato: newCara.formato,
+                tipo: newCara.tipo,
+                caras: newCara.caras,
+                bonificacion: newCara.bonificacion,
+                costo: costoCalculado,
+                tarifa_publica: newCara.tarifa_publica,
+                articulo: newCara.articulo || null,
+              });
+              autorizacion_dg = resultado.autorizacion_dg || 'aprobado';
+              autorizacion_dcm = resultado.autorizacion_dcm || 'aprobado';
+            } catch (error) {
+              console.error('Error evaluando autorización:', error);
+            }
           }
 
           // Update in database with authorization status
           const updatedCara = await campanasService.updateCara(campana!.id, caraToEdit.id, caraData);
 
-          // Update local state with new authorization status
-          setCaras(prev => prev.map(c =>
-            c.localId === editingCaraId
-              ? {
-                  ...c,
-                  ...newCara,
-                  costo: costoCalculado,
-                  autorizacion_dg: updatedCara?.autorizacion_dg || autorizacion_dg,
-                  autorizacion_dcm: updatedCara?.autorizacion_dcm || autorizacion_dcm
-                }
-              : c
-          ));
+          // Update local state with new authorization status + recalc impar/contamination
+          setCaras(prev => {
+            let updated = prev.map(c =>
+              c.localId === editingCaraId
+                ? { ...c, ...newCara, costo: costoCalculado, autorizacion_dg: updatedCara?.autorizacion_dg || autorizacion_dg, autorizacion_dcm: updatedCara?.autorizacion_dcm || autorizacion_dcm, _originalDg: updatedCara?.autorizacion_dg || autorizacion_dg, _originalDcm: updatedCara?.autorizacion_dcm || autorizacion_dcm }
+                : c
+            );
+            updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
+            updated = updated.map(c => { const total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' }; return c; });
+            const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
+            if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+            return updated;
+          });
         }
         setEditingCaraId(null);
       } else {
         // Create new cara in database
         const createdCara = await campanasService.createCara(campana!.id, caraData);
-        // Add to local state with the database ID and authorization status from response
         const newCaraItem: CaraItem = {
           ...newCara,
           id: createdCara.id,
@@ -1686,8 +1698,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           costo: costoCalculado,
           autorizacion_dg: createdCara.autorizacion_dg || 'aprobado',
           autorizacion_dcm: createdCara.autorizacion_dcm || 'aprobado',
+          _originalDg: createdCara.autorizacion_dg || 'aprobado',
+          _originalDcm: createdCara.autorizacion_dcm || 'aprobado',
         };
-        setCaras(prev => [...prev, newCaraItem]);
+        setCaras(prev => {
+          let updated = [...prev, newCaraItem];
+          updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
+          updated = updated.map(c => { const total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' }; return c; });
+          const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
+          if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+          return updated;
+        });
       }
 
       setNewCara(EMPTY_CARA);
@@ -5129,8 +5150,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       {hasChanges && (
                         <button
                           onClick={handleUpdateCampana}
-                          disabled={isUpdatingCampana}
+                          disabled={isUpdatingCampana || caras.some(c => { const t = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); return t > 0 && t % 2 !== 0; })}
                           className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={caras.some(c => { const t = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); return t > 0 && t % 2 !== 0; }) ? 'Hay grupos con caras impar — corrige antes de guardar' : undefined}
                         >
                           {isUpdatingCampana ? (
                             <>
@@ -5376,8 +5398,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {newCara.ciudad && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
+                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {newCara.ciudad && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={
                               solicitudFilters?.ciudades
@@ -5517,7 +5539,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </button>
                       <button
                         onClick={handleSaveCara}
-                        className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors"
+                        disabled={(newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0}
+                        className={`px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors ${(newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title={(newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'Caras impar — no se puede guardar' : undefined}
                       >
                         {editingCaraId ? 'Actualizar' : 'Agregar'}
                       </button>
@@ -5700,7 +5724,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const caraAuthPendiente = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
+                                      const caraAuthPendiente = caras.some(c => c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente');
                                       const editBlocked = caraAuthPendiente || caraAPSBlocked;
                                       const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendiente ? 'Autorización pendiente - no se puede editar' : 'Editar';
                                       return (
@@ -5719,12 +5743,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         {canEditResumen && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
-                                            disabled={hasReservas}
-                                            className={`p-2 rounded-lg border transition-colors ${hasReservas
+                                            disabled={hasReservas || caraAuthPendiente}
+                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendiente
                                               ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={caraAuthPendiente ? 'Autorización pendiente' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>
