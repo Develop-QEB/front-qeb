@@ -134,8 +134,8 @@ export const propuestasService = {
     return response.data.data;
   },
 
-  async getStats(): Promise<PropuestaStats> {
-    const response = await api.get<ApiResponse<PropuestaStats>>('/propuestas/stats');
+  async getStats(params: Omit<PropuestasParams, 'page' | 'limit' | 'soloAtendidas'> = {}): Promise<PropuestaStats> {
+    const response = await api.get<ApiResponse<PropuestaStats>>('/propuestas/stats', { params });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener estadisticas');
     }

@@ -437,6 +437,12 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
         doc.text(item.label, itemX + 20, yPos + 16, { align: 'center' });
       });
 
+      // "*Precios más IVA" centrado dentro de la caja azul
+      doc.setFontSize(5);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(150, 155, 170);
+      doc.text('*Precios más IVA', centerX, yPos + 18, { align: 'center' });
+
       yPos += 26;
     }
 
@@ -445,7 +451,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
       doc.setTextColor(...imuDarkBlue);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
-      doc.text('DETALLE DE CARAS', marginX, yPos);
+      doc.text('DETALLE DE CIRCUITOS', marginX, yPos);
 
       doc.setFillColor(...imuBlue);
       doc.rect(marginX, yPos + 2, 28, 0.5, 'F');
@@ -509,7 +515,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
           doc.setFont('helvetica', 'bold');
           doc.text(articuloGroup.articulo, marginX + 9, yPos + 4);
           doc.setFont('helvetica', 'normal');
-          doc.text(`Caras: ${articuloGroup.totalCaras} | $${articuloGroup.totalInversion.toLocaleString('es-MX')}`, pageWidth - marginX - 9, yPos + 4, { align: 'right' });
+          doc.text(`Caras: ${articuloGroup.totalCaras} | Inversión: $${articuloGroup.totalInversion.toLocaleString('es-MX')}`, pageWidth - marginX - 9, yPos + 4, { align: 'right' });
           yPos += 8;
 
           // Tabla de caras para este artículo
@@ -587,6 +593,9 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
       doc.setFontSize(6);
       doc.setFont('helvetica', 'normal');
       doc.text('Grupo IMU', marginX, pageHeight - 2.5);
+      doc.setFont('helvetica', 'italic');
+      doc.text('*Precios más IVA', centerX, pageHeight - 2.5, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
       doc.text(`${i} / ${totalPages}`, pageWidth - marginX, pageHeight - 2.5, { align: 'right' });
     }
 
@@ -687,14 +696,14 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
           ) : data ? (
             <div className="space-y-5">
               {/* Stats Row - Centrado y limpio */}
-              <div className="bg-gradient-to-r from-violet-600/10 via-purple-600/10 to-fuchsia-600/10 rounded-2xl p-5 border border-violet-500/20">
+              <div className={`rounded-2xl p-5 border ${isDark ? 'bg-gradient-to-r from-violet-600/10 via-purple-600/10 to-fuchsia-600/10 border-violet-500/20' : 'bg-violet-50 border-violet-200'}`}>
                 <div className="grid grid-cols-4 gap-6">
                   <div className="text-center">
                     <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalCaras}</p>
                     <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Total Caras</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-violet-400">{totalRenta}</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-violet-400' : 'text-violet-600'}`}>{totalRenta}</p>
                     <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>En Renta</p>
                   </div>
                   <div className="text-center">
@@ -702,7 +711,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Bonificación</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-amber-400">{formatCurrency(inversion)}</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{formatCurrency(inversion)}</p>
                     <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Inversión</p>
                   </div>
                 </div>
@@ -723,7 +732,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     </div>
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Período</span>
-                      <span className="text-violet-300 text-sm font-medium">
+                      <span className={`${isDark ? 'text-violet-300' : 'text-violet-600'} text-sm font-medium`}>
                         {data.cotizacion ? getCatorcenaRange(data.cotizacion.fecha_inicio, data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}
                       </span>
                     </div>
@@ -821,20 +830,20 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
               {/* Caras grouped - Diseño con colores */}
               {groupedCaras.length > 0 && (
-                <div className="bg-gradient-to-br from-violet-900/20 via-purple-900/15 to-fuchsia-900/10 rounded-2xl border border-violet-500/20 overflow-hidden">
-                  <div className="px-5 py-4 border-b border-violet-500/20 bg-violet-600/10">
-                    <h3 className="text-sm font-semibold text-violet-300 flex items-center gap-2">
+                <div className={`${isDark ? 'bg-gradient-to-br from-violet-900/20 via-purple-900/15 to-fuchsia-900/10 border-violet-500/20' : 'bg-white border-gray-200'} rounded-2xl border overflow-hidden`}>
+                  <div className={`px-5 py-4 border-b ${isDark ? 'border-violet-500/20 bg-violet-600/10' : 'border-gray-200 bg-violet-50'}`}>
+                    <h3 className={`text-sm font-semibold ${isDark ? 'text-violet-300' : 'text-violet-700'} flex items-center gap-2`}>
                       <MapPin className="h-4 w-4" />
-                      Detalle de Caras
+                      Detalle de Circuitos
                     </h3>
                   </div>
-                  <div className="divide-y divide-violet-500/10">
+                  <div className={`divide-y ${isDark ? 'divide-violet-500/10' : 'divide-gray-200'}`}>
                     {groupedCaras.map((catorcenaGroup) => (
                       <div key={catorcenaGroup.catorcena}>
                         {/* Catorcena Header (Parent Level) */}
                         <button
                           onClick={() => toggleGroup(catorcenaGroup.catorcena)}
-                          className="w-full px-5 py-3 flex items-center justify-between hover:bg-violet-600/10 transition-colors bg-violet-600/5"
+                          className={`w-full px-5 py-3 flex items-center justify-between transition-colors ${isDark ? 'hover:bg-violet-600/10 bg-violet-600/5' : 'hover:bg-violet-50 bg-white'}`}
                         >
                           <div className="flex items-center gap-3">
                             {expandedGroups.has(catorcenaGroup.catorcena) ? (
@@ -842,7 +851,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                             ) : (
                               <ChevronRight className="h-4 w-4 text-violet-500/50" />
                             )}
-                            <span className="px-3 py-1 rounded-lg bg-violet-500/30 text-violet-200 text-xs font-medium border border-violet-400/30">
+                            <span className={`px-3 py-1 rounded-lg text-xs font-medium border ${isDark ? 'bg-violet-500/30 text-violet-200 border-violet-400/30' : 'bg-violet-100 text-violet-700 border-violet-200'}`}>
                               {catorcenaGroup.catorcena}
                             </span>
                             <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>
@@ -863,22 +872,22 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                               <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-bold`}>{catorcenaGroup.totalCaras + catorcenaGroup.totalBonificacion}</span>
                             </div>
                             <div className="flex items-center gap-1.5 pl-2 border-l border-violet-500/30">
-                              <span className="text-emerald-400 text-xs">Inversión:</span>
-                              <span className="text-emerald-300 text-sm font-semibold">{formatCurrency(catorcenaGroup.totalInversion)}</span>
+                              <span className={`${isDark ? 'text-emerald-400' : 'text-emerald-600'} text-xs`}>Inversión:</span>
+                              <span className={`${isDark ? 'text-emerald-300' : 'text-emerald-700'} text-sm font-semibold`}>{formatCurrency(catorcenaGroup.totalInversion)}</span>
                             </div>
                           </div>
                         </button>
 
                         {/* Articulo Groups (Nested Level) */}
                         {expandedGroups.has(catorcenaGroup.catorcena) && (
-                          <div className="pl-6 border-l-2 border-violet-500/20 ml-5">
+                          <div className={`pl-6 border-l-2 ${isDark ? 'border-violet-500/20' : 'border-violet-200'} ml-5`}>
                             {catorcenaGroup.articulos.map((articuloGroup) => {
                               const articuloKey = `${catorcenaGroup.catorcena}|${articuloGroup.articulo}`;
                               return (
-                                <div key={articuloKey} className="border-b border-violet-500/10 last:border-b-0">
+                                <div key={articuloKey} className={`border-b ${isDark ? 'border-violet-500/10' : 'border-gray-100'} last:border-b-0`}>
                                   <button
                                     onClick={() => toggleGroup(articuloKey)}
-                                    className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-purple-600/10 transition-colors"
+                                    className={`w-full px-4 py-2.5 flex items-center justify-between transition-colors ${isDark ? 'hover:bg-purple-600/10' : 'hover:bg-purple-50'}`}
                                   >
                                     <div className="flex items-center gap-3">
                                       {expandedGroups.has(articuloKey) ? (
@@ -886,7 +895,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                       ) : (
                                         <ChevronRight className="h-3.5 w-3.5 text-purple-500/50" />
                                       )}
-                                      <span className="px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-200 text-xs font-medium border border-purple-400/20">
+                                      <span className={`px-2.5 py-0.5 rounded-md text-xs font-medium border ${isDark ? 'bg-purple-500/20 text-purple-200 border-purple-400/20' : 'bg-purple-100 text-purple-700 border-purple-200'}`}>
                                         {articuloGroup.articulo}
                                       </span>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>
@@ -896,13 +905,13 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                     <div className="flex items-center gap-3 text-xs">
                                       <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>R: <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{articuloGroup.totalCaras}</span></span>
                                       <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>B: <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{articuloGroup.totalBonificacion}</span></span>
-                                      <span className="text-emerald-400">{formatCurrency(articuloGroup.totalInversion)}</span>
+                                      <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>{formatCurrency(articuloGroup.totalInversion)}</span>
                                     </div>
                                   </button>
 
                                   {expandedGroups.has(articuloKey) && (
                                     <div className="px-4 pb-3">
-                                      <div className={`overflow-x-auto rounded-xl border border-violet-500/20 ${isDark ? 'bg-zinc-900/50' : 'bg-white'}`}>
+                                      <div className={`overflow-x-auto rounded-xl border ${isDark ? 'border-violet-500/20 bg-zinc-900/50' : 'border-gray-200 bg-white'}`}>
                                         <table className="w-full text-sm">
                                           <thead>
                                             <tr className={isDark ? 'bg-violet-600/20' : 'bg-violet-50'}>
@@ -918,7 +927,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                               <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Autorización</th>
                                             </tr>
                                           </thead>
-                                          <tbody className="divide-y divide-violet-500/10">
+                                          <tbody className={`divide-y ${isDark ? 'divide-violet-500/10' : 'divide-gray-100'}`}>
                                             {articuloGroup.caras.map((cara, idx) => {
                                               const inversion = (cara.tarifa_publica || 0) * (Number(cara.caras) || 0);
                                               // Compute combined authorization state from both columns
@@ -936,25 +945,25 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                               } else if (authDg === 'aprobado' && authDcm === 'aprobado') {
                                                 authBadges.push({
                                                   label: 'Aprobado',
-                                                  color: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' }
+                                                  color: { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: isDark ? 'border-emerald-500/30' : 'border-emerald-200' }
                                                 });
                                               } else {
                                                 if (authDg === 'pendiente') {
                                                   authBadges.push({
                                                     label: 'Pend. DG',
-                                                    color: { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' }
+                                                    color: { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: isDark ? 'border-red-500/30' : 'border-red-200' }
                                                   });
                                                 }
                                                 if (authDcm === 'pendiente') {
                                                   authBadges.push({
                                                     label: 'Pend. DCM',
-                                                    color: { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' }
+                                                    color: { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: isDark ? 'border-amber-500/30' : 'border-amber-200' }
                                                   });
                                                 }
                                               }
 
                                               return (
-                                                <tr key={idx} className="hover:bg-violet-600/10 transition-colors">
+                                                <tr key={idx} className={`transition-colors ${isDark ? 'hover:bg-violet-600/10' : 'hover:bg-violet-50'}`}>
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{cara.ciudad || '-'}</td>
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.estados || '-'}</td>
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.formato || '-'}</td>

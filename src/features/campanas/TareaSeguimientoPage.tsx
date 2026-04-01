@@ -436,7 +436,8 @@ function getItemFlujoStatus(item: InventoryRow, tab: MainTab): string {
   }
 }
 
-function FlujoBadges({ items, tab, isDark = true }: { items: InventoryRow[]; tab: MainTab; isDark?: boolean }) {
+function FlujoBadges({ items, tab }: { items: InventoryRow[]; tab: MainTab; isDark?: boolean }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const counts: Record<string, number> = {};
   items.forEach(item => {
     const status = getItemFlujoStatus(item, tab);
@@ -460,13 +461,14 @@ function FlujoBadges({ items, tab, isDark = true }: { items: InventoryRow[]; tab
 // Oculta Programación si el grupo es Tradicional, Impresiones si es Digital
 // Recibe mapas de estado de impresión, programación e instalación para sincronizar
 // correctamente con los tabs de gestión de artes
-function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap, isDark = true }: {
+function FlowStepIcons({ items, impresionMap, programacionMap, instalacionMap }: {
   items: InventoryRow[];
   impresionMap?: Map<string, { estado: 'en_impresion' | 'pendiente_recepcion' | 'recibido'; titulo: string }>;
   programacionMap?: Map<string, { estado: 'en_programacion' | 'programado' }>;
   instalacionMap?: Map<string, { estado: 'en_proceso' | 'validar_instalacion' | 'instalado'; titulo: string; tareaId: number }>;
   isDark?: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   if (items.length === 0) return null;
 
   const isDigital = items[0]?.tradicional_digital === 'Digital';
@@ -1156,7 +1158,6 @@ function UploadArtModal({
   error,
   campanaId,
   tipoPeriodo = 'catorcena',
-  isDark = true,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -1173,8 +1174,8 @@ function UploadArtModal({
   error: string | null;
   campanaId: number;
   tipoPeriodo?: string;
-  isDark?: boolean;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [selectedOption, setSelectedOption] = useState<UploadOption>('file');
   const [existingArtUrl, setExistingArtUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -1722,7 +1723,7 @@ function UploadArtModal({
             className={`px-4 py-1.5 text-xs font-medium rounded-t-lg border border-b-0 transition-colors ${
               modalTab === 'artes'
                 ? 'bg-card text-purple-300 border-border'
-                : 'bg-zinc-800/50 text-zinc-500 border-transparent hover:text-zinc-300'
+                : isDark ? 'bg-zinc-800/50 text-zinc-500 border-transparent hover:text-zinc-300' : 'bg-gray-100 text-gray-500 border-transparent hover:text-gray-700'
             }`}
           >
             <Upload className="h-3 w-3 inline mr-1.5" />
@@ -1733,7 +1734,7 @@ function UploadArtModal({
             className={`px-4 py-1.5 text-xs font-medium rounded-t-lg border border-b-0 transition-colors ${
               modalTab === 'fichas'
                 ? 'bg-card text-emerald-300 border-border'
-                : 'bg-zinc-800/50 text-zinc-500 border-transparent hover:text-zinc-300'
+                : isDark ? 'bg-zinc-800/50 text-zinc-500 border-transparent hover:text-zinc-300' : 'bg-gray-100 text-gray-500 border-transparent hover:text-gray-700'
             }`}
           >
             <FileSpreadsheet className="h-3 w-3 inline mr-1.5" />
@@ -1797,14 +1798,14 @@ function UploadArtModal({
                                   return next;
                                 });
                               }}
-                              className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800/60 rounded transition-colors text-left"
+                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded transition-colors text-left ${isDark ? 'hover:bg-zinc-800/60' : 'hover:bg-gray-100'}`}
                               style={{ paddingLeft: `${paddingLeft + 8}px` }}
                             >
                               {isExpanded
                                 ? <FolderOpen className="h-4 w-4 text-amber-400 flex-shrink-0" />
                                 : <Folder className="h-4 w-4 text-amber-400/70 flex-shrink-0" />
                               }
-                              <span className="text-xs text-zinc-200 truncate">{node.name}</span>
+                              <span className={`text-xs truncate ${isDark ? 'text-zinc-200' : 'text-gray-700'}`}>{node.name}</span>
                               {node.children && (
                                 <span className="text-[10px] text-zinc-500 ml-auto flex-shrink-0">
                                   {node.children.length} {node.children.length === 1 ? 'elemento' : 'elementos'}
@@ -1864,14 +1865,14 @@ function UploadArtModal({
                   <div className="flex items-center gap-3 mb-2">
                     <div className={`flex items-center gap-1.5 ${digitalWizardStep === 1 ? 'text-cyan-300' : 'text-zinc-500'}`}>
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        digitalWizardStep === 1 ? 'bg-cyan-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                        digitalWizardStep === 1 ? 'bg-cyan-600 text-white' : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500'
                       }`}>1</div>
                       <span className="text-xs font-medium">Seleccionar</span>
                     </div>
                     <div className="flex-1 h-px bg-border" />
-                    <div className={`flex items-center gap-1.5 ${digitalWizardStep === 2 ? 'text-cyan-300' : 'text-zinc-500'}`}>
+                    <div className={`flex items-center gap-1.5 ${digitalWizardStep === 2 ? 'text-cyan-300' : isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        digitalWizardStep === 2 ? 'bg-cyan-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                        digitalWizardStep === 2 ? 'bg-cyan-600 text-white' : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500'
                       }`}>2</div>
                       <span className="text-xs font-medium">Notas</span>
                     </div>
@@ -1882,11 +1883,11 @@ function UploadArtModal({
                     <>
                       {/* Galería de artes digitales existentes */}
                       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                        <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                           Biblioteca de contenido digital ({localArtes.length})
                           {isUploadingDigitalFile && <Loader2 className="inline h-3 w-3 animate-spin text-cyan-400 ml-1.5" />}
                         </label>
-                        <div className="flex-1 min-h-[120px] max-h-[260px] border border-border rounded-lg bg-zinc-900/50 overflow-auto p-2">
+                        <div className={`flex-1 min-h-[120px] max-h-[260px] border border-border rounded-lg overflow-auto p-2 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
                           {isLoadingArtes ? (
                             <div className="h-full flex items-center justify-center">
                               <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
@@ -1943,7 +1944,7 @@ function UploadArtModal({
 
                       {/* Subir archivos a la biblioteca */}
                       <div className="space-y-2">
-                        <label className="block text-xs font-medium text-zinc-400">
+                        <label className={`block text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                           Subir a la biblioteca
                         </label>
                         <div className="flex gap-2">
@@ -1992,7 +1993,7 @@ function UploadArtModal({
                     /* ===== PASO 2: Notas opcionales por archivo ===== */
                     <>
                       <div className="flex-1 min-h-0 overflow-auto">
-                        <label className="block text-xs font-medium text-zinc-400 mb-2">
+                        <label className="block text-xs font-medium text-muted-foreground mb-2">
                           Notas por archivo (opcional) — {selectedDigitalImages.size} archivo{selectedDigitalImages.size !== 1 ? 's' : ''}
                         </label>
                         <div className="space-y-3">
@@ -2059,14 +2060,14 @@ function UploadArtModal({
                   <div className="flex items-center gap-3 mb-2">
                     <div className={`flex items-center gap-1.5 ${wizardStep === 1 ? 'text-purple-300' : 'text-zinc-500'}`}>
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        wizardStep === 1 ? 'bg-purple-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                        wizardStep === 1 ? 'bg-purple-600 text-white' : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500'
                       }`}>1</div>
                       <span className="text-xs font-medium">Seleccionar</span>
                     </div>
                     <div className="flex-1 h-px bg-border" />
-                    <div className={`flex items-center gap-1.5 ${wizardStep === 2 ? 'text-purple-300' : 'text-zinc-500'}`}>
+                    <div className={`flex items-center gap-1.5 ${wizardStep === 2 ? 'text-purple-300' : isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        wizardStep === 2 ? 'bg-purple-600 text-white' : 'bg-zinc-700 text-zinc-400'
+                        wizardStep === 2 ? 'bg-purple-600 text-white' : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500'
                       }`}>2</div>
                       <span className="text-xs font-medium">Notas</span>
                     </div>
@@ -2077,11 +2078,11 @@ function UploadArtModal({
                     <>
                       {/* Galería de artes existentes */}
                       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                        <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                           Biblioteca de artes ({localArtes.length})
                           {isUploadingFile && <Loader2 className="inline h-3 w-3 animate-spin text-purple-400 ml-1.5" />}
                         </label>
-                        <div className="flex-1 min-h-[120px] max-h-[260px] border border-border rounded-lg bg-zinc-900/50 overflow-auto p-2">
+                        <div className={`flex-1 min-h-[120px] max-h-[260px] border border-border rounded-lg overflow-auto p-2 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
                           {isLoadingArtes ? (
                             <div className="h-full flex items-center justify-center">
                               <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
@@ -2131,7 +2132,7 @@ function UploadArtModal({
 
                       {/* Opciones: Subir archivo o URL */}
                       <div className="space-y-2">
-                        <label className="block text-xs font-medium text-zinc-400">
+                        <label className={`block text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                           O agrega nuevas
                         </label>
                         <div className="flex gap-2">
@@ -2150,15 +2151,15 @@ function UploadArtModal({
                             />
                             <div className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs border rounded-lg transition-colors ${
                               isUploadingFile
-                                ? 'bg-purple-600/10 border-purple-500/20 opacity-70'
-                                : 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30'
+                                ? isDark ? 'bg-purple-600/10 border-purple-500/20 opacity-70' : 'bg-purple-100 border-purple-300 opacity-70'
+                                : isDark ? 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30' : 'bg-purple-100 border-purple-300 hover:bg-purple-200'
                             }`}>
                               {isUploadingFile ? (
-                                <Loader2 className="h-3.5 w-3.5 text-purple-400 animate-spin" />
+                                <Loader2 className={`h-3.5 w-3.5 animate-spin ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                               ) : (
-                                <Upload className="h-3.5 w-3.5 text-purple-400" />
+                                <Upload className={`h-3.5 w-3.5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                               )}
-                              <span className="text-purple-300">{isUploadingFile ? 'Subiendo...' : 'Subir archivo'}</span>
+                              <span className={isDark ? 'text-purple-300' : 'text-purple-700'}>{isUploadingFile ? 'Subiendo...' : 'Subir archivo'}</span>
                             </div>
                           </label>
                           <div className="flex-1 flex gap-1">
@@ -2184,7 +2185,7 @@ function UploadArtModal({
                       {/* Preview de seleccionadas */}
                       {selectedGalleryImages.size > 0 && (
                         <div>
-                          <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                             Seleccionadas ({selectedGalleryImages.size})
                           </label>
                           <div className="flex gap-2 overflow-x-auto py-1">
@@ -2217,9 +2218,9 @@ function UploadArtModal({
                       </div>
                       <div className="flex-1 min-h-0 overflow-auto space-y-3">
                         {Array.from(selectedGalleryImages.entries()).map(([id, img], idx) => (
-                          <div key={id} className="flex gap-3 p-3 bg-zinc-900/50 border border-border rounded-lg">
+                          <div key={id} className={`flex gap-3 p-3 border border-border rounded-lg ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
                             {/* Image preview */}
-                            <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-zinc-800">
+                            <div className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`}>
                               <img
                                 src={img.preview || getImageUrl(img.url) || ''}
                                 alt={`Arte ${idx + 1}`}
@@ -2228,7 +2229,7 @@ function UploadArtModal({
                             </div>
                             {/* Note input */}
                             <div className="flex-1 min-w-0">
-                              <label className="block text-[10px] font-medium text-zinc-400 mb-1">
+                              <label className={`block text-[10px] font-medium mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                                 Nota para imagen {idx + 1} <span className="text-red-400">*</span>
                               </label>
                               <textarea
@@ -2259,10 +2260,10 @@ function UploadArtModal({
             <div className="flex flex-col h-full">
               {/* Header with count and toolbar */}
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-white">
+                <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   Espacios a asignar
                 </span>
-                <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/30">
+                <Badge className={isDark ? "bg-purple-600/30 text-purple-300 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
                   {selectedInventory.length} elemento{selectedInventory.length !== 1 ? 's' : ''}
                 </Badge>
               </div>
@@ -2309,7 +2310,7 @@ function UploadArtModal({
                       {Object.entries(groupedModalInventory).map(([groupKey, items]) => (
                         <div key={groupKey}>
                           <div className="px-4 py-2 bg-purple-900/20 sticky top-0 z-10 flex items-center justify-between border-b border-border">
-                            <span className="text-xs font-bold text-white">{groupKey}</span>
+                            <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupKey}</span>
                             <span className="text-[10px] text-zinc-500">{items.length} cara{items.length !== 1 ? 's' : ''}</span>
                           </div>
                           <table className="w-full text-xs">
@@ -2326,10 +2327,10 @@ function UploadArtModal({
                               {items.map((item) => (
                                 <tr key={item.id} className="border-b border-border/50 hover:bg-purple-900/20 transition-colors">
                                   <td className="p-2 text-xs text-purple-400 font-medium">{item.aps}</td>
-                                  <td className="p-2 text-xs text-white font-medium">{item.codigo_unico}</td>
-                                  <td className="p-2 text-xs text-zinc-300 max-w-[150px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
-                                  <td className="p-2 text-xs text-zinc-300">{item.mueble}</td>
-                                  <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
+                                  <td className={`p-2 text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.codigo_unico}</td>
+                                  <td className={`p-2 text-xs max-w-[150px] truncate ${isDark ? 'text-zinc-300' : 'text-gray-600'}`} title={item.ubicacion}>{item.ubicacion}</td>
+                                  <td className={`p-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>{item.mueble}</td>
+                                  <td className={`p-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>{item.ciudad}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -2368,10 +2369,10 @@ function UploadArtModal({
                                   pageItems.map((item) => (
                                     <tr key={item.id} className="border-b border-border/50 hover:bg-purple-900/20 transition-colors">
                                       <td className="p-2 text-xs text-purple-400 font-medium">{item.aps}</td>
-                                      <td className="p-2 text-xs text-white font-medium">{item.codigo_unico}</td>
-                                      <td className="p-2 text-xs text-zinc-300 max-w-[150px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
-                                      <td className="p-2 text-xs text-zinc-300">{item.mueble}</td>
-                                      <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
+                                      <td className={`p-2 text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.codigo_unico}</td>
+                                      <td className={`p-2 text-xs max-w-[150px] truncate ${isDark ? 'text-zinc-300' : 'text-gray-600'}`} title={item.ubicacion}>{item.ubicacion}</td>
+                                      <td className={`p-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>{item.mueble}</td>
+                                      <td className={`p-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>{item.ciudad}</td>
                                     </tr>
                                   ))
                                 )}
@@ -2905,6 +2906,8 @@ function TestigoTaskView({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+
   // Estados para filtros y agrupaciones de la tabla de inventario
   const [filters, setFilters] = useState<FilterCondition[]>([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -3194,7 +3197,7 @@ function TestigoTaskView({
                 <div key={groupKey} className="bg-zinc-900/30">
                   <div className="px-4 py-2 bg-purple-900/20 border-b border-purple-500/20 flex items-center justify-between">
                     <span className="text-sm font-medium text-purple-300">{groupKey}</span>
-                    <Badge className="bg-purple-500/20 text-purple-300">{(items as InventoryRow[]).length}</Badge>
+                    <Badge className={isDark ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-700"}>{(items as InventoryRow[]).length}</Badge>
                   </div>
                   <table className="w-full text-xs">
                     <thead className="bg-zinc-800/50">
@@ -3546,6 +3549,8 @@ function TaskDetailModal({
   tipoPeriodo?: string;
   campana?: any;
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
 
@@ -6002,7 +6007,7 @@ function TaskDetailModal({
                 <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
                   <h4 className="text-sm font-medium text-purple-300 mb-3">Crear tarea de recepción</h4>
                   <div className="relative">
-                    <label className="block text-xs font-medium text-zinc-400 mb-1">Asignar a *</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Asignar a *</label>
                     <input
                       ref={recepcionInputRef}
                       type="text"
@@ -6058,7 +6063,7 @@ function TaskDetailModal({
                     )}
                   </div>
                   <div className="mt-4">
-                    <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor en PDF (opcional)</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Guía del proveedor en PDF (opcional)</label>
                     {impresionPdfFile ? (
                       <div className="flex items-center gap-2 mb-2 p-2 bg-zinc-800 rounded border border-border">
                         <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
@@ -6137,7 +6142,7 @@ function TaskDetailModal({
                               )}
                               <span className="text-sm font-bold text-white">{catorcenaKey}</span>
                             </div>
-                            <span className="px-2 py-0.5 rounded text-xs bg-purple-600/40 text-purple-200">{level1ItemCount}</span>
+                            <span className={`px-2 py-0.5 rounded text-xs ${isDark ? 'bg-purple-600/40 text-purple-200' : 'bg-purple-100 text-purple-700'}`}>{level1ItemCount}</span>
                           </button>
                           {level1Expanded && (
                             <div className="pl-4">
@@ -6160,7 +6165,7 @@ function TaskDetailModal({
                                         )}
                                         <span className="text-xs font-semibold text-purple-300">{apsKey}</span>
                                       </div>
-                                      <span className="px-2 py-0.5 rounded text-[10px] bg-purple-600/30 text-purple-300">{level2ItemCount}</span>
+                                      <span className={`px-2 py-0.5 rounded text-[10px] ${isDark ? 'bg-purple-600/30 text-purple-300' : 'bg-purple-100 text-purple-700'}`}>{level2ItemCount}</span>
                                     </button>
                                     {level2Expanded && (
                                       <div className="pl-4">
@@ -6350,7 +6355,7 @@ function TaskDetailModal({
                               )}
                               <span className="text-sm font-bold text-white">{catorcenaKey}</span>
                             </div>
-                            <span className="px-2 py-0.5 rounded text-xs bg-purple-600/40 text-purple-200">{level1ItemCount}</span>
+                            <span className={`px-2 py-0.5 rounded text-xs ${isDark ? 'bg-purple-600/40 text-purple-200' : 'bg-purple-100 text-purple-700'}`}>{level1ItemCount}</span>
                           </button>
                           {level1Expanded && (
                             <div className="pl-4">
@@ -6373,7 +6378,7 @@ function TaskDetailModal({
                                         )}
                                         <span className="text-xs font-semibold text-purple-300">{apsKey}</span>
                                       </div>
-                                      <span className="px-2 py-0.5 rounded text-[10px] bg-purple-600/30 text-purple-300">{level2ItemCount}</span>
+                                      <span className={`px-2 py-0.5 rounded text-[10px] ${isDark ? 'bg-purple-600/30 text-purple-300' : 'bg-purple-100 text-purple-700'}`}>{level2ItemCount}</span>
                                     </button>
                                     {level2Expanded && (
                                       <div className="pl-4">
@@ -6862,7 +6867,7 @@ function TaskDetailModal({
 
                     {/* Observaciones */}
                     <div>
-                      <label className="block text-xs font-medium text-zinc-400 mb-1">Observaciones (opcional)</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Observaciones (opcional)</label>
                       <textarea
                         value={observacionesRecepcion}
                         onChange={(e) => setObservacionesRecepcion(e.target.value)}
@@ -6874,7 +6879,7 @@ function TaskDetailModal({
 
                     {/* Fotos comprobatorias */}
                     <div>
-                      <label className="block text-xs font-medium text-zinc-400 mb-1">Fotos comprobatorias (opcional)</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Fotos comprobatorias (opcional)</label>
                       {recepcionFiles.length > 0 && (
                         <div className="flex flex-wrap gap-2 mb-2">
                           {recepcionFiles.map((item, idx) => (
@@ -6929,7 +6934,7 @@ function TaskDetailModal({
 
                     {/* PDF guía del proveedor (solo lectura en Recepción) */}
                     <div>
-                      <label className="block text-xs font-medium text-zinc-400 mb-1">Guía del proveedor (PDF)</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Guía del proveedor (PDF)</label>
                       {guiaPdfUrlResolved ? (
                         <a
                           href={getImageUrl(guiaPdfUrlResolved) || guiaPdfUrlResolved}
@@ -7229,7 +7234,7 @@ function TaskDetailModal({
                         <div key={groupKey} className="bg-zinc-900/30">
                           <div className="px-4 py-2 bg-purple-900/20 border-b border-purple-500/20 flex items-center justify-between">
                             <span className="text-sm font-medium text-purple-300">{groupKey}</span>
-                            <Badge className="bg-purple-500/20 text-purple-300">{items.length}</Badge>
+                            <Badge className={isDark ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-700"}>{items.length}</Badge>
                           </div>
                           <table className="w-full text-xs">
                             <thead className="bg-zinc-800/50">
@@ -7483,11 +7488,11 @@ function TaskDetailModal({
                     <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Orden</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
-                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <span className="text-muted-foreground text-xs">Título:</span>
                         <p className="text-white font-medium">{task.titulo || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Estatus:</span>
+                        <span className="text-muted-foreground text-xs">Estatus:</span>
                         <p className={`font-medium ${
                           task.estatus === 'Finalizada' ? 'text-green-400' :
                           task.estatus === 'Activada' ? 'text-blue-400' :
@@ -7497,24 +7502,24 @@ function TaskDetailModal({
                         </p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Asignado:</span>
+                        <span className="text-muted-foreground text-xs">Asignado:</span>
                         <p className="text-white font-medium">{task.asignado || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Periodo:</span>
+                        <span className="text-muted-foreground text-xs">Periodo:</span>
                         <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Creador:</span>
+                        <span className="text-muted-foreground text-xs">Creador:</span>
                         <p className="text-white">{task.creador || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <span className="text-muted-foreground text-xs">Fecha creación:</span>
                         <p className="text-white">{task.fecha_inicio || '-'}</p>
                       </div>
                       {task.descripcion && (
                         <div className="col-span-2">
-                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <span className="text-muted-foreground text-xs">Descripción:</span>
                           <p className="text-white">{task.descripcion}</p>
                         </div>
                       )}
@@ -7848,11 +7853,11 @@ function TaskDetailModal({
                     <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Orden</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
-                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <span className="text-muted-foreground text-xs">Título:</span>
                         <p className="text-white font-medium">{task.titulo || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Estatus:</span>
+                        <span className="text-muted-foreground text-xs">Estatus:</span>
                         <p className={`font-medium ${
                           task.estatus === 'Finalizada' ? 'text-green-400' :
                           task.estatus === 'Enviada' ? 'text-blue-400' :
@@ -7862,24 +7867,24 @@ function TaskDetailModal({
                         </p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Asignado:</span>
+                        <span className="text-muted-foreground text-xs">Asignado:</span>
                         <p className="text-white font-medium">{task.asignado || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Periodo:</span>
+                        <span className="text-muted-foreground text-xs">Periodo:</span>
                         <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Creador:</span>
+                        <span className="text-muted-foreground text-xs">Creador:</span>
                         <p className="text-white">{task.creador || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <span className="text-muted-foreground text-xs">Fecha creación:</span>
                         <p className="text-white">{task.fecha_inicio || '-'}</p>
                       </div>
                       {task.descripcion && (
                         <div className="col-span-2">
-                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <span className="text-muted-foreground text-xs">Descripción:</span>
                           <p className="text-white">{task.descripcion}</p>
                         </div>
                       )}
@@ -8249,34 +8254,34 @@ function TaskDetailModal({
                     <h4 className="text-sm font-medium text-purple-300 mb-3">Información de la Tarea</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
-                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <span className="text-muted-foreground text-xs">Título:</span>
                         <p className="text-white font-medium">{task.titulo || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Estatus:</span>
+                        <span className="text-muted-foreground text-xs">Estatus:</span>
                         <p className={`font-medium ${task.estatus === 'Completado' ? 'text-green-400' : task.estatus === 'Activo' || task.estatus === 'Pendiente' ? 'text-yellow-400' : 'text-blue-400'}`}>
                           {task.estatus}
                         </p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Asignado:</span>
+                        <span className="text-muted-foreground text-xs">Asignado:</span>
                         <p className="text-white font-medium">{task.asignado || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Periodo:</span>
+                        <span className="text-muted-foreground text-xs">Periodo:</span>
                         <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Creador:</span>
+                        <span className="text-muted-foreground text-xs">Creador:</span>
                         <p className="text-white">{task.creador || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <span className="text-muted-foreground text-xs">Fecha creación:</span>
                         <p className="text-white">{task.fecha_inicio || '-'}</p>
                       </div>
                       {task.descripcion && (
                         <div className="col-span-2">
-                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <span className="text-muted-foreground text-xs">Descripción:</span>
                           <p className="text-white">{task.descripcion}</p>
                         </div>
                       )}
@@ -8619,7 +8624,7 @@ function TaskDetailModal({
                                     )}
                                     <span className="text-sm font-bold text-white">{level1Key}</span>
                                   </div>
-                                  <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                                  <Badge className={isDark ? "bg-purple-600/40 text-purple-200 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
                                     {level1ItemCount}
                                   </Badge>
                                 </button>
@@ -8644,7 +8649,7 @@ function TaskDetailModal({
                                               )}
                                               <span className="text-xs font-semibold text-purple-300">{level2Key}</span>
                                             </div>
-                                            <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
+                                            <Badge className={isDark ? "bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]" : "bg-purple-100 text-purple-700 border-purple-300 text-[10px]"}>
                                               {level2ItemCount}
                                             </Badge>
                                           </button>
@@ -8851,34 +8856,34 @@ function TaskDetailModal({
                     <h4 className="text-sm font-medium text-teal-300 mb-3">Información de la Tarea</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
-                        <span className="text-zinc-500 text-xs">Título:</span>
+                        <span className="text-muted-foreground text-xs">Título:</span>
                         <p className="text-white font-medium">{task.titulo || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Estatus:</span>
+                        <span className="text-muted-foreground text-xs">Estatus:</span>
                         <p className={`font-medium ${task.estatus === 'Completado' || task.estatus === 'Atendido' ? 'text-green-400' : task.estatus === 'Activo' || task.estatus === 'Pendiente' ? 'text-yellow-400' : 'text-blue-400'}`}>
                           {task.estatus}
                         </p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Asignado:</span>
+                        <span className="text-muted-foreground text-xs">Asignado:</span>
                         <p className="text-white font-medium">{task.asignado || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Periodo:</span>
+                        <span className="text-muted-foreground text-xs">Periodo:</span>
                         <p className="text-white font-medium">{getCatorcenaFromFechaFin || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Creador:</span>
+                        <span className="text-muted-foreground text-xs">Creador:</span>
                         <p className="text-white">{task.creador || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-500 text-xs">Fecha creación:</span>
+                        <span className="text-muted-foreground text-xs">Fecha creación:</span>
                         <p className="text-white">{task.fecha_inicio || '-'}</p>
                       </div>
                       {task.descripcion && (
                         <div className="col-span-2">
-                          <span className="text-zinc-500 text-xs">Descripción:</span>
+                          <span className="text-muted-foreground text-xs">Descripción:</span>
                           <p className="text-white">{task.descripcion}</p>
                         </div>
                       )}
@@ -9431,7 +9436,7 @@ function TaskDetailModal({
                         <div key={groupKey} className="bg-zinc-900/30">
                           <div className="px-4 py-2 bg-purple-900/20 border-b border-purple-500/20 flex items-center justify-between">
                             <span className="text-sm font-medium text-purple-300">{groupKey}</span>
-                            <Badge className="bg-purple-500/20 text-purple-300">{items.length}</Badge>
+                            <Badge className={isDark ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-700"}>{items.length}</Badge>
                           </div>
                           <table className="w-full text-xs">
                             <thead className="bg-zinc-800/50">
@@ -9669,7 +9674,7 @@ function TaskDetailModal({
                         <div key={groupKey} className="bg-zinc-900/30">
                           <div className="px-4 py-2 bg-purple-900/20 border-b border-purple-500/20 flex items-center justify-between">
                             <span className="text-sm font-medium text-purple-300">{groupKey}</span>
-                            <Badge className="bg-purple-500/20 text-purple-300">{items.length}</Badge>
+                            <Badge className={isDark ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-700"}>{items.length}</Badge>
                           </div>
                           <table className="w-full text-xs">
                             <thead className="bg-zinc-800/50">
@@ -9889,7 +9894,7 @@ function TaskDetailModal({
                       <>
                         {/* Galería de artes digitales */}
                         <div className="bg-zinc-900/50 rounded-lg p-3 border border-border">
-                          <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                             Biblioteca de contenido digital ({digitalEditLocalArtes.length})
                             {isDigitalEditUploadingFile && <Loader2 className="inline h-3 w-3 animate-spin text-cyan-400 ml-1.5" />}
                           </label>
@@ -9946,7 +9951,7 @@ function TaskDetailModal({
 
                         {/* Subir archivos a la biblioteca */}
                         <div className="space-y-2">
-                          <label className="block text-xs font-medium text-zinc-400">Subir a la biblioteca</label>
+                          <label className="block text-xs font-medium text-muted-foreground">Subir a la biblioteca</label>
                           <div className="flex gap-2">
                             <label className={`flex-1 ${isDigitalEditUploadingFile ? 'pointer-events-none' : 'cursor-pointer'}`}>
                               <input
@@ -10120,7 +10125,7 @@ function TaskDetailModal({
                       /* ===== PASO 1: Seleccionar imágenes ===== */
                       <>
                         <div className="bg-zinc-900/50 rounded-lg p-3 border border-border">
-                          <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                             Biblioteca de artes ({artesExistentes.length})
                           </label>
                           <div className="min-h-[100px] max-h-[200px] border border-border rounded-lg bg-zinc-900/50 overflow-auto p-2">
@@ -10169,7 +10174,7 @@ function TaskDetailModal({
 
                         {/* Opciones: Subir archivo o URL */}
                         <div className="space-y-2">
-                          <label className="block text-xs font-medium text-zinc-400">O agrega nuevas</label>
+                          <label className="block text-xs font-medium text-muted-foreground">O agrega nuevas</label>
                           <div className="flex gap-2">
                             <label className="flex-1 cursor-pointer">
                               <input
@@ -10963,7 +10968,7 @@ function OrdenImpresionModal({
         <div className="p-5 space-y-4">
           {/* Artículos seleccionados */}
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Artículos</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Artículos</label>
             <div className="bg-zinc-900/50 rounded-lg border border-border max-h-32 overflow-y-auto">
               {selectedItems.map(item => (
                 <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-border/30 last:border-0">
@@ -10980,7 +10985,7 @@ function OrdenImpresionModal({
 
           {/* Título */}
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Título *</label>
             <input
               type="text"
               value={titulo}
@@ -10992,7 +10997,7 @@ function OrdenImpresionModal({
 
           {/* Descripción */}
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción *</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Descripción *</label>
             <textarea
               value={descripcion}
               onChange={e => setDescripcion(e.target.value)}
@@ -11004,7 +11009,7 @@ function OrdenImpresionModal({
 
           {/* Proveedor */}
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Proveedor *</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Proveedor *</label>
             {isLoadingProveedores ? (
               <div className="flex items-center gap-2 py-2 text-zinc-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -11026,7 +11031,7 @@ function OrdenImpresionModal({
 
           {/* Asignados (Compras) */}
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados (Área Compras) *</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Asignados (Área Compras) *</label>
             {/* Tags de seleccionados */}
             {selectedAsignados.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-2">
@@ -11128,6 +11133,7 @@ function CreateTaskModal({
   initialTipo?: string;
   availableTipos?: string[];
 }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   // Obtener usuario actual
   const { user } = useAuthStore();
 
@@ -11828,15 +11834,15 @@ function CreateTaskModal({
           </div>
         )}
 
-        <div className="mb-4 p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
-          <p className="text-xs text-purple-300">
+        <div className={`mb-4 p-3 border rounded-lg ${isDark ? 'bg-purple-900/20 border-purple-500/30' : 'bg-purple-50 border-purple-300'}`}>
+          <p className={`text-xs ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
             <span className="font-medium">{selectedCount}</span> espacio(s) seleccionado(s)
           </p>
         </div>
 
         {/* Selector de tipo de tarea */}
         <div className="mb-4">
-          <label className="block text-xs font-medium text-zinc-400 mb-2">Selecciona el tipo de tarea *</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-2">Selecciona el tipo de tarea *</label>
           <div className={`grid gap-2 ${
             availableTipos?.length === 1
               ? 'grid-cols-1'
@@ -11854,8 +11860,8 @@ function CreateTaskModal({
                 disabled={isSubmitting}
                 className={`p-3 rounded-lg border text-center transition-all ${
                   tipo === t.value
-                    ? 'border-purple-500 bg-purple-500/20 text-purple-300'
-                    : 'border-border bg-background text-zinc-400 hover:border-purple-500/50 hover:bg-purple-900/10'
+                    ? isDark ? 'border-purple-500 bg-purple-500/20 text-purple-300' : 'border-purple-500 bg-purple-50 text-purple-700'
+                    : isDark ? 'border-border bg-background text-zinc-400 hover:border-purple-500/50 hover:bg-purple-900/10' : 'border-border bg-background text-gray-600 hover:border-purple-400 hover:bg-purple-50'
                 } disabled:opacity-50`}
               >
                 <span className="text-sm font-medium">{t.label}</span>
@@ -11875,7 +11881,7 @@ function CreateTaskModal({
             {/* Campos comunes - Título para tipos que no tienen formulario propio */}
             {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Instalación' && tipo !== 'Orden de Instalación' && tipo !== 'Testigo' && tipo !== 'Programación' && tipo !== 'Programación para Tráfico' && tipo !== 'Orden de Programación' && (
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Título *</label>
                 <input
                   type="text"
                   value={titulo}
@@ -11892,7 +11898,7 @@ function CreateTaskModal({
               <>
                 {/* Título */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Título *</label>
                   <input
                     type="text"
                     value={titulo}
@@ -11905,7 +11911,7 @@ function CreateTaskModal({
 
                 {/* Descripción */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Descripción</label>
                   <textarea
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
@@ -11918,7 +11924,7 @@ function CreateTaskModal({
 
                 {/* Fecha de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha de entrega</label>
                   <input
                     type="date"
                     value={fechaEntrega}
@@ -11930,14 +11936,14 @@ function CreateTaskModal({
 
                 {/* Asignados (área Operaciones) - Multi-select */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados (Operaciones) *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Asignados (Operaciones) *</label>
                   {/* Chips de usuarios seleccionados */}
                   {selectedAsignadosInstalacion.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {selectedAsignadosInstalacion.map((u) => (
                         <span
                           key={u.id}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full"
+                          className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full border ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-300'}`}
                         >
                           {u.id}, {u.nombre}
                           <button
@@ -11993,7 +11999,7 @@ function CreateTaskModal({
 
                 {/* Fecha creación (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha creación *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha creación *</label>
                   <input
                     type="text"
                     value={new Date().toLocaleString('es-MX', {
@@ -12010,7 +12016,7 @@ function CreateTaskModal({
 
                 {/* Creador (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Creador *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Creador *</label>
                   <input
                     type="text"
                     value={user ? `${user.id}, ${user.nombre}` : 'Usuario no identificado'}
@@ -12020,7 +12026,8 @@ function CreateTaskModal({
                 </div>
                 {/* Indicaciones por archivo (Instalación y Orden de Instalación) */}
                 <div className="border-t border-border pt-4">
-                  <h4 className="text-sm font-medium text-zinc-300 mb-3">Indicaciones por archivo</h4>
+                  <h4 className={`text-sm font-medium mb-3 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Indicaciones por archivo</h4>
+
                   {isLoadingArchivosInstalacion ? (
                     <div className="flex items-center justify-center py-4">
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-500"></div>
@@ -12074,7 +12081,7 @@ function CreateTaskModal({
               <>
                 {/* Título */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Título</label>
                   <input
                     type="text"
                     value={titulo}
@@ -12087,7 +12094,7 @@ function CreateTaskModal({
 
                 {/* Descripción */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Descripción *</label>
                   <input
                     type="text"
                     value={descripcion}
@@ -12100,7 +12107,7 @@ function CreateTaskModal({
 
                 {/* Fecha de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha de entrega</label>
                   <input
                     type="date"
                     value={fechaEntrega}
@@ -12112,7 +12119,7 @@ function CreateTaskModal({
 
                 {/* Asignados (múltiples) */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Asignados *</label>
 
                   {/* Chips de usuarios seleccionados */}
                   {selectedAsignadosRevision.length > 0 && (
@@ -12120,7 +12127,7 @@ function CreateTaskModal({
                       {selectedAsignadosRevision.map((u) => (
                         <span
                           key={u.id}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full"
+                          className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full border ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-300'}`}
                         >
                           {u.nombre}
                           <button
@@ -12184,7 +12191,7 @@ function CreateTaskModal({
 
                 {/* Fecha creación (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha creación *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha creación *</label>
                   <input
                     type="text"
                     value={new Date().toLocaleString('es-MX', {
@@ -12201,7 +12208,7 @@ function CreateTaskModal({
 
                 {/* Creador (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Creador *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Creador *</label>
                   <input
                     type="text"
                     value={user ? `${user.id}, ${user.nombre}` : 'Usuario no identificado'}
@@ -12217,7 +12224,7 @@ function CreateTaskModal({
               <>
                 {/* Título */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Título *</label>
                   <input
                     type="text"
                     value={titulo}
@@ -12230,7 +12237,7 @@ function CreateTaskModal({
 
                 {/* Descripción */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Descripción *</label>
                   <textarea
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
@@ -12243,7 +12250,7 @@ function CreateTaskModal({
 
                 {/* Fecha de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha de entrega *</label>
                   <input
                     type="date"
                     value={fechaEntrega}
@@ -12255,7 +12262,7 @@ function CreateTaskModal({
 
                 {/* Asignado - Multi-select para Tráfico o Operaciones */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
                     Asignado ({tipo === 'Programación para Tráfico' ? 'Tráfico' : 'Operaciones'}) *
                   </label>
                   {isLoadingUsuarios ? (
@@ -12271,7 +12278,7 @@ function CreateTaskModal({
                           {selectedAsignadosProgramacion.map((u) => (
                             <span
                               key={u.id}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-600/30 text-purple-300 rounded-full"
+                              className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full ${isDark ? 'bg-purple-600/30 text-purple-300' : 'bg-purple-100 text-purple-700'}`}
                             >
                               {u.nombre}
                               <button
@@ -12325,7 +12332,7 @@ function CreateTaskModal({
 
                 {/* Fecha de creación (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de creación</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha de creación</label>
                   <input
                     type="datetime-local"
                     value={fechaCreacion}
@@ -12336,7 +12343,7 @@ function CreateTaskModal({
 
                 {/* Creador (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Creador *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Creador *</label>
                   <input
                     type="text"
                     value={user ? `${user.id}, ${user.nombre}` : 'Usuario no identificado'}
@@ -12347,7 +12354,7 @@ function CreateTaskModal({
 
                 {/* Archivos digitales con indicaciones */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-2">
+                  <label className="block text-xs font-medium text-muted-foreground mb-2">
                     Indicaciones por archivo * ({archivosDigitalesProgramacion.length} archivo(s))
                   </label>
                   {isLoadingArchivosDigitales ? (
@@ -12448,7 +12455,7 @@ function CreateTaskModal({
                     return (
                       <>
                         <div className="flex items-center justify-between mb-2">
-                          <label onClick={() => console.log(grupos)} className="block text-xs font-medium text-zinc-400">
+                          <label onClick={() => console.log(grupos)} className="block text-xs font-medium text-muted-foreground">
                             Artes a imprimir ({grupos.length} {grupos.length === 1 ? 'arte' : 'artes diferentes'} - {selectedInventory.length} ubicaciones)
                           </label>
                           <span className="text-xs text-purple-400">
@@ -12529,7 +12536,7 @@ function CreateTaskModal({
 
                 {/* Proveedor de impresión */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Proveedor de impresión *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Proveedor de impresión *</label>
                   {isLoadingProveedores ? (
                     <div className="flex items-center gap-2 py-2 text-zinc-400">
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -12554,7 +12561,7 @@ function CreateTaskModal({
 
                 {/* Título */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Título *</label>
                   <input
                     type="text"
                     value={titulo}
@@ -12567,7 +12574,7 @@ function CreateTaskModal({
 
                 {/* Descripción */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Descripción *</label>
                   <textarea
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
@@ -12580,7 +12587,7 @@ function CreateTaskModal({
 
                 {/* Fecha de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha de entrega *</label>
                   <input
                     type="date"
                     value={fechaEntrega}
@@ -12592,7 +12599,7 @@ function CreateTaskModal({
 
                 {/* Asignados (múltiples - área Compras) */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados (Compras) *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Asignados (Compras) *</label>
 
                   {/* Chips de usuarios seleccionados */}
                   {selectedAsignadosImpresion.length > 0 && (
@@ -12600,7 +12607,7 @@ function CreateTaskModal({
                       {selectedAsignadosImpresion.map((u) => (
                         <span
                           key={u.id}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full"
+                          className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full border ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-300'}`}
                         >
                           {u.nombre}
                           <button
@@ -12664,7 +12671,7 @@ function CreateTaskModal({
 
                 {/* Fecha creación (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha creación</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha creación</label>
                   <input
                     type="text"
                     value={new Date().toLocaleString('es-MX', {
@@ -12681,7 +12688,7 @@ function CreateTaskModal({
 
                 {/* Creador (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Creador</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Creador</label>
                   <input
                     type="text"
                     value={user ? `${user.id}, ${user.nombre}` : 'Usuario no identificado'}
@@ -12697,7 +12704,7 @@ function CreateTaskModal({
               <>
                 {/* Título */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Título *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Título *</label>
                   <input
                     type="text"
                     value={titulo}
@@ -12710,7 +12717,7 @@ function CreateTaskModal({
 
                 {/* Descripción */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Descripción</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Descripción</label>
                   <textarea
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
@@ -12723,7 +12730,7 @@ function CreateTaskModal({
 
                 {/* Fecha de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha de entrega *</label>
                   <input
                     type="date"
                     value={fechaEntrega}
@@ -12735,14 +12742,14 @@ function CreateTaskModal({
 
                 {/* Asignados (área Operaciones) - Multi-select */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Asignados (Operaciones) *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Asignados (Operaciones) *</label>
                   {/* Chips de usuarios seleccionados */}
                   {selectedAsignadosTestigo.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {selectedAsignadosTestigo.map((u) => (
                         <span
                           key={u.id}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full"
+                          className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full border ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-300'}`}
                         >
                           {u.id}, {u.nombre}
                           <button
@@ -12798,7 +12805,7 @@ function CreateTaskModal({
 
                 {/* Fecha inicio (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha inicio</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha inicio</label>
                   <input
                     type="text"
                     value={new Date().toLocaleString('es-MX', {
@@ -12815,7 +12822,7 @@ function CreateTaskModal({
 
                 {/* Creador (solo lectura) */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Creador</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Creador</label>
                   <input
                     type="text"
                     value={user ? `${user.id}, ${user.nombre}` : 'Usuario no identificado'}
@@ -12830,7 +12837,7 @@ function CreateTaskModal({
               <>
                 {/* Tipo de incidencia */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Tipo de incidencia *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Tipo de incidencia *</label>
                   <select
                     value={tipoIncidencia}
                     onChange={e => setTipoIncidencia(e.target.value)}
@@ -12846,7 +12853,7 @@ function CreateTaskModal({
 
                 {/* ¿Qué pasó? */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">¿Qué pasó? *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">¿Qué pasó? *</label>
                   <textarea
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
@@ -12859,7 +12866,7 @@ function CreateTaskModal({
 
                 {/* Fecha de entrega */}
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Fecha de entrega *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha de entrega *</label>
                   <input
                     type="date"
                     value={fechaEntrega}
@@ -12871,7 +12878,7 @@ function CreateTaskModal({
 
                 {/* Asignar analistas */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Analistas asignados *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Analistas asignados *</label>
                   {selectedAnalistasReImpresion.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {selectedAnalistasReImpresion.map((u) => (
@@ -13249,6 +13256,7 @@ export function TareaSeguimientoPage() {
   const campanaId = id ? parseInt(id, 10) : 0;
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
 
   // WebSocket para sincronización en tiempo real
   useSocketCampana(campanaId);
@@ -16110,7 +16118,7 @@ export function TareaSeguimientoPage() {
             }}
           />
         ) : (
-          <span className="text-zinc-500 text-xs">Sin archivo</span>
+          <span className="text-muted-foreground text-xs">Sin archivo</span>
         )}
       </td>
       <td className="p-2 text-xs text-zinc-300 max-w-[150px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
@@ -16143,7 +16151,7 @@ export function TareaSeguimientoPage() {
         {(() => {
           const rsvIds = item.rsv_id?.split(',').map(id => id.trim()) || [];
           const instalacionInfo = rsvIds.map(id => instalacionStatusMap.get(id)).find(info => info);
-          if (!instalacionInfo) return <span className="text-zinc-500 text-xs">-</span>;
+          if (!instalacionInfo) return <span className="text-muted-foreground text-xs">-</span>;
           const estadoLabels: Record<string, { label: string; color: string }> = {
             'en_proceso': { label: 'En proceso de instalación', color: 'bg-orange-500/20 text-orange-400' },
             'validar_instalacion': { label: 'Validar instalación', color: 'bg-yellow-500/20 text-yellow-400' },
@@ -16318,7 +16326,7 @@ export function TareaSeguimientoPage() {
             onClick={() => window.open(getImageUrl(item.archivo_arte) || '', '_blank')}
           />
         ) : (
-          <span className="text-zinc-500 text-xs">Sin archivo</span>
+          <span className="text-muted-foreground text-xs">Sin archivo</span>
         )}
       </td>
       <td className="p-2 text-xs text-zinc-300 max-w-[150px] truncate" title={item.ubicacion}>{item.ubicacion}</td>
@@ -16344,7 +16352,7 @@ export function TareaSeguimientoPage() {
         {(() => {
           const rsvIds = item.rsv_id?.split(',').map(id => id.trim()) || [];
           const instalacionInfo = rsvIds.map(id => instalacionStatusMap.get(id)).find(info => info);
-          if (!instalacionInfo) return <span className="text-zinc-500 text-xs">-</span>;
+          if (!instalacionInfo) return <span className="text-muted-foreground text-xs">-</span>;
           const estadoLabels: Record<string, { label: string; color: string }> = {
             'en_proceso': { label: 'En proceso de instalación', color: 'bg-orange-500/20 text-orange-400' },
             'validar_instalacion': { label: 'Validar instalación', color: 'bg-yellow-500/20 text-yellow-400' },
@@ -16456,7 +16464,7 @@ export function TareaSeguimientoPage() {
         )}
 
         {/* Workflow Step Indicator */}
-        <div className="bg-gradient-to-r from-purple-900/30 to-purple-900/10 rounded-xl border border-purple-500/20 p-4">
+        <div className={`rounded-xl border border-purple-500/20 p-4 ${isDark ? 'bg-gradient-to-r from-purple-900/30 to-purple-900/10' : 'bg-gradient-to-r from-purple-50 to-white'}`}>
           <div className="flex items-start gap-4">
             {/* Step indicator */}
             <div className="hidden sm:flex items-center gap-2">
@@ -16480,13 +16488,13 @@ export function TareaSeguimientoPage() {
                           ? 'bg-purple-600 text-white ring-2 ring-purple-400/50'
                           : isPast
                           ? 'bg-green-600 text-white'
-                          : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+                          : isDark ? 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600' : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
                       }`}
                     >
                       {isPast && !isActive ? <Check className="h-4 w-4" /> : idx + 1}
                     </button>
                     {idx < arr.length - 1 && (
-                      <div className={`w-8 h-0.5 ${isPast ? 'bg-green-600' : 'bg-zinc-700'}`} />
+                      <div className={`w-8 h-0.5 ${isPast ? 'bg-green-600' : isDark ? 'bg-zinc-700' : 'bg-gray-300'}`} />
                     )}
                   </div>
                 );
@@ -16499,11 +16507,11 @@ export function TareaSeguimientoPage() {
                   const Icon = TAB_DESCRIPTIONS[activeMainTab].icon;
                   return <Icon className="h-5 w-5 text-purple-400" />;
                 })()}
-                <h2 className="text-lg font-semibold text-white">
+                <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   {TAB_DESCRIPTIONS[activeMainTab].title}
                 </h2>
               </div>
-              <p className="text-sm text-zinc-400">
+              <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                 {TAB_DESCRIPTIONS[activeMainTab].description}
               </p>
             </div>
@@ -16543,7 +16551,7 @@ export function TareaSeguimientoPage() {
                     className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                       activeMainTab === tab.key
                         ? 'border-purple-500 text-purple-300'
-                        : 'border-transparent text-muted-foreground hover:text-zinc-300'
+                        : isDark ? 'border-transparent text-muted-foreground hover:text-zinc-300' : 'border-transparent text-muted-foreground hover:text-gray-700'
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -16574,7 +16582,7 @@ export function TareaSeguimientoPage() {
                         className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
                           activeFormat === format.key
                             ? 'bg-purple-600 text-white'
-                            : 'bg-purple-900/30 text-zinc-400 hover:bg-purple-900/50'
+                            : isDark ? 'bg-purple-900/30 text-zinc-400 hover:bg-purple-900/50' : 'bg-purple-100 text-gray-600 hover:bg-purple-200'
                         }`}
                       >
                         {format.label} ({format.count})
@@ -16625,21 +16633,21 @@ export function TareaSeguimientoPage() {
               <div className="flex items-center gap-3">
                 {selectedInventoryIds.size > 0 ? (
                   <>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 rounded-lg border border-purple-500/30">
-                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
-                      <span className="text-sm font-medium text-purple-300">
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${isDark ? 'bg-purple-500/20 border-purple-500/30' : 'bg-purple-100 border-purple-300'}`}>
+                      <CheckCircle2 className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                      <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                         {selectedInventoryIds.size} espacio(s) seleccionado(s)
                       </span>
                     </div>
                     <button
                       onClick={() => setSelectedInventoryIds(new Set())}
-                      className="text-xs text-zinc-400 hover:text-zinc-300"
+                      className={`text-xs ${isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                       Limpiar seleccion
                     </button>
                   </>
                 ) : (
-                  <div className="flex items-center gap-2 text-zinc-400">
+                  <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                     <Info className="h-4 w-4" />
                     <span className="text-xs">Selecciona los espacios donde quieres subir arte</span>
                   </div>
@@ -16652,7 +16660,7 @@ export function TareaSeguimientoPage() {
                   className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                     selectedInventoryIds.size > 0
                       ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
-                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                      : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
                 >
                   <Upload className="h-4 w-4" />
@@ -16664,7 +16672,7 @@ export function TareaSeguimientoPage() {
 
           {/* Estado Arte Tabs (Atender tab) */}
           {activeMainTab === 'atender' && (
-            <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
+            <div className={`px-4 py-2 border-b border-border ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
               <div className="flex items-center gap-1">
                 {(() => {
                   // Filtrar por formato seleccionado (Tradicional/Digital)
@@ -16683,14 +16691,14 @@ export function TareaSeguimientoPage() {
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
                       activeEstadoArteTab === tab.key
                         ? 'bg-purple-600 text-white'
-                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+                        : isDark ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300' : 'bg-gray-200 text-gray-600 hover:bg-gray-300 hover:text-gray-700'
                     }`}
                   >
                     {tab.label}
                     <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                       activeEstadoArteTab === tab.key
                         ? 'bg-purple-500/50 text-purple-100'
-                        : 'bg-zinc-700 text-zinc-400'
+                        : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-300 text-gray-500'
                     }`}>
                       {tab.count}
                     </span>
@@ -16714,7 +16722,7 @@ export function TareaSeguimientoPage() {
                     placeholder="Buscar por ID, código, plaza..."
                     value={inventorySearch}
                     onChange={(e) => setInventorySearch(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                    className={`pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-purple-500 w-64 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
                   />
                   {inventorySearch && (
                     <button
@@ -16771,21 +16779,21 @@ export function TareaSeguimientoPage() {
               <div className="flex items-center gap-3">
                 {selectedInventoryIds.size > 0 ? (
                   <>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 rounded-lg border border-purple-500/30">
-                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
-                      <span className="text-sm font-medium text-purple-300">
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${isDark ? 'bg-purple-500/20 border-purple-500/30' : 'bg-purple-100 border-purple-300'}`}>
+                      <CheckCircle2 className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                      <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                         {selectedInventoryIds.size} arte(s) seleccionado(s)
                       </span>
                     </div>
                     <button
                       onClick={() => setSelectedInventoryIds(new Set())}
-                      className="text-xs text-zinc-400 hover:text-zinc-300"
+                      className={`text-xs ${isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                       Limpiar seleccion
                     </button>
                   </>
                 ) : (
-                  <div className="flex items-center gap-2 text-zinc-400">
+                  <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                     <Info className="h-4 w-4" />
                     <span className="text-xs">Selecciona artes para crear tareas de revision</span>
                   </div>
@@ -16825,7 +16833,7 @@ export function TareaSeguimientoPage() {
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                       selectedInventoryIds.size > 0 && !isCheckingTareas && !hasSelectedItemsWithInstalacion && !assignArteMutation.isPending
                         ? 'bg-red-600 hover:bg-red-700 text-white'
-                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                        : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     }`}
                     title={hasSelectedItemsWithInstalacion ? 'No se puede limpiar arte de items con instalación activa' : undefined}
                   >
@@ -16848,7 +16856,7 @@ export function TareaSeguimientoPage() {
                       className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                         selectedInventoryIds.size > 0 && !isCheckingExistingTasks
                           ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                          : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                          : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                       }`}
                     >
                       {isCheckingExistingTasks ? (
@@ -16866,7 +16874,7 @@ export function TareaSeguimientoPage() {
 
           {/* Estado Programación Tabs (Programación tab) */}
           {activeMainTab === 'programacion' && (
-            <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
+            <div className={`px-4 py-2 border-b border-border ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
               <div className="flex items-center gap-1">
                 {[
                   { key: 'en_programacion' as const, label: 'En Programación', count: inventoryProgramacionData.filter(i => i.estado_programacion === 'en_programacion').length },
@@ -16878,14 +16886,14 @@ export function TareaSeguimientoPage() {
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
                       activeEstadoProgramacionTab === tab.key
                         ? 'bg-purple-600 text-white'
-                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+                        : isDark ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300' : 'bg-gray-200 text-gray-600 hover:bg-gray-300 hover:text-gray-700'
                     }`}
                   >
                     {tab.label}
                     <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                       activeEstadoProgramacionTab === tab.key
                         ? 'bg-purple-500/50 text-purple-100'
-                        : 'bg-zinc-700 text-zinc-400'
+                        : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-300 text-gray-500'
                     }`}>
                       {tab.count}
                     </span>
@@ -16909,7 +16917,7 @@ export function TareaSeguimientoPage() {
                     placeholder="Buscar por ID, código, plaza..."
                     value={inventorySearch}
                     onChange={(e) => setInventorySearch(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                    className={`pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-purple-500 w-64 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
                   />
                   {inventorySearch && (
                     <button
@@ -16953,21 +16961,21 @@ export function TareaSeguimientoPage() {
               <div className="flex items-center gap-3">
                 {activeEstadoProgramacionTab === 'programado' && selectedInventoryIds.size > 0 ? (
                   <>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 rounded-lg border border-purple-500/30">
-                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
-                      <span className="text-sm font-medium text-purple-300">
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${isDark ? 'bg-purple-500/20 border-purple-500/30' : 'bg-purple-100 border-purple-300'}`}>
+                      <CheckCircle2 className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                      <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                         {selectedInventoryIds.size} item(s) seleccionado(s)
                       </span>
                     </div>
                     <button
                       onClick={() => setSelectedInventoryIds(new Set())}
-                      className="text-xs text-zinc-400 hover:text-zinc-300"
+                      className={`text-xs ${isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                       Limpiar selección
                     </button>
                   </>
                 ) : (
-                  <div className="flex items-center gap-2 text-zinc-400">
+                  <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                     <Info className="h-4 w-4" />
                     <span className="text-xs">
                       {activeEstadoProgramacionTab === 'programado'
@@ -16985,7 +16993,7 @@ export function TareaSeguimientoPage() {
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                       selectedInventoryIds.size > 0 && !isCheckingExistingTasks
                         ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                        : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     }`}
                   >
                     {isCheckingExistingTasks ? (
@@ -17002,7 +17010,7 @@ export function TareaSeguimientoPage() {
 
           {/* Estado Instalacion Tabs (Testigo tab) */}
           {activeMainTab === 'testigo' && (
-            <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
+            <div className={`px-4 py-2 border-b border-border ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
               <div className="flex items-center gap-1">
                 {[
                   { key: 'por_instalar' as const, label: 'Por Instalar', count: inventoryTestigosData.filter(i => {
@@ -17022,14 +17030,14 @@ export function TareaSeguimientoPage() {
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
                       activeEstadoInstalacionTab === tab.key
                         ? 'bg-purple-600 text-white'
-                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+                        : isDark ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300' : 'bg-gray-200 text-gray-600 hover:bg-gray-300 hover:text-gray-700'
                     }`}
                   >
                     {tab.label}
                     <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                       activeEstadoInstalacionTab === tab.key
                         ? 'bg-purple-500/50 text-purple-100'
-                        : 'bg-zinc-700 text-zinc-400'
+                        : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-300 text-gray-500'
                     }`}>
                       {tab.count}
                     </span>
@@ -17051,7 +17059,7 @@ export function TareaSeguimientoPage() {
                     placeholder="Buscar por ID, código, plaza..."
                     value={inventorySearch}
                     onChange={(e) => setInventorySearch(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                    className={`pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-purple-500 w-64 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
                   />
                   {inventorySearch && (
                     <button
@@ -17091,7 +17099,7 @@ export function TareaSeguimientoPage() {
 
           {/* Estado Impresion Tabs (Impresiones tab) */}
           {activeMainTab === 'impresiones' && (
-            <div className="px-4 py-2 border-b border-border bg-zinc-900/50">
+            <div className={`px-4 py-2 border-b border-border ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
               <div className="flex items-center gap-1">
                 {(() => {
                   // Calcular impresiones por estado a nivel de TAREA (sin matching de IDs)
@@ -17148,14 +17156,14 @@ export function TareaSeguimientoPage() {
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
                       activeEstadoImpresionTab === tab.key
                         ? 'bg-purple-600 text-white'
-                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+                        : isDark ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300' : 'bg-gray-200 text-gray-600 hover:bg-gray-300 hover:text-gray-700'
                     }`}
                   >
                     {tab.label}
                     <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                       activeEstadoImpresionTab === tab.key
                         ? 'bg-purple-500/50 text-purple-100'
-                        : 'bg-zinc-700 text-zinc-400'
+                        : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-300 text-gray-500'
                     }`}>
                       {tab.count}
                     </span>
@@ -17216,15 +17224,15 @@ export function TareaSeguimientoPage() {
               <div className="flex items-center gap-3">
                 {selectedInventoryIds.size > 0 ? (
                   <>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 rounded-lg border border-purple-500/30">
-                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
-                      <span className="text-sm font-medium text-purple-300">
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${isDark ? 'bg-purple-500/20 border-purple-500/30' : 'bg-purple-100 border-purple-300'}`}>
+                      <CheckCircle2 className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                      <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                         {selectedInventoryIds.size} item(s) seleccionado(s)
                       </span>
                     </div>
                     <button
                       onClick={() => setSelectedInventoryIds(new Set())}
-                      className="text-xs text-zinc-400 hover:text-zinc-300"
+                      className={`text-xs ${isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                       Limpiar seleccion
                     </button>
@@ -17244,7 +17252,7 @@ export function TareaSeguimientoPage() {
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                       selectedInventoryIds.size > 0 && !isCheckingExistingTasks
                         ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                        : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     }`}
                   >
                     {isCheckingExistingTasks ? (
@@ -17265,15 +17273,15 @@ export function TareaSeguimientoPage() {
               <div className="flex items-center gap-3">
                 {selectedInventoryIds.size > 0 ? (
                   <>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 rounded-lg border border-purple-500/30">
-                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
-                      <span className="text-sm font-medium text-purple-300">
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${isDark ? 'bg-purple-500/20 border-purple-500/30' : 'bg-purple-100 border-purple-300'}`}>
+                      <CheckCircle2 className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                      <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                         {selectedInventoryIds.size} item(s) seleccionado(s)
                       </span>
                     </div>
                     <button
                       onClick={() => setSelectedInventoryIds(new Set())}
-                      className="text-xs text-zinc-400 hover:text-zinc-300"
+                      className={`text-xs ${isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                       Limpiar seleccion
                     </button>
@@ -17293,7 +17301,7 @@ export function TareaSeguimientoPage() {
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                       selectedInventoryIds.size > 0 && !isCheckingExistingTasks
                         ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                        : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     }`}
                   >
                     {isCheckingExistingTasks ? (
@@ -17354,6 +17362,7 @@ export function TareaSeguimientoPage() {
                       : 'Los testigos se generan despues de aprobar e instalar los artes'
                 }
                 icon={activeMainTab === 'versionario' ? Image : activeMainTab === 'atender' ? Eye : activeMainTab === 'impresiones' ? Printer : Camera}
+                isDark={isDark}
               />
             ) : activeMainTab === 'impresiones' && activeEstadoImpresionTab === 'orden_impresion' ? (
               // Vista de artículos de impresión (IM) - Orden Impresión
@@ -17590,7 +17599,7 @@ export function TareaSeguimientoPage() {
                             <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs">
                               Recibido
                             </Badge>
-                            <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
+                            <Badge className={isDark ? "bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs" : "bg-purple-100 text-purple-700 border-purple-300 text-xs"}>
                               {totalImpresionesRecibido > 0 ? `${totalImpresionesRecibido} impresiones` : `${grupo.items.length} items`}
                             </Badge>
                             {permissions.canOpenTasks && (
@@ -17771,7 +17780,7 @@ export function TareaSeguimientoPage() {
                           }`}>
                             {grupo.tarea_estatus}
                           </Badge>
-                          <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
+                          <Badge className={isDark ? "bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs" : "bg-purple-100 text-purple-700 border-purple-300 text-xs"}>
                             {totalImpresiones > 0 ? `${totalImpresiones} impresiones` : `${grupo.items.length} items`}
                           </Badge>
                           {permissions.canOpenTasks && (
@@ -17909,7 +17918,7 @@ export function TareaSeguimientoPage() {
                         </div>
                         <div className="flex items-center gap-1">
                           <FlujoBadges items={getAllLevel1Items()} tab={activeMainTab} />
-                          <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                          <Badge className={isDark ? "bg-purple-600/40 text-purple-200 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
                             {level1ItemCount}
                           </Badge>
                         </div>
@@ -17965,7 +17974,7 @@ export function TareaSeguimientoPage() {
                                   </div>
                                   <div className="flex items-center gap-1">
                                     <FlujoBadges items={getAllLevel2Items()} tab={activeMainTab} />
-                                    <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
+                                    <Badge className={isDark ? "bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]" : "bg-purple-100 text-purple-700 border-purple-300 text-[10px]"}>
                                       {level2ItemCount}
                                     </Badge>
                                   </div>
@@ -18142,7 +18151,7 @@ export function TareaSeguimientoPage() {
                         </div>
                         <div className="flex items-center gap-1">
                           <FlujoBadges items={getAllLevel1Items()} tab={activeMainTab} />
-                          <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                          <Badge className={isDark ? "bg-purple-600/40 text-purple-200 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
                             {level1ItemCount} elemento{level1ItemCount !== 1 ? 's' : ''}
                           </Badge>
                         </div>
@@ -18199,7 +18208,7 @@ export function TareaSeguimientoPage() {
                                   </div>
                                   <div className="flex items-center gap-1">
                                     <FlujoBadges items={getAllLevel2Items()} tab={activeMainTab} />
-                                    <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
+                                    <Badge className={isDark ? "bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]" : "bg-purple-100 text-purple-700 border-purple-300 text-[10px]"}>
                                       {level2ItemCount}
                                     </Badge>
                                   </div>
@@ -18396,7 +18405,7 @@ export function TareaSeguimientoPage() {
                             </div>
                           )}
                         </div>
-                        <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                        <Badge className={isDark ? "bg-purple-600/40 text-purple-200 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
                           {level1ItemCount}
                         </Badge>
                       </button>
@@ -18449,7 +18458,7 @@ export function TareaSeguimientoPage() {
                                       </div>
                                     )}
                                   </div>
-                                  <Badge className="bg-purple-500/30 text-purple-200 border-purple-500/20 text-[10px]">
+                                  <Badge className={isDark ? "bg-purple-500/30 text-purple-200 border-purple-500/20 text-[10px]" : "bg-purple-100 text-purple-700 border-purple-300 text-[10px]"}>
                                     {level2ItemCount}
                                   </Badge>
                                 </button>
@@ -18717,7 +18726,7 @@ export function TareaSeguimientoPage() {
                                   setSelectedTestigoFile(group.archivoTestigo);
                                   setIsTestigoFileModalOpen(true);
                                 }}
-                                className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 rounded-full border border-purple-500/30 transition-colors"
+                                className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full border transition-colors ${isDark ? 'bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 text-purple-700 border-purple-300'}`}
                                 title="Ver fotos comprobatorias"
                               >
                                 <Eye className="h-3 w-3" />
@@ -18727,7 +18736,7 @@ export function TareaSeguimientoPage() {
                             <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full border ${estatusColors[group.tareaEstatus] || 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'}`}>
                               {group.tareaEstatus}
                             </span>
-                            <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                            <Badge className={isDark ? "bg-purple-600/40 text-purple-200 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
                               {group.items.length} items
                             </Badge>
                           </div>
@@ -18842,7 +18851,7 @@ export function TareaSeguimientoPage() {
                               {validadosCount} validado{validadosCount !== 1 ? 's' : ''}
                             </span>
                           )}
-                          <Badge className="bg-purple-600/40 text-purple-200 border-purple-500/30">
+                          <Badge className={isDark ? "bg-purple-600/40 text-purple-200 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
                             {level1ItemCount}
                           </Badge>
                         </div>
@@ -18898,7 +18907,7 @@ export function TareaSeguimientoPage() {
                                   </div>
                                   <div className="flex items-center gap-1">
                                     <FlujoBadges items={getAllLevel2Items()} tab={activeMainTab} />
-                                    <Badge className="bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]">
+                                    <Badge className={isDark ? "bg-purple-600/30 text-purple-300 border-purple-500/20 text-[10px]" : "bg-purple-100 text-purple-700 border-purple-300 text-[10px]"}>
                                       {level2ItemCount}
                                     </Badge>
                                   </div>
@@ -19049,14 +19058,14 @@ export function TareaSeguimientoPage() {
         {/* ================================================================ */}
         <div className="bg-card rounded-xl border border-border">
           {/* Tasks Header */}
-          <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-blue-900/20 to-transparent">
+          <div className={`px-4 py-3 border-b border-border ${isDark ? 'bg-gradient-to-r from-blue-900/20 to-transparent' : 'bg-gradient-to-r from-blue-50 to-white'}`}>
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
-                <ClipboardList className="h-4 w-4 text-blue-400" />
+              <div className={`p-2 rounded-lg border ${isDark ? 'bg-blue-500/20 border-blue-500/30' : 'bg-blue-100 border-blue-300'}`}>
+                <ClipboardList className={`h-4 w-4 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">Tareas de Gestión de Artes</h3>
-                <p className="text-xs text-zinc-400">Tareas del flujo de gestión de artes: revisión, impresión, instalación y programación</p>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Tareas de Gestión de Artes</h3>
+                <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Tareas del flujo de gestión de artes: revisión, impresión, instalación y programación</p>
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
@@ -19111,7 +19120,7 @@ export function TareaSeguimientoPage() {
                         placeholder="Buscar por título, ID, asignado..."
                         value={tasksSearch}
                         onChange={(e) => setTasksSearch(e.target.value)}
-                        className="pl-8 pr-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500 w-64"
+                        className={`pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-purple-500 w-64 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
                       />
                       {tasksSearch && (
                         <button
@@ -19968,7 +19977,7 @@ Por favor registra la cantidad de impresiones recibidas.`,
                         href={resolvedUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 text-sm transition-colors"
+                        className={`flex items-center justify-center gap-2 px-4 py-2 text-sm transition-colors ${isDark ? 'bg-purple-600/20 hover:bg-purple-600/30 text-purple-300' : 'bg-purple-100 hover:bg-purple-200 text-purple-700'}`}
                       >
                         <ExternalLink className="h-4 w-4" />
                         Abrir {fileUrls.length > 1 ? `foto ${idx + 1}` : 'foto'}

@@ -956,13 +956,13 @@ export function CompartirPropuestaPage() {
             {chartCiudades.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={chartCiudades} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                  <XAxis type="number" stroke="#888" />
-                  <YAxis dataKey="name" type="category" stroke="#888" width={100} tick={{ fontSize: 11 }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#333' : '#e5e7eb'} />
+                  <XAxis type="number" stroke={isDark ? '#888' : '#9ca3af'} />
+                  <YAxis dataKey="name" type="category" stroke={isDark ? '#888' : '#9ca3af'} width={100} tick={{ fontSize: 11, fill: isDark ? '#888' : '#6b7280' }} />
                   <Tooltip
-                    contentStyle={{ background: '#18181b', border: '1px solid #333', borderRadius: '8px' }}
-                    itemStyle={{ color: '#e4e4e7' }}
-                    labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
+                    contentStyle={{ background: isDark ? '#18181b' : '#fff', border: `1px solid ${isDark ? '#333' : '#e5e7eb'}`, borderRadius: '8px' }}
+                    itemStyle={{ color: isDark ? '#e4e4e7' : '#1f2937' }}
+                    labelStyle={{ color: isDark ? '#a1a1aa' : '#6b7280', marginBottom: '4px' }}
                     cursor={{ fill: 'rgba(168, 85, 247, 0.1)' }}
                   />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>
@@ -982,13 +982,13 @@ export function CompartirPropuestaPage() {
             {chartFormatos.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={chartFormatos}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                  <XAxis dataKey="name" stroke="#888" tick={{ fontSize: 10 }} />
-                  <YAxis stroke="#888" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#333' : '#e5e7eb'} />
+                  <XAxis dataKey="name" stroke={isDark ? '#888' : '#9ca3af'} tick={{ fontSize: 10, fill: isDark ? '#888' : '#6b7280' }} />
+                  <YAxis stroke={isDark ? '#888' : '#9ca3af'} />
                   <Tooltip
-                    contentStyle={{ background: '#18181b', border: '1px solid #333', borderRadius: '8px' }}
-                    itemStyle={{ color: '#e4e4e7' }}
-                    labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
+                    contentStyle={{ background: isDark ? '#18181b' : '#fff', border: `1px solid ${isDark ? '#333' : '#e5e7eb'}`, borderRadius: '8px' }}
+                    itemStyle={{ color: isDark ? '#e4e4e7' : '#1f2937' }}
+                    labelStyle={{ color: isDark ? '#a1a1aa' : '#6b7280', marginBottom: '4px' }}
                     cursor={{ fill: 'rgba(168, 85, 247, 0.1)' }}
                   />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
@@ -1025,7 +1025,7 @@ export function CompartirPropuestaPage() {
           {/* Toolbar */}
           <div className={`px-5 py-4 border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-600/10 to-violet-600/10' : 'border-gray-200 bg-gray-50'}`}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-purple-300 flex items-center gap-2">
+              <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                 <Layers className="h-4 w-4" />
                 Resumen de Caras
                 <span className={`text-xs font-normal ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({filteredInventario.length} inventarios)</span>
@@ -1178,7 +1178,7 @@ export function CompartirPropuestaPage() {
                         ) : (
                           <ChevronRight className="h-4 w-4 text-purple-500/50" />
                         )}
-                        <span className="px-3 py-1 rounded-lg bg-purple-500/30 text-purple-200 text-xs font-medium border border-purple-400/30">
+                        <span className={`px-3 py-1 rounded-lg text-xs font-medium border ${isDark ? 'bg-purple-500/30 text-purple-200 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-300'}`}>
                           {catGroup.catorcena}
                         </span>
                         <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
@@ -1191,8 +1191,8 @@ export function CompartirPropuestaPage() {
                           <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{catGroup.totalCaras}</span>
                         </div>
                         <div className="flex items-center gap-1.5 pl-2 border-l border-purple-500/30">
-                          <span className="text-emerald-400 text-xs">Inversion:</span>
-                          <span className="text-emerald-300 text-sm font-semibold">{formatCurrency(catGroup.totalInversion)}</span>
+                          <span className={`text-xs ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Inversion:</span>
+                          <span className={`text-sm font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{formatCurrency(catGroup.totalInversion)}</span>
                         </div>
                       </div>
                     </button>
@@ -1242,8 +1242,8 @@ export function CompartirPropuestaPage() {
                                 </div>
                                 <div className="flex items-center gap-3 text-xs">
                                   <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
-                                  <span className="text-amber-300">Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
-                                  <span className="text-emerald-400">{formatCurrency(artGroup.totalInversion)}</span>
+                                  <span className={isDark ? 'text-amber-300' : 'text-amber-600'}>Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
+                                  <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>{formatCurrency(artGroup.totalInversion)}</span>
                                 </div>
                               </button>
                               <div className="flex items-center gap-1 ml-2">
@@ -1274,22 +1274,22 @@ export function CompartirPropuestaPage() {
                                   </div>
                                 </div>
                                 {/* Detail table with checkboxes */}
-                                <div className="overflow-x-auto rounded-xl border border-purple-500/20 bg-zinc-900/50">
+                                <div className={`overflow-x-auto rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/50' : 'border-gray-200 bg-white'}`}>
                                   <table className="w-full text-sm">
                                     <thead>
-                                      <tr className="bg-purple-600/20">
+                                      <tr className={isDark ? 'bg-purple-600/20' : 'bg-purple-50'}>
                                         <th className="px-3 py-2 w-8"></th>
-                                        <th className="px-3 py-2 text-left text-xs font-semibold text-purple-200">Codigo</th>
-                                        <th className="px-3 py-2 text-left text-xs font-semibold text-purple-200">Plaza</th>
-                                        <th className="px-3 py-2 text-left text-xs font-semibold text-purple-200">Formato</th>
-                                        <th className="px-3 py-2 text-center text-xs font-semibold text-purple-200">Caras</th>
-                                        <th className="px-3 py-2 text-right text-xs font-semibold text-purple-200">Lat</th>
-                                        <th className="px-3 py-2 text-right text-xs font-semibold text-purple-200">Long</th>
-                                        <th className="px-3 py-2 text-right text-xs font-semibold text-amber-300">Tarifa</th>
-                                        <th className="px-3 py-2 text-right text-xs font-semibold text-emerald-300">Inversion</th>
+                                        <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Codigo</th>
+                                        <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Plaza</th>
+                                        <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Formato</th>
+                                        <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Caras</th>
+                                        <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Lat</th>
+                                        <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Long</th>
+                                        <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Tarifa</th>
+                                        <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>Inversion</th>
                                       </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-purple-500/10">
+                                    <tbody className={`divide-y ${isDark ? 'divide-purple-500/10' : 'divide-gray-100'}`}>
                                       {artGroup.items.map((item, idx) => {
                                         const inv = (Number(item.tarifa_publica) || 0) * (Number(item.caras_totales) || 0);
                                         return (
@@ -1297,19 +1297,19 @@ export function CompartirPropuestaPage() {
                                             <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                                               <input type="checkbox" checked={selectedItems.has(item.id)} onChange={() => toggleItemSelection(item.id)} className="checkbox-purple" />
                                             </td>
-                                            <td className="px-3 py-2 text-blue-300 font-mono text-xs">{item.codigo_unico}</td>
-                                            <td className="px-3 py-2 text-zinc-300 text-xs">{item.plaza || '-'}</td>
-                                            <td className="px-3 py-2 text-zinc-400 text-xs">
+                                            <td className={`px-3 py-2 font-mono text-xs ${isDark ? 'text-blue-300' : 'text-blue-600'}`}>{item.codigo_unico}</td>
+                                            <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.plaza || '-'}</td>
+                                            <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                                               {item.mueble || '-'}
                                               {item.tipo_de_mueble && item.tipo_de_mueble !== item.mueble && (
-                                                <span className="block text-[10px] text-zinc-500">{item.tipo_de_mueble}</span>
+                                                <span className={`block text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.tipo_de_mueble}</span>
                                               )}
                                             </td>
-                                            <td className="px-3 py-2 text-center font-semibold text-white text-xs">{item.caras_totales}</td>
-                                            <td className="px-3 py-2 text-right text-zinc-500 text-xs font-mono">{item.latitud?.toFixed(6) || '-'}</td>
-                                            <td className="px-3 py-2 text-right text-zinc-500 text-xs font-mono">{item.longitud?.toFixed(6) || '-'}</td>
-                                            <td className="px-3 py-2 text-right text-amber-300 text-xs">{formatCurrency(item.tarifa_publica || 0)}</td>
-                                            <td className="px-3 py-2 text-right text-emerald-300 font-medium text-xs">{formatCurrency(inv)}</td>
+                                            <td className={`px-3 py-2 text-center font-semibold text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.caras_totales}</td>
+                                            <td className={`px-3 py-2 text-right text-xs font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.latitud?.toFixed(6) || '-'}</td>
+                                            <td className={`px-3 py-2 text-right text-xs font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.longitud?.toFixed(6) || '-'}</td>
+                                            <td className={`px-3 py-2 text-right text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{formatCurrency(item.tarifa_publica || 0)}</td>
+                                            <td className={`px-3 py-2 text-right font-medium text-xs ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{formatCurrency(inv)}</td>
                                           </tr>
                                         );
                                       })}
@@ -1330,16 +1330,16 @@ export function CompartirPropuestaPage() {
         </div>
 
         {/* Map */}
-        <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
-          <div className="p-4 border-b border-zinc-800 flex items-center gap-4">
+        <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'}`}>
+          <div className={`p-4 border-b flex items-center gap-4 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <MapIcon className="h-5 w-5 text-blue-500" />
-            <h3 className="text-lg font-semibold text-white">Mapa de Reservas</h3>
+            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Mapa de Reservas</h3>
 
             <div className="flex items-center gap-2 ml-auto">
               <select
                 value={searchRange}
                 onChange={(e) => setSearchRange(parseInt(e.target.value))}
-                className="px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-white"
+                className={`px-2 py-1.5 rounded-lg text-xs ${isDark ? 'bg-zinc-800 border border-zinc-700 text-white' : 'bg-white border border-gray-200 text-gray-900'}`}
               >
                 <option value={100}>100m</option>
                 <option value={200}>200m</option>
@@ -1359,7 +1359,7 @@ export function CompartirPropuestaPage() {
                     value={poiSearch}
                     onChange={(e) => setPoiSearch(e.target.value)}
                     placeholder="Buscar POI..."
-                    className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500 w-48"
+                    className={`px-3 py-1.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 w-48 ${isDark ? 'bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border border-gray-200 text-gray-900 placeholder:text-gray-400'}`}
                   />
                 </Autocomplete>
               )}
@@ -1381,7 +1381,7 @@ export function CompartirPropuestaPage() {
                 mapContainerStyle={{ width: '100%', height: '100%' }}
                 center={mapCenter}
                 zoom={12}
-                options={{ styles: DARK_MAP_STYLES, disableDefaultUI: true, zoomControl: true }}
+                options={{ styles: isDark ? DARK_MAP_STYLES : [], disableDefaultUI: true, zoomControl: true }}
                 onLoad={(map) => {
                   mapRef.current = map;
                   // Fit bounds to all inventory items on load

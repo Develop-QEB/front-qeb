@@ -13,6 +13,7 @@ export interface Ticket {
   respuesta?: string | null;
   respondido_por?: string | null;
   respondido_at?: string | null;
+  has_chat_unread?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -60,10 +61,24 @@ export interface TicketHistorial {
   usuario_email: string;
   status_cambiado_por?: string | null;
   total_mensajes: number;
+  total_chat: number;
   has_unread: boolean;
+  has_chat_unread: boolean;
   is_opened: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface TicketChatMessage {
+  id: number;
+  ticket_id: number;
+  usuario_id: number;
+  usuario_nombre: string;
+  mensaje?: string | null;
+  archivo_url?: string | null;
+  archivo_nombre?: string | null;
+  archivo_tipo?: string | null;
+  created_at: string;
 }
 
 export interface TicketMensaje {
@@ -159,5 +174,25 @@ export const ticketsService = {
 
   markMensajesRead: async (ticketId: number, ultimoMensajeId: number): Promise<void> => {
     await api.post(`/tickets/${ticketId}/mensajes/read`, { ultimo_mensaje_id: ultimoMensajeId });
+  },
+
+  // ---- Chat de soporte ----
+  getChatMessages: async (ticketId: number): Promise<TicketChatMessage[]> => {
+    const response = await api.get(`/tickets/${ticketId}/chat`);
+    return response.data.data;
+  },
+
+  createChatMessage: async (ticketId: number, data: { mensaje?: string; archivo_url?: string; archivo_nombre?: string; archivo_tipo?: string }): Promise<TicketChatMessage> => {
+    const response = await api.post(`/tickets/${ticketId}/chat`, data);
+    return response.data.data;
+  },
+
+  markChatRead: async (ticketId: number, ultimoMensajeId: number): Promise<void> => {
+    await api.post(`/tickets/${ticketId}/chat/read`, { ultimo_mensaje_id: ultimoMensajeId });
+  },
+
+  getChatUnreadCount: async (): Promise<number> => {
+    const response = await api.get('/tickets/chat/unread-count');
+    return response.data.data.unreadCount;
   },
 };

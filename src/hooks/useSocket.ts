@@ -78,6 +78,7 @@ export const SOCKET_EVENTS = {
   // Tickets Historial
   TICKET_MENSAJE_NUEVO: 'ticket:mensaje:nuevo',
   TICKET_STATUS_CHANGED: 'ticket:status:changed',
+  TICKET_CHAT_NUEVO: 'ticket:chat:nuevo',
 };
 
 let socketInstance: Socket | null = null;
@@ -1007,15 +1008,24 @@ export function useSocketTicketsHistorial() {
       queryClient.invalidateQueries({ queryKey: ['tickets-unread-count'], refetchType: 'active' });
     };
 
+    const handleChatNuevo = () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets-historial'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['tickets-unread-count'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['tickets-chat-unread-count'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['my-tickets'], refetchType: 'active' });
+    };
+
     const handleStatusChanged = () => {
       queryClient.invalidateQueries({ queryKey: ['tickets-historial'], refetchType: 'active' });
     };
 
     socket.on(SOCKET_EVENTS.TICKET_MENSAJE_NUEVO, handleMensajeNuevo);
+    socket.on(SOCKET_EVENTS.TICKET_CHAT_NUEVO, handleChatNuevo);
     socket.on(SOCKET_EVENTS.TICKET_STATUS_CHANGED, handleStatusChanged);
 
     return () => {
       socket.off(SOCKET_EVENTS.TICKET_MENSAJE_NUEVO, handleMensajeNuevo);
+      socket.off(SOCKET_EVENTS.TICKET_CHAT_NUEVO, handleChatNuevo);
       socket.off(SOCKET_EVENTS.TICKET_STATUS_CHANGED, handleStatusChanged);
       leaveRoom(socket, 'join-tickets-historial');
       joinedRef.current = false;
@@ -1050,6 +1060,71 @@ export function useSocketTicketChat(ticketId: number | null, onNuevoMensaje: () 
       }
     };
   }, [ticketId, onNuevoMensaje]);
+}
+
+/**
+ * Hook para escuchar mensajes del chat de soporte de un ticket
+ */
+export function useSocketTicketChatSoporte(ticketId: number | null, onNuevoMensaje: () => void) {
+  const joinedRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!ticketId) return;
+
+    const socket = getSocket();
+
+    if (joinedRef.current !== ticketId) {
+      if (joinedRef.current) socket.emit('leave-ticket-chat', joinedRef.current);
+      socket.emit('join-ticket-chat', ticketId);
+      joinedRef.current = ticketId;
+    }
+
+    socket.on(SOCKET_EVENTS.TICKET_CHAT_NUEVO, onNuevoMensaje);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.TICKET_CHAT_NUEVO, onNuevoMensaje);
+      if (joinedRef.current) {
+        socket.emit('leave-ticket-chat', joinedRef.current);
+        joinedRef.current = null;
+      }
+    };
+  }, [ticketId, onNuevoMensaje]);
+}
+
+/**
+ * Hook global: escucha notificaciones de chat de soporte para el usuario actual.
+ * Se une al room user-notifications-{userId} y invalida el query de unread count.
+ */
+export function useSocketChatNotifications(userId: number | null) {
+  const queryClient = useQueryClient();
+  const joinedRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const socket = getSocket();
+
+    if (joinedRef.current !== userId) {
+      if (joinedRef.current) socket.emit('leave-user-notifications', joinedRef.current);
+      socket.emit('join-user-notifications', userId);
+      joinedRef.current = userId;
+    }
+
+    const handleChatNuevo = () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets-chat-unread-count'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['my-tickets'], refetchType: 'active' });
+    };
+
+    socket.on(SOCKET_EVENTS.TICKET_CHAT_NUEVO, handleChatNuevo);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.TICKET_CHAT_NUEVO, handleChatNuevo);
+      if (joinedRef.current) {
+        socket.emit('leave-user-notifications', joinedRef.current);
+        joinedRef.current = null;
+      }
+    };
+  }, [userId, queryClient]);
 }
 
 /**

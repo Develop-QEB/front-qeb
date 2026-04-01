@@ -132,12 +132,18 @@ export function InventariosPage() {
   const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [bulkCsvData, setBulkCsvData] = useState<Record<string, string>[]>([]);
   const [bulkValidation, setBulkValidation] = useState<{ valid: number; errors: { fila: number; campo: string; mensaje: string }[]; duplicatesInCsv: number }>({ valid: 0, errors: [], duplicatesInCsv: 0 });
+  const [bulkParsing, setBulkParsing] = useState(false);
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ insertados: number; duplicados: number; actualizados?: number; duplicados_ocupados?: number; errores: { fila: number; campo: string; mensaje: string }[]; total: number } | null>(null);
   const [bulkCheckResult, setBulkCheckResult] = useState<BulkCheckResult | null>(null);
   const [bulkChecking, setBulkChecking] = useState(false);
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   const [bulkStep, setBulkStep] = useState<'upload' | 'check' | 'result'>('upload');
+  const [bulkTab, setBulkTab] = useState<'errors' | 'ok'>('errors');
+  const [checkTab, setCheckTab] = useState<'nuevos' | 'sobreescribibles' | 'ocupados'>('nuevos');
+  const [checkPage, setCheckPage] = useState(1);
+  const [bulkPage, setBulkPage] = useState(1);
+  const BULK_PAGE_SIZE = 50;
   const bulkInputRef = useRef<HTMLInputElement>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [editItemOcupado, setEditItemOcupado] = useState(false);
@@ -428,31 +434,36 @@ export function InventariosPage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    setBulkParsing(true);
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(line => line.trim());
-      if (lines.length < 2) return;
+      // Use setTimeout to let the loading state render before heavy parsing
+      setTimeout(() => {
+        const lines = text.split(/\r?\n/).filter(line => line.trim());
+        if (lines.length < 2) { setBulkParsing(false); return; }
 
-      const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-      const mappedHeaders = rawHeaders.map(mapHeader);
+        const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        const mappedHeaders = rawHeaders.map(mapHeader);
 
-      const parsed: Record<string, string>[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-        const row: Record<string, string> = {};
-        mappedHeaders.forEach((header, idx) => {
-          row[header] = values[idx] || '';
-        });
-        // Skip completely empty rows
-        if (Object.values(row).every(v => !v)) continue;
-        parsed.push(row);
-      }
+        const parsed: Record<string, string>[] = [];
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+          const row: Record<string, string> = {};
+          mappedHeaders.forEach((header, idx) => {
+            row[header] = values[idx] || '';
+          });
+          // Skip completely empty rows
+          if (Object.values(row).every(v => !v)) continue;
+          parsed.push(row);
+        }
 
-      setBulkCsvData(parsed);
-      revalidateBulkData(parsed);
-      setBulkResult(null);
-      setBulkStep('upload');
+        setBulkCsvData(parsed);
+        revalidateBulkData(parsed);
+        setBulkResult(null);
+        setBulkStep('upload');
+        setBulkParsing(false);
+      }, 50);
     };
     reader.readAsText(file);
   }, []);
@@ -523,21 +534,20 @@ export function InventariosPage() {
     }
   };
 
-  const downloadOcupadosCsv = () => {
-    if (!bulkCheckResult?.ocupados.length) return;
-    const ocupadosCodigos = new Set(bulkCheckResult.ocupados.map(o => o.codigo_unico));
-    const ocupadosRows = bulkCsvData.filter(r => ocupadosCodigos.has(r.codigo_unico?.trim()));
-    if (ocupadosRows.length === 0) return;
+  const downloadBulkSubsetCsv = (codigos: string[], filename: string) => {
+    const codigosSet = new Set(codigos);
+    const rows = bulkCsvData.filter(r => codigosSet.has(r.codigo_unico?.trim()));
+    if (rows.length === 0) return;
 
-    const keys = Object.keys(ocupadosRows[0]);
+    const keys = Object.keys(rows[0]);
     const header = keys.join(',');
-    const rows = ocupadosRows.map(r => keys.map(k => `"${(r[k] || '').replace(/"/g, '""')}"`).join(','));
-    const csv = '\ufeff' + header + '\n' + rows.join('\n');
+    const csvRows = rows.map(r => keys.map(k => `"${(r[k] || '').replace(/"/g, '""')}"`).join(','));
+    const csv = '\ufeff' + header + '\n' + csvRows.join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'inventarios_ocupados.csv';
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1187,7 +1197,7 @@ export function InventariosPage() {
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-auto p-5 space-y-4">
+            <div className="flex-1 overflow-auto overscroll-contain p-5 space-y-4">
               {/* Step 1: Upload + Template */}
               <div className="flex items-center gap-3 flex-wrap">
                 <input ref={bulkInputRef} type="file" accept=".csv" onChange={handleBulkCsvUpload} className="hidden" />
@@ -1211,7 +1221,14 @@ export function InventariosPage() {
               </div>
 
               {/* Step 2: Preview */}
-              {bulkCsvData.length > 0 && bulkStep === 'upload' && (
+              {bulkParsing && (
+                <div className={`flex items-center justify-center gap-3 py-8 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                  <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
+                  <span className="text-sm">Procesando archivo...</span>
+                </div>
+              )}
+
+              {!bulkParsing && bulkCsvData.length > 0 && bulkStep === 'upload' && (
                 <>
                   {/* Counters */}
                   <div className="flex items-center gap-3 flex-wrap">
@@ -1239,253 +1256,352 @@ export function InventariosPage() {
 
                   {/* Error details */}
                   {bulkValidation.errors.length > 0 && (
-                    <div className={`${isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-200'} border rounded-xl p-3 max-h-32 overflow-auto`}>
-                      <p className={`text-xs ${isDark ? 'text-red-300' : 'text-red-700'} font-medium mb-2`}>Errores encontrados:</p>
+                    <div className={`${isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-200'} border rounded-xl p-3 max-h-48 overflow-auto`}>
+                      <p className={`text-xs ${isDark ? 'text-red-300' : 'text-red-700'} font-medium mb-2`}>Errores encontrados ({bulkValidation.errors.length}):</p>
                       <div className="space-y-1">
-                        {bulkValidation.errors.slice(0, 50).map((err, idx) => (
+                        {bulkValidation.errors.map((err, idx) => (
                           <p key={idx} className={`text-[11px] ${isDark ? 'text-red-300/80' : 'text-red-600'}`}>
                             Fila {err.fila}: <span className={`${isDark ? 'text-red-400' : 'text-red-700'} font-mono`}>{err.campo}</span> — {err.mensaje}
                           </p>
                         ))}
-                        {bulkValidation.errors.length > 50 && (
-                          <p className={`text-[11px] ${isDark ? 'text-red-400' : 'text-red-600'}`}>... y {bulkValidation.errors.length - 50} errores más</p>
-                        )}
                       </div>
                     </div>
                   )}
 
-                  {/* Editable preview table */}
-                  <div className={`border ${isDark ? 'border-zinc-800' : 'border-gray-200'} rounded-xl overflow-hidden`}>
-                    <div className="max-h-80 overflow-auto">
-                      <table className="w-full text-xs">
-                        <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} sticky top-0 z-10`}>
-                          <tr>
-                            <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-8`}>#</th>
-                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Código Único</th>
-                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Tipo Mueble</th>
-                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-24`}>Cara</th>
-                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-24`}>T/D</th>
-                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Plaza</th>
-                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Estado</th>
-                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Municipio</th>
-                            <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-20`}>Tarifa Pub.</th>
-                            <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-16`}>Estatus</th>
-                            <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-8`}></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {bulkCsvData.map((row, idx) => {
-                            const filaNum = idx + 1;
-                            const rowErrors = bulkValidation.errors.filter(e => e.fila === filaNum);
-                            const hasError = rowErrors.length > 0;
-                            const isDupInCsv = rowErrors.some(e => e.mensaje === 'Duplicado dentro del CSV');
-                            const fieldHasError = (field: string) => rowErrors.some(e => e.campo === field);
-                            const inputClass = (field: string) => `w-full px-1.5 py-1 ${isDark ? 'bg-zinc-800/80 text-white' : 'bg-white text-gray-900'} ${fieldHasError(field) ? 'border-red-500 ring-1 ring-red-500/30' : isDark ? 'border-zinc-700/50' : 'border-gray-200'} border rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-purple-500/50`;
-                            return (
-                              <tr
-                                key={idx}
-                                className={`border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-100'} ${hasError ? (isDupInCsv ? 'bg-amber-500/5' : 'bg-red-500/5') : ''}`}
-                                title={hasError ? rowErrors.map(e => `${e.campo}: ${e.mensaje}`).join('\n') : undefined}
-                              >
-                                <td className={`px-1 py-1 text-center ${isDark ? 'text-zinc-600' : 'text-gray-400'} text-[10px]`}>{filaNum}</td>
-                                <td className="px-1 py-1">
-                                  <input value={row.codigo_unico || ''} onChange={e => updateBulkRow(idx, 'codigo_unico', e.target.value)} className={`${inputClass('codigo_unico')} font-mono`} />
-                                </td>
-                                <td className="px-1 py-1">
-                                  <input value={row.tipo_de_mueble || ''} onChange={e => updateBulkRow(idx, 'tipo_de_mueble', e.target.value)} className={inputClass('tipo_de_mueble')} />
-                                </td>
-                                <td className="px-1 py-1">
-                                  <select value={row.tipo_de_cara || ''} onChange={e => updateBulkRow(idx, 'tipo_de_cara', e.target.value)} className={inputClass('tipo_de_cara')}>
-                                    <option value="">—</option>
-                                    <option value="Flujo">Flujo</option>
-                                    <option value="Contraflujo">Contraflujo</option>
-                                  </select>
-                                </td>
-                                <td className="px-1 py-1">
-                                  <select value={row.tradicional_digital || ''} onChange={e => updateBulkRow(idx, 'tradicional_digital', e.target.value)} className={inputClass('tradicional_digital')}>
-                                    <option value="">—</option>
-                                    <option value="Tradicional">Tradicional</option>
-                                    <option value="Digital">Digital</option>
-                                  </select>
-                                </td>
-                                <td className="px-1 py-1">
-                                  <input value={row.plaza || ''} onChange={e => updateBulkRow(idx, 'plaza', e.target.value)} className={inputClass('plaza')} />
-                                </td>
-                                <td className="px-1 py-1">
-                                  <input value={row.estado || ''} onChange={e => updateBulkRow(idx, 'estado', e.target.value)} className={inputClass('estado')} />
-                                </td>
-                                <td className="px-1 py-1">
-                                  <input value={row.municipio || ''} onChange={e => updateBulkRow(idx, 'municipio', e.target.value)} className={inputClass('municipio')} />
-                                </td>
-                                <td className="px-1 py-1">
-                                  <input value={row.tarifa_publica || ''} onChange={e => updateBulkRow(idx, 'tarifa_publica', e.target.value)} className={inputClass('tarifa_publica')} />
-                                </td>
-                                <td className="px-1 py-1 text-center">
-                                  {hasError ? (
-                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${isDupInCsv ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700') : (isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700')}`}>
-                                      {isDupInCsv ? 'DUP' : 'ERR'}
-                                    </span>
-                                  ) : (
-                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>OK</span>
-                                  )}
-                                </td>
-                                <td className="px-1 py-1 text-center">
-                                  <button onClick={() => deleteBulkRow(idx)} className={`p-0.5 rounded ${isDark ? 'hover:bg-red-500/20 text-zinc-600 hover:text-red-400' : 'hover:bg-red-50 text-gray-400 hover:text-red-600'} transition-colors`} title="Eliminar fila">
-                                    <X className="h-3.5 w-3.5" />
-                                  </button>
-                                </td>
+                  {/* Tabs: Errores / OK */}
+                  {(() => {
+                    const errorFilasSet = new Set(bulkValidation.errors.map(e => e.fila));
+                    const errorRows = bulkCsvData.map((row, idx) => ({ row, idx })).filter(({ idx }) => errorFilasSet.has(idx + 1));
+                    const okRows = bulkCsvData.map((row, idx) => ({ row, idx })).filter(({ idx }) => !errorFilasSet.has(idx + 1));
+                    const currentRows = bulkTab === 'errors' ? errorRows : okRows;
+                    const totalPages = Math.max(1, Math.ceil(currentRows.length / BULK_PAGE_SIZE));
+                    const safePage = Math.min(bulkPage, totalPages);
+                    const pagedRows = currentRows.slice((safePage - 1) * BULK_PAGE_SIZE, safePage * BULK_PAGE_SIZE);
+
+                    return (
+                      <div className={`border ${isDark ? 'border-zinc-800' : 'border-gray-200'} rounded-xl overflow-hidden`}>
+                        {/* Tab buttons */}
+                        <div className={`flex ${isDark ? 'bg-zinc-800/50 border-zinc-800' : 'bg-gray-50 border-gray-200'} border-b`}>
+                          <button
+                            onClick={() => { setBulkTab('errors'); setBulkPage(1); }}
+                            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors ${bulkTab === 'errors' ? (isDark ? 'text-red-300 border-b-2 border-red-400 bg-red-500/5' : 'text-red-700 border-b-2 border-red-500 bg-red-50') : (isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600')}`}
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Con errores ({errorRows.length})
+                          </button>
+                          <button
+                            onClick={() => { setBulkTab('ok'); setBulkPage(1); }}
+                            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors ${bulkTab === 'ok' ? (isDark ? 'text-emerald-300 border-b-2 border-emerald-400 bg-emerald-500/5' : 'text-emerald-700 border-b-2 border-emerald-500 bg-emerald-50') : (isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600')}`}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            OK ({okRows.length})
+                          </button>
+                        </div>
+
+                        {/* Table */}
+                        <div className="max-h-80 overflow-auto">
+                          <table className="w-full text-xs">
+                            <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} sticky top-0 z-10`}>
+                              <tr>
+                                <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-8`}>#</th>
+                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Código Único</th>
+                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Tipo Mueble</th>
+                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-24`}>Cara</th>
+                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-24`}>T/D</th>
+                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Plaza</th>
+                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Estado</th>
+                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Municipio</th>
+                                <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-16`}>Estatus</th>
+                                <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-8`}></th>
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                            </thead>
+                            <tbody>
+                              {pagedRows.length === 0 ? (
+                                <tr><td colSpan={10} className={`px-4 py-6 text-center text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>{bulkTab === 'errors' ? 'Sin errores' : 'Sin filas válidas'}</td></tr>
+                              ) : pagedRows.map(({ row, idx }) => {
+                                const filaNum = idx + 1;
+                                const rowErrors = bulkValidation.errors.filter(e => e.fila === filaNum);
+                                const hasError = rowErrors.length > 0;
+                                const isDupInCsv = rowErrors.some(e => e.mensaje === 'Duplicado dentro del CSV');
+                                const fieldHasError = (field: string) => rowErrors.some(e => e.campo === field);
+                                const inputClass = (field: string) => `w-full px-1.5 py-1 ${isDark ? 'bg-zinc-800/80 text-white' : 'bg-white text-gray-900'} ${fieldHasError(field) ? 'border-red-500 ring-1 ring-red-500/30' : isDark ? 'border-zinc-700/50' : 'border-gray-200'} border rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-purple-500/50`;
+                                return (
+                                  <tr
+                                    key={idx}
+                                    className={`border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-100'} ${hasError ? (isDupInCsv ? 'bg-amber-500/5' : 'bg-red-500/5') : ''}`}
+                                    title={hasError ? rowErrors.map(e => `${e.campo}: ${e.mensaje}`).join('\n') : undefined}
+                                  >
+                                    <td className={`px-1 py-1 text-center ${isDark ? 'text-zinc-600' : 'text-gray-400'} text-[10px]`}>{filaNum}</td>
+                                    <td className="px-1 py-1">
+                                      <input value={row.codigo_unico || ''} onChange={e => updateBulkRow(idx, 'codigo_unico', e.target.value)} className={`${inputClass('codigo_unico')} font-mono`} />
+                                    </td>
+                                    <td className="px-1 py-1">
+                                      <input value={row.tipo_de_mueble || ''} onChange={e => updateBulkRow(idx, 'tipo_de_mueble', e.target.value)} className={inputClass('tipo_de_mueble')} />
+                                    </td>
+                                    <td className="px-1 py-1">
+                                      <select value={row.tipo_de_cara || ''} onChange={e => updateBulkRow(idx, 'tipo_de_cara', e.target.value)} className={inputClass('tipo_de_cara')}>
+                                        <option value="">—</option>
+                                        <option value="Flujo">Flujo</option>
+                                        <option value="Contraflujo">Contraflujo</option>
+                                      </select>
+                                    </td>
+                                    <td className="px-1 py-1">
+                                      <select value={row.tradicional_digital || ''} onChange={e => updateBulkRow(idx, 'tradicional_digital', e.target.value)} className={inputClass('tradicional_digital')}>
+                                        <option value="">—</option>
+                                        <option value="Tradicional">Tradicional</option>
+                                        <option value="Digital">Digital</option>
+                                      </select>
+                                    </td>
+                                    <td className="px-1 py-1">
+                                      <input value={row.plaza || ''} onChange={e => updateBulkRow(idx, 'plaza', e.target.value)} className={inputClass('plaza')} />
+                                    </td>
+                                    <td className="px-1 py-1">
+                                      <input value={row.estado || ''} onChange={e => updateBulkRow(idx, 'estado', e.target.value)} className={inputClass('estado')} />
+                                    </td>
+                                    <td className="px-1 py-1">
+                                      <input value={row.municipio || ''} onChange={e => updateBulkRow(idx, 'municipio', e.target.value)} className={inputClass('municipio')} />
+                                    </td>
+                                    <td className="px-1 py-1 text-center">
+                                      {hasError ? (
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${isDupInCsv ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700') : (isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700')}`}>
+                                          {isDupInCsv ? 'DUP' : 'ERR'}
+                                        </span>
+                                      ) : (
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>OK</span>
+                                      )}
+                                    </td>
+                                    <td className="px-1 py-1 text-center">
+                                      <button onClick={() => deleteBulkRow(idx)} className={`p-0.5 rounded ${isDark ? 'hover:bg-red-500/20 text-zinc-600 hover:text-red-400' : 'hover:bg-red-50 text-gray-400 hover:text-red-600'} transition-colors`} title="Eliminar fila">
+                                        <X className="h-3.5 w-3.5" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Pagination */}
+                        {totalPages > 1 && (
+                          <div className={`flex items-center justify-between px-3 py-2 ${isDark ? 'bg-zinc-800/30 border-zinc-800' : 'bg-gray-50 border-gray-200'} border-t`}>
+                            <span className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                              Página {safePage} de {totalPages} ({currentRows.length} filas)
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => setBulkPage(p => Math.max(1, p - 1))}
+                                disabled={safePage <= 1}
+                                className={`px-2 py-1 rounded text-[11px] ${isDark ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 disabled:text-zinc-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:text-gray-300'} disabled:cursor-not-allowed transition-colors`}
+                              >
+                                Anterior
+                              </button>
+                              <button
+                                onClick={() => setBulkPage(p => Math.min(totalPages, p + 1))}
+                                disabled={safePage >= totalPages}
+                                className={`px-2 py-1 rounded text-[11px] ${isDark ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 disabled:text-zinc-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:text-gray-300'} disabled:cursor-not-allowed transition-colors`}
+                              >
+                                Siguiente
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
 
-              {/* Step 3: Check Result - Confirm overwrite */}
+              {/* Step 3: Check Result - Tabs */}
               {bulkStep === 'check' && bulkCheckResult && (
                 <div className="space-y-4">
-                  <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Resultado de verificación contra la base de datos:</p>
-
-                  <div className="flex items-center gap-4 flex-wrap">
-                    {/* Nuevos */}
-                    <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'} border`}>
+                  {/* Tab buttons as KPI cards */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                      onClick={() => { setCheckTab('nuevos'); setCheckPage(1); }}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border transition-all ${checkTab === 'nuevos' ? (isDark ? 'bg-emerald-500/15 border-emerald-400 ring-1 ring-emerald-400/30' : 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500/30') : (isDark ? 'bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10' : 'bg-emerald-50/50 border-emerald-200 hover:bg-emerald-50')}`}
+                    >
                       <CheckCircle2 className={`h-5 w-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
-                      <div>
+                      <div className="text-left">
                         <p className={`text-sm font-medium ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{bulkCheckResult.nuevos.length} nuevos</p>
-                        <p className={`text-[10px] ${isDark ? 'text-emerald-400/60' : 'text-emerald-500'}`}>Se insertarán normalmente</p>
+                        <p className={`text-[10px] ${isDark ? 'text-emerald-400/60' : 'text-emerald-500'}`}>Se insertarán</p>
                       </div>
-                    </div>
-
-                    {/* Sobreescribibles */}
-                    {bulkCheckResult.sobreescribibles.length > 0 && (
-                      <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'} border`}>
-                        <AlertCircle className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
-                        <div>
-                          <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{bulkCheckResult.sobreescribibles.length} existentes (no ocupados)</p>
-                          <p className={`text-[10px] ${isDark ? 'text-amber-400/60' : 'text-amber-500'}`}>Se pueden sobreescribir</p>
-                        </div>
+                    </button>
+                    <button
+                      onClick={() => { setCheckTab('sobreescribibles'); setCheckPage(1); }}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border transition-all ${checkTab === 'sobreescribibles' ? (isDark ? 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400/30' : 'bg-amber-50 border-amber-500 ring-1 ring-amber-500/30') : (isDark ? 'bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10' : 'bg-amber-50/50 border-amber-200 hover:bg-amber-50')}`}
+                    >
+                      <AlertCircle className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
+                      <div className="text-left">
+                        <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{bulkCheckResult.sobreescribibles.length} existentes</p>
+                        <p className={`text-[10px] ${isDark ? 'text-amber-400/60' : 'text-amber-500'}`}>Sobreescribibles</p>
                       </div>
-                    )}
-
-                    {/* Ocupados */}
-                    {bulkCheckResult.ocupados.length > 0 && (
-                      <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'} border`}>
-                        <Ban className={`h-5 w-5 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
-                        <div>
-                          <p className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>{bulkCheckResult.ocupados.length} ocupados/bloqueados</p>
-                          <p className={`text-[10px] ${isDark ? 'text-red-400/60' : 'text-red-500'}`}>No se pueden sobreescribir</p>
-                        </div>
+                    </button>
+                    <button
+                      onClick={() => { setCheckTab('ocupados'); setCheckPage(1); }}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border transition-all ${checkTab === 'ocupados' ? (isDark ? 'bg-red-500/15 border-red-400 ring-1 ring-red-400/30' : 'bg-red-50 border-red-500 ring-1 ring-red-500/30') : (isDark ? 'bg-red-500/5 border-red-500/20 hover:bg-red-500/10' : 'bg-red-50/50 border-red-200 hover:bg-red-50')}`}
+                    >
+                      <Ban className={`h-5 w-5 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+                      <div className="text-left">
+                        <p className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>{bulkCheckResult.ocupados.length} ocupados</p>
+                        <p className={`text-[10px] ${isDark ? 'text-red-400/60' : 'text-red-500'}`}>No se pueden sobreescribir</p>
                       </div>
-                    )}
+                    </button>
                   </div>
 
-                  {/* Sobreescribir checkbox + editable table */}
-                  {bulkCheckResult.sobreescribibles.length > 0 && (
-                    <div className="space-y-3">
-                      <label className={`flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer ${isDark ? 'bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10' : 'bg-amber-50 border-amber-200 hover:bg-amber-100'} border transition-colors`}>
-                        <input
-                          type="checkbox"
-                          checked={confirmOverwrite}
-                          onChange={e => setConfirmOverwrite(e.target.checked)}
-                          className="w-4 h-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
-                        />
-                        <div>
-                          <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-                            Sobreescribir {bulkCheckResult.sobreescribibles.length} inventarios existentes (no ocupados)
-                          </p>
-                          <p className={`text-[10px] ${isDark ? 'text-amber-400/60' : 'text-amber-500'}`}>
-                            Revisa y edita los datos antes de subir
-                          </p>
-                        </div>
-                      </label>
+                  {/* Sobreescribir checkbox (only on sobreescribibles tab) */}
+                  {checkTab === 'sobreescribibles' && bulkCheckResult.sobreescribibles.length > 0 && (
+                    <label className={`flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer ${isDark ? 'bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10' : 'bg-amber-50 border-amber-200 hover:bg-amber-100'} border transition-colors`}>
+                      <input type="checkbox" checked={confirmOverwrite} onChange={e => setConfirmOverwrite(e.target.checked)} className="w-4 h-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500" />
+                      <div>
+                        <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Sobreescribir {bulkCheckResult.sobreescribibles.length} inventarios existentes</p>
+                        <p className={`text-[10px] ${isDark ? 'text-amber-400/60' : 'text-amber-500'}`}>Revisa y edita los datos antes de subir</p>
+                      </div>
+                    </label>
+                  )}
 
-                      {confirmOverwrite && (
-                        <div className={`border ${isDark ? 'border-amber-500/20' : 'border-amber-200'} rounded-xl overflow-hidden`}>
-                          <div className="max-h-64 overflow-auto">
-                            <table className="w-full text-xs">
-                              <thead className={`${isDark ? 'bg-amber-900/20' : 'bg-amber-50'} sticky top-0`}>
-                                <tr>
-                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Código Único</th>
-                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Tipo Mueble</th>
-                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Cara</th>
-                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>T/D</th>
-                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Plaza</th>
-                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Estado</th>
-                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Municipio</th>
-                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Tarifa Pub.</th>
-                                  <th className={`px-2 py-2 text-left ${isDark ? 'text-amber-400' : 'text-amber-600'} font-medium`}>Tarifa Piso</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {bulkCheckResult.sobreescribibles.map((item) => {
-                                  const csvRow = bulkCsvData.find(r => r.codigo_unico?.trim() === item.codigo_unico);
-                                  if (!csvRow) return null;
-                                  const csvIdx = bulkCsvData.indexOf(csvRow);
-                                  const editCell = (field: string, value: string) => {
-                                    const updated = [...bulkCsvData];
-                                    updated[csvIdx] = { ...updated[csvIdx], [field]: value };
-                                    setBulkCsvData(updated);
-                                  };
-                                  const inputClass = `w-full px-1.5 py-1 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-amber-500/50`;
-                                  return (
-                                    <tr key={item.codigo_unico} className={`border-t ${isDark ? 'border-zinc-800/50' : 'border-amber-100'}`}>
-                                      <td className={`px-2 py-1.5 font-mono ${isDark ? 'text-amber-300' : 'text-amber-700'} text-[11px]`}>{item.codigo_unico}</td>
-                                      <td className="px-1 py-1"><input value={csvRow.tipo_de_mueble || ''} onChange={e => editCell('tipo_de_mueble', e.target.value)} className={inputClass} /></td>
-                                      <td className="px-1 py-1">
-                                        <select value={csvRow.tipo_de_cara || ''} onChange={e => editCell('tipo_de_cara', e.target.value)} className={inputClass}>
-                                          <option value="Flujo">Flujo</option>
-                                          <option value="Contraflujo">Contraflujo</option>
-                                        </select>
-                                      </td>
-                                      <td className="px-1 py-1">
-                                        <select value={csvRow.tradicional_digital || ''} onChange={e => editCell('tradicional_digital', e.target.value)} className={inputClass}>
-                                          <option value="Tradicional">Tradicional</option>
-                                          <option value="Digital">Digital</option>
-                                        </select>
-                                      </td>
-                                      <td className="px-1 py-1"><input value={csvRow.plaza || ''} onChange={e => editCell('plaza', e.target.value)} className={inputClass} /></td>
-                                      <td className="px-1 py-1"><input value={csvRow.estado || ''} onChange={e => editCell('estado', e.target.value)} className={inputClass} /></td>
-                                      <td className="px-1 py-1"><input value={csvRow.municipio || ''} onChange={e => editCell('municipio', e.target.value)} className={inputClass} /></td>
-                                      <td className="px-1 py-1"><input value={csvRow.tarifa_publica || ''} onChange={e => editCell('tarifa_publica', e.target.value)} className={inputClass} /></td>
-                                      <td className="px-1 py-1"><input value={csvRow.tarifa_piso || ''} onChange={e => editCell('tarifa_piso', e.target.value)} className={inputClass} /></td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
+                  {/* Tab content with paginated table */}
+                  {(() => {
+                    const codigosList = checkTab === 'nuevos' ? bulkCheckResult.nuevos
+                      : checkTab === 'sobreescribibles' ? bulkCheckResult.sobreescribibles.map(s => s.codigo_unico || '')
+                      : bulkCheckResult.ocupados.map(o => o.codigo_unico || '');
+                    const codigosSet = new Set(codigosList);
+                    const matchedRows = bulkCsvData.map((row, idx) => ({ row, idx })).filter(({ row }) => codigosSet.has(row.codigo_unico?.trim()));
+                    const totalCheckPages = Math.max(1, Math.ceil(matchedRows.length / BULK_PAGE_SIZE));
+                    const safeCheckPage = Math.min(checkPage, totalCheckPages);
+                    const pagedCheckRows = matchedRows.slice((safeCheckPage - 1) * BULK_PAGE_SIZE, safeCheckPage * BULK_PAGE_SIZE);
+                    const isEditable = checkTab === 'sobreescribibles' && confirmOverwrite;
+                    const colorPrefix = checkTab === 'nuevos' ? 'emerald' : checkTab === 'sobreescribibles' ? 'amber' : 'red';
+
+                    return (
+                      <div className={`border ${isDark ? 'border-zinc-800' : 'border-gray-200'} rounded-xl overflow-hidden`}>
+                        {/* Download button */}
+                        <div className={`flex items-center justify-between px-3 py-2 ${isDark ? 'bg-zinc-800/50 border-zinc-800' : 'bg-gray-50 border-gray-200'} border-b`}>
+                          <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                            {matchedRows.length} filas — {checkTab === 'nuevos' ? 'Se insertarán' : checkTab === 'sobreescribibles' ? 'Se pueden sobreescribir' : 'No se sobreescribirán'}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => downloadBulkSubsetCsv(codigosList, `inventarios_${checkTab}.csv`)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'} transition-colors`}
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              CSV
+                            </button>
+                            {checkTab === 'ocupados' && bulkCheckResult.ocupados.length > 0 && (
+                              <button
+                                onClick={() => {
+                                  const header = 'codigo_unico,estatus,campana';
+                                  const rows = bulkCheckResult.ocupados.map(o => `"${o.codigo_unico || ''}","${o.estatus_real || o.estatus || ''}","${(o.campana || 'Sin campaña').replace(/"/g, '""')}"`);
+                                  const csv = '\ufeff' + header + '\n' + rows.join('\n');
+                                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                                  const url = URL.createObjectURL(blob);
+                                  const link = document.createElement('a');
+                                  link.href = url;
+                                  link.download = 'inventarios_ocupados_detalle.csv';
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                  URL.revokeObjectURL(url);
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30' : 'bg-red-100 text-red-700 hover:bg-red-200'} transition-colors`}
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                CSV con Campañas
+                              </button>
+                            )}
                           </div>
                         </div>
-                      )}
-                    </div>
-                  )}
 
-                  {/* Ocupados detail + download */}
-                  {bulkCheckResult.ocupados.length > 0 && (
-                    <div className={`${isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-200'} border rounded-xl p-4 space-y-3`}>
-                      <div className="flex items-center justify-between">
-                        <p className={`text-xs font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>
-                          Inventarios ocupados que NO se sobreescribirán:
-                        </p>
-                        <button
-                          onClick={downloadOcupadosCsv}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30' : 'bg-red-100 text-red-700 hover:bg-red-200'} transition-colors`}
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                          Descargar CSV ocupados
-                        </button>
+                        {/* Table */}
+                        <div className="max-h-72 overflow-auto">
+                          <table className="w-full text-xs">
+                            <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} sticky top-0 z-10`}>
+                              <tr>
+                                <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Código Único</th>
+                                <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Tipo Mueble</th>
+                                <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Cara</th>
+                                <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>T/D</th>
+                                <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Plaza</th>
+                                <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Estado</th>
+                                <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Municipio</th>
+                                {checkTab === 'ocupados' && <th className={`px-2 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Estatus</th>}
+                                {checkTab === 'ocupados' && <th className={`px-2 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Campaña</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pagedCheckRows.length === 0 ? (
+                                <tr><td colSpan={9} className={`px-4 py-6 text-center text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>Sin filas</td></tr>
+                              ) : pagedCheckRows.map(({ row, idx }) => {
+                                const editCell = (field: string, value: string) => {
+                                  const updated = [...bulkCsvData];
+                                  updated[idx] = { ...updated[idx], [field]: value };
+                                  setBulkCsvData(updated);
+                                };
+                                const inputClass = `w-full px-1.5 py-1 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-purple-500/50`;
+                                const ocupadoItem = checkTab === 'ocupados' ? bulkCheckResult.ocupados.find(o => o.codigo_unico === row.codigo_unico?.trim()) : null;
+                                return (
+                                  <tr key={idx} className={`border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-100'}`}>
+                                    <td className={`px-2 py-1.5 font-mono text-[11px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{row.codigo_unico}</td>
+                                    {isEditable ? (
+                                      <>
+                                        <td className="px-1 py-1"><input value={row.tipo_de_mueble || ''} onChange={e => editCell('tipo_de_mueble', e.target.value)} className={inputClass} /></td>
+                                        <td className="px-1 py-1">
+                                          <select value={row.tipo_de_cara || ''} onChange={e => editCell('tipo_de_cara', e.target.value)} className={inputClass}>
+                                            <option value="Flujo">Flujo</option><option value="Contraflujo">Contraflujo</option>
+                                          </select>
+                                        </td>
+                                        <td className="px-1 py-1">
+                                          <select value={row.tradicional_digital || ''} onChange={e => editCell('tradicional_digital', e.target.value)} className={inputClass}>
+                                            <option value="Tradicional">Tradicional</option><option value="Digital">Digital</option>
+                                          </select>
+                                        </td>
+                                        <td className="px-1 py-1"><input value={row.plaza || ''} onChange={e => editCell('plaza', e.target.value)} className={inputClass} /></td>
+                                        <td className="px-1 py-1"><input value={row.estado || ''} onChange={e => editCell('estado', e.target.value)} className={inputClass} /></td>
+                                        <td className="px-1 py-1"><input value={row.municipio || ''} onChange={e => editCell('municipio', e.target.value)} className={inputClass} /></td>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <td className={`px-2 py-1.5 text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{row.tipo_de_mueble}</td>
+                                        <td className={`px-2 py-1.5 text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{row.tipo_de_cara}</td>
+                                        <td className={`px-2 py-1.5 text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{row.tradicional_digital}</td>
+                                        <td className={`px-2 py-1.5 text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{row.plaza}</td>
+                                        <td className={`px-2 py-1.5 text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{row.estado}</td>
+                                        <td className={`px-2 py-1.5 text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{row.municipio}</td>
+                                      </>
+                                    )}
+                                    {checkTab === 'ocupados' && ocupadoItem && (
+                                      <>
+                                        <td className="px-2 py-1.5 text-center">
+                                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`}>
+                                            {ocupadoItem.estatus_real || ocupadoItem.estatus}
+                                          </span>
+                                        </td>
+                                        <td className={`px-2 py-1.5 text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                                          {ocupadoItem.campana || 'Sin campaña'}
+                                        </td>
+                                      </>
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Pagination */}
+                        {totalCheckPages > 1 && (
+                          <div className={`flex items-center justify-between px-3 py-2 ${isDark ? 'bg-zinc-800/30 border-zinc-800' : 'bg-gray-50 border-gray-200'} border-t`}>
+                            <span className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Página {safeCheckPage} de {totalCheckPages}</span>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => setCheckPage(p => Math.max(1, p - 1))} disabled={safeCheckPage <= 1} className={`px-2 py-1 rounded text-[11px] ${isDark ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 disabled:text-zinc-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:text-gray-300'} disabled:cursor-not-allowed transition-colors`}>Anterior</button>
+                              <button onClick={() => setCheckPage(p => Math.min(totalCheckPages, p + 1))} disabled={safeCheckPage >= totalCheckPages} className={`px-2 py-1 rounded text-[11px] ${isDark ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 disabled:text-zinc-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:text-gray-300'} disabled:cursor-not-allowed transition-colors`}>Siguiente</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="max-h-32 overflow-auto space-y-1">
-                        {bulkCheckResult.ocupados.map((item, idx) => (
-                          <p key={idx} className={`text-[11px] ${isDark ? 'text-red-300/80' : 'text-red-600'}`}>
-                            <span className="font-mono">{item.codigo_unico}</span> — Estatus: <span className="font-medium">{item.estatus_real || item.estatus}</span>
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
 

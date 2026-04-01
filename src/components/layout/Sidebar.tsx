@@ -22,6 +22,7 @@ import { usePrefetch } from '../../hooks/usePrefetch';
 import { getPermissions } from '../../lib/permissions';
 import { AyudaModal } from './AyudaModal';
 import { ticketsService } from '../../services/tickets.service';
+import { useSocketTicketsHistorial } from '../../hooks/useSocket';
 
 const HISTORIAL_TICKETS_EMAILS = [
   'akary.lopez@datistic.mx',
@@ -79,6 +80,15 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     enabled: !!canSeeHistorialTickets,
     refetchInterval: 30000,
   });
+
+  const { data: chatUnreadCount = 0 } = useQuery({
+    queryKey: ['tickets-chat-unread-count'],
+    queryFn: () => ticketsService.getChatUnreadCount(),
+    refetchInterval: 30000,
+  });
+
+  // Real-time: invalidar todos los unread counts cuando llega un mensaje/chat nuevo
+  useSocketTicketsHistorial();
 
   const filteredNavigation = navigation.filter(item => {
     if (!permissions[item.permissionKey]) {
@@ -280,11 +290,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           )}
           <button
             onClick={() => setAyudaOpen(true)}
-            className={cn(actionBtnCls, collapsed && 'justify-center px-2')}
+            className={cn(actionBtnCls, collapsed && 'justify-center px-2', 'relative')}
             title={collapsed ? 'Ayuda' : undefined}
           >
             <HelpCircle className="h-5 w-5 flex-shrink-0" />
             {!collapsed && <span>Ayuda</span>}
+            {chatUnreadCount > 0 && (
+              <span className="absolute top-1.5 left-6 h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse ring-2 ring-red-500/30" />
+            )}
           </button>
           <button
             onClick={handleLogout}
@@ -303,6 +316,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       onClose={() => setAyudaOpen(false)}
       tutorialId={ayudaTutorial}
       onSelect={setAyudaTutorial}
+      chatUnreadCount={chatUnreadCount}
     />
     </>
   );

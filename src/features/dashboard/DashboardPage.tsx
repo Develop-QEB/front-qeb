@@ -1631,10 +1631,10 @@ export function DashboardPage() {
           {showFilters && (
             <GlassCard>
               <div className="p-4 grid gap-4 md:grid-cols-4">
-                <FilterSelect label="Estado" value={filters.estado || ''} onChange={(v) => { setFilters(p => ({ ...p, estado: v || undefined })); setInventoryPage(1); }} options={filterOptions?.estados || []} />
-                <FilterSelect label="Ciudad" value={filters.ciudad || ''} onChange={(v) => { setFilters(p => ({ ...p, ciudad: v || undefined })); setInventoryPage(1); }} options={filterOptions?.ciudades || []} placeholder="Todas" />
-                <FilterSelect label="Formato" value={filters.formato || ''} onChange={(v) => { setFilters(p => ({ ...p, formato: v || undefined })); setInventoryPage(1); }} options={filterOptions?.formatos || []} />
-                <FilterSelect label="NSE" value={filters.nse || ''} onChange={(v) => { setFilters(p => ({ ...p, nse: v || undefined })); setInventoryPage(1); }} options={filterOptions?.nses || []} />
+                <FilterSelect label="Estado" value={filters.estado || ''} onChange={(v) => { setFilters(p => ({ ...p, estado: v || undefined, ciudad: undefined, formato: undefined, nse: undefined })); setInventoryPage(1); }} options={filterOptions?.estados || []} />
+                <FilterSelect label="Ciudad" value={filters.ciudad || ''} onChange={(v) => { setFilters(p => ({ ...p, ciudad: v || undefined, formato: undefined, nse: undefined })); setInventoryPage(1); }} options={[...new Set((filterOptions?.ciudades || []).filter(c => !filters.estado || c.estado === filters.estado).map(c => c.ciudad))].sort()} placeholder="Todas" />
+                <FilterSelect label="Formato" value={filters.formato || ''} onChange={(v) => { setFilters(p => ({ ...p, formato: v || undefined, nse: undefined })); setInventoryPage(1); }} options={[...new Set((filterOptions?.formatos || []).filter(f => (!filters.estado || f.estado === filters.estado) && (!filters.ciudad || f.ciudad === filters.ciudad)).map(f => f.formato))].sort()} />
+                <FilterSelect label="NSE" value={filters.nse || ''} onChange={(v) => { setFilters(p => ({ ...p, nse: v || undefined })); setInventoryPage(1); }} options={[...new Set((filterOptions?.nses || []).filter(n => (!filters.estado || n.estado === filters.estado) && (!filters.ciudad || n.ciudad === filters.ciudad)).map(n => n.nse))].sort()} />
               </div>
               <div className={`px-4 pb-4 pt-0`}>
                 <div className="flex items-center gap-2 mb-3">

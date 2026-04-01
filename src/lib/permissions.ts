@@ -12,10 +12,10 @@ export type UserRole =
   | 'Gerente Comercial Aeropuerto'
   | 'Asesor Comercial Aeropuerto'
   | 'Analista de Aeropuerto'
-  | 'Gerente de Tráfico'
-  | 'Coordinador de tráfico'
-  | 'Especialista de tráfico'
-  | 'Auxiliar de tráfico'
+  | 'Gerente de Trafico'
+  | 'Coordinador de trafico'
+  | 'Especialista de trafico'
+  | 'Auxiliar de trafico'
   | 'Coordinador de Diseño'
   | 'Diseñadores'
   | 'Compradores'
@@ -76,6 +76,7 @@ export interface RolePermissions {
   allowedCampanaStatuses: string[] | null; // null = todos los estatus permitidos, array = solo esos
   canEditDetalleCampana: boolean;
   canEditCaraFiltersOnEdit: boolean; // Editar estados, ciudades y formatos al editar una cara existente en propuestas
+  canEditArticuloOnEdit: boolean; // Editar artículo SAP al editar una cara existente (solo si no hay reservas)
   canDeleteDetalleCampana: boolean;
   canSeeGestionArtes: boolean; // Ver página de Gestión de Artes
   canEditGestionArtes: boolean;
@@ -151,6 +152,7 @@ const defaultPermissions: RolePermissions = {
   allowedCampanaStatuses: null, // null = todos
   canEditDetalleCampana: true,
   canEditCaraFiltersOnEdit: false,
+  canEditArticuloOnEdit: false,
   canDeleteDetalleCampana: true,
   canSeeGestionArtes: true,
   canEditGestionArtes: true,
@@ -201,6 +203,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
     canBuscarInventarioEnModal: false,
     canEditClienteEnFormularios: true, // Puede editar campo cliente en solicitudes y propuestas
+    canEditArticuloOnEdit: true, // Puede editar artículo SAP al editar circuito (si no hay reservas)
 
     canEditCampanas: true,
     canEditDetalleCampana: false,
@@ -649,6 +652,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
     canBuscarInventarioEnModal: false,
     canEditClienteEnFormularios: true, // Puede editar campo cliente en solicitudes y propuestas
+    canEditArticuloOnEdit: true, // Puede editar artículo SAP al editar circuito (si no hay reservas)
 
     canEditCampanas: false,
     canEditDetalleCampana: false,
@@ -955,8 +959,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Admin tiene todos los permisos por defecto
     canEditClienteEnFormularios: true,
     canEditCaraFiltersOnEdit: true,
+    canEditArticuloOnEdit: true,
   },
-  'Gerente de Tráfico': {
+  'Gerente de Trafico': {
     // Secciones visibles
     canSeeDashboard: true,
     canSeeClientes: false,
@@ -984,9 +989,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
+    // Propuestas - pueden cambiar a Abierto, Atendido, Ajuste Comercial y Compartir
     canEditPropuestaStatus: true,
-    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    allowedPropuestaStatuses: ['Abierto', 'Atendido', 'Ajuste Comercial'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
     canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
@@ -1022,7 +1027,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
   },
-  'Coordinador de tráfico': {
+  'Coordinador de trafico': {
     // Secciones visibles
     canSeeDashboard: true,
     canSeeClientes: false,
@@ -1050,9 +1055,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
+    // Propuestas - pueden cambiar a Abierto, Atendido, Ajuste Comercial y Compartir
     canEditPropuestaStatus: true,
-    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    allowedPropuestaStatuses: ['Abierto', 'Atendido', 'Ajuste Comercial'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
     canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
@@ -1091,7 +1096,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Órdenes de Montaje - solo visualización
     canExportOrdenesMontaje: false,
   },
-  'Especialista de tráfico': {
+  'Especialista de trafico': {
     // Secciones visibles
     canSeeDashboard: true,
     canSeeClientes: false,
@@ -1119,9 +1124,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
+    // Propuestas - pueden cambiar a Abierto, Atendido, Ajuste Comercial y Compartir
     canEditPropuestaStatus: true,
-    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    allowedPropuestaStatuses: ['Abierto', 'Atendido', 'Ajuste Comercial'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
     canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta
@@ -1160,7 +1165,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Órdenes de Montaje - solo visualización
     canExportOrdenesMontaje: false,
   },
-  'Auxiliar de tráfico': {
+  'Auxiliar de trafico': {
     // Secciones visibles
     canSeeDashboard: true,
     canSeeClientes: false,
@@ -1188,9 +1193,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - pueden cambiar a Abierto, Atendido y Compartir
+    // Propuestas - pueden cambiar a Abierto, Atendido, Ajuste Comercial y Compartir
     canEditPropuestaStatus: true,
-    allowedPropuestaStatuses: ['Abierto', 'Atendido'],
+    allowedPropuestaStatuses: ['Abierto', 'Atendido', 'Ajuste Comercial'],
     canAprobarPropuesta: false,
     canAsignarInventario: true,
     canEditResumenPropuesta: true, // Puede editar campos en Resumen de Propuesta

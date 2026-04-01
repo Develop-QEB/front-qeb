@@ -1963,6 +1963,7 @@ export function CampanasPage() {
                     setCatorcenaFin(undefined);
                     setPage(1);
                   }}
+                  isDark={isDark}
                 />
 
                 {/* Divider */}
@@ -1998,6 +1999,7 @@ export function CampanasPage() {
                   value={activeGroupings[0] || ''}
                   onChange={(val) => { setActiveGroupings([val as GroupByField]); setExpandedGroups(new Set()); }}
                   onClear={() => { setActiveGroupings([]); setExpandedGroups(new Set()); }}
+                  isDark={isDark}
                 />
 
                 {/* Clear All */}
@@ -2259,7 +2261,7 @@ export function CampanasPage() {
 
                   // Función para renderizar una campaña
                   const renderCampana = (campana: Campana, indent: number = 0) => {
-                    const statusColor = getStatusColor(campana.status);
+                    const statusColor = getStatusColor(campana.status, isDark);
                     const periodStatus = getPeriodStatus(campana.fecha_inicio, campana.fecha_fin);
                     const PERIOD_COLORS_LOCAL = getPeriodColors(isDark);
                     const periodColor = PERIOD_COLORS_LOCAL[periodStatus] || getDefaultStatusColor(isDark);
@@ -2435,7 +2437,7 @@ export function CampanasPage() {
                                               estatusCount[estatus] = (estatusCount[estatus] || 0) + 1;
                                             });
                                             const estatusPredominante = Object.entries(estatusCount).sort((a, b) => b[1] - a[1])[0];
-                                            const estatusGrupoColor = estatusPredominante ? getEstatusArteColor(estatusPredominante[0]) : getDefaultStatusColor(isDark);
+                                            const estatusGrupoColor = estatusPredominante ? getEstatusArteColor(estatusPredominante[0], isDark) : getDefaultStatusColor(isDark);
                                             return (
                                               <div key={grupo.key} className={`border-l-2 ${isDark ? 'border-zinc-700' : 'border-gray-300'} pl-2`}>
                                                 <button
@@ -2574,7 +2576,7 @@ export function CampanasPage() {
                                                       );
                                                     })()}
                                                     {grupo.items.map(inv => {
-                                                      const estatusArteColor = getEstatusArteColor((inv as any).estatus_arte);
+                                                      const estatusArteColor = getEstatusArteColor((inv as any).estatus_arte, isDark);
                                                       const hasArte = inv.archivo != null && inv.archivo !== '';
                                                       const indicacionesProg = (inv as any).indicaciones_programacion;
                                                       const indicacionesInst = (inv as any).indicaciones_instalacion;

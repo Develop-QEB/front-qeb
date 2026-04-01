@@ -6,6 +6,8 @@ import { LoadingScreen } from '../ui/LoadingScreen';
 import { QEBooh } from '../ui/Qebsillo';
 import { usePrefetch } from '../../hooks/usePrefetch';
 import { useThemeStore } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
+import { LightThemeNotificationModal } from './LightThemeNotificationModal';
 
 export function MainLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -13,6 +15,7 @@ export function MainLayout() {
   const [dataReady, setDataReady] = useState(false);
   const { prefetchAllAsync } = usePrefetch();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +55,10 @@ export function MainLayout() {
       </main>
 
       <QEBooh />
+
+      {user && user.light_theme_notified !== true && (
+        <LightThemeNotificationModal />
+      )}
     </div>
   );
 }

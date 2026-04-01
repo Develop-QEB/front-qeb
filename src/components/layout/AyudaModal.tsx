@@ -83,9 +83,10 @@ interface Props {
   onClose: () => void;
   tutorialId: string;
   onSelect: (id: string) => void;
+  chatUnreadCount?: number;
 }
 
-export function AyudaModal({ isOpen, onClose, tutorialId, onSelect }: Props) {
+export function AyudaModal({ isOpen, onClose, tutorialId, onSelect, chatUnreadCount = 0 }: Props) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const navigate = useNavigate();
   const scriptLoaded = useRef(false);
@@ -156,7 +157,7 @@ export function AyudaModal({ isOpen, onClose, tutorialId, onSelect }: Props) {
             <button
               onClick={() => { onClose(); navigate('/tickets'); }}
               className={cn(
-                'w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium transition-all',
+                'w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium transition-all relative',
                 isDark
                   ? 'bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 border border-purple-500/30'
                   : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
@@ -164,6 +165,9 @@ export function AyudaModal({ isOpen, onClose, tutorialId, onSelect }: Props) {
             >
               <Ticket className="h-4 w-4" />
               Mis Tickets de Soporte
+              {chatUnreadCount > 0 && (
+                <span className="absolute top-1.5 right-2 h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse ring-2 ring-red-500/30" />
+              )}
             </button>
           </div>
         </div>

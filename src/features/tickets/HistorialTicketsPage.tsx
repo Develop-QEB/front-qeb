@@ -6,11 +6,11 @@ import {
   ChevronDown, Circle, Info,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
-import { ticketsService, TicketHistorial, TicketMensaje } from '../../services/tickets.service';
+import { ticketsService, TicketHistorial, TicketMensaje, TicketChatMessage } from '../../services/tickets.service';
 import { uploadsService } from '../../services/uploads.service';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
-import { useSocketTicketsHistorial, useSocketTicketChat } from '../../hooks/useSocket';
+import { useSocketTicketsHistorial, useSocketTicketChat, useSocketTicketChatSoporte } from '../../hooks/useSocket';
 
 const STATUS_OPTIONS = ['Nuevo', 'En Progreso', 'Resuelto', 'Cerrado'];
 const PRIORIDAD_OPTIONS = ['Baja', 'Normal', 'Alta', 'Urgente'];
@@ -40,6 +40,123 @@ function getTimeAgo(dateStr: string) {
   return `${days}d`;
 }
 
+// ===================== CHAT PANEL (reusable) =====================
+function ChatPanel({
+  messages,
+  userId,
+  isDark,
+  onSend,
+  isPending,
+  onFileUpload,
+  uploading,
+  emptyText,
+  chatEndRef,
+}: {
+  messages: (TicketMensaje | TicketChatMessage)[];
+  userId: number | undefined;
+  isDark: boolean;
+  onSend: (msg: string) => void;
+  isPending: boolean;
+  onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  uploading: boolean;
+  emptyText: string;
+  chatEndRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const [mensaje, setMensaje] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSend = () => {
+    if (!mensaje.trim()) return;
+    onSend(mensaje.trim());
+    setMensaje('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  return (
+    <>
+      <div className={`rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/50' : 'border-gray-200 bg-gray-50'} p-3 min-h-[200px] max-h-[300px] overflow-y-auto space-y-3`}>
+        {messages.length === 0 && (
+          <p className={`text-center text-sm py-8 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+            {emptyText}
+          </p>
+        )}
+        {messages.map((msg) => {
+          const isMe = msg.usuario_id === userId;
+          return (
+            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] rounded-xl px-3 py-2 ${isMe
+                ? isDark ? 'bg-purple-600/30 border border-purple-500/30' : 'bg-purple-100 border border-purple-200'
+                : isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-white border border-gray-200'
+              }`}>
+                <p className={`text-xs font-medium mb-1 ${isMe ? (isDark ? 'text-purple-300' : 'text-purple-700') : (isDark ? 'text-zinc-400' : 'text-gray-500')}`}>
+                  {msg.usuario_nombre}
+                </p>
+                {msg.mensaje && (
+                  <p className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{msg.mensaje}</p>
+                )}
+                {msg.archivo_url && msg.archivo_tipo === 'image' && (
+                  <a href={msg.archivo_url} target="_blank" rel="noopener noreferrer">
+                    <img src={msg.archivo_url} alt={msg.archivo_nombre || 'Imagen'} className="max-h-40 rounded-lg mt-1 object-contain" />
+                  </a>
+                )}
+                {msg.archivo_url && msg.archivo_tipo === 'file' && (
+                  <a
+                    href={msg.archivo_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center gap-2 mt-1 px-2 py-1.5 rounded-lg text-xs ${isDark ? 'bg-zinc-700/50 text-purple-300 hover:bg-zinc-700' : 'bg-gray-100 text-purple-600 hover:bg-gray-200'} transition-colors`}
+                  >
+                    <FileText className="h-4 w-4" />
+                    {msg.archivo_nombre || 'Archivo'}
+                  </a>
+                )}
+                <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
+                  {new Date(msg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={chatEndRef} />
+      </div>
+
+      {/* Input */}
+      <div className="mt-3 flex items-end gap-2">
+        <input type="file" ref={fileInputRef} className="hidden" onChange={onFileUpload} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className={`p-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800 text-purple-400 hover:bg-purple-500/10' : 'border-purple-200 bg-gray-50 text-purple-600 hover:bg-purple-50'} transition-colors flex-shrink-0`}
+          title="Adjuntar archivo"
+        >
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+        </button>
+        <textarea
+          value={mensaje}
+          onChange={(e) => setMensaje(e.target.value)}
+          onKeyDown={handleKeyDown}
+          rows={1}
+          placeholder="Escribe un mensaje..."
+          className={`flex-1 px-3 py-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/80 text-white placeholder:text-zinc-500' : 'border-purple-200 bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 resize-none`}
+        />
+        <button
+          onClick={handleSend}
+          disabled={!mensaje.trim() || isPending}
+          className="p-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 transition-all flex-shrink-0"
+        >
+          {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        </button>
+      </div>
+    </>
+  );
+}
+
 // ===================== TICKET DETAIL MODAL =====================
 function TicketDetailModal({
   ticket,
@@ -53,25 +170,25 @@ function TicketDetailModal({
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [mensaje, setMensaje] = useState('');
+  const notasChatEndRef = useRef<HTMLDivElement>(null);
+  const soporteChatEndRef = useRef<HTMLDivElement>(null);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingNotas, setUploadingNotas] = useState(false);
+  const [uploadingSoporte, setUploadingSoporte] = useState(false);
+  const [activeChat, setActiveChat] = useState<'notas' | 'soporte'>('notas');
 
   // Mark as opened
   useEffect(() => {
     ticketsService.markOpened(ticket.id);
   }, [ticket.id]);
 
-  // Fetch messages
+  // ---- Notas y conversacion (internal) ----
   const { data: mensajes = [], refetch: refetchMensajes } = useQuery({
     queryKey: ['ticket-mensajes', ticket.id],
     queryFn: () => ticketsService.getMensajes(ticket.id),
     refetchInterval: 10000,
   });
 
-  // Socket for real-time chat
   const handleNuevoMensaje = useCallback(() => {
     refetchMensajes();
     queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
@@ -79,7 +196,6 @@ function TicketDetailModal({
   }, [refetchMensajes, queryClient]);
   useSocketTicketChat(ticket.id, handleNuevoMensaje);
 
-  // Mark messages as read when they load
   useEffect(() => {
     if (mensajes.length > 0) {
       const lastId = mensajes[mensajes.length - 1].id;
@@ -89,51 +205,78 @@ function TicketDetailModal({
     }
   }, [mensajes, ticket.id, queryClient]);
 
-  // Auto scroll to bottom
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [mensajes]);
+    if (activeChat === 'notas') notasChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [mensajes, activeChat]);
 
-  // Send message mutation
-  const sendMutation = useMutation({
+  const sendNotaMutation = useMutation({
     mutationFn: (data: { mensaje?: string; archivo_url?: string; archivo_nombre?: string; archivo_tipo?: string }) =>
       ticketsService.createMensaje(ticket.id, data),
-    onSuccess: () => {
-      setMensaje('');
-      refetchMensajes();
-    },
+    onSuccess: () => refetchMensajes(),
   });
 
-  const handleSend = () => {
-    if (!mensaje.trim()) return;
-    sendMutation.mutate({ mensaje: mensaje.trim() });
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNotaFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) return;
-
-    setUploading(true);
+    if (!file || file.size > 10 * 1024 * 1024) return;
+    setUploadingNotas(true);
     try {
       const uploaded = await uploadsService.uploadFile(file, 'ticket-chat');
-      sendMutation.mutate({
+      sendNotaMutation.mutate({
         archivo_url: uploaded.url,
         archivo_nombre: uploaded.originalName,
         archivo_tipo: file.type.startsWith('image/') ? 'image' : 'file',
       });
-    } catch {
-      // silently fail
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch {} finally {
+      setUploadingNotas(false);
+      const input = e.target; input.value = '';
+    }
+  };
+
+  // ---- Chat de soporte (with ticket creator) ----
+  const { data: chatMessages = [], refetch: refetchChat } = useQuery({
+    queryKey: ['ticket-chat', ticket.id],
+    queryFn: () => ticketsService.getChatMessages(ticket.id),
+    refetchInterval: 10000,
+  });
+
+  const handleNuevoChat = useCallback(() => {
+    refetchChat();
+    queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
+  }, [refetchChat, queryClient]);
+  useSocketTicketChatSoporte(ticket.id, handleNuevoChat);
+
+  useEffect(() => {
+    if (chatMessages.length > 0) {
+      const lastId = chatMessages[chatMessages.length - 1].id;
+      ticketsService.markChatRead(ticket.id, lastId);
+      queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
+    }
+  }, [chatMessages, ticket.id, queryClient]);
+
+  useEffect(() => {
+    if (activeChat === 'soporte') soporteChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, activeChat]);
+
+  const sendChatMutation = useMutation({
+    mutationFn: (data: { mensaje?: string; archivo_url?: string; archivo_nombre?: string; archivo_tipo?: string }) =>
+      ticketsService.createChatMessage(ticket.id, data),
+    onSuccess: () => refetchChat(),
+  });
+
+  const handleChatFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || file.size > 10 * 1024 * 1024) return;
+    setUploadingSoporte(true);
+    try {
+      const uploaded = await uploadsService.uploadFile(file, 'ticket-chat');
+      sendChatMutation.mutate({
+        archivo_url: uploaded.url,
+        archivo_nombre: uploaded.originalName,
+        archivo_tipo: file.type.startsWith('image/') ? 'image' : 'file',
+      });
+    } catch {} finally {
+      setUploadingSoporte(false);
+      const input = e.target; input.value = '';
     }
   };
 
@@ -168,7 +311,6 @@ function TicketDetailModal({
           {/* Ticket info */}
           <div className={`p-5 border-b ${isDark ? 'border-purple-500/10' : 'border-gray-100'}`}>
             <div className="flex flex-wrap gap-2 mb-3">
-              {/* Status with dropdown */}
               <div className="relative">
                 <button
                   onClick={() => setShowStatusDropdown(!showStatusDropdown)}
@@ -213,11 +355,7 @@ function TicketDetailModal({
             {ticket.imagen && (
               <div className="mt-3">
                 <a href={ticket.imagen} target="_blank" rel="noopener noreferrer">
-                  <img
-                    src={ticket.imagen}
-                    alt="Captura"
-                    className={`max-h-48 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-gray-200'} object-contain`}
-                  />
+                  <img src={ticket.imagen} alt="Captura" className={`max-h-48 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-gray-200'} object-contain`} />
                 </a>
               </div>
             )}
@@ -225,89 +363,78 @@ function TicketDetailModal({
             <div className={`mt-3 flex items-center gap-4 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
               <span className="flex items-center gap-1"><User className="h-3 w-3" />{ticket.usuario_email}</span>
               <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(ticket.created_at).toLocaleString('es-MX')}</span>
-              <span className="flex items-center gap-1"><MessageSquare className="h-3 w-3" />{ticket.total_mensajes} mensajes</span>
+              <span className="flex items-center gap-1"><MessageSquare className="h-3 w-3" />{ticket.total_mensajes} notas</span>
             </div>
           </div>
 
-          {/* Chat */}
-          <div className={`p-5`}>
-            <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
-              <MessageSquare className="h-4 w-4" /> Notas y conversacion
-            </h3>
-
-            <div className={`rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/50' : 'border-gray-200 bg-gray-50'} p-3 min-h-[200px] max-h-[300px] overflow-y-auto space-y-3`}>
-              {mensajes.length === 0 && (
-                <p className={`text-center text-sm py-8 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                  No hay mensajes aun. Inicia la conversacion.
-                </p>
-              )}
-              {mensajes.map((msg) => {
-                const isMe = msg.usuario_id === user?.id;
-                return (
-                  <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] rounded-xl px-3 py-2 ${isMe
-                      ? isDark ? 'bg-purple-600/30 border border-purple-500/30' : 'bg-purple-100 border border-purple-200'
-                      : isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-white border border-gray-200'
-                    }`}>
-                      <p className={`text-xs font-medium mb-1 ${isMe ? (isDark ? 'text-purple-300' : 'text-purple-700') : (isDark ? 'text-zinc-400' : 'text-gray-500')}`}>
-                        {msg.usuario_nombre}
-                      </p>
-                      {msg.mensaje && (
-                        <p className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{msg.mensaje}</p>
-                      )}
-                      {msg.archivo_url && msg.archivo_tipo === 'image' && (
-                        <a href={msg.archivo_url} target="_blank" rel="noopener noreferrer">
-                          <img src={msg.archivo_url} alt={msg.archivo_nombre || 'Imagen'} className="max-h-40 rounded-lg mt-1 object-contain" />
-                        </a>
-                      )}
-                      {msg.archivo_url && msg.archivo_tipo === 'file' && (
-                        <a
-                          href={msg.archivo_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`flex items-center gap-2 mt-1 px-2 py-1.5 rounded-lg text-xs ${isDark ? 'bg-zinc-700/50 text-purple-300 hover:bg-zinc-700' : 'bg-gray-100 text-purple-600 hover:bg-gray-200'} transition-colors`}
-                        >
-                          <FileText className="h-4 w-4" />
-                          {msg.archivo_nombre || 'Archivo'}
-                        </a>
-                      )}
-                      <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
-                        {new Date(msg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* Input */}
-            <div className={`mt-3 flex items-end gap-2`}>
-              <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" />
+          {/* Chat tabs */}
+          <div className={`px-5 pt-4 border-b ${isDark ? 'border-purple-500/10' : 'border-gray-100'}`}>
+            <div className="flex gap-1">
               <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className={`p-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800 text-purple-400 hover:bg-purple-500/10' : 'border-purple-200 bg-gray-50 text-purple-600 hover:bg-purple-50'} transition-colors flex-shrink-0`}
-                title="Adjuntar archivo"
+                onClick={() => setActiveChat('notas')}
+                className={`px-4 py-2 rounded-t-xl text-xs font-medium transition-all flex items-center gap-2 ${
+                  activeChat === 'notas'
+                    ? isDark ? 'bg-purple-500/20 text-purple-300 border border-b-0 border-purple-500/30' : 'bg-purple-50 text-purple-700 border border-b-0 border-purple-200'
+                    : isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'
+                }`}
               >
-                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+                <MessageSquare className="h-3.5 w-3.5" />
+                Notas internas
+                {mensajes.length > 0 && (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-purple-500/30 text-purple-200' : 'bg-purple-200 text-purple-700'}`}>
+                    {mensajes.length}
+                  </span>
+                )}
               </button>
-              <textarea
-                value={mensaje}
-                onChange={(e) => setMensaje(e.target.value)}
-                onKeyDown={handleKeyDown}
-                rows={1}
-                placeholder="Escribe un mensaje..."
-                className={`flex-1 px-3 py-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/80 text-white placeholder:text-zinc-500' : 'border-purple-200 bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 resize-none`}
+              <button
+                onClick={() => setActiveChat('soporte')}
+                className={`px-4 py-2 rounded-t-xl text-xs font-medium transition-all flex items-center gap-2 ${
+                  activeChat === 'soporte'
+                    ? isDark ? 'bg-cyan-500/20 text-cyan-300 border border-b-0 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border border-b-0 border-cyan-200'
+                    : isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Send className="h-3.5 w-3.5" />
+                Chat con {ticket.usuario_nombre.split(' ')[0]}
+                {chatMessages.length > 0 && (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-cyan-500/30 text-cyan-200' : 'bg-cyan-200 text-cyan-700'}`}>
+                    {chatMessages.length}
+                  </span>
+                )}
+                {ticket.has_chat_unread && activeChat !== 'soporte' && (
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Active chat panel */}
+          <div className="p-5">
+            {activeChat === 'notas' ? (
+              <ChatPanel
+                messages={mensajes}
+                userId={user?.id}
+                isDark={isDark}
+                onSend={(msg) => sendNotaMutation.mutate({ mensaje: msg })}
+                isPending={sendNotaMutation.isPending}
+                onFileUpload={handleNotaFileUpload}
+                uploading={uploadingNotas}
+                emptyText="No hay notas internas aun. Inicia la conversacion."
+                chatEndRef={notasChatEndRef}
               />
-              <button
-                onClick={handleSend}
-                disabled={!mensaje.trim() || sendMutation.isPending}
-                className="p-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 transition-all flex-shrink-0"
-              >
-                {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </button>
-            </div>
+            ) : (
+              <ChatPanel
+                messages={chatMessages}
+                userId={user?.id}
+                isDark={isDark}
+                onSend={(msg) => sendChatMutation.mutate({ mensaje: msg })}
+                isPending={sendChatMutation.isPending}
+                onFileUpload={handleChatFileUpload}
+                uploading={uploadingSoporte}
+                emptyText="No hay mensajes en el chat de soporte. Escribe para comunicarte con el creador del ticket."
+                chatEndRef={soporteChatEndRef}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -367,7 +494,7 @@ export function HistorialTicketsPage() {
     enProgreso: tickets.filter((t) => t.status === 'En Progreso').length,
     resuelto: tickets.filter((t) => t.status === 'Resuelto').length,
     cerrado: tickets.filter((t) => t.status === 'Cerrado').length,
-    unread: tickets.filter((t) => t.has_unread).length,
+    unread: tickets.filter((t) => t.has_unread || t.has_chat_unread).length,
   };
 
   return (
@@ -513,10 +640,10 @@ export function HistorialTicketsPage() {
                       {isNew && (
                         <div className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse" title="No abierto" />
                       )}
-                      {!isNew && t.has_unread && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-red-500" title="Mensajes no leidos" />
+                      {!isNew && (t.has_unread || t.has_chat_unread) && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" title="Mensajes no leidos" />
                       )}
-                      {!isNew && !t.has_unread && (
+                      {!isNew && !t.has_unread && !t.has_chat_unread && (
                         <div className={`w-2.5 h-2.5 rounded-full ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`} />
                       )}
                     </div>
